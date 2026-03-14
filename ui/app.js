@@ -133,7 +133,7 @@ export async function initApp() {
 
 function bindNavigation() {
   document.querySelectorAll('[data-page]').forEach(el => {
-    el.addEventListener('click', (e) => {
+    el.addEventListener('click', async (e) => {
       e.preventDefault();
       await navigateTo(el.dataset.page);
       // Close tools dropdown if open
@@ -592,7 +592,7 @@ async function renderDashboard() {
         <table>
           <thead><tr><th>Application</th><th>Due Date</th><th>Type</th><th>Action</th></tr></thead>
           <tbody>
-            ${overdue.slice(0, 5).map(fu => {
+            ${overdue.slice(0, 5).map(async fu => {
               const app = await store.getOne('applications', fu.applicationId);
               const payer = app ? (getPayerById(app.payerId) || { name: app.payerName }) : {};
               return `<tr class="overdue">
@@ -633,7 +633,7 @@ async function renderDashboard() {
 
     <!-- Tasks & Document Progress -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-      ${(() => {
+      ${(async () => {
         const tasks = await store.getAll('tasks');
         const taskToday = new Date().toISOString().split('T')[0];
         const pendingTasks = tasks.filter(t => !t.completed);
@@ -666,7 +666,7 @@ async function renderDashboard() {
             </div>
           </div>`;
       })()}
-      ${(() => {
+      ${(async () => {
         const allApps = await store.getAll('applications');
         const totalDocSlots = allApps.length * CRED_DOCUMENTS.length;
         const completedDocSlots = allApps.reduce((sum, a) => {
@@ -1139,7 +1139,7 @@ function renderFollowupTable(title, followups, showAction) {
             ${showAction ? '<th>Action</th>' : '<th>Completed</th><th>Outcome</th>'}
           </tr></thead>
           <tbody>
-            ${followups.map(fu => {
+            ${followups.map(async fu => {
               const app = await store.getOne('applications', fu.applicationId);
               const payer = app ? (getPayerById(app.payerId) || { name: app.payerName }) : {};
               const isOverdue = fu.dueDate && fu.dueDate <= new Date().toISOString().split('T')[0] && !fu.completedDate;
@@ -1951,7 +1951,7 @@ async function renderEmailGenerator() {
           <div class="form-group">
             <label>Target States <span style="font-size:11px;color:var(--text-muted);">(hold Ctrl/Cmd to select multiple)</span></label>
             <select class="form-control" id="email-expansion-states" multiple size="10" style="min-height:180px;">
-              ${(() => {
+              ${(async () => {
                 const licensedCodes = new Set((await store.getAll('licenses')).filter(l => l.status === 'active').map(l => l.state));
                 const licensed = STATES.filter(s => licensedCodes.has(s.code));
                 const unlicensed = STATES.filter(s => !licensedCodes.has(s.code));
@@ -2800,7 +2800,7 @@ function renderTaskSection(title, tasks, today, color) {
   `;
 }
 
-function renderTaskPageRow(task, today) {
+async function renderTaskPageRow(task, today) {
   const cat = TASK_CATEGORIES.find(c => c.id === task.category) || TASK_CATEGORIES[TASK_CATEGORIES.length - 1];
   const pri = TASK_PRIORITIES.find(p => p.id === task.priority) || TASK_PRIORITIES[2];
   const isOverdue = !task.completed && task.dueDate && task.dueDate < today;
@@ -2824,7 +2824,7 @@ function renderTaskPageRow(task, today) {
   </tr>`;
 }
 
-function renderTaskModal() {
+async function renderTaskModal() {
   const tasks = await store.getAll('tasks');
   const today = new Date().toISOString().split('T')[0];
   const pending = tasks.filter(t => !t.completed).sort((a, b) => {
@@ -2930,7 +2930,7 @@ function renderTaskModal() {
   `;
 }
 
-function renderTaskItem(task, today) {
+async function renderTaskItem(task, today) {
   const cat = TASK_CATEGORIES.find(c => c.id === task.category) || TASK_CATEGORIES[TASK_CATEGORIES.length - 1];
   const pri = TASK_PRIORITIES.find(p => p.id === task.priority) || TASK_PRIORITIES[2];
   const isOverdue = !task.completed && task.dueDate && task.dueDate < today;
@@ -2963,7 +2963,7 @@ function showQuickTask() {
   modal.classList.add('active');
 }
 
-function quickAddApp() {
+async function quickAddApp() {
   await openApplicationModal();
 }
 
@@ -4423,7 +4423,7 @@ window.app = {
     const status = document.getElementById('bulk-status')?.value;
     if (!status) { showToast('Select a status first'); return; }
     const selected = Array.from(document.querySelectorAll('.app-checkbox:checked')).map(el => el.dataset.appId);
-    selected.forEach(id => await store.update('applications', id, { status }));
+    selected.forEach(async id => await store.update('applications', id, { status }));
     showToast(`Updated ${selected.length} applications to ${status}`);
     await renderAppTable();
   },
@@ -4431,13 +4431,13 @@ window.app = {
     const wave = document.getElementById('bulk-wave')?.value;
     if (!wave) { showToast('Select a wave first'); return; }
     const selected = Array.from(document.querySelectorAll('.app-checkbox:checked')).map(el => el.dataset.appId);
-    selected.forEach(id => await store.update('applications', id, { wave: Number(wave) }));
+    selected.forEach(async id => await store.update('applications', id, { wave: Number(wave) }));
     showToast(`Updated ${selected.length} applications to Wave ${wave}`);
     await renderAppTable();
   },
   async exportSelectedCSV() {
     const selected = Array.from(document.querySelectorAll('.app-checkbox:checked')).map(el => el.dataset.appId);
-    const apps = selected.map(id => await store.getOne('applications', id)).filter(Boolean);
+    const apps = selected.map(async id => await store.getOne('applications', id)).filter(Boolean);
     const headers = ['State', 'Payer', 'Status', 'Wave', 'Submitted', 'Effective Date', 'Est Revenue', 'Notes'];
     const rows = apps.map(a => {
       const payer = getPayerById(a.payerId);
@@ -4456,7 +4456,7 @@ window.app = {
   async bulkDelete() {
     const selected = Array.from(document.querySelectorAll('.app-checkbox:checked')).map(el => el.dataset.appId);
     if (!await appConfirm(`Delete ${selected.length} applications? This cannot be undone.`, { title: 'Bulk Delete', okLabel: 'Delete All', okClass: 'btn-danger' })) return;
-    selected.forEach(id => await store.remove('applications', id));
+    selected.forEach(async id => await store.remove('applications', id));
     showToast(`Deleted ${selected.length} applications`);
     await renderAppTable();
   },
@@ -5568,7 +5568,7 @@ async function renderApplicationTimeline(appId) {
 async function checkRecurringTasks() {
   const tasks = await store.getAll('tasks');
 
-  tasks.forEach(t => {
+  tasks.forEach(async t => {
     if (!t.completed || !t.recurrence) return;
 
     // Calculate next due date from completed date
@@ -6390,7 +6390,7 @@ function closeConfirmModal(confirmed) {
 
 // ─── Task Edit Modal ───
 
-function openTaskEditModal(id) {
+async function openTaskEditModal(id) {
   const task = await store.getOne('tasks', id);
   if (!task) return;
   const apps = await store.getAll('applications');
@@ -6455,7 +6455,7 @@ function closeTaskEditModal() {
   document.getElementById('task-edit-modal').classList.remove('active');
 }
 
-function saveTaskEdit() {
+async function saveTaskEdit() {
   const id = document.getElementById('edit-task-id').value;
   const title = document.getElementById('edit-task-title').value.trim();
   if (!title) { showToast('Title is required'); return; }
