@@ -1677,10 +1677,10 @@ async function renderCoverageMatrix() {
   const payerIds = [...new Set(apps.map(a => a.payerId).filter(Boolean))];
   const payersInUse = payerIds.map(id => getPayerById(id)).filter(Boolean);
 
-  // Also include top national payers for gap analysis even if no apps yet
+  // Include top national payers + all BCBS licensees for gap analysis
   const topPayers = PAYER_CATALOG
-    .filter(p => ['national', 'bcbs_anthem', 'bcbs_hcsc'].includes(p.category))
-    .slice(0, 15);
+    .filter(p => ['national', 'bcbs_anthem', 'bcbs_hcsc', 'bcbs_highmark', 'bcbs_independent'].includes(p.category))
+    .slice(0, 16);
   const allMatrixPayers = [...new Map([...payersInUse, ...topPayers].map(p => [p.id, p])).values()]
     .sort((a, b) => a.name.localeCompare(b.name));
 
