@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="Providus — Credentialing & Licensing Operations Platform">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.providus.io https://npiregistry.cms.hhs.gov;">
+  <title>Providus — Credentialing Platform</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.svg">
+  <link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="ui/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js" defer></script>
+</head>
+<body>
+
+  <!-- JWT Login / Register Gate -->
+  <div class="auth-gate" id="auth-gate">
+    <div class="auth-box">
+      <!-- Login Form -->
+      <div id="login-view">
+        <div class="logo">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="56" height="56" rx="14" fill="#3b82f6"/>
+            <path d="M16 20h8c3.3 0 6 2.7 6 6s-2.7 6-6 6h-8V20z" stroke="#fff" stroke-width="2.5" fill="none"/>
+            <path d="M34 20v12l4 4" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h2>Providus</h2>
+        <p>Credentialing & licensing operations platform.<br>Sign in to your account to continue.</p>
+        <div class="auth-field">
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" placeholder="you@agency.com" autocomplete="email">
+        </div>
+        <div class="auth-field">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')handleLogin()">
+        </div>
+        <button class="btn-enter" onclick="handleLogin()">Sign In</button>
+        <div class="error" id="auth-error"></div>
+        <p class="auth-switch">Don't have an account? <a href="#" onclick="toggleAuthView('register');return false;">Create an account</a></p>
+      </div>
+
+      <!-- Registration Form -->
+      <div id="register-view" style="display:none;">
+        <div class="logo">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="56" height="56" rx="14" fill="#3b82f6"/>
+            <path d="M16 20h8c3.3 0 6 2.7 6 6s-2.7 6-6 6h-8V20z" stroke="#fff" stroke-width="2.5" fill="none"/>
+            <path d="M34 20v12l4 4" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h2>Create Account</h2>
+        <p>Set up your Providus agency account.</p>
+        <div class="auth-field">
+          <label for="reg-agency">Agency Name</label>
+          <input type="text" id="reg-agency" placeholder="Your agency name" autocomplete="organization">
+        </div>
+        <div class="auth-row">
+          <div class="auth-field">
+            <label for="reg-first">First Name</label>
+            <input type="text" id="reg-first" placeholder="First name" autocomplete="given-name">
+          </div>
+          <div class="auth-field">
+            <label for="reg-last">Last Name</label>
+            <input type="text" id="reg-last" placeholder="Last name" autocomplete="family-name">
+          </div>
+        </div>
+        <div class="auth-field">
+          <label for="reg-email">Email</label>
+          <input type="email" id="reg-email" placeholder="you@agency.com" autocomplete="email">
+        </div>
+        <div class="auth-field">
+          <label for="reg-password">Password</label>
+          <input type="password" id="reg-password" placeholder="Create a password" autocomplete="new-password">
+        </div>
+        <div class="auth-field">
+          <label for="reg-confirm">Confirm Password</label>
+          <input type="password" id="reg-confirm" placeholder="Confirm password" autocomplete="new-password" onkeydown="if(event.key==='Enter')handleRegister()">
+        </div>
+        <button class="btn-enter" onclick="handleRegister()">Create Account</button>
+        <div class="error" id="register-error"></div>
+        <p class="auth-switch">Already have an account? <a href="#" onclick="toggleAuthView('login');return false;">Sign in</a></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main App (hidden until authenticated) -->
+  <div class="app-shell" style="display:none;" id="app-shell">
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="56" height="56" rx="14" fill="#3b82f6"/>
+            <path d="M16 20h8c3.3 0 6 2.7 6 6s-2.7 6-6 6h-8V20z" stroke="#fff" stroke-width="2.5" fill="none"/>
+            <path d="M34 20v12l4 4" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div>
+            <h1>Providus</h1>
+            <div class="version">Credentialing Platform</div>
+          </div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <!-- OVERVIEW -->
+        <div class="nav-section">Overview</div>
+        <button class="nav-item active" data-page="dashboard">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="5" height="5" rx="1"/><rect x="9.5" y="1.5" width="5" height="5" rx="1"/><rect x="1.5" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/></svg>
+          </span> Dashboard
+        </button>
+
+        <!-- CREDENTIALING -->
+        <div class="nav-section">Credentialing</div>
+        <button class="nav-item" data-page="applications">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 2.5h-11a1 1 0 00-1 1v9a1 1 0 001 1h11a1 1 0 001-1v-9a1 1 0 00-1-1z"/><path d="M1.5 5.5h13"/><path d="M5.5 8.5h5"/><path d="M5.5 10.5h3"/></svg>
+          </span> Applications
+        </button>
+        <button class="nav-item" data-page="followups">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4l2.5 1.5"/></svg>
+          </span> Follow-ups
+          <span class="badge" id="followup-badge" style="display:none;">0</span>
+        </button>
+        <button class="nav-item" data-page="tasks">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>
+          </span> Tasks
+          <span class="badge" id="task-badge" style="display:none;">0</span>
+        </button>
+
+        <!-- DIRECTORY -->
+        <div class="nav-section">Directory</div>
+        <button class="nav-item" data-page="providers">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="3"/><path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/></svg>
+          </span> Providers
+        </button>
+        <button class="nav-item" data-page="licenses">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5l1.5 3 3.5.5-2.5 2.5.5 3.5L8 9.5 4.5 11.5 5 8 2.5 5.5 6 5z"/></svg>
+          </span> Licenses
+        </button>
+        <button class="nav-item" data-page="payers">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5"/><path d="M1.5 6.5h13"/></svg>
+          </span> Payers
+        </button>
+        <button class="nav-item" data-page="organizations">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M5 4V2.5a1 1 0 011-1h4a1 1 0 011 1V4"/><path d="M2 8h12"/></svg>
+          </span> Organizations
+        </button>
+
+        <!-- ANALYTICS -->
+        <div class="nav-section">Analytics</div>
+        <button class="nav-item" data-page="coverage">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="13" height="13" rx="1"/><path d="M1.5 5.5h13"/><path d="M5.5 1.5v13"/><path d="M9.5 1.5v13"/><path d="M1.5 9.5h13"/></svg>
+          </span> Coverage Matrix
+        </button>
+        <button class="nav-item" data-page="forecast">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13l4-5 3 2 5-7"/><path d="M11 3h3v3"/></svg>
+          </span> Revenue Forecast
+        </button>
+        <button class="nav-item" data-page="policies">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5C5 1.5 2.5 3 2.5 3v5.5c0 3 5.5 6 5.5 6s5.5-3 5.5-6V3s-2.5-1.5-5.5-1.5z"/></svg>
+          </span> State Policies
+        </button>
+
+        <!-- TOOLS -->
+        <div class="nav-section">Tools</div>
+        <button class="nav-item" data-page="batch">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M6 2v12M2 6h12"/></svg>
+          </span> Batch Generator
+        </button>
+        <button class="nav-item" data-page="emails">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4.5L8 9l6.5-4.5"/></svg>
+          </span> Email Generator
+        </button>
+        <button class="nav-item" data-page="caqh-manager">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5C5 1.5 2.5 3 2.5 3v5.5c0 3 5.5 6 5.5 6s5.5-3 5.5-6V3s-2.5-1.5-5.5-1.5z"/><path d="M6 8l1.5 1.5L10 6"/></svg>
+          </span> CAQH Manager
+        </button>
+        <button class="nav-item" data-page="taxonomy-search">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/><path d="M5.5 7h3M7 5.5v3"/></svg>
+          </span> NPI & Taxonomy
+        </button>
+
+        <!-- ADMIN -->
+        <div class="nav-section">Admin</div>
+        <button class="nav-item" data-page="settings">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M13.5 8a5.5 5.5 0 01-.3 1.8l1.3 1-1.2 2-1.5-.6a5.5 5.5 0 01-1.6.9L10 14.5H7.8l-.2-1.4a5.5 5.5 0 01-1.6-.9l-1.5.6-1.2-2 1.3-1A5.5 5.5 0 014.5 8c0-.6.1-1.2.3-1.8l-1.3-1 1.2-2 1.5.6A5.5 5.5 0 017.8 3l.2-1.5h2.2l.2 1.4a5.5 5.5 0 011.6.9l1.5-.6 1.2 2-1.3 1c.2.6.3 1.2.3 1.8z"/></svg>
+          </span> Agency Settings
+        </button>
+        <button class="nav-item" data-page="users">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.5"/><path d="M1.5 13c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/><circle cx="12" cy="5.5" r="2"/><path d="M14.5 13c0-2 -1.5-3.5-3-3.5"/></svg>
+          </span> Users
+        </button>
+        <button class="nav-item" data-page="onboarding">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 1.5h5l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1v-12a1 1 0 011-1z"/><path d="M9 1.5v4h4"/><path d="M6 9h4M6 11h2"/></svg>
+          </span> Onboarding
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span id="sync-status" class="sync-indicator"></span>
+        <span class="agency-label" id="sidebar-agency-name"></span>
+      </div>
+    </aside>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="page-header">
+        <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="toggleSidebar()">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 5h14M3 10h14M3 15h14"/></svg>
+        </button>
+        <div>
+          <h2 id="page-title">Dashboard</h2>
+          <div class="subtitle" id="page-subtitle">Credentialing operations overview</div>
+        </div>
+        <div class="header-actions-group">
+          <div class="page-header-actions" id="page-actions"></div>
+          <div class="header-icon-bar">
+            <button class="header-icon-btn" id="notification-bell" onclick="window.app && window.app.toggleNotifications()" title="Alerts">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13.5c.3.6 1 1 1.8 1s1.6-.4 1.9-1"/><path d="M12.5 10c0-1-1-1.5-1-4a3.5 3.5 0 00-7 0c0 2.5-1 3-1 4v.5h9V10z"/></svg>
+              <span class="notification-count" id="notification-count" style="display:none;">0</span>
+            </button>
+            <div class="header-user-info">
+              <span class="user-agency" id="header-agency-name"></span>
+              <span class="user-name" id="header-user-name"></span>
+            </div>
+            <button class="btn-logout" onclick="handleLogout()" title="Sign out">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14H3a1 1 0 01-1-1V3a1 1 0 011-1h3"/><path d="M10 11l3-3-3-3"/><path d="M13 8H6"/></svg>
+              <span class="logout-label">Sign Out</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-body" id="page-body">
+        <!-- Dynamic content rendered here -->
+        <div id="app-content"></div>
+      </div>
+    </main>
+
+  </div>
+
+  <!-- Generic Modal -->
+  <div class="modal-overlay" id="app-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modal-title">Modal</h2>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-form"></div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="modal-save-btn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm / Prompt Modal -->
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal" style="max-width:420px;">
+      <div class="modal-header">
+        <h2 id="confirm-modal-title">Confirm</h2>
+        <button class="modal-close" onclick="window.app && window.app.closeConfirmModal(false)">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-modal-message" style="margin:0 0 12px;font-size:14px;color:var(--gray-700);line-height:1.6;"></p>
+        <input type="text" id="confirm-modal-input" class="form-control" style="display:none;" placeholder="">
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="confirm-modal-cancel" onclick="window.app && window.app.closeConfirmModal(false)">Cancel</button>
+        <button class="btn btn-primary" id="confirm-modal-ok" onclick="window.app && window.app.closeConfirmModal(true)">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Panel -->
+  <div class="notification-panel" id="notification-panel" style="display:none;">
+    <div class="notification-header">
+      <h3>Notifications</h3>
+      <button class="modal-close" onclick="window.app && window.app.toggleNotifications()">&times;</button>
+    </div>
+    <div class="notification-body" id="notification-body"></div>
+  </div>
+  <div class="notification-overlay" id="notification-overlay" style="display:none;" onclick="window.app && window.app.toggleNotifications()"></div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- Offline Indicator -->
+  <div class="offline-bar" id="offline-bar" style="display:none;">
+    You are offline — changes are saved locally and will sync when reconnected.
+  </div>
+
+  <!-- Auth Logic (JWT-based) -->
+  <script>
+    function toggleAuthView(view) {
+      document.getElementById('login-view').style.display = view === 'login' ? '' : 'none';
+      document.getElementById('register-view').style.display = view === 'register' ? '' : 'none';
+      document.getElementById('auth-error').textContent = '';
+      document.getElementById('auth-error').style.display = 'none';
+      document.getElementById('register-error').textContent = '';
+      document.getElementById('register-error').style.display = 'none';
+    }
+
+    function showError(elementId, message) {
+      const el = document.getElementById(elementId);
+      el.textContent = message;
+      el.style.display = 'block';
+    }
+
+    async function handleLogin() {
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+
+      if (!email || !password) {
+        showError('auth-error', 'Please enter your email and password.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          showError('auth-error', data.message || 'Invalid email or password.');
+          return;
+        }
+
+        localStorage.setItem('providus_token', data.token);
+        localStorage.setItem('providus_user', JSON.stringify(data.user));
+        showApp(data.user);
+      } catch (err) {
+        showError('auth-error', 'Unable to connect. Please try again.');
+      }
+    }
+
+    async function handleRegister() {
+      const agency = document.getElementById('reg-agency').value.trim();
+      const firstName = document.getElementById('reg-first').value.trim();
+      const lastName = document.getElementById('reg-last').value.trim();
+      const email = document.getElementById('reg-email').value.trim();
+      const password = document.getElementById('reg-password').value;
+      const confirm = document.getElementById('reg-confirm').value;
+
+      if (!agency || !firstName || !lastName || !email || !password) {
+        showError('register-error', 'All fields are required.');
+        return;
+      }
+      if (password !== confirm) {
+        showError('register-error', 'Passwords do not match.');
+        return;
+      }
+      if (password.length < 8) {
+        showError('register-error', 'Password must be at least 8 characters.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agency_name: agency, first_name: firstName, last_name: lastName, email, password })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          showError('register-error', data.message || 'Registration failed. Please try again.');
+          return;
+        }
+
+        localStorage.setItem('providus_token', data.token);
+        localStorage.setItem('providus_user', JSON.stringify(data.user));
+        showApp(data.user);
+      } catch (err) {
+        showError('register-error', 'Unable to connect. Please try again.');
+      }
+    }
+
+    function showApp(user) {
+      document.getElementById('auth-gate').style.display = 'none';
+      document.getElementById('app-shell').style.display = '';
+
+      if (user) {
+        const agencyName = user.agency_name || 'My Agency';
+        const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email;
+        document.getElementById('header-agency-name').textContent = agencyName;
+        document.getElementById('header-user-name').textContent = fullName;
+        document.getElementById('sidebar-agency-name').textContent = agencyName;
+      }
+    }
+
+    function handleLogout() {
+      localStorage.removeItem('providus_token');
+      localStorage.removeItem('providus_user');
+      location.reload();
+    }
+
+    function closeModal() {
+      document.getElementById('app-modal').classList.remove('active');
+    }
+
+    // Auto-login if token exists
+    (function checkAuth() {
+      const token = localStorage.getItem('providus_token');
+      const userJson = localStorage.getItem('providus_user');
+      if (token && userJson) {
+        try {
+          const user = JSON.parse(userJson);
+          showApp(user);
+        } catch (e) {
+          localStorage.removeItem('providus_token');
+          localStorage.removeItem('providus_user');
+        }
+      }
+    })();
+  </script>
+
+  <!-- Mobile sidebar toggle -->
+  <script>
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebar-overlay').classList.toggle('active');
+    }
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (window.innerWidth <= 1024) {
+          document.getElementById('sidebar').classList.remove('open');
+          document.getElementById('sidebar-overlay').classList.remove('active');
+        }
+      });
+    });
+  </script>
+
+  <!-- App Init -->
+  <script type="module">
+    import { initApp } from './ui/app.js';
+    document.addEventListener('DOMContentLoaded', () => {
+      const token = localStorage.getItem('providus_token');
+      if (token) {
+        initApp();
+      }
+    });
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
+
+    function updateOnlineStatus() {
+      const bar = document.getElementById('offline-bar');
+      if (bar) bar.style.display = navigator.onLine ? 'none' : 'block';
+    }
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+  </script>
+
+</body>
+</html>
