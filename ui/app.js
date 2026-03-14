@@ -382,9 +382,43 @@ async function renderDashboard() {
   const org = orgs[0] || {};
 
   const apps = await store.getAll('applications');
+  const tasks = await store.getAll('tasks');
   const activeLic = licenses.filter(l => l.status === 'active');
   const pendingLic = licenses.filter(l => l.status === 'pending');
   const today = new Date();
+
+  // Pre-compute task stats for dashboard
+  const taskToday = today.toISOString().split('T')[0];
+  const pendingTasks = tasks.filter(t => !t.completed && !t.isCompleted);
+  const overdueTasks = pendingTasks.filter(t => t.dueDate && t.dueDate < taskToday);
+  const dueTodayTasks = pendingTasks.filter(t => t.dueDate === taskToday);
+  const urgentTasks = pendingTasks.filter(t => t.priority === 'urgent' || t.priority === 'high');
+
+  // Pre-compute document completion stats
+  const totalDocSlots = apps.length * CRED_DOCUMENTS.length;
+  const completedDocSlots = apps.reduce((sum, a) => {
+    const docs = a.documentChecklist || {};
+    return sum + CRED_DOCUMENTS.filter(d => docs[d.id]?.completed).length;
+  }, 0);
+  const overallDocPct = totalDocSlots > 0 ? Math.round((completedDocSlots / totalDocSlots) * 100) : 0;
+  const fullyComplete = apps.filter(a => {
+    const docs = a.documentChecklist || {};
+    return CRED_DOCUMENTS.every(d => docs[d.id]?.completed);
+  }).length;
+  const lowApps = apps.map(a => {
+    const docs = a.documentChecklist || {};
+    const done = CRED_DOCUMENTS.filter(d => docs[d.id]?.completed).length;
+    const pct = Math.round((done / CRED_DOCUMENTS.length) * 100);
+    return { ...a, docPct: pct, docDone: done };
+  }).filter(a => a.docPct < 100).sort((a, b) => a.docPct - b.docPct);
+
+  // Pre-resolve overdue followup application details
+  const overdueRows = [];
+  for (const fu of overdue.slice(0, 5)) {
+    const app = await store.getOne('applications', fu.applicationId).catch(() => null);
+    const payer = app ? (getPayerById(app.payerId) || { name: app.payerName }) : {};
+    overdueRows.push({ fu, app, payer });
+  }
 
   // Telehealth policy data
   const licensedStates = [...new Set(licenses.map(l => l.state))];
@@ -596,16 +630,12 @@ async function renderDashboard() {
         <table>
           <thead><tr><th>Application</th><th>Due Date</th><th>Type</th><th>Action</th></tr></thead>
           <tbody>
-            ${overdue.slice(0, 5).map(async fu => {
-              const app = await store.getOne('applications', fu.applicationId);
-              const payer = app ? (getPayerById(app.payerId) || { name: app.payerName }) : {};
-              return `<tr class="overdue">
+            ${overdueRows.map(({ fu, app, payer }) => `<tr class="overdue">
                 <td><strong>${payer.name || 'Unknown'}</strong> — ${app ? getStateName(app.state) : ''}</td>
                 <td>${formatDateDisplay(fu.dueDate)}</td>
                 <td>${fu.type || 'status_check'}</td>
                 <td><button class="btn btn-sm btn-primary" onclick="window.app.completeFollowupPrompt('${fu.id}')">Complete</button></td>
-              </tr>`;
-            }).join('')}
+              </tr>`).join('')}
           </tbody>
         </table>
       </div>
@@ -637,15 +667,7 @@ async function renderDashboard() {
 
     <!-- Tasks & Document Progress -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-      ${(async () => {
-        const tasks = await store.getAll('tasks');
-        const taskToday = new Date().toISOString().split('T')[0];
-        const pendingTasks = tasks.filter(t => !t.completed);
-        const overdueTasks = pendingTasks.filter(t => t.dueDate && t.dueDate < taskToday);
-        const dueTodayTasks = pendingTasks.filter(t => t.dueDate === taskToday);
-        const urgentTasks = pendingTasks.filter(t => t.priority === 'urgent' || t.priority === 'high');
-        return `
-          <div class="card">
+      <div class="card">
             <div class="card-header">
               <h3>Tasks Overview</h3>
               <button class="btn btn-sm" onclick="window.app.showQuickTask()">View All</button>
@@ -668,28 +690,8 @@ async function renderDashboard() {
                 </div>
               ` : '<div class="text-sm text-muted" style="text-align:center;padding:8px;">No urgent tasks right now.</div>'}
             </div>
-          </div>`;
-      })()}
-      ${(async () => {
-        const allApps = await store.getAll('applications');
-        const totalDocSlots = allApps.length * CRED_DOCUMENTS.length;
-        const completedDocSlots = allApps.reduce((sum, a) => {
-          const docs = a.documentChecklist || {};
-          return sum + CRED_DOCUMENTS.filter(d => docs[d.id]?.completed).length;
-        }, 0);
-        const overallPct = totalDocSlots > 0 ? Math.round((completedDocSlots / totalDocSlots) * 100) : 0;
-        const fullyComplete = allApps.filter(a => {
-          const docs = a.documentChecklist || {};
-          return CRED_DOCUMENTS.every(d => docs[d.id]?.completed);
-        }).length;
-        const lowApps = allApps.map(a => {
-          const docs = a.documentChecklist || {};
-          const done = CRED_DOCUMENTS.filter(d => docs[d.id]?.completed).length;
-          const pct = Math.round((done / CRED_DOCUMENTS.length) * 100);
-          return { ...a, docPct: pct, docDone: done };
-        }).filter(a => a.docPct < 100).sort((a, b) => a.docPct - b.docPct);
-        return `
-          <div class="card">
+          </div>
+      <div class="card">
             <div class="card-header">
               <h3>Document Completion</h3>
               <button class="btn btn-sm" onclick="window.app.navigateTo('applications')">View Apps</button>
@@ -697,14 +699,14 @@ async function renderDashboard() {
             <div class="card-body">
               <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
                 <div style="flex:1;height:10px;background:var(--gray-200);border-radius:5px;overflow:hidden;">
-                  <div style="width:${overallPct}%;height:100%;background:${overallPct === 100 ? 'var(--green)' : 'var(--teal)'};border-radius:5px;transition:width 0.3s;"></div>
+                  <div style="width:${overallDocPct}%;height:100%;background:${overallDocPct === 100 ? 'var(--green)' : 'var(--teal)'};border-radius:5px;transition:width 0.3s;"></div>
                 </div>
-                <span style="font-size:14px;font-weight:700;color:${overallPct === 100 ? 'var(--green)' : 'var(--teal)'};">${overallPct}%</span>
+                <span style="font-size:14px;font-weight:700;color:${overallDocPct === 100 ? 'var(--green)' : 'var(--teal)'};">${overallDocPct}%</span>
               </div>
               <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px;">
-                <div class="stat-card" style="padding:8px 10px;"><div class="label">Applications</div><div class="value" style="font-size:20px;">${allApps.length}</div></div>
+                <div class="stat-card" style="padding:8px 10px;"><div class="label">Applications</div><div class="value" style="font-size:20px;">${apps.length}</div></div>
                 <div class="stat-card" style="padding:8px 10px;"><div class="label">Docs Complete</div><div class="value" style="font-size:20px;color:var(--green);">${fullyComplete}</div></div>
-                <div class="stat-card" style="padding:8px 10px;"><div class="label">Need Docs</div><div class="value" style="font-size:20px;color:${allApps.length - fullyComplete > 0 ? 'var(--warning-600)' : 'var(--green)'};">${allApps.length - fullyComplete}</div></div>
+                <div class="stat-card" style="padding:8px 10px;"><div class="label">Need Docs</div><div class="value" style="font-size:20px;color:${apps.length - fullyComplete > 0 ? 'var(--warning-600)' : 'var(--green)'};">${apps.length - fullyComplete}</div></div>
               </div>
               ${lowApps.length > 0 ? `
                 <div style="font-size:12px;">
@@ -718,8 +720,7 @@ async function renderDashboard() {
                 </div>
               ` : '<div class="text-sm text-muted" style="text-align:center;padding:8px;">No applications yet.</div>'}
             </div>
-          </div>`;
-      })()}
+          </div>
     </div>
 
     <!-- Charts Row -->
@@ -1115,6 +1116,10 @@ async function renderFollowups() {
   const completed = (await store.getAll('followups')).filter(f => f.completedDate)
     .sort((a, b) => (b.completedDate || '').localeCompare(a.completedDate || ''));
 
+  const overdueHtml = overdue.length > 0 ? await renderFollowupTable('Overdue', overdue, true) : '';
+  const upcomingHtml = upcoming.length > 0 ? await renderFollowupTable('Upcoming (Next 14 Days)', upcoming, true) : '';
+  const completedHtml = completed.length > 0 ? await renderFollowupTable('Recently Completed', completed.slice(0, 10), false) : '';
+
   body.innerHTML = `
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
       <div class="stat-card"><div class="label">Overdue</div><div class="value red">${overdue.length}</div></div>
@@ -1122,14 +1127,21 @@ async function renderFollowups() {
       <div class="stat-card"><div class="label">Completed</div><div class="value green">${completed.length}</div></div>
     </div>
 
-    ${overdue.length > 0 ? renderFollowupTable('Overdue', overdue, true) : ''}
-    ${upcoming.length > 0 ? renderFollowupTable('Upcoming (Next 14 Days)', upcoming, true) : ''}
+    ${overdueHtml}
+    ${upcomingHtml}
     ${overdue.length === 0 && upcoming.length === 0 ? '<div class="alert alert-success">No pending follow-ups. All caught up.</div>' : ''}
-    ${completed.length > 0 ? renderFollowupTable('Recently Completed', completed.slice(0, 10), false) : ''}
+    ${completedHtml}
   `;
 }
 
-function renderFollowupTable(title, followups, showAction) {
+async function renderFollowupTable(title, followups, showAction) {
+  // Pre-resolve all async app lookups
+  const rows = [];
+  for (const fu of followups) {
+    const app = await store.getOne('applications', fu.applicationId).catch(() => null);
+    const payer = app ? (getPayerById(app.payerId) || { name: app.payerName }) : {};
+    rows.push({ fu, app, payer });
+  }
   return `
     <div class="card">
       <div class="card-header"><h3>${title} (${followups.length})</h3></div>
@@ -1143,9 +1155,7 @@ function renderFollowupTable(title, followups, showAction) {
             ${showAction ? '<th>Action</th>' : '<th>Completed</th><th>Outcome</th>'}
           </tr></thead>
           <tbody>
-            ${followups.map(async fu => {
-              const app = await store.getOne('applications', fu.applicationId);
-              const payer = app ? (getPayerById(app.payerId) || { name: app.payerName }) : {};
+            ${rows.map(({ fu, app, payer }) => {
               const isOverdue = fu.dueDate && fu.dueDate <= new Date().toISOString().split('T')[0] && !fu.completedDate;
               return `<tr class="${isOverdue ? 'overdue' : ''}">
                 <td><strong>${payer.name || 'Unknown'}</strong> — ${app ? getStateName(app.state) : ''}</td>
@@ -1924,6 +1934,9 @@ async function renderEmailGenerator() {
   const body = document.getElementById('page-body');
   const templates = emailGenerator.getTemplateList();
   const apps = (await store.getAll('applications')).filter(a => a.status !== 'approved' && a.status !== 'denied');
+  const emailLicensedCodes = new Set((await store.getAll('licenses')).filter(l => l.status === 'active').map(l => l.state));
+  const emailLicensed = STATES.filter(s => emailLicensedCodes.has(s.code));
+  const emailUnlicensed = STATES.filter(s => !emailLicensedCodes.has(s.code));
 
   body.innerHTML = `
     <div class="form-row">
@@ -1955,17 +1968,12 @@ async function renderEmailGenerator() {
           <div class="form-group">
             <label>Target States <span style="font-size:11px;color:var(--text-muted);">(hold Ctrl/Cmd to select multiple)</span></label>
             <select class="form-control" id="email-expansion-states" multiple size="10" style="min-height:180px;">
-              ${(async () => {
-                const licensedCodes = new Set((await store.getAll('licenses')).filter(l => l.status === 'active').map(l => l.state));
-                const licensed = STATES.filter(s => licensedCodes.has(s.code));
-                const unlicensed = STATES.filter(s => !licensedCodes.has(s.code));
-                return `<optgroup label="Licensed States (${licensed.length})">
-                  ${licensed.map(s => `<option value="${s.code}">${s.name} (${s.code})</option>`).join('')}
+              <optgroup label="Licensed States (${emailLicensed.length})">
+                  ${emailLicensed.map(s => `<option value="${s.code}">${s.name} (${s.code})</option>`).join('')}
                 </optgroup>
                 <optgroup label="Unlicensed States">
-                  ${unlicensed.map(s => `<option value="${s.code}">${s.name} (${s.code})</option>`).join('')}
-                </optgroup>`;
-              })()}
+                  ${emailUnlicensed.map(s => `<option value="${s.code}">${s.name} (${s.code})</option>`).join('')}
+                </optgroup>
             </select>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
@@ -4427,7 +4435,7 @@ window.app = {
     const status = document.getElementById('bulk-status')?.value;
     if (!status) { showToast('Select a status first'); return; }
     const selected = Array.from(document.querySelectorAll('.app-checkbox:checked')).map(el => el.dataset.appId);
-    selected.forEach(async id => await store.update('applications', id, { status }));
+    for (const id of selected) { await store.update('applications', id, { status }); }
     showToast(`Updated ${selected.length} applications to ${status}`);
     await renderAppTable();
   },
@@ -4435,13 +4443,14 @@ window.app = {
     const wave = document.getElementById('bulk-wave')?.value;
     if (!wave) { showToast('Select a wave first'); return; }
     const selected = Array.from(document.querySelectorAll('.app-checkbox:checked')).map(el => el.dataset.appId);
-    selected.forEach(async id => await store.update('applications', id, { wave: Number(wave) }));
+    for (const id of selected) { await store.update('applications', id, { wave: Number(wave) }); }
     showToast(`Updated ${selected.length} applications to Wave ${wave}`);
     await renderAppTable();
   },
   async exportSelectedCSV() {
     const selected = Array.from(document.querySelectorAll('.app-checkbox:checked')).map(el => el.dataset.appId);
-    const apps = selected.map(async id => await store.getOne('applications', id)).filter(Boolean);
+    const apps = [];
+    for (const id of selected) { const a = await store.getOne('applications', id); if (a) apps.push(a); }
     const headers = ['State', 'Payer', 'Status', 'Wave', 'Submitted', 'Effective Date', 'Est Revenue', 'Notes'];
     const rows = apps.map(a => {
       const payer = getPayerById(a.payerId);
