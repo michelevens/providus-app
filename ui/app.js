@@ -2683,9 +2683,12 @@ const PRESET_TASKS = [
 async function renderTasksPage() {
   const body = document.getElementById('page-body');
   const tasks = await store.getAll('tasks');
+  const allApps = await store.getAll('applications');
+  const appsMap = {};
+  allApps.forEach(a => { appsMap[a.id] = a; });
   const today = new Date().toISOString().split('T')[0];
 
-  const pending = tasks.filter(t => !t.completed).sort((a, b) => {
+  const pending = tasks.filter(t => !t.isCompleted && !t.completed).sort((a, b) => {
     const priOrder = { urgent: 0, high: 1, normal: 2, low: 3 };
     const pa = priOrder[a.priority] ?? 2;
     const pb = priOrder[b.priority] ?? 2;
@@ -2695,7 +2698,7 @@ async function renderTasksPage() {
     if (b.dueDate) return 1;
     return 0;
   });
-  const completed = tasks.filter(t => t.completed).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
+  const completed = tasks.filter(t => t.isCompleted || t.completed).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
 
   const overdue = pending.filter(t => t.dueDate && t.dueDate < today);
   const dueToday = pending.filter(t => t.dueDate === today);
@@ -2774,9 +2777,9 @@ async function renderTasksPage() {
       <span style="color:var(--text-muted);font-size:13px;">${pending.length} pending, ${completed.length} completed</span>
     </div>
 
-    ${fOverdue.length > 0 ? renderTaskSection('Overdue', fOverdue, today, 'var(--red)') : ''}
-    ${fDueToday.length > 0 ? renderTaskSection('Due Today', fDueToday, today, 'var(--warning-600)') : ''}
-    ${fUpcoming.length > 0 ? renderTaskSection('Upcoming', fUpcoming, today, 'var(--teal)') : ''}
+    ${fOverdue.length > 0 ? renderTaskSection('Overdue', fOverdue, today, 'var(--red)', appsMap) : ''}
+    ${fDueToday.length > 0 ? renderTaskSection('Due Today', fDueToday, today, 'var(--warning-600)', appsMap) : ''}
+    ${fUpcoming.length > 0 ? renderTaskSection('Upcoming', fUpcoming, today, 'var(--teal)', appsMap) : ''}
     ${pending.length === 0 ? '<div class="card" style="text-align:center;padding:40px;color:var(--text-muted);"><h3>No pending tasks</h3><p>Click "+ Add Task" to create one.</p></div>' : ''}
     ${fCompleted.length > 0 ? `
       <div class="card" style="margin-top:16px;">
@@ -2787,7 +2790,7 @@ async function renderTasksPage() {
           <table>
             <thead><tr><th style="width:40px;"></th><th>Task</th><th>Category</th><th>Priority</th><th>Completed</th><th style="width:60px;"></th></tr></thead>
             <tbody>
-              ${fCompleted.slice(0, 50).map(t => renderTaskPageRow(t, today)).join('')}
+              ${fCompleted.slice(0, 50).map(t => renderTaskPageRow(t, today, appsMap)).join('')}
             </tbody>
           </table>
         </div>
@@ -2796,7 +2799,7 @@ async function renderTasksPage() {
   `;
 }
 
-function renderTaskSection(title, tasks, today, color) {
+function renderTaskSection(title, tasks, today, color, appsMap) {
   return `
     <div class="card" style="margin-bottom:12px;">
       <div class="card-header"><h3 style="color:${color};">${title} (${tasks.length})</h3></div>
@@ -2804,7 +2807,7 @@ function renderTaskSection(title, tasks, today, color) {
         <table>
           <thead><tr><th style="width:40px;"></th><th>Task</th><th>Category</th><th>Priority</th><th>Due Date</th><th>Linked App</th><th style="width:60px;"></th></tr></thead>
           <tbody>
-            ${tasks.map(t => renderTaskPageRow(t, today)).join('')}
+            ${tasks.map(t => renderTaskPageRow(t, today, appsMap)).join('')}
           </tbody>
         </table>
       </div>
@@ -2812,17 +2815,18 @@ function renderTaskSection(title, tasks, today, color) {
   `;
 }
 
-async function renderTaskPageRow(task, today) {
+function renderTaskPageRow(task, today, appsMap) {
   const cat = TASK_CATEGORIES.find(c => c.id === task.category) || TASK_CATEGORIES[TASK_CATEGORIES.length - 1];
   const pri = TASK_PRIORITIES.find(p => p.id === task.priority) || TASK_PRIORITIES[2];
-  const isOverdue = !task.completed && task.dueDate && task.dueDate < today;
-  const linkedApp = task.linkedAppId ? await store.getOne('applications', task.linkedAppId) : null;
+  const isOverdue = !task.isCompleted && !task.completed && task.dueDate && task.dueDate < today;
+  const linkedApp = task.linkedApplicationId || task.linkedAppId ? (appsMap || {})[task.linkedApplicationId || task.linkedAppId] : null;
   const linkedPayer = linkedApp ? (getPayerById(linkedApp.payerId) || { name: linkedApp.payerName }) : null;
 
-  return `<tr class="${isOverdue ? 'overdue' : ''}" style="${task.completed ? 'opacity:0.6;' : ''}">
-    <td><input type="checkbox" ${task.completed ? 'checked' : ''} onchange="window.app.toggleTaskPage('${task.id}')" style="cursor:pointer;accent-color:var(--brand-600);transform:scale(1.2);"></td>
+  const isDone = task.isCompleted || task.completed;
+  return `<tr class="${isOverdue ? 'overdue' : ''}" style="${isDone ? 'opacity:0.6;' : ''}">
+    <td><input type="checkbox" ${isDone ? 'checked' : ''} onchange="window.app.toggleTaskPage('${task.id}')" style="cursor:pointer;accent-color:var(--brand-600);transform:scale(1.2);"></td>
     <td>
-      <div style="font-weight:${task.completed ? '400' : '600'};${task.completed ? 'text-decoration:line-through;' : ''}">${escHtml(task.title)}${task.recurrence ? ` <span style="font-size:10px;padding:1px 5px;background:var(--teal);color:white;border-radius:3px;">&#8635; ${task.recurrence}</span>` : ''}</div>
+      <div style="font-weight:${isDone ? '400' : '600'};${isDone ? 'text-decoration:line-through;' : ''}">${escHtml(task.title)}${task.recurrence ? ` <span style="font-size:10px;padding:1px 5px;background:var(--teal);color:white;border-radius:3px;">&#8635; ${task.recurrence}</span>` : ''}</div>
       ${task.notes ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${escHtml(task.notes)}</div>` : ''}
     </td>
     <td><span style="font-size:12px;">${cat.icon} ${cat.label}</span></td>
@@ -2838,8 +2842,11 @@ async function renderTaskPageRow(task, today) {
 
 async function renderTaskModal() {
   const tasks = await store.getAll('tasks');
+  const modalApps = await store.getAll('applications');
+  const modalAppsMap = {};
+  modalApps.forEach(a => { modalAppsMap[a.id] = a; });
   const today = new Date().toISOString().split('T')[0];
-  const pending = tasks.filter(t => !t.completed).sort((a, b) => {
+  const pending = tasks.filter(t => !t.isCompleted && !t.completed).sort((a, b) => {
     const priOrder = { urgent: 0, high: 1, normal: 2, low: 3 };
     const pa = priOrder[a.priority] ?? 2;
     const pb = priOrder[b.priority] ?? 2;
@@ -2849,7 +2856,7 @@ async function renderTaskModal() {
     if (b.dueDate) return 1;
     return 0;
   });
-  const completed = tasks.filter(t => t.completed).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
+  const completed = tasks.filter(t => t.isCompleted || t.completed).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
 
   const overdue = pending.filter(t => t.dueDate && t.dueDate < today);
   const dueToday = pending.filter(t => t.dueDate === today);
@@ -2917,47 +2924,48 @@ async function renderTaskModal() {
     ${overdue.length > 0 ? `
       <div style="margin-bottom:12px;">
         <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:6px;">OVERDUE</div>
-        ${overdue.map(t => renderTaskItem(t, today)).join('')}
+        ${overdue.map(t => renderTaskItem(t, today, modalAppsMap)).join('')}
       </div>
     ` : ''}
     ${dueToday.length > 0 ? `
       <div style="margin-bottom:12px;">
         <div style="font-size:12px;font-weight:700;color:var(--warning-600);margin-bottom:6px;">DUE TODAY</div>
-        ${dueToday.map(t => renderTaskItem(t, today)).join('')}
+        ${dueToday.map(t => renderTaskItem(t, today, modalAppsMap)).join('')}
       </div>
     ` : ''}
     ${upcoming.length > 0 ? `
       <div style="margin-bottom:12px;">
         <div style="font-size:12px;font-weight:700;color:var(--brand-600);margin-bottom:6px;">UPCOMING</div>
-        ${upcoming.map(t => renderTaskItem(t, today)).join('')}
+        ${upcoming.map(t => renderTaskItem(t, today, modalAppsMap)).join('')}
       </div>
     ` : ''}
     ${pending.length === 0 ? '<div style="text-align:center;padding:20px;color:#94a3b8;">No pending tasks. Click "Add Task" to create one.</div>' : ''}
     ${completed.length > 0 ? `
       <details style="margin-top:8px;">
         <summary style="font-size:12px;font-weight:700;color:var(--green);cursor:pointer;margin-bottom:6px;">COMPLETED (${completed.length})</summary>
-        ${completed.slice(0, 20).map(t => renderTaskItem(t, today)).join('')}
+        ${completed.slice(0, 20).map(t => renderTaskItem(t, today, modalAppsMap)).join('')}
       </details>
     ` : ''}
   `;
 }
 
-async function renderTaskItem(task, today) {
+function renderTaskItem(task, today, appsMap) {
   const cat = TASK_CATEGORIES.find(c => c.id === task.category) || TASK_CATEGORIES[TASK_CATEGORIES.length - 1];
   const pri = TASK_PRIORITIES.find(p => p.id === task.priority) || TASK_PRIORITIES[2];
-  const isOverdue = !task.completed && task.dueDate && task.dueDate < today;
-  const linkedApp = task.linkedAppId ? await store.getOne('applications', task.linkedAppId) : null;
+  const isOverdue = !task.isCompleted && !task.completed && task.dueDate && task.dueDate < today;
+  const linkedApp = task.linkedApplicationId || task.linkedAppId ? (appsMap || {})[task.linkedApplicationId || task.linkedAppId] : null;
 
+  const isDone = task.isCompleted || task.completed;
   return `
-    <div style="display:flex;align-items:flex-start;gap:8px;padding:8px;border-radius:6px;border:1px solid ${isOverdue ? 'var(--red)' : 'var(--border)'};margin-bottom:4px;background:${task.completed ? '#f1f5f9' : 'white'};${task.completed ? 'opacity:0.7;' : ''}">
-      <input type="checkbox" ${task.completed ? 'checked' : ''} onchange="window.app.toggleTask('${task.id}')" style="margin-top:3px;cursor:pointer;accent-color:var(--brand-600);">
+    <div style="display:flex;align-items:flex-start;gap:8px;padding:8px;border-radius:6px;border:1px solid ${isOverdue ? 'var(--red)' : 'var(--border)'};margin-bottom:4px;background:${isDone ? '#f1f5f9' : 'white'};${isDone ? 'opacity:0.7;' : ''}">
+      <input type="checkbox" ${isDone ? 'checked' : ''} onchange="window.app.toggleTask('${task.id}')" style="margin-top:3px;cursor:pointer;accent-color:var(--brand-600);">
       <div style="flex:1;min-width:0;">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
           <span style="font-size:11px;padding:1px 5px;border-radius:4px;background:${pri.color}15;color:${pri.color};font-weight:600;">${pri.label}</span>
           <span style="font-size:11px;color:#64748b;" title="${cat.label}">${cat.icon} ${cat.label}</span>
           ${task.dueDate ? `<span style="font-size:11px;color:${isOverdue ? 'var(--red)' : '#64748b'};">${formatDateDisplay(task.dueDate)}</span>` : ''}
         </div>
-        <div style="font-size:13px;font-weight:${task.completed ? '400' : '600'};${task.completed ? 'text-decoration:line-through;' : ''}">${escHtml(task.title)}</div>
+        <div style="font-size:13px;font-weight:${isDone ? '400' : '600'};${isDone ? 'text-decoration:line-through;' : ''}">${escHtml(task.title)}</div>
         ${task.notes ? `<div style="font-size:11px;color:#64748b;margin-top:2px;">${escHtml(task.notes)}</div>` : ''}
         ${linkedApp ? `<div style="font-size:10px;color:var(--brand-600);margin-top:2px;">Linked: ${getStateName(linkedApp.state)} — ${linkedApp.payerName}</div>` : ''}
       </div>
