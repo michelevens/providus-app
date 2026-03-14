@@ -8,6 +8,32 @@ class Store {
         this.loading = {};
     }
 
+    // ── Key converters (snake_case <-> camelCase) ──
+
+    _snakeToCamel(obj) {
+        if (Array.isArray(obj)) return obj.map(item => this._snakeToCamel(item));
+        if (obj !== null && typeof obj === 'object' && !(obj instanceof Date)) {
+            return Object.keys(obj).reduce((result, key) => {
+                const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+                result[camelKey] = this._snakeToCamel(obj[key]);
+                return result;
+            }, {});
+        }
+        return obj;
+    }
+
+    _camelToSnake(obj) {
+        if (Array.isArray(obj)) return obj.map(item => this._camelToSnake(item));
+        if (obj !== null && typeof obj === 'object' && !(obj instanceof Date)) {
+            return Object.keys(obj).reduce((result, key) => {
+                const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+                result[snakeKey] = this._camelToSnake(obj[key]);
+                return result;
+            }, {});
+        }
+        return obj;
+    }
+
     // ── HTTP helpers ──
 
     async _fetch(url, options = {}) {
@@ -20,6 +46,14 @@ class Store {
         const token = auth.getToken();
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        // Convert request body from camelCase to snake_case
+        if (options.body && typeof options.body === 'string') {
+            try {
+                const parsed = JSON.parse(options.body);
+                options = { ...options, body: JSON.stringify(this._camelToSnake(parsed)) };
+            } catch (e) { /* not JSON, leave as-is */ }
         }
 
         const response = await fetch(url, { ...options, headers });
@@ -35,7 +69,9 @@ class Store {
             throw new Error(error.message || error.error || `HTTP ${response.status}`);
         }
 
-        return response.json();
+        // Convert response from snake_case to camelCase
+        const json = await response.json();
+        return this._snakeToCamel(json);
     }
 
     _url(collection) {
@@ -211,7 +247,19 @@ class Store {
 
     async getApplicationStats() {
         const result = await this._fetch(`${CONFIG.API_URL}/applications-stats`);
-        return result.data || result;
+        const raw = result.data || result;
+        // Transform to format expected by dashboard
+        const byStatus = raw.byStatus || {};
+        const inProgressStatuses = ['gathering_docs', 'gatheringDocs', 'submitted', 'in_review', 'inReview', 'pending_info', 'pendingInfo'];
+        const inProgress = inProgressStatuses.reduce((sum, s) => sum + (byStatus[s] || 0), 0);
+        return {
+            ...raw,
+            total: raw.total || 0,
+            approved: (byStatus.approved || 0) + (byStatus.credentialed || 0),
+            inProgress,
+            denied: byStatus.denied || 0,
+            estMonthlyRevenue: raw.totalApprovedRevenue || 0,
+        };
     }
 
     async completeFollowup(id) {

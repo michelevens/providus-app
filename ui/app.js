@@ -162,7 +162,11 @@ async function navigateTo(page) {
 
   // Update task badge
   const today = new Date().toISOString().split('T')[0];
-  const _allTasks = await store.getAll('tasks'); const pendingTasks = _allTasks.filter(t => !t.completed && t.dueDate && t.dueDate <= today).length;
+  let pendingTaskCount = 0;
+  try {
+    const _allTasks = await store.getAll('tasks');
+    pendingTaskCount = _allTasks.filter(t => !t.isCompleted && !t.completed && t.dueDate && t.dueDate <= today).length;
+  } catch {}
   const taskBadge = document.getElementById('task-badge');
   if (taskBadge) {
     taskBadge.textContent = pendingTaskCount;
