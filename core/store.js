@@ -6,6 +6,7 @@ class Store {
         this.cache = {};
         this.listeners = {};
         this.loading = {};
+        this.activeAgencyId = null; // SuperAdmin agency override
     }
 
     // ── Key converters (snake_case <-> camelCase) ──
@@ -46,6 +47,11 @@ class Store {
         const token = auth.getToken();
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        // SuperAdmin agency override
+        if (this.activeAgencyId) {
+            headers['X-Agency-Id'] = String(this.activeAgencyId);
         }
 
         // Convert request body from camelCase to snake_case
@@ -476,6 +482,28 @@ class Store {
             method: 'POST',
             body: JSON.stringify(data),
         });
+        return result.data || result;
+    }
+
+    // ── SuperAdmin: Agency Management ──
+
+    setActiveAgency(agencyId) {
+        this.activeAgencyId = agencyId;
+        this.clearCache(); // Clear cached data so next fetch uses new agency scope
+    }
+
+    clearActiveAgency() {
+        this.activeAgencyId = null;
+        this.clearCache();
+    }
+
+    async getAdminAgencies() {
+        const result = await this._fetch(`${CONFIG.API_URL}/admin/agencies`);
+        return result.data || result;
+    }
+
+    async getAdminAgency(id) {
+        const result = await this._fetch(`${CONFIG.API_URL}/admin/agencies/${id}`);
         return result.data || result;
     }
 }

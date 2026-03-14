@@ -364,6 +364,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderOnboardingStub();
       break;
+    case 'admin':
+      pageTitle.textContent = 'Super Admin';
+      pageSubtitle.textContent = 'Manage all agencies and system settings';
+      pageActions.innerHTML = '';
+      await renderAdminPanel();
+      break;
     default:
       pageBody.innerHTML = '<div class="empty-state"><h3>Page not found</h3></div>';
   }
@@ -5081,6 +5087,70 @@ function handleNppesProxy(payload) {
       showToast('Error: ' + (e.message || 'Failed to reactivate user'));
     }
   },
+
+  // ── SuperAdmin: Agency Switcher ──────────────────────────
+  async switchToAgency(agencyId, agencyName) {
+    store.setActiveAgency(agencyId);
+    document.getElementById('sidebar-agency-name').textContent = agencyName + ' (viewing)';
+    showToast('Switched to ' + agencyName);
+    await navigateTo('dashboard');
+  },
+  async clearAgencyOverride() {
+    store.clearActiveAgency();
+    const user = auth.getUser();
+    const agencyName = user?.agency?.name || 'My Agency';
+    document.getElementById('sidebar-agency-name').textContent = agencyName;
+    showToast('Returned to your agency');
+    await navigateTo('admin');
+  },
+  async viewAgencyDetail(agencyId) {
+    try {
+      const agency = await store.getAdminAgency(agencyId);
+      const users = agency.users || [];
+      const modal = document.getElementById('app-modal');
+      const title = document.getElementById('modal-title');
+      const form = document.getElementById('modal-form');
+      title.textContent = agency.name + ' — Details';
+      form.innerHTML = `
+        <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;">
+          <div class="stat-card"><div class="label">Users</div><div class="value">${agency.usersCount || 0}</div></div>
+          <div class="stat-card"><div class="label">Orgs</div><div class="value">${agency.organizationsCount || 0}</div></div>
+          <div class="stat-card"><div class="label">Providers</div><div class="value">${agency.providersCount || 0}</div></div>
+          <div class="stat-card"><div class="label">Applications</div><div class="value">${agency.applicationsCount || 0}</div></div>
+          <div class="stat-card"><div class="label">Licenses</div><div class="value">${agency.licensesCount || 0}</div></div>
+          <div class="stat-card"><div class="label">Tasks</div><div class="value">${agency.tasksCount || 0}</div></div>
+        </div>
+        <h4 style="margin-bottom:8px;">Info</h4>
+        <table style="margin-bottom:16px;">
+          <tr><td><strong>Slug</strong></td><td>${escHtml(agency.slug || '')}</td></tr>
+          <tr><td><strong>Email</strong></td><td>${escHtml(agency.email || '')}</td></tr>
+          <tr><td><strong>Phone</strong></td><td>${escHtml(agency.phone || '')}</td></tr>
+          <tr><td><strong>NPI</strong></td><td>${escHtml(agency.npi || '')}</td></tr>
+          <tr><td><strong>Created</strong></td><td>${agency.createdAt ? new Date(agency.createdAt).toLocaleDateString() : ''}</td></tr>
+        </table>
+        <h4 style="margin-bottom:8px;">Users (${users.length})</h4>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Active</th></tr></thead>
+          <tbody>
+            ${users.map(u => `
+              <tr>
+                <td>${escHtml((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''))}</td>
+                <td>${escHtml(u.email || '')}</td>
+                <td><span class="badge badge-${u.role === 'superadmin' || u.role === 'agency' ? 'approved' : 'pending'}">${u.role}</span></td>
+                <td>${(u.isActive !== false && u.is_active !== false) ? 'Yes' : 'No'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div style="margin-top:16px;display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="window.app.switchToAgency(${agency.id}, '${escHtml(agency.name)}')">Switch to This Agency</button>
+        </div>
+      `;
+      modal.classList.add('active');
+    } catch (e) {
+      showToast('Error loading agency: ' + e.message);
+    }
+  },
 };
 
 // ─── Application Modal ───
@@ -6772,6 +6842,77 @@ async function renderUsersStub() {
                 </td>
               </tr>`;
             }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Super Admin Panel ───
+
+async function renderAdminPanel() {
+  const body = document.getElementById('page-body');
+  if (!auth.isSuperAdmin()) {
+    body.innerHTML = '<div class="alert alert-danger">SuperAdmin access required.</div>';
+    return;
+  }
+
+  let agencies = [];
+  try { agencies = await store.getAdminAgencies(); } catch (e) {
+    body.innerHTML = `<div class="alert alert-danger">Failed to load agencies: ${e.message}</div>`;
+    return;
+  }
+
+  const totalUsers = agencies.reduce((s, a) => s + (a.usersCount || 0), 0);
+  const totalProviders = agencies.reduce((s, a) => s + (a.providersCount || 0), 0);
+  const totalApps = agencies.reduce((s, a) => s + (a.applicationsCount || 0), 0);
+  const activeAgencyId = store.activeAgencyId;
+
+  body.innerHTML = `
+    ${activeAgencyId ? `
+      <div class="alert" style="background:var(--brand-50);border-left:4px solid var(--brand-600);margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;">
+        <span>Viewing as: <strong>${agencies.find(a => a.id === activeAgencyId)?.name || 'Agency #' + activeAgencyId}</strong></span>
+        <button class="btn btn-sm" onclick="window.app.clearAgencyOverride()">Exit Agency View</button>
+      </div>
+    ` : ''}
+
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="stat-card"><div class="label">Agencies</div><div class="value">${agencies.length}</div></div>
+      <div class="stat-card"><div class="label">Total Users</div><div class="value" style="color:var(--brand-600);">${totalUsers}</div></div>
+      <div class="stat-card"><div class="label">Total Providers</div><div class="value" style="color:var(--green);">${totalProviders}</div></div>
+      <div class="stat-card"><div class="label">Total Applications</div><div class="value" style="color:var(--amber);">${totalApps}</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>All Agencies</h3></div>
+      <div class="card-body" style="padding:0;">
+        <table>
+          <thead>
+            <tr>
+              <th>Agency</th><th>Slug</th><th>Users</th><th>Orgs</th>
+              <th>Providers</th><th>Applications</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${agencies.map(a => `
+              <tr style="${activeAgencyId === a.id ? 'background:var(--brand-50);' : ''}">
+                <td><strong>${escHtml(a.name)}</strong></td>
+                <td><code>${escHtml(a.slug || '')}</code></td>
+                <td>${a.usersCount || 0}</td>
+                <td>${a.organizationsCount || 0}</td>
+                <td>${a.providersCount || 0}</td>
+                <td>${a.applicationsCount || 0}</td>
+                <td>
+                  <div style="display:flex;gap:4px;">
+                    <button class="btn btn-sm btn-primary" onclick="window.app.switchToAgency(${a.id}, '${escHtml(a.name)}')" title="View as this agency">
+                      ${activeAgencyId === a.id ? 'Viewing' : 'Switch'}
+                    </button>
+                    <button class="btn btn-sm" onclick="window.app.viewAgencyDetail(${a.id})" title="Agency details">Details</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
           </tbody>
         </table>
       </div>
