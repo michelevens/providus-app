@@ -3568,6 +3568,9 @@ async function renderCaqhManager() {
     </tr>`;
   });
 
+  const attestationTabHtml = await renderCaqhAttestationTab(providers, tracking);
+  const payerMapHtml = await renderCaqhPayerMap();
+
   body.innerHTML = `
     ${!configured ? `
       <div class="alert alert-warning">
@@ -3630,12 +3633,12 @@ async function renderCaqhManager() {
 
     <!-- Attestation Tracker Tab -->
     <div id="caqh-attestation" class="hidden">
-      ${renderCaqhAttestationTab(providers, tracking)}
+      ${attestationTabHtml}
     </div>
 
     <!-- Payer → CAQH Map Tab -->
     <div id="caqh-payer-map" class="hidden">
-      ${renderCaqhPayerMap()}
+      ${payerMapHtml}
     </div>
   `;
 }
@@ -5867,6 +5870,8 @@ async function renderRenewalCalendar() {
     else if (daysUntil <= 90) expiring90.push({ ...l, daysUntil });
   });
 
+  const credRenewalHtml = await renderCredentialingRenewalSection(today);
+
   body.innerHTML = `
     <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
       <div class="stat-card"><div class="label">Expired</div><div class="value ${expired.length > 0 ? 'red' : ''}">${expired.length}</div></div>
@@ -5937,7 +5942,7 @@ async function renderRenewalCalendar() {
       </div>
     </div>` : ''}
 
-    ${renderCredentialingRenewalSection(today)}
+    ${credRenewalHtml}
   `;
 }
 
