@@ -4977,6 +4977,110 @@ function handleNppesProxy(payload) {
       </div>
     `;
   },
+
+  // ── User Management ───────────────────────────────────────
+  inviteUser() {
+    const form = document.getElementById('invite-user-form');
+    if (form) { form.classList.remove('hidden'); form.scrollIntoView({ behavior: 'smooth' }); }
+  },
+  cancelInvite() {
+    const form = document.getElementById('invite-user-form');
+    if (form) form.classList.add('hidden');
+    document.getElementById('invite-error')?.classList.add('hidden');
+  },
+  onInviteRoleChange() {
+    const role = document.getElementById('invite-role')?.value;
+    const orgSel = document.getElementById('invite-org');
+    const provSel = document.getElementById('invite-provider');
+    if (orgSel) orgSel.classList.toggle('hidden', role === 'agency');
+    if (provSel) provSel.classList.toggle('hidden', role !== 'provider');
+  },
+  async submitInvite() {
+    const errEl = document.getElementById('invite-error');
+    errEl?.classList.add('hidden');
+
+    const firstName = document.getElementById('invite-first-name')?.value?.trim();
+    const lastName = document.getElementById('invite-last-name')?.value?.trim();
+    const email = document.getElementById('invite-email')?.value?.trim();
+    const password = document.getElementById('invite-password')?.value;
+    const role = document.getElementById('invite-role')?.value;
+    const organizationId = document.getElementById('invite-org')?.value || null;
+    const providerId = document.getElementById('invite-provider')?.value || null;
+
+    if (!firstName || !lastName || !email || !password) {
+      if (errEl) { errEl.textContent = 'First name, last name, email, and password are required.'; errEl.classList.remove('hidden'); }
+      return;
+    }
+    if (role === 'organization' && !organizationId) {
+      if (errEl) { errEl.textContent = 'Please select an organization for this user.'; errEl.classList.remove('hidden'); }
+      return;
+    }
+    if (role === 'provider' && !providerId) {
+      if (errEl) { errEl.textContent = 'Please select a provider for this user.'; errEl.classList.remove('hidden'); }
+      return;
+    }
+
+    try {
+      await store.inviteUser({
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        password,
+        role,
+        organization_id: organizationId ? parseInt(organizationId) : null,
+        provider_id: providerId ? parseInt(providerId) : null,
+      });
+      showToast('User created successfully');
+      await renderUsersStub();
+    } catch (e) {
+      if (errEl) { errEl.textContent = e.message || 'Failed to create user'; errEl.classList.remove('hidden'); }
+    }
+  },
+  async editUserRole(userId, currentRole) {
+    const roles = ['agency', 'organization', 'provider'].filter(r => r !== currentRole);
+    const newRole = prompt(`Change role from "${currentRole}" to:\n\nOptions: ${roles.join(', ')}`);
+    if (!newRole || !['agency', 'organization', 'provider'].includes(newRole)) return;
+
+    try {
+      const data = { role: newRole };
+      if (newRole === 'organization') {
+        const orgs = await store.getAll('organizations');
+        const orgId = prompt('Enter organization ID:\n\n' + orgs.map(o => `${o.id}: ${o.name}`).join('\n'));
+        if (!orgId) return;
+        data.organization_id = parseInt(orgId);
+      }
+      if (newRole === 'provider') {
+        const provs = await store.getAll('providers');
+        const provId = prompt('Enter provider ID:\n\n' + provs.map(p => `${p.id}: ${(p.firstName || '') + ' ' + (p.lastName || '')}`).join('\n'));
+        if (!provId) return;
+        data.provider_id = parseInt(provId);
+      }
+      await store.updateUser(userId, data);
+      showToast('Role updated');
+      await renderUsersStub();
+    } catch (e) {
+      showToast('Error: ' + (e.message || 'Failed to update role'));
+    }
+  },
+  async deactivateUser(userId, name) {
+    if (!confirm(`Deactivate user "${name}"? They will no longer be able to log in.`)) return;
+    try {
+      await store.deleteUser(userId);
+      showToast('User deactivated');
+      await renderUsersStub();
+    } catch (e) {
+      showToast('Error: ' + (e.message || 'Failed to deactivate user'));
+    }
+  },
+  async reactivateUser(userId) {
+    try {
+      await store.updateUser(userId, { is_active: true });
+      showToast('User reactivated');
+      await renderUsersStub();
+    } catch (e) {
+      showToast('Error: ' + (e.message || 'Failed to reactivate user'));
+    }
+  },
 };
 
 // ─── Application Modal ───
@@ -6557,34 +6661,117 @@ async function renderOrganizationsStub() {
 
 async function renderUsersStub() {
   const body = document.getElementById('page-body');
-  if (!auth.isAdmin()) {
+  if (!auth.isAgency()) {
     body.innerHTML = '<div class="alert alert-danger">You do not have permission to manage users.</div>';
     return;
   }
   let users = [];
   try { users = await store.getAgencyUsers(); } catch {}
 
+  // Pre-load orgs and providers for dropdowns
+  let orgs = [], providers = [];
+  try { orgs = await store.getAll('organizations'); } catch {}
+  try { providers = await store.getAll('providers'); } catch {}
+
+  const roleBadge = (role) => {
+    const map = {
+      superadmin: { label: 'Super Admin', cls: 'approved', icon: '&#9733;' },
+      agency: { label: 'Agency', cls: 'approved', icon: '&#127970;' },
+      organization: { label: 'Organization', cls: 'submitted', icon: '&#127963;' },
+      provider: { label: 'Provider', cls: 'pending', icon: '&#129658;' },
+    };
+    const r = map[role] || { label: role, cls: 'pending', icon: '' };
+    return `<span class="badge badge-${r.cls}">${r.icon} ${r.label}</span>`;
+  };
+
+  const agencyUsers = users.filter(u => u.role === 'agency' || u.role === 'superadmin');
+  const orgUsers = users.filter(u => u.role === 'organization');
+  const providerUsers = users.filter(u => u.role === 'provider');
+
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
-      <div class="stat-card"><div class="label">Team Members</div><div class="value">${users.length}</div></div>
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="stat-card"><div class="label">Total Users</div><div class="value">${users.length}</div></div>
+      <div class="stat-card"><div class="label">Agency</div><div class="value" style="color:var(--green);">${agencyUsers.length}</div></div>
+      <div class="stat-card"><div class="label">Organization</div><div class="value" style="color:var(--brand-600);">${orgUsers.length}</div></div>
+      <div class="stat-card"><div class="label">Provider</div><div class="value" style="color:var(--amber);">${providerUsers.length}</div></div>
     </div>
+
+    <!-- Invite User Form (hidden by default) -->
+    <div id="invite-user-form" class="card hidden" style="margin-bottom:16px;border-left:4px solid var(--brand-600);">
+      <div class="card-header"><h3>Invite / Create User</h3></div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <input type="text" id="invite-first-name" class="form-control" placeholder="First Name *">
+          <input type="text" id="invite-last-name" class="form-control" placeholder="Last Name *">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <input type="email" id="invite-email" class="form-control" placeholder="Email Address *">
+          <input type="password" id="invite-password" class="form-control" placeholder="Temporary Password *">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+          <select id="invite-role" class="form-control" onchange="window.app.onInviteRoleChange()">
+            <option value="agency">Agency (Full Access)</option>
+            <option value="organization">Organization</option>
+            <option value="provider">Provider</option>
+          </select>
+          <select id="invite-org" class="form-control hidden">
+            <option value="">Select Organization *</option>
+            ${orgs.map(o => `<option value="${o.id}">${escHtml(o.name)}</option>`).join('')}
+          </select>
+          <select id="invite-provider" class="form-control hidden">
+            <option value="">Select Provider *</option>
+            ${providers.map(p => `<option value="${p.id}">${escHtml((p.firstName || '') + ' ' + (p.lastName || ''))}</option>`).join('')}
+          </select>
+        </div>
+        <div id="invite-error" class="alert alert-danger hidden" style="margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn" onclick="window.app.cancelInvite()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.submitInvite()">Create User</button>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header">
         <h3>Team Members</h3>
-        ${auth.isOwner() ? '<button class="btn btn-gold" onclick="window.app.inviteUser()">+ Invite User</button>' : ''}
+        <button class="btn btn-gold" onclick="window.app.inviteUser()">+ Invite User</button>
       </div>
       <div class="card-body" style="padding:0;">
         <table>
-          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Name</th><th>Email</th><th>Role</th>
+              <th>Org / Provider</th><th>Status</th><th>Actions</th>
+            </tr>
+          </thead>
           <tbody>
-            ${users.map(u => `
-              <tr>
-                <td><strong>${escHtml((u.first_name || '') + ' ' + (u.last_name || ''))}</strong></td>
+            ${users.map(u => {
+              const name = escHtml(((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || '')).trim());
+              const orgName = u.organization ? escHtml(u.organization.name) : '';
+              const provName = u.provider ? escHtml((u.provider.firstName || u.provider.first_name || '') + ' ' + (u.provider.lastName || u.provider.last_name || '')) : '';
+              const scope = u.role === 'organization' ? orgName : u.role === 'provider' ? provName : 'All';
+              const isActive = u.isActive !== false && u.is_active !== false;
+              const isSelf = u.id === auth.getUser()?.id;
+              return `
+              <tr style="${!isActive ? 'opacity:0.5;' : ''}">
+                <td><strong>${name}</strong></td>
                 <td>${escHtml(u.email || '')}</td>
-                <td><span class="badge badge-${u.role === 'owner' ? 'approved' : u.role === 'admin' ? 'submitted' : 'pending'}">${u.role}</span></td>
-                <td><span class="badge badge-active">Active</span></td>
-              </tr>
-            `).join('')}
+                <td>${roleBadge(u.role)}</td>
+                <td>${scope}</td>
+                <td><span class="badge badge-${isActive ? 'approved' : 'denied'}">${isActive ? 'Active' : 'Inactive'}</span></td>
+                <td>
+                  ${!isSelf && u.role !== 'superadmin' ? `
+                    <div style="display:flex;gap:4px;">
+                      <button class="btn btn-sm" onclick="window.app.editUserRole(${u.id}, '${u.role}')" title="Change role">&#9998;</button>
+                      ${isActive
+                        ? `<button class="btn btn-sm" onclick="window.app.deactivateUser(${u.id}, '${name}')" title="Deactivate" style="color:var(--red);">&#10005;</button>`
+                        : `<button class="btn btn-sm" onclick="window.app.reactivateUser(${u.id})" title="Reactivate" style="color:var(--green);">&#10003;</button>`
+                      }
+                    </div>
+                  ` : isSelf ? '<span class="text-muted text-sm">You</span>' : ''}
+                </td>
+              </tr>`;
+            }).join('')}
           </tbody>
         </table>
       </div>

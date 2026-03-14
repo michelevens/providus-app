@@ -27,16 +27,38 @@ class Auth {
         return this.user?.agency?.config || null;
     }
 
+    // ── New 4-tier role system ──────────────────────────────
+    isSuperAdmin() {
+        return this.user?.role === 'superadmin';
+    }
+
+    isAgency() {
+        return ['superadmin', 'agency'].includes(this.user?.role);
+    }
+
+    isOrganization() {
+        return ['superadmin', 'agency', 'organization'].includes(this.user?.role);
+    }
+
+    isProviderRole() {
+        return this.user?.role === 'provider';
+    }
+
+    getRole() {
+        return this.user?.role || null;
+    }
+
+    // ── Backward-compatible aliases ──────────────────────────
     isOwner() {
-        return this.user?.role === 'owner';
+        return this.isSuperAdmin() || this.user?.role === 'agency';
     }
 
     isAdmin() {
-        return ['owner', 'admin'].includes(this.user?.role);
+        return this.isAgency();
     }
 
     isReadonly() {
-        return this.user?.role === 'readonly';
+        return this.user?.role === 'provider';
     }
 
     onChange(callback) {

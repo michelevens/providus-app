@@ -331,6 +331,21 @@ class Store {
         return result.data || result;
     }
 
+    async updateUser(id, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/agency/users/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+        return result.data || result;
+    }
+
+    async deleteUser(id) {
+        const result = await this._fetch(`${CONFIG.API_URL}/agency/users/${id}`, {
+            method: 'DELETE',
+        });
+        return result;
+    }
+
     // ── Onboarding tokens ──
 
     async getOnboardTokens() {
