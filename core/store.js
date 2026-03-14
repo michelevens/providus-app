@@ -131,9 +131,15 @@ class Store {
     }
 
     _invalidateCache(collection) {
-        const key = this._cacheKey(collection);
-        delete this.cache[key];
-        localStorage.removeItem(key);
+        const prefix = this._cacheKey(collection);
+        // Clear all cache entries for this collection (with or without params)
+        Object.keys(this.cache).forEach(k => {
+            if (k.startsWith(prefix)) delete this.cache[k];
+        });
+        // Clear from localStorage too
+        Object.keys(localStorage).forEach(k => {
+            if (k.startsWith(prefix)) localStorage.removeItem(k);
+        });
     }
 
     _clearOldCache() {

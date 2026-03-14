@@ -3814,18 +3814,19 @@ window.app = {
   async savePageTask() {
     const title = document.getElementById('task-page-title')?.value?.trim();
     if (!title) { showToast('Enter a task title'); return; }
-    const result = await store.create('tasks', {
-      title,
-      category: document.getElementById('task-page-category')?.value || 'other',
-      priority: document.getElementById('task-page-priority')?.value || 'normal',
-      dueDate: document.getElementById('task-page-due')?.value || '',
-      linkedAppId: document.getElementById('task-page-link-app')?.value || '',
-      recurrence: document.getElementById('task-page-recurrence')?.value || '',
-      notes: document.getElementById('task-page-notes')?.value?.trim() || '',
-      completed: false,
-      completedAt: '',
-    });
-    if (!result.success) { showToast('Error saving task: ' + result.errors.join(', ')); return; }
+    try {
+      await store.create('tasks', {
+        title,
+        category: document.getElementById('task-page-category')?.value || 'other',
+        priority: document.getElementById('task-page-priority')?.value || 'normal',
+        dueDate: document.getElementById('task-page-due')?.value || '',
+        linkedApplicationId: document.getElementById('task-page-link-app')?.value || '',
+        recurrence: document.getElementById('task-page-recurrence')?.value || '',
+        notes: document.getElementById('task-page-notes')?.value?.trim() || '',
+        isCompleted: false,
+        completedAt: '',
+      });
+    } catch (e) { showToast('Error saving task: ' + e.message); return; }
     showToast('Task added');
     await renderTasksPage();
   },
@@ -3894,18 +3895,19 @@ window.app = {
   async saveTask() {
     const title = document.getElementById('task-title')?.value?.trim();
     if (!title) { showToast('Enter a task title'); return; }
-    const result = await store.create('tasks', {
-      title,
-      category: document.getElementById('task-category')?.value || 'other',
-      priority: document.getElementById('task-priority')?.value || 'normal',
-      dueDate: document.getElementById('task-due')?.value || '',
-      linkedAppId: document.getElementById('task-link-app')?.value || '',
-      recurrence: document.getElementById('task-recurrence')?.value || '',
-      notes: document.getElementById('task-notes')?.value?.trim() || '',
-      completed: false,
-      completedAt: '',
-    });
-    if (!result.success) { showToast('Error saving task: ' + result.errors.join(', ')); return; }
+    try {
+      await store.create('tasks', {
+        title,
+        category: document.getElementById('task-category')?.value || 'other',
+        priority: document.getElementById('task-priority')?.value || 'normal',
+        dueDate: document.getElementById('task-due')?.value || '',
+        linkedApplicationId: document.getElementById('task-link-app')?.value || '',
+        recurrence: document.getElementById('task-recurrence')?.value || '',
+        notes: document.getElementById('task-notes')?.value?.trim() || '',
+        isCompleted: false,
+        completedAt: '',
+      });
+    } catch (e) { showToast('Error saving task: ' + e.message); return; }
     showToast('Task added');
     renderTaskModal();
   },
@@ -4989,6 +4991,23 @@ function handleNppesProxy(payload) {
     const form = document.getElementById('invite-user-form');
     if (form) { form.classList.remove('hidden'); form.scrollIntoView({ behavior: 'smooth' }); }
   },
+  generatePassword() {
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lower = 'abcdefghjkmnpqrstuvwxyz';
+    const digits = '23456789';
+    const symbols = '!@#$%&*';
+    const all = upper + lower + digits + symbols;
+    let pw = [
+      upper[Math.floor(Math.random() * upper.length)],
+      lower[Math.floor(Math.random() * lower.length)],
+      digits[Math.floor(Math.random() * digits.length)],
+      symbols[Math.floor(Math.random() * symbols.length)],
+    ];
+    for (let i = 4; i < 14; i++) pw.push(all[Math.floor(Math.random() * all.length)]);
+    pw = pw.sort(() => Math.random() - 0.5);
+    const el = document.getElementById('invite-password');
+    if (el) { el.value = pw.join(''); el.type = 'text'; }
+  },
   cancelInvite() {
     const form = document.getElementById('invite-user-form');
     if (form) form.classList.add('hidden');
@@ -5262,8 +5281,8 @@ window.saveApplication = async function() {
     payerContactPhone: document.getElementById('field-payer-phone').value.trim(),
     payerContactEmail: document.getElementById('field-payer-email').value.trim(),
     notes: document.getElementById('field-notes').value,
-    providerId: document.getElementById('field-provider').value || DEFAULT_PROVIDER.id,
-    orgId: DEFAULT_ORGANIZATION.id,
+    providerId: document.getElementById('field-provider').value || '',
+    organizationId: '',
   };
 
   if (!data.state || !data.payerId) {
@@ -5284,7 +5303,7 @@ window.saveApplication = async function() {
       await store.create('activity_logs', {
         applicationId: id,
         type: 'status_change',
-        date: new Date().toISOString().split('T')[0],
+        loggedDate: new Date().toISOString().split('T')[0],
         outcome: reason,
         statusFrom: existing.status,
         statusTo: data.status,
@@ -5293,15 +5312,16 @@ window.saveApplication = async function() {
     await store.update('applications', id, data);
     showToast('Application updated');
   } else {
-    const result = await store.create('applications', data);
-    if (result.success) {
-      // Auto-log creation
-      await store.create('activity_logs', {
-        applicationId: result.record.id,
-        type: 'note',
-        date: new Date().toISOString().split('T')[0],
-        outcome: 'Application created',
-      });
+    const created = await store.create('applications', data);
+    if (created && created.id) {
+      try {
+        await store.create('activity_logs', {
+          applicationId: created.id,
+          type: 'note',
+          loggedDate: new Date().toISOString().split('T')[0],
+          outcome: 'Application created',
+        });
+      } catch (e) { console.error('Failed to log creation:', e); }
     }
     showToast('Application added');
   }
@@ -5479,7 +5499,7 @@ window.saveActivityLog = async function() {
   await store.create('activity_logs', {
     applicationId,
     type,
-    date,
+    loggedDate: date,
     contactName,
     contactPhone,
     refNumber: document.getElementById('log-ref').value.trim(),
@@ -5709,7 +5729,7 @@ async function renderApplicationTimeline(appId) {
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const followups = store.query('followups', { applicationId: appId })
     .sort((a, b) => (b.dueDate || '').localeCompare(a.dueDate || ''));
-  const tasks = (await store.getAll('tasks')).filter(t => t.linkedAppId === appId);
+  const tasks = (await store.getAll('tasks')).filter(t => (t.linkedApplicationId || t.linkedAppId) === appId);
 
   const typeIcons = { call: '&#128222;', email: '&#9993;', portal_check: '&#128187;', status_change: '&#9889;', document: '&#128196;', note: '&#128221;' };
 
@@ -5798,10 +5818,10 @@ async function checkRecurringTasks() {
       category: t.category,
       priority: t.priority,
       dueDate: nextDueStr,
-      linkedAppId: t.linkedAppId || '',
+      linkedApplicationId: t.linkedApplicationId || t.linkedAppId || '',
       notes: t.notes || '',
       recurrence: t.recurrence,
-      completed: false,
+      isCompleted: false,
       completedAt: null,
     });
   });
@@ -6639,7 +6659,7 @@ async function openTaskEditModal(id) {
         <option value="">None</option>
         ${apps.map(a => {
           const payer = getPayerById(a.payerId);
-          return `<option value="${a.id}" ${task.linkedAppId === a.id ? 'selected' : ''}>${payer?.name || 'Unknown'} — ${getStateName(a.state)} (${a.status})</option>`;
+          return `<option value="${a.id}" ${(task.linkedApplicationId || task.linkedAppId) === a.id ? 'selected' : ''}>${payer?.name || 'Unknown'} — ${getStateName(a.state)} (${a.status})</option>`;
         }).join('')}
       </select>
     </div>
@@ -6665,7 +6685,7 @@ async function saveTaskEdit() {
     priority: document.getElementById('edit-task-priority').value,
     dueDate: document.getElementById('edit-task-due').value || '',
     recurrence: document.getElementById('edit-task-recurrence').value || '',
-    linkedAppId: document.getElementById('edit-task-link-app').value || '',
+    linkedApplicationId: document.getElementById('edit-task-link-app').value || '',
     notes: document.getElementById('edit-task-notes').value || '',
   });
   closeTaskEditModal();
@@ -6776,7 +6796,10 @@ async function renderUsersStub() {
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
           <input type="email" id="invite-email" class="form-control" placeholder="Email Address *">
-          <input type="password" id="invite-password" class="form-control" placeholder="Temporary Password *">
+          <div style="display:flex;gap:4px;">
+            <input type="text" id="invite-password" class="form-control" placeholder="Temporary Password *" style="flex:1;">
+            <button type="button" class="btn btn-sm" onclick="window.app.generatePassword()" title="Generate strong password" style="white-space:nowrap;">Generate</button>
+          </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
           <select id="invite-role" class="form-control" onchange="window.app.onInviteRoleChange()">
