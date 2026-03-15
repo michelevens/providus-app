@@ -385,8 +385,14 @@ async function navigateTo(page) {
     case 'billing':
       pageTitle.textContent = 'Billing & Invoicing';
       pageSubtitle.textContent = 'Manage invoices, services, and payments';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openInvoiceModal()">+ Create Invoice</button>' + printBtn;
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openInvoiceModal()">+ Create Invoice</button> <button class="btn btn-sm" onclick="window.app.openEstimateModal()">+ Estimate</button>' + printBtn;
       await renderBillingPage();
+      break;
+    case 'invoice-detail':
+      pageTitle.textContent = 'Invoice Detail';
+      pageSubtitle.textContent = '';
+      pageActions.innerHTML = printBtn;
+      await renderInvoiceDetail(window._selectedInvoiceId);
       break;
     case 'import':
       pageTitle.textContent = 'Bulk Import';
@@ -5377,58 +5383,161 @@ function handleNppesProxy(payload) {
   },
 
   // ── Billing & Invoicing ──
+  billingTab(btn, tabId) {
+    _billingTab = tabId;
+    btn.closest('.tabs').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    ['billing-invoices', 'billing-estimates', 'billing-services'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden', id !== 'billing-' + tabId);
+    });
+  },
   openInvoiceModal() {
+    _invoiceLineItems = [{ description: '', qty: 1, rate: 0 }];
     document.getElementById('invoice-modal-title').textContent = 'Create Invoice';
-    ['inv-client','inv-amount','inv-due','inv-desc'].forEach(f => {
+    ['inv-client','inv-due','inv-desc','inv-notes','inv-client-email'].forEach(f => {
       const el = document.getElementById(f); if (el) el.value = '';
     });
     document.getElementById('inv-status').value = 'draft';
     document.getElementById('inv-edit-id').value = '';
+    document.getElementById('inv-mode').value = 'invoice';
+    document.getElementById('inv-date-label').textContent = 'Due Date *';
+    // Auto-generate invoice number
+    store.getInvoices().then(invs => {
+      const numEl = document.getElementById('inv-number');
+      if (numEl && !numEl.value) numEl.value = _nextInvoiceNumber(Array.isArray(invs) ? invs : []);
+    }).catch(() => {});
+    const editor = document.getElementById('line-items-editor');
+    if (editor) editor.innerHTML = _renderLineItemsEditor();
     document.getElementById('invoice-modal').classList.add('active');
   },
+  openEstimateModal() {
+    _invoiceLineItems = [{ description: '', qty: 1, rate: 0 }];
+    document.getElementById('invoice-modal-title').textContent = 'Create Estimate';
+    ['inv-client','inv-due','inv-desc','inv-notes','inv-client-email'].forEach(f => {
+      const el = document.getElementById(f); if (el) el.value = '';
+    });
+    document.getElementById('inv-status').value = 'draft';
+    document.getElementById('inv-edit-id').value = '';
+    document.getElementById('inv-mode').value = 'estimate';
+    document.getElementById('inv-date-label').textContent = 'Expiration Date *';
+    document.getElementById('inv-number').value = '';
+    const editor = document.getElementById('line-items-editor');
+    if (editor) editor.innerHTML = _renderLineItemsEditor();
+    document.getElementById('invoice-modal').classList.add('active');
+  },
+
+  // Line item management
+  addLineItem() {
+    _invoiceLineItems.push({ description: '', qty: 1, rate: 0 });
+    const editor = document.getElementById('line-items-editor');
+    if (editor) editor.innerHTML = _renderLineItemsEditor();
+  },
+  removeLineItem(idx) {
+    _invoiceLineItems.splice(idx, 1);
+    if (_invoiceLineItems.length === 0) _invoiceLineItems.push({ description: '', qty: 1, rate: 0 });
+    const editor = document.getElementById('line-items-editor');
+    if (editor) editor.innerHTML = _renderLineItemsEditor();
+  },
+  updateLineItem(idx, field, value) {
+    if (!_invoiceLineItems[idx]) return;
+    if (field === 'qty') _invoiceLineItems[idx].qty = parseInt(value) || 1;
+    else if (field === 'rate') _invoiceLineItems[idx].rate = parseFloat(value) || 0;
+    else _invoiceLineItems[idx][field] = value;
+    // Re-render totals
+    const editor = document.getElementById('line-items-editor');
+    if (editor) editor.innerHTML = _renderLineItemsEditor();
+  },
+  addServiceLineItem(serviceId) {
+    const svc = _billingServices.find(s => s.id === serviceId);
+    if (!svc) return;
+    _invoiceLineItems.push({ description: svc.name || svc.serviceName, qty: 1, rate: svc.rate || svc.defaultRate || 0 });
+    const editor = document.getElementById('line-items-editor');
+    if (editor) editor.innerHTML = _renderLineItemsEditor();
+  },
+
   async saveInvoice() {
     const client = document.getElementById('inv-client')?.value?.trim();
-    const amount = parseFloat(document.getElementById('inv-amount')?.value);
     const due = document.getElementById('inv-due')?.value;
     if (!client) { showToast('Client name is required'); return; }
-    if (!amount || amount <= 0) { showToast('Enter a valid amount'); return; }
-    if (!due) { showToast('Due date is required'); return; }
+    if (!due) { showToast('Date is required'); return; }
+
+    const validItems = _invoiceLineItems.filter(i => i.description && i.rate > 0);
+    const totalAmount = validItems.reduce((s, i) => s + i.qty * i.rate, 0);
+    if (validItems.length === 0 || totalAmount <= 0) { showToast('Add at least one line item with a rate'); return; }
+
+    const mode = document.getElementById('inv-mode')?.value || 'invoice';
     const data = {
       clientName: client,
-      totalAmount: amount,
-      dueDate: due,
+      clientEmail: document.getElementById('inv-client-email')?.value?.trim() || '',
+      items: validItems,
+      totalAmount,
       description: document.getElementById('inv-desc')?.value?.trim() || '',
+      notes: document.getElementById('inv-notes')?.value?.trim() || '',
       status: document.getElementById('inv-status')?.value || 'draft',
     };
+
+    if (mode === 'estimate') {
+      data.expirationDate = due;
+      data.estimateNumber = document.getElementById('inv-number')?.value?.trim() || '';
+    } else {
+      data.dueDate = due;
+      data.invoiceNumber = document.getElementById('inv-number')?.value?.trim() || '';
+    }
+
     const editId = document.getElementById('inv-edit-id')?.value;
     try {
-      if (editId) {
-        await store.updateInvoice(editId, data);
-        showToast('Invoice updated');
+      if (mode === 'estimate') {
+        if (editId) { await store.updateEstimate(editId, data); showToast('Estimate updated'); }
+        else { await store.createEstimate(data); showToast('Estimate created'); }
       } else {
-        await store.createInvoice(data);
-        showToast('Invoice created');
+        if (editId) { await store.updateInvoice(editId, data); showToast('Invoice updated'); }
+        else { await store.createInvoice(data); showToast('Invoice created'); }
       }
       document.getElementById('invoice-modal').classList.remove('active');
       await renderBillingPage();
     } catch (e) { showToast('Error: ' + e.message); }
   },
-  async viewInvoice(id) {
+
+  // Invoice detail view
+  viewInvoiceDetail(id) {
+    window._selectedInvoiceId = id;
+    navigateTo('invoice-detail');
+  },
+  async editInvoice(id) {
     try {
-      const invoices = await store.getInvoices();
-      const inv = (Array.isArray(invoices) ? invoices : []).find(x => x.id === id);
+      let inv;
+      try { inv = await store.getInvoice(id); } catch {
+        const all = await store.getInvoices();
+        inv = (Array.isArray(all) ? all : []).find(x => x.id == id);
+      }
       if (!inv) { showToast('Invoice not found'); return; }
+
+      // Populate line items
+      const items = inv.items || inv.lineItems || inv.line_items || [];
+      _invoiceLineItems = Array.isArray(items) && items.length > 0
+        ? items.map(i => ({ description: i.description || i.name || '', qty: i.qty || i.quantity || 1, rate: i.rate || i.unitPrice || i.unit_price || 0 }))
+        : [{ description: inv.description || '', qty: 1, rate: inv.totalAmount || inv.total_amount || inv.amount || 0 }];
+
       document.getElementById('inv-edit-id').value = id;
-      document.getElementById('invoice-modal-title').textContent = 'Edit Invoice #' + (inv.invoiceNumber || inv.invoice_number || inv.id);
+      document.getElementById('inv-mode').value = 'invoice';
+      document.getElementById('invoice-modal-title').textContent = 'Edit Invoice ' + (inv.invoiceNumber || inv.invoice_number || '#' + inv.id);
+      document.getElementById('inv-date-label').textContent = 'Due Date *';
       const set = (el, val) => { const e = document.getElementById(el); if (e) e.value = val || ''; };
       set('inv-client', inv.clientName || inv.client_name);
-      set('inv-amount', inv.totalAmount || inv.total_amount || inv.amount);
+      set('inv-client-email', inv.clientEmail || inv.client_email);
       set('inv-due', inv.dueDate || inv.due_date);
+      set('inv-number', inv.invoiceNumber || inv.invoice_number);
       set('inv-desc', inv.description);
+      set('inv-notes', inv.notes || inv.paymentTerms || inv.payment_terms);
       set('inv-status', inv.status);
+      const editor = document.getElementById('line-items-editor');
+      if (editor) editor.innerHTML = _renderLineItemsEditor();
       document.getElementById('invoice-modal').classList.add('active');
     } catch (e) { showToast('Error: ' + e.message); }
   },
+  async viewInvoice(id) { this.viewInvoiceDetail(id); },
+
   async deleteInvoice(id) {
     if (!await appConfirm('Delete this invoice?', { title: 'Delete Invoice', okLabel: 'Delete', okClass: 'btn-danger' })) return;
     try {
@@ -5437,6 +5546,20 @@ function handleNppesProxy(payload) {
       await renderBillingPage();
     } catch (e) { showToast('Error: ' + e.message); }
   },
+  async sendInvoice(id) {
+    if (!await appConfirm('Mark this invoice as sent? The client will be notified if email is configured.', { title: 'Send Invoice', okLabel: 'Send', okClass: 'btn-primary' })) return;
+    try {
+      await store.sendInvoice(id);
+      showToast('Invoice sent');
+      await renderBillingPage();
+    } catch (e) {
+      // Fallback: just update status to sent
+      try { await store.updateInvoice(id, { status: 'sent' }); showToast('Invoice marked as sent'); await renderBillingPage(); }
+      catch (e2) { showToast('Error: ' + e2.message); }
+    }
+  },
+
+  // Payments
   openPaymentModal(invoiceId) {
     document.getElementById('pay-invoice-id').value = invoiceId;
     document.getElementById('pay-amount').value = '';
@@ -5459,14 +5582,42 @@ function handleNppesProxy(payload) {
       await store.addPayment(invoiceId, data);
       showToast('Payment recorded');
       document.getElementById('payment-modal').classList.remove('active');
-      await renderBillingPage();
+      // Refresh whichever page we're on
+      if (window._selectedInvoiceId == invoiceId && document.getElementById('page-title')?.textContent?.includes('Invoice')) {
+        await renderInvoiceDetail(invoiceId);
+      } else {
+        await renderBillingPage();
+      }
     } catch (e) { showToast('Error: ' + e.message); }
   },
-  openServiceModal() {
+
+  // Services
+  openServiceModal(editId) {
     ['svc-name','svc-code','svc-rate','svc-desc'].forEach(f => {
       const el = document.getElementById(f); if (el) el.value = '';
     });
+    document.getElementById('svc-edit-id').value = editId || '';
+    document.getElementById('service-modal-title').textContent = editId ? 'Edit Service' : 'Add Service';
+    if (editId) {
+      const svc = _billingServices.find(s => s.id === editId);
+      if (svc) {
+        const set = (el, val) => { const e = document.getElementById(el); if (e) e.value = val || ''; };
+        set('svc-name', svc.name || svc.serviceName);
+        set('svc-code', svc.code || svc.serviceCode);
+        set('svc-rate', svc.rate || svc.defaultRate);
+        set('svc-desc', svc.description);
+      }
+    }
     document.getElementById('service-modal').classList.add('active');
+  },
+  async editService(id) { this.openServiceModal(id); },
+  async deleteService(id) {
+    if (!await appConfirm('Delete this service?', { title: 'Delete Service', okLabel: 'Delete', okClass: 'btn-danger' })) return;
+    try {
+      await store.deleteService(id);
+      showToast('Service deleted');
+      await renderBillingPage();
+    } catch (e) { showToast('Error: ' + e.message); }
   },
   async saveService() {
     const name = document.getElementById('svc-name')?.value?.trim();
@@ -5477,13 +5628,87 @@ function handleNppesProxy(payload) {
       defaultRate: parseFloat(document.getElementById('svc-rate')?.value) || 0,
       description: document.getElementById('svc-desc')?.value?.trim() || '',
     };
+    const editId = document.getElementById('svc-edit-id')?.value;
     try {
-      await store.createService(data);
-      showToast('Service created');
+      if (editId) {
+        await store.updateService(editId, data);
+        showToast('Service updated');
+      } else {
+        await store.createService(data);
+        showToast('Service created');
+      }
       document.getElementById('service-modal').classList.remove('active');
       await renderBillingPage();
     } catch (e) { showToast('Error: ' + e.message); }
   },
+
+  // Estimates
+  async editEstimate(id) {
+    try {
+      const estimates = await store.getEstimates();
+      const est = (Array.isArray(estimates) ? estimates : []).find(x => x.id == id);
+      if (!est) { showToast('Estimate not found'); return; }
+
+      const items = est.items || est.lineItems || est.line_items || [];
+      _invoiceLineItems = Array.isArray(items) && items.length > 0
+        ? items.map(i => ({ description: i.description || i.name || '', qty: i.qty || i.quantity || 1, rate: i.rate || i.unitPrice || i.unit_price || 0 }))
+        : [{ description: '', qty: 1, rate: est.totalAmount || est.total_amount || 0 }];
+
+      document.getElementById('inv-edit-id').value = id;
+      document.getElementById('inv-mode').value = 'estimate';
+      document.getElementById('invoice-modal-title').textContent = 'Edit Estimate';
+      document.getElementById('inv-date-label').textContent = 'Expiration Date *';
+      const set = (el, val) => { const e = document.getElementById(el); if (e) e.value = val || ''; };
+      set('inv-client', est.clientName || est.client_name);
+      set('inv-client-email', est.clientEmail || est.client_email);
+      set('inv-due', est.expirationDate || est.expiration_date);
+      set('inv-number', est.estimateNumber || est.estimate_number);
+      set('inv-desc', est.description);
+      set('inv-notes', est.notes);
+      set('inv-status', est.status);
+      const editor = document.getElementById('line-items-editor');
+      if (editor) editor.innerHTML = _renderLineItemsEditor();
+      document.getElementById('invoice-modal').classList.add('active');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async convertEstimate(id) {
+    if (!await appConfirm('Convert this estimate to an invoice? The estimate will be marked as converted.', { title: 'Convert to Invoice', okLabel: 'Convert', okClass: 'btn-primary' })) return;
+    try {
+      await store.convertEstimateToInvoice(id);
+      showToast('Estimate converted to invoice');
+      await renderBillingPage();
+    } catch (e) {
+      // Fallback: manually create invoice from estimate data
+      try {
+        const estimates = await store.getEstimates();
+        const est = (Array.isArray(estimates) ? estimates : []).find(x => x.id == id);
+        if (!est) { showToast('Estimate not found'); return; }
+        const invData = {
+          clientName: est.clientName || est.client_name,
+          clientEmail: est.clientEmail || est.client_email || '',
+          items: est.items || est.lineItems || est.line_items || [],
+          totalAmount: est.totalAmount || est.total_amount || est.amount,
+          description: est.description || '',
+          notes: est.notes || '',
+          dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+          status: 'draft',
+        };
+        await store.createInvoice(invData);
+        try { await store.updateEstimate(id, { status: 'converted' }); } catch {}
+        showToast('Invoice created from estimate');
+        await renderBillingPage();
+      } catch (e2) { showToast('Error: ' + e2.message); }
+    }
+  },
+  async deleteEstimate(id) {
+    if (!await appConfirm('Delete this estimate?', { title: 'Delete Estimate', okLabel: 'Delete', okClass: 'btn-danger' })) return;
+    try {
+      await store.deleteEstimate(id);
+      showToast('Estimate deleted');
+      await renderBillingPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+
   filterInvoices() {
     const search = (document.getElementById('invoice-search')?.value || '').toLowerCase();
     const statusFilter = document.getElementById('invoice-status-filter')?.value || '';
@@ -8229,121 +8454,290 @@ async function renderFacilitiesPage() {
 
 // ─── Billing & Invoicing Page ───
 
+let _billingTab = 'invoices';
+let _invoiceLineItems = [];
+let _billingServices = [];
+
+function _fmtMoney(n) {
+  return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function _invoiceStatusBadge(status) {
+  const map = { draft: 'inactive', sent: 'pending', partial: 'pending', paid: 'approved', overdue: 'denied', cancelled: 'inactive', void: 'inactive' };
+  return `<span class="badge badge-${map[status] || 'inactive'}">${escHtml(status || 'draft')}</span>`;
+}
+
+function _nextInvoiceNumber(invoices) {
+  const nums = invoices.map(i => {
+    const n = (i.invoiceNumber || i.invoice_number || '').replace(/[^0-9]/g, '');
+    return n ? parseInt(n, 10) : 0;
+  });
+  const max = nums.length ? Math.max(...nums) : 0;
+  return 'INV-' + String(max + 1).padStart(4, '0');
+}
+
+function _renderLineItemsEditor() {
+  return `
+    <div id="line-items-container">
+      <div style="display:flex;gap:8px;align-items:center;font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;padding:0 0 6px;">
+        <div style="flex:3;">Description</div>
+        <div style="flex:1;text-align:center;">Qty</div>
+        <div style="flex:1;text-align:center;">Rate</div>
+        <div style="flex:1;text-align:right;">Subtotal</div>
+        <div style="width:32px;"></div>
+      </div>
+      ${_invoiceLineItems.map((item, idx) => `
+        <div class="line-item-row" style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+          <input type="text" class="form-control" style="flex:3;height:34px;font-size:13px;" value="${escAttr(item.description)}" onchange="window.app.updateLineItem(${idx},'description',this.value)" placeholder="Service description">
+          <input type="number" class="form-control" style="flex:1;height:34px;font-size:13px;text-align:center;" value="${item.qty}" min="1" step="1" onchange="window.app.updateLineItem(${idx},'qty',this.value)">
+          <input type="number" class="form-control" style="flex:1;height:34px;font-size:13px;text-align:center;" value="${item.rate}" min="0" step="0.01" onchange="window.app.updateLineItem(${idx},'rate',this.value)">
+          <div style="flex:1;text-align:right;font-weight:600;font-size:13px;">${_fmtMoney(item.qty * item.rate)}</div>
+          <button class="btn btn-sm" style="width:32px;height:32px;padding:0;color:var(--red);flex-shrink:0;" onclick="window.app.removeLineItem(${idx})" title="Remove">&times;</button>
+        </div>
+      `).join('')}
+      <button class="btn btn-sm" style="margin-top:4px;font-size:12px;" onclick="window.app.addLineItem()">+ Add Line Item</button>
+    </div>
+    <div style="margin-top:12px;border-top:1px solid var(--gray-200);padding-top:12px;display:flex;justify-content:flex-end;">
+      <div style="text-align:right;">
+        <div style="font-size:13px;color:var(--gray-600);margin-bottom:4px;">Subtotal: <strong>${_fmtMoney(_invoiceLineItems.reduce((s, i) => s + i.qty * i.rate, 0))}</strong></div>
+        <div style="font-size:18px;font-weight:800;color:var(--gray-900);">Total: ${_fmtMoney(_invoiceLineItems.reduce((s, i) => s + i.qty * i.rate, 0))}</div>
+      </div>
+    </div>
+  `;
+}
+
 async function renderBillingPage() {
   const body = document.getElementById('page-body');
   body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
 
-  let stats = { totalRevenue: 0, outstanding: 0, overdue: 0, drafts: 0 };
+  let stats = { totalRevenue: 0, outstanding: 0, overdue: 0, drafts: 0, collected: 0, estimatesPending: 0 };
   let invoices = [];
   let services = [];
+  let estimates = [];
 
   try { stats = await store.getBillingStats(); } catch (e) { console.error('Billing stats error:', e); }
   try { invoices = await store.getInvoices(); } catch (e) { console.error('Invoices error:', e); }
   try { services = await store.getServices(); } catch (e) { console.error('Services error:', e); }
+  try { estimates = await store.getEstimates(); } catch (e) { /* estimates endpoint may not exist yet */ }
   if (!Array.isArray(invoices)) invoices = [];
   if (!Array.isArray(services)) services = [];
+  if (!Array.isArray(estimates)) estimates = [];
+  _billingServices = services;
 
-  const fmt = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Compute aging buckets from invoices
+  const today = new Date();
+  const aging = { current: 0, days30: 0, days60: 0, days90plus: 0 };
+  invoices.filter(i => i.status !== 'paid' && i.status !== 'void' && i.status !== 'cancelled' && i.status !== 'draft').forEach(inv => {
+    const due = new Date(inv.dueDate || inv.due_date || inv.createdAt || inv.created_at);
+    const daysPast = Math.floor((today - due) / 86400000);
+    const amt = (inv.totalAmount || inv.total_amount || inv.amount || 0) - (inv.paidAmount || inv.paid_amount || 0);
+    if (daysPast <= 0) aging.current += amt;
+    else if (daysPast <= 30) aging.days30 += amt;
+    else if (daysPast <= 60) aging.days60 += amt;
+    else aging.days90plus += amt;
+  });
 
-  const invoiceStatusBadge = (status) => {
-    const map = { draft: 'inactive', sent: 'pending', partial: 'pending', paid: 'approved', overdue: 'denied', cancelled: 'inactive', void: 'inactive' };
-    return `<span class="badge badge-${map[status] || 'inactive'}">${escHtml(status || 'draft')}</span>`;
-  };
+  // Monthly revenue breakdown (last 6 months)
+  const monthlyRev = {};
+  for (let m = 5; m >= 0; m--) {
+    const d = new Date(today.getFullYear(), today.getMonth() - m, 1);
+    const key = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    monthlyRev[key] = 0;
+  }
+  invoices.forEach(inv => {
+    if (inv.status === 'paid' || (inv.paidAmount || inv.paid_amount || 0) > 0) {
+      const d = new Date(inv.paidDate || inv.paid_date || inv.updatedAt || inv.updated_at || inv.createdAt || inv.created_at || '');
+      const key = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      if (monthlyRev[key] !== undefined) monthlyRev[key] += (inv.paidAmount || inv.paid_amount || inv.totalAmount || inv.total_amount || 0);
+    }
+  });
+  const maxMonthly = Math.max(...Object.values(monthlyRev), 1);
 
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));">
-      <div class="stat-card"><div class="label">Total Revenue</div><div class="value" style="color:var(--green);">${fmt(stats.totalRevenue)}</div></div>
-      <div class="stat-card"><div class="label">Outstanding</div><div class="value" style="color:var(--brand-600);">${fmt(stats.outstanding)}</div></div>
-      <div class="stat-card"><div class="label">Overdue</div><div class="value" style="color:var(--red);">${fmt(stats.overdue)}</div></div>
+    <!-- Stats Row -->
+    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
+      <div class="stat-card"><div class="label">Total Revenue</div><div class="value" style="color:var(--green);">${_fmtMoney(stats.totalRevenue || stats.total_revenue)}</div></div>
+      <div class="stat-card"><div class="label">Outstanding</div><div class="value" style="color:var(--brand-600);">${_fmtMoney(stats.outstanding)}</div></div>
+      <div class="stat-card"><div class="label">Overdue</div><div class="value" style="color:var(--red);">${_fmtMoney(stats.overdue)}</div></div>
+      <div class="stat-card"><div class="label">Collected</div><div class="value" style="color:var(--green);">${_fmtMoney(stats.collected || stats.totalPaid || stats.total_paid)}</div></div>
       <div class="stat-card"><div class="label">Drafts</div><div class="value" style="color:var(--gray-500);">${stats.drafts || 0}</div></div>
+      <div class="stat-card"><div class="label">Estimates</div><div class="value" style="color:var(--brand-600);">${estimates.length}</div></div>
     </div>
 
-    <!-- Services Section -->
-    <div class="card" style="margin-bottom:20px;">
-      <div class="card-header" style="cursor:pointer;" onclick="this.parentElement.querySelector('.card-body').classList.toggle('collapsed');">
-        <h3>Services (${services.length})</h3>
-        ${editButton('+ Add Service', 'window.app.openServiceModal()')}
+    <!-- Revenue Chart & Aging -->
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px;">
+      <div class="card">
+        <div class="card-header"><h3>Monthly Revenue (Last 6 Months)</h3></div>
+        <div class="card-body" style="padding:16px;">
+          <div style="display:flex;align-items:flex-end;gap:8px;height:140px;">
+            ${Object.entries(monthlyRev).map(([label, val]) => `
+              <div style="flex:1;text-align:center;">
+                <div style="background:var(--brand-600);border-radius:4px 4px 0 0;height:${Math.max(val / maxMonthly * 120, 4)}px;margin-bottom:6px;transition:height 0.3s;" title="${_fmtMoney(val)}"></div>
+                <div style="font-size:10px;font-weight:600;color:var(--gray-500);">${label}</div>
+                <div style="font-size:10px;color:var(--gray-600);">${_fmtMoney(val)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
       </div>
-      <div class="card-body" style="padding:0;">
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Service</th><th>Code</th><th>Rate</th><th>Description</th></tr></thead>
-            <tbody>
-              ${services.map(s => `
-                <tr>
-                  <td><strong>${escHtml(s.name || s.serviceName || '—')}</strong></td>
-                  <td><code>${escHtml(s.code || s.serviceCode || '—')}</code></td>
-                  <td>${fmt(s.rate || s.defaultRate)}</td>
-                  <td class="text-sm text-muted">${escHtml(s.description || '—')}</td>
-                </tr>`).join('')}
-              ${services.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:1rem;color:var(--gray-500);">No services defined yet.</td></tr>' : ''}
-            </tbody>
-          </table>
+      <div class="card">
+        <div class="card-header"><h3>Aging Analysis</h3></div>
+        <div class="card-body" style="padding:16px;">
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:var(--gray-600);">Current</span><strong style="color:var(--green);">${_fmtMoney(aging.current)}</strong></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:var(--gray-600);">1-30 days</span><strong style="color:var(--gold);">${_fmtMoney(aging.days30)}</strong></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:var(--gray-600);">31-60 days</span><strong style="color:var(--orange,#f97316);">${_fmtMoney(aging.days60)}</strong></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:var(--gray-600);">60+ days</span><strong style="color:var(--red);">${_fmtMoney(aging.days90plus)}</strong></div>
+            <div style="border-top:1px solid var(--gray-200);padding-top:8px;display:flex;justify-content:space-between;"><span style="font-size:12px;font-weight:700;">Total AR</span><strong>${_fmtMoney(aging.current + aging.days30 + aging.days60 + aging.days90plus)}</strong></div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Invoices Table -->
-    <div class="card">
-      <div class="card-header">
-        <h3>Invoices (${invoices.length})</h3>
-        <div style="display:flex;gap:8px;">
-          <select id="invoice-status-filter" class="form-control" style="width:140px;height:34px;font-size:13px;" onchange="window.app.filterInvoices()">
-            <option value="">All Statuses</option>
-            <option value="draft">Draft</option>
-            <option value="sent">Sent</option>
-            <option value="partial">Partial</option>
-            <option value="paid">Paid</option>
-            <option value="overdue">Overdue</option>
-          </select>
-          <input type="text" id="invoice-search" placeholder="Search invoices..." class="form-control" style="width:200px;height:34px;font-size:13px;" oninput="window.app.filterInvoices()">
+    <!-- Billing Tabs -->
+    <div class="tabs" style="margin-bottom:16px;">
+      <button class="tab ${_billingTab === 'invoices' ? 'active' : ''}" onclick="window.app.billingTab(this,'invoices')">Invoices (${invoices.length})</button>
+      <button class="tab ${_billingTab === 'estimates' ? 'active' : ''}" onclick="window.app.billingTab(this,'estimates')">Estimates (${estimates.length})</button>
+      <button class="tab ${_billingTab === 'services' ? 'active' : ''}" onclick="window.app.billingTab(this,'services')">Services (${services.length})</button>
+    </div>
+
+    <!-- Invoices Tab -->
+    <div id="billing-invoices" class="${_billingTab !== 'invoices' ? 'hidden' : ''}">
+      <div class="card">
+        <div class="card-header">
+          <h3>Invoices</h3>
+          <div style="display:flex;gap:8px;">
+            <select id="invoice-status-filter" class="form-control" style="width:140px;height:34px;font-size:13px;" onchange="window.app.filterInvoices()">
+              <option value="">All Statuses</option>
+              <option value="draft">Draft</option>
+              <option value="sent">Sent</option>
+              <option value="partial">Partial</option>
+              <option value="paid">Paid</option>
+              <option value="overdue">Overdue</option>
+            </select>
+            <input type="text" id="invoice-search" placeholder="Search invoices..." class="form-control" style="width:200px;height:34px;font-size:13px;" oninput="window.app.filterInvoices()">
+          </div>
         </div>
-      </div>
-      <div class="card-body" style="padding:0;">
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr><th>Invoice #</th><th>Client</th><th>Amount</th><th>Paid</th><th>Status</th><th>Due Date</th><th>Actions</th></tr>
-            </thead>
-            <tbody id="invoice-table-body">
-              ${invoices.map(inv => {
-                const invStatus = inv.status || 'draft';
-                const client = inv.clientName || inv.client_name || inv.organizationName || '—';
-                return `
-                <tr class="invoice-row" data-status="${invStatus}" data-search="${(inv.invoiceNumber || '').toLowerCase()} ${client.toLowerCase()}">
-                  <td><strong>${escHtml(inv.invoiceNumber || inv.invoice_number || '#' + inv.id)}</strong></td>
-                  <td>${escHtml(client)}</td>
-                  <td>${fmt(inv.totalAmount || inv.total_amount || inv.amount)}</td>
-                  <td>${fmt(inv.paidAmount || inv.paid_amount || 0)}</td>
-                  <td>${invoiceStatusBadge(invStatus)}</td>
-                  <td>${inv.dueDate || inv.due_date ? formatDateDisplay(inv.dueDate || inv.due_date) : '—'}</td>
-                  <td>
-                    ${editButton('View', `window.app.viewInvoice(${inv.id})`)}
-                    ${invStatus !== 'paid' ? editButton('Payment', `window.app.openPaymentModal(${inv.id})`, 'btn-primary') : ''}
-                    ${invStatus === 'draft' ? deleteButton('Delete', `window.app.deleteInvoice(${inv.id})`) : ''}
-                  </td>
-                </tr>`;
-              }).join('')}
-              ${invoices.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-500);">No invoices yet.</td></tr>' : ''}
-            </tbody>
-          </table>
+        <div class="card-body" style="padding:0;">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Invoice #</th><th>Client</th><th>Items</th><th>Amount</th><th>Paid</th><th>Status</th><th>Due Date</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="invoice-table-body">
+                ${invoices.map(inv => {
+                  const invStatus = inv.status || 'draft';
+                  const client = inv.clientName || inv.client_name || inv.organizationName || '—';
+                  const items = inv.items || inv.lineItems || inv.line_items || [];
+                  const itemCount = Array.isArray(items) ? items.length : 0;
+                  return `
+                  <tr class="invoice-row" style="cursor:pointer;" data-status="${invStatus}" data-search="${(inv.invoiceNumber || '').toLowerCase()} ${client.toLowerCase()}" onclick="window.app.viewInvoiceDetail(${inv.id})">
+                    <td><strong>${escHtml(inv.invoiceNumber || inv.invoice_number || '#' + inv.id)}</strong></td>
+                    <td>${escHtml(client)}</td>
+                    <td class="text-sm text-muted">${itemCount} item${itemCount !== 1 ? 's' : ''}</td>
+                    <td>${_fmtMoney(inv.totalAmount || inv.total_amount || inv.amount)}</td>
+                    <td>${_fmtMoney(inv.paidAmount || inv.paid_amount || 0)}</td>
+                    <td>${_invoiceStatusBadge(invStatus)}</td>
+                    <td>${inv.dueDate || inv.due_date ? formatDateDisplay(inv.dueDate || inv.due_date) : '—'}</td>
+                    <td onclick="event.stopPropagation();">
+                      ${invStatus === 'draft' ? `<button class="btn btn-sm" onclick="window.app.sendInvoice(${inv.id})" title="Send">Send</button>` : ''}
+                      ${invStatus !== 'paid' && invStatus !== 'void' ? `<button class="btn btn-sm btn-primary" onclick="window.app.openPaymentModal(${inv.id})" title="Payment">Pay</button>` : ''}
+                      ${invStatus === 'draft' ? `<button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteInvoice(${inv.id})">Del</button>` : ''}
+                    </td>
+                  </tr>`;
+                }).join('')}
+                ${invoices.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No invoices yet. Click "+ Create Invoice" to get started.</td></tr>' : ''}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Invoice Modal -->
+    <!-- Estimates Tab -->
+    <div id="billing-estimates" class="${_billingTab !== 'estimates' ? 'hidden' : ''}">
+      <div class="card">
+        <div class="card-header">
+          <h3>Estimates</h3>
+          ${editButton('+ Create Estimate', 'window.app.openEstimateModal()')}
+        </div>
+        <div class="card-body" style="padding:0;">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Estimate #</th><th>Client</th><th>Items</th><th>Amount</th><th>Status</th><th>Expires</th><th>Actions</th></tr></thead>
+              <tbody>
+                ${estimates.map(est => {
+                  const estStatus = est.status || 'draft';
+                  const items = est.items || est.lineItems || est.line_items || [];
+                  return `
+                  <tr>
+                    <td><strong>${escHtml(est.estimateNumber || est.estimate_number || 'EST-' + est.id)}</strong></td>
+                    <td>${escHtml(est.clientName || est.client_name || '—')}</td>
+                    <td class="text-sm text-muted">${Array.isArray(items) ? items.length : 0} items</td>
+                    <td>${_fmtMoney(est.totalAmount || est.total_amount || est.amount)}</td>
+                    <td>${_invoiceStatusBadge(estStatus)}</td>
+                    <td>${est.expirationDate || est.expiration_date ? formatDateDisplay(est.expirationDate || est.expiration_date) : '—'}</td>
+                    <td>
+                      <button class="btn btn-sm" onclick="window.app.editEstimate(${est.id})">Edit</button>
+                      ${estStatus !== 'converted' ? `<button class="btn btn-sm btn-primary" onclick="window.app.convertEstimate(${est.id})" title="Convert to Invoice">To Invoice</button>` : ''}
+                      <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteEstimate(${est.id})">Del</button>
+                    </td>
+                  </tr>`;
+                }).join('')}
+                ${estimates.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-500);">No estimates yet.</td></tr>' : ''}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Services Tab -->
+    <div id="billing-services" class="${_billingTab !== 'services' ? 'hidden' : ''}">
+      <div class="card">
+        <div class="card-header">
+          <h3>Service Catalog</h3>
+          ${editButton('+ Add Service', 'window.app.openServiceModal()')}
+        </div>
+        <div class="card-body" style="padding:0;">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>Code</th><th>Rate</th><th>Description</th><th>Actions</th></tr></thead>
+              <tbody>
+                ${services.map(s => `
+                  <tr>
+                    <td><strong>${escHtml(s.name || s.serviceName || '—')}</strong></td>
+                    <td><code>${escHtml(s.code || s.serviceCode || '—')}</code></td>
+                    <td>${_fmtMoney(s.rate || s.defaultRate)}</td>
+                    <td class="text-sm text-muted">${escHtml(s.description || '—')}</td>
+                    <td>
+                      <button class="btn btn-sm" onclick="window.app.editService(${s.id})">Edit</button>
+                      <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteService(${s.id})">Del</button>
+                    </td>
+                  </tr>`).join('')}
+                ${services.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:1rem;color:var(--gray-500);">No services defined yet. Add your CPT codes and rates.</td></tr>' : ''}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Invoice/Estimate Modal (shared) -->
     <div class="modal" id="invoice-modal">
-      <div class="modal-content" style="max-width:600px;">
+      <div class="modal-content" style="max-width:720px;">
         <div class="modal-header">
           <h3 id="invoice-modal-title">Create Invoice</h3>
           <button class="modal-close" onclick="document.getElementById('invoice-modal').classList.remove('active')">&times;</button>
         </div>
-        <div class="modal-body">
-          <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Client Name *</label><input type="text" id="inv-client" class="form-control"></div>
-            <div class="auth-field" style="margin:0;"><label>Amount *</label><input type="number" id="inv-amount" class="form-control" step="0.01" min="0"></div>
-            <div class="auth-field" style="margin:0;"><label>Due Date *</label><input type="date" id="inv-due" class="form-control"></div>
-            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Description</label><textarea id="inv-desc" class="form-control" rows="3" style="resize:vertical;"></textarea></div>
+        <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+          <input type="hidden" id="inv-edit-id" value="">
+          <input type="hidden" id="inv-mode" value="invoice">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Client / Organization Name *</label><input type="text" id="inv-client" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Client Email</label><input type="email" id="inv-client-email" class="form-control" placeholder="client@example.com"></div>
+            <div class="auth-field" style="margin:0;"><label id="inv-date-label">Due Date *</label><input type="date" id="inv-due" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Invoice #</label><input type="text" id="inv-number" class="form-control" placeholder="Auto-generated"></div>
             <div class="auth-field" style="margin:0;"><label>Status</label>
               <select id="inv-status" class="form-control">
                 <option value="draft">Draft</option>
@@ -8351,11 +8745,22 @@ async function renderBillingPage() {
               </select>
             </div>
           </div>
-          <input type="hidden" id="inv-edit-id" value="">
+
+          <!-- Line Items -->
+          <div style="margin-bottom:16px;">
+            <label style="display:block;font-size:12px;font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Line Items</label>
+            <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">
+              ${services.map(s => `<button class="btn btn-sm" style="font-size:11px;" onclick="window.app.addServiceLineItem(${s.id})">${escHtml(s.code || s.name)}</button>`).join('')}
+            </div>
+            <div id="line-items-editor">${_renderLineItemsEditor()}</div>
+          </div>
+
+          <div class="auth-field" style="margin:0 0 12px;"><label>Notes / Payment Terms</label><textarea id="inv-notes" class="form-control" rows="2" style="resize:vertical;" placeholder="e.g. Payment due within 30 days. Late fees may apply."></textarea></div>
+          <div class="auth-field" style="margin:0;"><label>Description</label><textarea id="inv-desc" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
         </div>
         <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
           <button class="btn" onclick="document.getElementById('invoice-modal').classList.remove('active')">Cancel</button>
-          <button class="btn btn-primary" onclick="window.app.saveInvoice()">Save Invoice</button>
+          <button class="btn btn-primary" onclick="window.app.saveInvoice()">Save</button>
         </div>
       </div>
     </div>
@@ -8393,12 +8798,13 @@ async function renderBillingPage() {
     <div class="modal" id="service-modal">
       <div class="modal-content" style="max-width:420px;">
         <div class="modal-header">
-          <h3>Add Service</h3>
+          <h3 id="service-modal-title">Add Service</h3>
           <button class="modal-close" onclick="document.getElementById('service-modal').classList.remove('active')">&times;</button>
         </div>
         <div class="modal-body">
+          <input type="hidden" id="svc-edit-id" value="">
           <div class="auth-field" style="margin:0 0 12px;"><label>Service Name *</label><input type="text" id="svc-name" class="form-control"></div>
-          <div class="auth-field" style="margin:0 0 12px;"><label>Code</label><input type="text" id="svc-code" class="form-control" placeholder="e.g. CPT code"></div>
+          <div class="auth-field" style="margin:0 0 12px;"><label>Code (CPT / HCPCS)</label><input type="text" id="svc-code" class="form-control" placeholder="e.g. 99213, 90834"></div>
           <div class="auth-field" style="margin:0 0 12px;"><label>Default Rate</label><input type="number" id="svc-rate" class="form-control" step="0.01" min="0"></div>
           <div class="auth-field" style="margin:0;"><label>Description</label><textarea id="svc-desc" class="form-control" rows="2"></textarea></div>
         </div>
@@ -8406,6 +8812,130 @@ async function renderBillingPage() {
           <button class="btn" onclick="document.getElementById('service-modal').classList.remove('active')">Cancel</button>
           <button class="btn btn-primary" onclick="window.app.saveService()">Save Service</button>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Invoice Detail View ───
+
+async function renderInvoiceDetail(invoiceId) {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  let inv = {};
+  let payments = [];
+  try { inv = await store.getInvoice(invoiceId); } catch (e) {
+    try {
+      const all = await store.getInvoices();
+      inv = (Array.isArray(all) ? all : []).find(x => x.id == invoiceId) || {};
+    } catch {}
+  }
+  try { payments = await store.getInvoicePayments(invoiceId); } catch {}
+  if (!Array.isArray(payments)) payments = [];
+
+  if (!inv || !inv.id) { body.innerHTML = '<div class="empty-state"><h3>Invoice not found</h3></div>'; return; }
+
+  const invNum = inv.invoiceNumber || inv.invoice_number || '#' + inv.id;
+  const client = inv.clientName || inv.client_name || '—';
+  const status = inv.status || 'draft';
+  const items = inv.items || inv.lineItems || inv.line_items || [];
+  const total = inv.totalAmount || inv.total_amount || inv.amount || 0;
+  const paid = inv.paidAmount || inv.paid_amount || 0;
+  const balance = total - paid;
+  const notes = inv.notes || inv.paymentTerms || inv.payment_terms || '';
+  const desc = inv.description || '';
+
+  const pageTitle = document.getElementById('page-title');
+  const pageSubtitle = document.getElementById('page-subtitle');
+  const pageActions = document.getElementById('page-actions');
+  if (pageTitle) pageTitle.textContent = 'Invoice ' + invNum;
+  if (pageSubtitle) pageSubtitle.textContent = client;
+  if (pageActions) pageActions.innerHTML = `
+    <button class="btn btn-sm" onclick="window.app.navigateTo('billing')">&larr; Back</button>
+    ${status === 'draft' ? `<button class="btn btn-sm btn-primary" onclick="window.app.sendInvoice(${inv.id})">Send Invoice</button>` : ''}
+    ${status !== 'paid' && status !== 'void' ? `<button class="btn btn-sm btn-gold" onclick="window.app.openPaymentModal(${inv.id})">Record Payment</button>` : ''}
+    <button class="btn btn-sm" onclick="window.app.editInvoice(${inv.id})">Edit</button>
+    <button class="btn btn-sm no-print" onclick="window.app.printPage()">Print</button>
+  `;
+
+  body.innerHTML = `
+    <!-- Invoice Header -->
+    <div class="card" style="border-top:3px solid var(--brand-600);margin-bottom:20px;">
+      <div class="card-body">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+          <div>
+            <div style="font-size:24px;font-weight:800;color:var(--gray-900);">Invoice ${escHtml(invNum)}</div>
+            <div style="font-size:15px;color:var(--gray-600);margin-top:4px;">${escHtml(client)}</div>
+            ${inv.clientEmail || inv.client_email ? `<div style="font-size:13px;color:var(--gray-500);margin-top:2px;">${escHtml(inv.clientEmail || inv.client_email)}</div>` : ''}
+          </div>
+          <div style="text-align:right;">
+            <div style="margin-bottom:8px;">${_invoiceStatusBadge(status)}</div>
+            <div style="font-size:13px;color:var(--gray-600);">Invoice Date: <strong>${formatDateDisplay(inv.invoiceDate || inv.invoice_date || inv.createdAt || inv.created_at)}</strong></div>
+            <div style="font-size:13px;color:var(--gray-600);">Due Date: <strong>${formatDateDisplay(inv.dueDate || inv.due_date)}</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Amount Summary -->
+    <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
+      <div class="stat-card"><div class="label">Total Amount</div><div class="value">${_fmtMoney(total)}</div></div>
+      <div class="stat-card"><div class="label">Paid</div><div class="value" style="color:var(--green);">${_fmtMoney(paid)}</div></div>
+      <div class="stat-card"><div class="label">Balance Due</div><div class="value" style="color:${balance > 0 ? 'var(--red)' : 'var(--green)'};">${_fmtMoney(balance)}</div></div>
+    </div>
+
+    <!-- Line Items -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-header"><h3>Line Items</h3></div>
+      <div class="card-body" style="padding:0;">
+        ${Array.isArray(items) && items.length > 0 ? `
+          <table>
+            <thead><tr><th>Description</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Rate</th><th style="text-align:right;">Subtotal</th></tr></thead>
+            <tbody>
+              ${items.map(item => `
+                <tr>
+                  <td>${escHtml(item.description || item.name || '—')}</td>
+                  <td style="text-align:center;">${item.qty || item.quantity || 1}</td>
+                  <td style="text-align:right;">${_fmtMoney(item.rate || item.unitPrice || item.unit_price)}</td>
+                  <td style="text-align:right;font-weight:600;">${_fmtMoney((item.qty || item.quantity || 1) * (item.rate || item.unitPrice || item.unit_price || 0))}</td>
+                </tr>
+              `).join('')}
+              <tr style="border-top:2px solid var(--gray-300);font-weight:700;">
+                <td colspan="3" style="text-align:right;">Total</td>
+                <td style="text-align:right;">${_fmtMoney(total)}</td>
+              </tr>
+            </tbody>
+          </table>
+        ` : `<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No line items. Amount: <strong>${_fmtMoney(total)}</strong></div>`}
+      </div>
+    </div>
+
+    ${desc ? `<div class="card" style="margin-bottom:20px;"><div class="card-header"><h3>Description</h3></div><div class="card-body"><p style="white-space:pre-wrap;font-size:14px;color:var(--gray-700);margin:0;">${escHtml(desc)}</p></div></div>` : ''}
+    ${notes ? `<div class="card" style="margin-bottom:20px;"><div class="card-header"><h3>Notes / Payment Terms</h3></div><div class="card-body"><p style="white-space:pre-wrap;font-size:14px;color:var(--gray-700);margin:0;">${escHtml(notes)}</p></div></div>` : ''}
+
+    <!-- Payment History -->
+    <div class="card">
+      <div class="card-header">
+        <h3>Payment History (${payments.length})</h3>
+        ${status !== 'paid' && status !== 'void' ? `<button class="btn btn-sm btn-gold" onclick="window.app.openPaymentModal(${inv.id})">+ Record Payment</button>` : ''}
+      </div>
+      <div class="card-body" style="padding:0;">
+        ${payments.length > 0 ? `
+          <table>
+            <thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th></tr></thead>
+            <tbody>
+              ${payments.map(p => `
+                <tr>
+                  <td>${formatDateDisplay(p.paymentDate || p.payment_date || p.createdAt || p.created_at)}</td>
+                  <td style="font-weight:600;color:var(--green);">${_fmtMoney(p.amount)}</td>
+                  <td>${escHtml((p.paymentMethod || p.payment_method || 'check').replace(/_/g, ' '))}</td>
+                  <td class="text-sm text-muted">${escHtml(p.reference || p.notes || '—')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No payments recorded yet.</div>'}
       </div>
     </div>
   `;
