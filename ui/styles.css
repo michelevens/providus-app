@@ -1424,6 +1424,9 @@ select.form-control {
   gap: 8px;
   animation: toastSlideUp 0.3s var(--ease-spring);
 }
+/* Onboarding org search dropdown */
+.onboard-org-item:hover { background: rgba(8, 145, 178, 0.15) !important; }
+
 @keyframes toastSlideUp {
   from { transform: translateY(16px) scale(0.96); opacity: 0; }
   to { transform: translateY(0) scale(1); opacity: 1; }

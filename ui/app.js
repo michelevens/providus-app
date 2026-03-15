@@ -5008,6 +5008,34 @@ function handleNppesProxy(payload) {
     const el = document.getElementById('invite-password');
     if (el) { el.value = pw.join(''); el.type = 'text'; }
   },
+
+  // Onboarding token management
+  async createOnboardToken() {
+    const email = document.getElementById('onboard-invite-email')?.value?.trim();
+    if (!email) { showToast('Please enter a provider email'); return; }
+    const hours = parseInt(document.getElementById('onboard-invite-hours')?.value || '72');
+    try {
+      const token = await store.createOnboardToken({ provider_email: email, expires_hours: hours });
+      const link = location.origin + location.pathname + '#onboard/' + (token.token || token.id);
+      try { await navigator.clipboard.writeText(link); } catch {}
+      const result = document.getElementById('onboard-invite-result');
+      document.getElementById('onboard-invite-link').textContent = link;
+      if (result) result.style.display = '';
+      document.getElementById('onboard-invite-email').value = '';
+      showToast('Invite link created and copied!');
+      await renderOnboardingStub();
+    } catch (e) { showToast('Error creating token: ' + e.message); }
+  },
+
+  async revokeOnboardToken(id) {
+    if (!confirm('Revoke this onboarding token?')) return;
+    try {
+      await store._fetch(`${CONFIG.API_URL}/onboard/tokens/${id}`, { method: 'DELETE' });
+      showToast('Token revoked');
+      await renderOnboardingStub();
+    } catch (e) { showToast('Error revoking token: ' + e.message); }
+  },
+
   cancelInvite() {
     const form = document.getElementById('invite-user-form');
     if (form) form.classList.add('hidden');
@@ -6952,28 +6980,64 @@ async function renderOnboardingStub() {
   let tokens = [];
   try { tokens = await store.getOnboardTokens(); } catch {}
 
+  const baseUrl = location.origin + location.pathname;
+
   body.innerHTML = `
+    <div class="card" style="margin-bottom:1.5rem;">
+      <div class="card-header">
+        <h3>Create Onboarding Invite</h3>
+      </div>
+      <div class="card-body">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+          <div class="auth-field" style="flex:1;min-width:200px;margin:0;">
+            <label for="onboard-invite-email">Provider Email</label>
+            <input type="email" id="onboard-invite-email" placeholder="provider@email.com" style="margin:0;">
+          </div>
+          <div class="auth-field" style="width:120px;margin:0;">
+            <label for="onboard-invite-hours">Expires In</label>
+            <select id="onboard-invite-hours" class="form-control" style="margin:0;">
+              <option value="24">24 hours</option>
+              <option value="48">48 hours</option>
+              <option value="72" selected>72 hours</option>
+              <option value="168">1 week</option>
+              <option value="720">30 days</option>
+            </select>
+          </div>
+          <button class="btn btn-gold" onclick="window.app.createOnboardToken()" style="height:38px;">Create & Copy Link</button>
+        </div>
+        <div id="onboard-invite-result" style="display:none;margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;">
+          <div style="font-size:12px;color:#10b981;margin-bottom:4px;">Invite link created — copied to clipboard!</div>
+          <code id="onboard-invite-link" style="font-size:12px;word-break:break-all;color:#f1f5f9;"></code>
+        </div>
+      </div>
+    </div>
     <div class="card">
       <div class="card-header">
         <h3>Onboarding Tokens</h3>
-        <button class="btn btn-gold" onclick="window.app.createOnboardToken()">+ Create Token</button>
       </div>
       <div class="card-body">
         ${tokens.length > 0 ? `
-          <table>
-            <thead><tr><th>Token</th><th>Provider</th><th>Status</th><th>Created</th></tr></thead>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Provider Email</th><th>Invite Link</th><th>Status</th><th>Expires</th><th></th></tr></thead>
             <tbody>
-              ${tokens.map(t => `
+              ${tokens.map(t => {
+                const isUsed = !!t.used_at;
+                const isExpired = t.expires_at && new Date(t.expires_at) < new Date();
+                const status = isUsed ? 'Used' : isExpired ? 'Expired' : 'Pending';
+                const badgeClass = isUsed ? 'approved' : isExpired ? 'denied' : 'pending';
+                const link = `${baseUrl}#onboard/${t.token}`;
+                return `
                 <tr>
-                  <td><code>${t.token || t.id}</code></td>
-                  <td>${escHtml(t.provider_name || '—')}</td>
-                  <td><span class="badge badge-${t.used ? 'approved' : 'pending'}">${t.used ? 'Used' : 'Pending'}</span></td>
-                  <td>${formatDateDisplay(t.created_at)}</td>
-                </tr>
-              `).join('')}
+                  <td>${escHtml(t.provider_email || '—')}</td>
+                  <td style="max-width:200px;"><code style="font-size:11px;cursor:pointer;" onclick="navigator.clipboard.writeText('${link}');window.app.showToast('Link copied!')" title="Click to copy">${t.token ? t.token.substring(0, 12) + '...' : t.id}</code></td>
+                  <td><span class="badge badge-${badgeClass}">${status}</span></td>
+                  <td>${formatDateDisplay(t.expires_at)}</td>
+                  <td>${!isUsed ? `<button class="btn btn-sm" style="color:#ef4444;" onclick="window.app.revokeOnboardToken(${t.id})">Revoke</button>` : ''}</td>
+                </tr>`;
+              }).join('')}
             </tbody>
-          </table>
-        ` : '<div class="text-sm text-muted" style="text-align:center;padding:2rem;">No onboarding tokens yet.</div>'}
+          </table></div>
+        ` : '<div class="text-sm text-muted" style="text-align:center;padding:2rem;">No onboarding tokens yet. Create one above to invite a provider.</div>'}
       </div>
     </div>
   `;

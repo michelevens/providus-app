@@ -480,6 +480,112 @@
     </div>
   </div>
 
+  <!-- Public Provider Onboarding Portal (shown via #onboard/TOKEN) -->
+  <div id="onboard-portal" style="display:none;">
+    <div class="auth-gate" style="display:flex;">
+      <div class="auth-box" style="max-width:560px;">
+        <div id="onboard-loading" style="text-align:center;padding:2rem;">
+          <div class="logo">
+            <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="56" height="56" rx="14" fill="#0891b2"/>
+              <path d="M16 20h8c3.3 0 6 2.7 6 6s-2.7 6-6 6h-8V20z" stroke="#fff" stroke-width="2.5" fill="none"/>
+              <path d="M34 20v12l4 4" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h2>Providus</h2>
+          <p>Validating your onboarding link...</p>
+        </div>
+
+        <div id="onboard-invalid" style="display:none;text-align:center;padding:2rem;">
+          <h2 style="color:#ef4444;">Invalid or Expired Link</h2>
+          <p>This onboarding link is no longer valid. Please contact your agency administrator for a new invitation.</p>
+        </div>
+
+        <div id="onboard-success" style="display:none;text-align:center;padding:2rem;">
+          <div style="font-size:48px;margin-bottom:12px;">&#10003;</div>
+          <h2 style="color:#10b981;">Welcome Aboard!</h2>
+          <p>Your profile has been submitted successfully. Your agency administrator will follow up with next steps.</p>
+        </div>
+
+        <div id="onboard-form-wrapper" style="display:none;">
+          <div class="logo">
+            <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="56" height="56" rx="14" fill="#0891b2"/>
+              <path d="M16 20h8c3.3 0 6 2.7 6 6s-2.7 6-6 6h-8V20z" stroke="#fff" stroke-width="2.5" fill="none"/>
+              <path d="M34 20v12l4 4" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h2>Provider Onboarding</h2>
+          <p id="onboard-agency-label">Complete your profile to join <strong id="onboard-agency-name"></strong></p>
+
+          <div class="auth-field">
+            <label>Organization <span style="color:#94a3b8;font-weight:normal;">(search by name or enter ID)</span></label>
+            <div style="position:relative;">
+              <input type="text" id="onboard-org-search" placeholder="Search organization name or NPI..." autocomplete="off">
+              <input type="hidden" id="onboard-org-id">
+              <div id="onboard-org-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--gray-900,#1e293b);border:1px solid var(--gray-700,#374151);border-radius:8px;max-height:200px;overflow-y:auto;z-index:100;margin-top:4px;"></div>
+            </div>
+            <div id="onboard-org-selected" style="display:none;margin-top:6px;padding:8px 12px;background:rgba(8,145,178,0.1);border:1px solid rgba(8,145,178,0.3);border-radius:6px;font-size:13px;display:none;">
+              <span id="onboard-org-selected-text"></span>
+              <a href="#" onclick="clearOrgSelection();return false;" style="float:right;color:#ef4444;font-size:12px;">Clear</a>
+            </div>
+          </div>
+
+          <div class="auth-row">
+            <div class="auth-field">
+              <label for="onboard-first">First Name *</label>
+              <input type="text" id="onboard-first" placeholder="First name" required>
+            </div>
+            <div class="auth-field">
+              <label for="onboard-last">Last Name *</label>
+              <input type="text" id="onboard-last" placeholder="Last name" required>
+            </div>
+          </div>
+
+          <div class="auth-field">
+            <label for="onboard-credentials">Credentials</label>
+            <input type="text" id="onboard-credentials" placeholder="e.g. MD, DO, NP, LCSW">
+          </div>
+
+          <div class="auth-row">
+            <div class="auth-field">
+              <label for="onboard-npi">NPI</label>
+              <input type="text" id="onboard-npi" placeholder="10-digit NPI" maxlength="10" pattern="[0-9]{10}">
+            </div>
+            <div class="auth-field">
+              <label for="onboard-caqh">CAQH ID</label>
+              <input type="text" id="onboard-caqh" placeholder="CAQH ProView ID">
+            </div>
+          </div>
+
+          <div class="auth-row">
+            <div class="auth-field">
+              <label for="onboard-taxonomy">Taxonomy Code</label>
+              <input type="text" id="onboard-taxonomy" placeholder="e.g. 207Q00000X">
+            </div>
+            <div class="auth-field">
+              <label for="onboard-specialty">Specialty</label>
+              <input type="text" id="onboard-specialty" placeholder="e.g. Family Medicine">
+            </div>
+          </div>
+
+          <div class="auth-field">
+            <label for="onboard-email">Email *</label>
+            <input type="email" id="onboard-email" placeholder="your@email.com" required>
+          </div>
+
+          <div class="auth-field">
+            <label for="onboard-phone">Phone</label>
+            <input type="tel" id="onboard-phone" placeholder="(555) 123-4567">
+          </div>
+
+          <button class="btn-enter" id="onboard-submit-btn" onclick="handleOnboardSubmit()">Submit Profile</button>
+          <div class="error" id="onboard-error"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
@@ -487,6 +593,181 @@
   <div class="offline-bar" id="offline-bar" style="display:none;">
     You are offline — changes are saved locally and will sync when reconnected.
   </div>
+
+  <!-- Public Onboarding Logic -->
+  <script>
+    const API_BASE = 'https://providus-web-production.up.railway.app/api';
+    let _onboardToken = null;
+    let _orgSearchTimer = null;
+
+    // Check if URL is an onboarding link
+    function checkOnboardHash() {
+      const hash = location.hash;
+      const match = hash.match(/^#onboard\/(.+)$/);
+      if (!match) return false;
+
+      _onboardToken = match[1];
+      document.getElementById('auth-gate').style.display = 'none';
+      document.getElementById('app-shell').style.display = 'none';
+      document.getElementById('onboard-portal').style.display = '';
+      validateOnboardToken(_onboardToken);
+      return true;
+    }
+
+    async function validateOnboardToken(token) {
+      try {
+        const res = await fetch(`${API_BASE}/onboard/${token}`);
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          document.getElementById('onboard-loading').style.display = 'none';
+          document.getElementById('onboard-invalid').style.display = '';
+          return;
+        }
+
+        document.getElementById('onboard-loading').style.display = 'none';
+        document.getElementById('onboard-form-wrapper').style.display = '';
+        document.getElementById('onboard-agency-name').textContent = data.data.agency_name;
+        if (data.data.provider_email) {
+          document.getElementById('onboard-email').value = data.data.provider_email;
+        }
+
+        // Set up org search
+        setupOrgSearch(token);
+      } catch (e) {
+        document.getElementById('onboard-loading').style.display = 'none';
+        document.getElementById('onboard-invalid').style.display = '';
+      }
+    }
+
+    function setupOrgSearch(token) {
+      const input = document.getElementById('onboard-org-search');
+      const results = document.getElementById('onboard-org-results');
+
+      // Load all orgs initially
+      fetchOrgs(token, '');
+
+      input.addEventListener('input', () => {
+        clearTimeout(_orgSearchTimer);
+        _orgSearchTimer = setTimeout(() => fetchOrgs(token, input.value.trim()), 300);
+      });
+
+      input.addEventListener('focus', () => {
+        if (results.children.length > 0 && !document.getElementById('onboard-org-id').value) {
+          results.style.display = '';
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('#onboard-org-search') && !e.target.closest('#onboard-org-results')) {
+          results.style.display = 'none';
+        }
+      });
+    }
+
+    async function fetchOrgs(token, search) {
+      const results = document.getElementById('onboard-org-results');
+      try {
+        const url = `${API_BASE}/onboard/${token}/organizations${search ? '?search=' + encodeURIComponent(search) : ''}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const orgs = data.data || [];
+
+        if (orgs.length === 0) {
+          results.innerHTML = '<div style="padding:12px;color:#94a3b8;font-size:13px;text-align:center;">No organizations found</div>';
+        } else {
+          results.innerHTML = orgs.map(o => `
+            <div class="onboard-org-item" onclick="selectOrg(${o.id}, '${(o.name || '').replace(/'/g, "\\'")}', '${o.npi || ''}', '${o.city || ''}', '${o.state || ''}')"
+                 style="padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05);transition:background 0.15s;">
+              <div style="font-weight:500;font-size:14px;color:#f1f5f9;">${o.name || 'Unnamed'}</div>
+              <div style="font-size:12px;color:#94a3b8;">${[o.npi ? 'NPI: ' + o.npi : '', o.city, o.state].filter(Boolean).join(' · ')}</div>
+            </div>
+          `).join('');
+        }
+        results.style.display = '';
+      } catch (e) {
+        results.innerHTML = '<div style="padding:12px;color:#ef4444;font-size:13px;">Error loading organizations</div>';
+        results.style.display = '';
+      }
+    }
+
+    function selectOrg(id, name, npi, city, state) {
+      document.getElementById('onboard-org-id').value = id;
+      document.getElementById('onboard-org-search').value = name;
+      document.getElementById('onboard-org-results').style.display = 'none';
+
+      const sel = document.getElementById('onboard-org-selected');
+      document.getElementById('onboard-org-selected-text').textContent = `${name}${npi ? ' (NPI: ' + npi + ')' : ''}${city ? ' — ' + city + ', ' + state : ''}`;
+      sel.style.display = 'block';
+    }
+
+    function clearOrgSelection() {
+      document.getElementById('onboard-org-id').value = '';
+      document.getElementById('onboard-org-search').value = '';
+      document.getElementById('onboard-org-selected').style.display = 'none';
+    }
+
+    async function handleOnboardSubmit() {
+      const btn = document.getElementById('onboard-submit-btn');
+      const firstName = document.getElementById('onboard-first').value.trim();
+      const lastName = document.getElementById('onboard-last').value.trim();
+      const email = document.getElementById('onboard-email').value.trim();
+
+      if (!firstName || !lastName || !email) {
+        showError('onboard-error', 'First name, last name, and email are required.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+
+      try {
+        const body = {
+          first_name: firstName,
+          last_name: lastName,
+          email,
+          credentials: document.getElementById('onboard-credentials').value.trim() || null,
+          npi: document.getElementById('onboard-npi').value.trim() || null,
+          taxonomy: document.getElementById('onboard-taxonomy').value.trim() || null,
+          specialty: document.getElementById('onboard-specialty').value.trim() || null,
+          phone: document.getElementById('onboard-phone').value.trim() || null,
+          caqh_id: document.getElementById('onboard-caqh').value.trim() || null,
+          organization_id: document.getElementById('onboard-org-id').value ? parseInt(document.getElementById('onboard-org-id').value) : null,
+        };
+
+        const res = await fetch(`${API_BASE}/onboard/${_onboardToken}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          const msg = data.message || (data.errors ? Object.values(data.errors).flat().join(', ') : 'Submission failed.');
+          showError('onboard-error', msg);
+          btn.disabled = false;
+          btn.textContent = 'Submit Profile';
+          return;
+        }
+
+        document.getElementById('onboard-form-wrapper').style.display = 'none';
+        document.getElementById('onboard-success').style.display = '';
+      } catch (e) {
+        showError('onboard-error', 'Unable to connect. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Submit Profile';
+      }
+    }
+
+    // Check onboard hash on page load
+    if (checkOnboardHash()) {
+      // We're in onboard mode — don't proceed with normal auth
+    }
+    window.addEventListener('hashchange', () => {
+      if (location.hash.match(/^#onboard\//)) checkOnboardHash();
+    });
+  </script>
 
   <!-- Auth Logic (JWT-based) -->
   <script>
@@ -606,8 +887,9 @@
       document.getElementById('app-modal').classList.remove('active');
     }
 
-    // Auto-login if token exists
+    // Auto-login if token exists (skip if in onboard mode)
     (function checkAuth() {
+      if (_onboardToken) return; // Skip auth check in onboard portal mode
       const token = localStorage.getItem('providus_token');
       const userJson = localStorage.getItem('providus_user');
       if (token && userJson) {
