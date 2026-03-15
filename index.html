@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Providus">
   <meta name="robots" content="noindex, nofollow">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -528,6 +530,8 @@
         localStorage.setItem('providus_token', data.token);
         localStorage.setItem('providus_user', JSON.stringify(data.user));
         showApp(data.user);
+        // Dynamically import and init the app after first login
+        import('./ui/app.js').then(m => m.initApp());
       } catch (err) {
         showError('auth-error', 'Unable to connect. Please try again.');
       }
@@ -570,6 +574,7 @@
         localStorage.setItem('providus_token', data.token);
         localStorage.setItem('providus_user', JSON.stringify(data.user));
         showApp(data.user);
+        import('./ui/app.js').then(m => m.initApp());
       } catch (err) {
         showError('register-error', 'Unable to connect. Please try again.');
       }

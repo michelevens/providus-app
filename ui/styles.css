@@ -1706,6 +1706,123 @@ select.form-control {
 }
 
 /* ═══════════════════════════════════════════
+   MOBILE EXCELLENCE — TOUCH, TABLES, LAYOUT
+   ═══════════════════════════════════════════ */
+
+/* Safe area insets for notched phones */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .sidebar { padding-top: env(safe-area-inset-top); }
+  .page-header { padding-top: max(14px, env(safe-area-inset-top)); }
+  .page-body { padding-bottom: env(safe-area-inset-bottom); }
+}
+
+@media (max-width: 768px) {
+  /* Touch-friendly nav items (44px min tap target) */
+  .nav-item { min-height: 44px; display: flex; align-items: center; }
+  .sidebar-footer { padding-bottom: max(16px, env(safe-area-inset-bottom, 16px)); }
+
+  /* Horizontal scrollable tables on mobile */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 600px; }
+
+  /* Touch-friendly form inputs */
+  .form-control, input, select, textarea {
+    min-height: 44px;
+    font-size: 16px !important; /* Prevents iOS zoom on focus */
+  }
+
+  /* Better modals on mobile — full screen */
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal {
+    max-width: 100%;
+    margin: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    max-height: 92vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Prevent body scroll when modal is open */
+  body.modal-open { overflow: hidden; position: fixed; width: 100%; }
+
+  /* Touch-friendly buttons */
+  .btn { min-height: 44px; padding: 10px 16px; }
+  .btn-sm { min-height: 36px; }
+
+  /* Better card headers on mobile */
+  .card-header h3 { font-size: 15px; }
+
+  /* Sidebar slide animation */
+  .sidebar {
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+  }
+  .sidebar-overlay {
+    transition: opacity 0.25s ease;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .sidebar-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Compact stat cards */
+  .stat-card { padding: 12px; }
+  .stat-card .sub { font-size: 9px; }
+
+  /* Better badge readability */
+  .badge { font-size: 10px; padding: 3px 8px; }
+}
+
+@media (max-width: 480px) {
+  /* Full-width action buttons on small phones */
+  .page-header-actions {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+  .page-header-actions .btn { width: 100%; justify-content: center; }
+
+  /* Stack filter chips */
+  .filters-bar { gap: 8px; }
+  .filters-bar .form-control { min-width: 0; }
+
+  /* Compact table cells */
+  thead th, tbody td { padding: 6px 8px; font-size: 11px; }
+
+  /* Mobile-optimized header */
+  .page-header h2 { font-size: 15px; }
+  .page-header .page-subtitle { font-size: 11px; }
+
+  /* Better toast on small screens */
+  .toast {
+    left: 8px;
+    right: 8px;
+    bottom: max(20px, env(safe-area-inset-bottom, 20px));
+    font-size: 13px;
+  }
+}
+
+/* ─── Pull-to-refresh visual cue ─── */
+@media (max-width: 1024px) {
+  .page-body { overscroll-behavior-y: contain; }
+}
+
+/* ─── Smooth scrolling on mobile ─── */
+.page-body, .modal-body, .sidebar-nav {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ─── Active state feedback for mobile taps ─── */
+@media (hover: none) and (pointer: coarse) {
+  .nav-item:active { background: var(--brand-100); transform: scale(0.98); }
+  .btn:active { transform: scale(0.97); }
+  .stat-card:active { transform: scale(0.98); }
+  tbody tr:active { background: var(--brand-50) !important; }
+}
+
+/* ═══════════════════════════════════════════
    PRINT
    ═══════════════════════════════════════════ */
 
