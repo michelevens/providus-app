@@ -349,8 +349,14 @@ async function navigateTo(page) {
     case 'organizations':
       pageTitle.textContent = 'Organizations';
       pageSubtitle.textContent = 'Manage organization profiles';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openOrgModal()">+ Add Organization</button>' + printBtn;
+      await renderOrganizationsPage();
+      break;
+    case 'org-detail':
+      pageTitle.textContent = 'Organization Detail';
+      pageSubtitle.textContent = '';
       pageActions.innerHTML = printBtn;
-      await renderOrganizationsStub();
+      await renderOrgDetailPage(window._selectedOrgId);
       break;
     case 'users':
       pageTitle.textContent = 'User Management';
@@ -5817,6 +5823,95 @@ function handleNppesProxy(payload) {
       await renderProviderProfilePage(providerId);
     } catch (e) { showToast('Error: ' + e.message); }
   },
+
+  // ─── Organization Management ───
+  viewOrg(id) {
+    window._selectedOrgId = id;
+    navigateTo('org-detail');
+  },
+  editOrg(id) { openOrgModal(id); },
+  openOrgModal(id) { openOrgModal(id); },
+  async deleteOrg(id) {
+    if (!await appConfirm('Delete this organization? Providers will not be deleted.', { title: 'Delete Organization', okLabel: 'Delete', okClass: 'btn-danger' })) return;
+    try {
+      await store.remove('organizations', id);
+      navigateTo('organizations');
+      showToast('Organization deleted');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async saveOrg() {
+    const id = document.getElementById('edit-org-id')?.value;
+    const data = {
+      name: document.getElementById('org-name')?.value?.trim(),
+      npi: document.getElementById('org-npi')?.value?.trim() || '',
+      taxId: document.getElementById('org-taxid')?.value?.trim() || '',
+      phone: document.getElementById('org-phone')?.value?.trim() || '',
+      email: document.getElementById('org-email')?.value?.trim() || '',
+      taxonomy: document.getElementById('org-taxonomy')?.value?.trim() || '',
+      addressStreet: document.getElementById('org-street')?.value?.trim() || '',
+      addressCity: document.getElementById('org-city')?.value?.trim() || '',
+      addressState: document.getElementById('org-state')?.value?.trim().toUpperCase() || '',
+      addressZip: document.getElementById('org-zip')?.value?.trim() || '',
+    };
+    if (!data.name) { showToast('Organization name is required'); return; }
+    try {
+      if (id) {
+        await store.update('organizations', id, data);
+        showToast('Organization updated');
+      } else {
+        await store.create('organizations', data);
+        showToast('Organization created');
+      }
+      window.closeLogModal();
+      navigateTo('organizations');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  orgDetailTab(btn, tabId) {
+    btn.closest('.tabs').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    ['od-providers', 'od-applications', 'od-contacts'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden', id !== tabId);
+    });
+  },
+
+  // Org Contacts
+  openOrgContactForm(orgId, contactId) { openOrgContactForm(orgId, contactId); },
+  editOrgContact(orgId, contactId) { openOrgContactForm(orgId, contactId); },
+  async deleteOrgContact(orgId, contactId) {
+    if (!await appConfirm('Delete this contact?', { title: 'Delete Contact', okLabel: 'Delete', okClass: 'btn-danger' })) return;
+    try {
+      const baseUrl = store._url('organizations').replace('/organizations', '');
+      await store._fetch(`${baseUrl}/organizations/${orgId}/contacts/${contactId}`, { method: 'DELETE' });
+      showToast('Contact deleted');
+      await renderOrgDetailPage(orgId);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async saveOrgContact() {
+    const id = document.getElementById('ocon-id')?.value;
+    const orgId = document.getElementById('ocon-org')?.value;
+    const data = {
+      name: document.getElementById('ocon-name')?.value?.trim() || '',
+      title: document.getElementById('ocon-title')?.value?.trim() || '',
+      role: document.getElementById('ocon-role')?.value || 'admin',
+      email: document.getElementById('ocon-email')?.value?.trim() || '',
+      phone: document.getElementById('ocon-phone')?.value?.trim() || '',
+    };
+    if (!data.name) { showToast('Contact name is required'); return; }
+    try {
+      const baseUrl = store._url('organizations').replace('/organizations', '');
+      if (id) {
+        await store._fetch(`${baseUrl}/organizations/${orgId}/contacts/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        showToast('Contact updated');
+      } else {
+        await store._fetch(`${baseUrl}/organizations/${orgId}/contacts`, { method: 'POST', body: JSON.stringify(data) });
+        showToast('Contact added');
+      }
+      window.closeLogModal();
+      window._selectedOrgId = orgId;
+      await renderOrgDetailPage(orgId);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
 };
 
 // ─── Application Modal ───
@@ -7370,30 +7465,291 @@ function escAttr(str) {
 
 // ─── Stub Pages ───
 
-async function renderOrganizationsStub() {
+async function renderOrganizationsPage() {
   const body = document.getElementById('page-body');
-  let orgs = [];
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  let orgs = [], providers = [], licenses = [], apps = [];
   try { orgs = await store.getAll('organizations'); } catch {}
+  try { providers = await store.getAll('providers'); } catch {}
+  try { licenses = await store.getAll('licenses'); } catch {}
+  try { apps = await store.getAll('applications'); } catch {}
 
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
-      <div class="stat-card"><div class="label">Total Organizations</div><div class="value">${orgs.length}</div></div>
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="stat-card"><div class="label">Organizations</div><div class="value">${orgs.length}</div></div>
+      <div class="stat-card"><div class="label">Total Providers</div><div class="value" style="color:var(--brand-600);">${providers.length}</div></div>
+      <div class="stat-card"><div class="label">Total Licenses</div><div class="value">${licenses.length}</div></div>
+      <div class="stat-card"><div class="label">Total Applications</div><div class="value">${apps.length}</div></div>
     </div>
-    ${orgs.map(o => `
-      <div class="card">
-        <div class="card-header"><h3>${escHtml(o.name || 'Unnamed')}</h3></div>
-        <div class="card-body">
-          <div style="display:flex;gap:24px;flex-wrap:wrap;">
-            <div><span class="text-sm text-muted">NPI:</span> <strong>${o.npi || '—'}</strong></div>
-            <div><span class="text-sm text-muted">Phone:</span> ${o.phone || '—'}</div>
-            <div><span class="text-sm text-muted">Email:</span> ${o.email || '—'}</div>
-            <div><span class="text-sm text-muted">EIN:</span> ${o.taxId || o.ein || '—'}</div>
+    ${orgs.map(o => {
+      const orgProviders = providers.filter(p => (p.organizationId || p.orgId) == o.id);
+      const orgLicenses = licenses.filter(l => orgProviders.some(p => p.id == (l.providerId || l.provider_id)));
+      const orgApps = apps.filter(a => (a.organizationId || a.orgId) == o.id || orgProviders.some(p => p.id == (a.providerId || a.provider_id)));
+      return `
+        <div class="card" style="cursor:pointer;" onclick="window.app.viewOrg(${o.id})">
+          <div class="card-header">
+            <h3>${escHtml(o.name || 'Unnamed')}</h3>
+            <div style="display:flex;gap:8px;" onclick="event.stopPropagation();">
+              <button class="btn btn-sm" onclick="window.app.editOrg(${o.id})">Edit</button>
+            </div>
           </div>
+          <div class="card-body">
+            <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:12px;font-size:13px;color:var(--gray-600);">
+              <div>NPI: <strong>${o.npi || '—'}</strong></div>
+              <div>Tax ID: <strong>${o.taxId || o.tax_id || '—'}</strong></div>
+              <div>Phone: ${escHtml(o.phone) || '—'}</div>
+              <div>Email: ${escHtml(o.email) || '—'}</div>
+            </div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;">
+              <div class="stat-card" style="flex:1;min-width:100px;"><div class="label">Providers</div><div class="value">${orgProviders.length}</div></div>
+              <div class="stat-card" style="flex:1;min-width:100px;"><div class="label">Licenses</div><div class="value" style="color:var(--brand-600);">${orgLicenses.length}</div></div>
+              <div class="stat-card" style="flex:1;min-width:100px;"><div class="label">Applications</div><div class="value">${orgApps.length}</div></div>
+            </div>
+          </div>
+        </div>`;
+    }).join('')}
+    ${orgs.length === 0 ? '<div class="empty-state"><h3>No organizations yet</h3><p>Click "+ Add Organization" to get started.</p></div>' : ''}
+  `;
+}
+
+// ─── Organization Detail Page ───
+
+async function renderOrgDetailPage(orgId) {
+  const body = document.getElementById('page-body');
+  if (!orgId) { body.innerHTML = '<div class="empty-state"><h3>Organization not found</h3></div>'; return; }
+
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div><div style="margin-top:12px;color:var(--gray-500);font-size:13px;">Loading organization...</div></div>';
+
+  let o = {}, providers = [], licenses = [], apps = [];
+  try { o = await store.getOne('organizations', orgId); } catch {}
+  try { providers = (await store.getAll('providers')).filter(p => (p.organizationId || p.orgId) == orgId); } catch {}
+  try { licenses = await store.getAll('licenses'); } catch {}
+  try { apps = await store.getAll('applications'); } catch {}
+
+  if (!o || !o.id) { body.innerHTML = '<div class="empty-state"><h3>Organization not found</h3></div>'; return; }
+
+  const orgLicenses = licenses.filter(l => providers.some(p => p.id == (l.providerId || l.provider_id)));
+  const orgApps = apps.filter(a => (a.organizationId || a.orgId) == orgId || providers.some(p => p.id == (a.providerId || a.provider_id)));
+  const licensedStates = [...new Set(orgLicenses.map(l => l.state))];
+  const estRevenue = orgApps.filter(a => a.status === 'approved' || a.status === 'credentialed').reduce((s, a) => s + (a.estMonthlyRevenue || a.est_monthly_revenue || 0), 0);
+
+  const pageTitle = document.getElementById('page-title');
+  const pageSubtitle = document.getElementById('page-subtitle');
+  const pageActions = document.getElementById('page-actions');
+  if (pageTitle) pageTitle.textContent = o.name;
+  if (pageSubtitle) pageSubtitle.textContent = 'Organization Detail';
+  if (pageActions) pageActions.innerHTML = `
+    <button class="btn btn-sm" onclick="window.app.navigateTo('organizations')">&larr; Back</button>
+    <button class="btn btn-sm" onclick="window.app.editOrg(${o.id})">Edit Organization</button>
+    <button class="btn btn-sm btn-gold" onclick="window.app.openProviderModal()">+ Add Provider</button>
+  `;
+
+  // Load contacts
+  let contacts = [];
+  try { contacts = await store.getAll('organizations'); /* placeholder — contacts come from org sub-resource */ } catch {}
+  // If the API supports org contacts as a sub-resource, use it; otherwise show empty
+  let orgContacts = [];
+  try {
+    const result = await store._fetch(`${store._url('organizations').replace('/organizations', '')}/organizations/${orgId}/contacts`);
+    orgContacts = (result.data || result) || [];
+    if (!Array.isArray(orgContacts)) orgContacts = [];
+  } catch { orgContacts = []; }
+
+  body.innerHTML = `
+    <!-- Org Header -->
+    <div class="card" style="border-top:3px solid var(--brand-600);margin-bottom:20px;">
+      <div class="card-body">
+        <div style="font-size:22px;font-weight:800;color:var(--gray-900);">${escHtml(o.name)}</div>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--gray-600);">
+          <div>Group NPI: <strong style="color:var(--brand-700);">${o.npi || '—'}</strong></div>
+          <div>Tax ID: <strong>${o.taxId || o.tax_id || '—'}</strong></div>
+          <div>Taxonomy: <strong>${o.taxonomy || o.taxonomyCode || '—'}</strong></div>
+        </div>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:6px;font-size:13px;color:var(--gray-600);">
+          ${o.phone ? `<div>Phone: ${escHtml(o.phone)}</div>` : ''}
+          ${o.email ? `<div>Email: <a href="mailto:${escAttr(o.email)}">${escHtml(o.email)}</a></div>` : ''}
+          ${(o.address && typeof o.address === 'object') ? `<div>${escHtml(o.address.street || '')}, ${escHtml(o.address.city || '')}, ${escHtml(o.address.state || '')} ${escHtml(o.address.zip || '')}</div>` : (o.addressStreet || o.address_street ? `<div>${escHtml(o.addressStreet || o.address_street || '')}, ${escHtml(o.addressCity || o.address_city || '')}, ${escHtml(o.addressState || o.address_state || '')} ${escHtml(o.addressZip || o.address_zip || '')}</div>` : '')}
         </div>
       </div>
-    `).join('')}
-    ${orgs.length === 0 ? '<div class="empty-state"><h3>No organizations yet</h3></div>' : ''}
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:20px;">
+      <div class="stat-card"><div class="label">Providers</div><div class="value">${providers.length}</div></div>
+      <div class="stat-card"><div class="label">Licenses</div><div class="value" style="color:var(--brand-600);">${orgLicenses.length}</div></div>
+      <div class="stat-card"><div class="label">Licensed States</div><div class="value">${licensedStates.length}</div></div>
+      <div class="stat-card"><div class="label">Applications</div><div class="value">${orgApps.length}</div></div>
+      <div class="stat-card"><div class="label">Est. Monthly Rev</div><div class="value" style="color:var(--green);">$${estRevenue.toLocaleString()}</div></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs" style="margin-bottom:16px;">
+      <button class="tab active" onclick="window.app.orgDetailTab(this, 'od-providers')">Providers (${providers.length})</button>
+      <button class="tab" onclick="window.app.orgDetailTab(this, 'od-applications')">Applications (${orgApps.length})</button>
+      <button class="tab" onclick="window.app.orgDetailTab(this, 'od-contacts')">Contacts (${orgContacts.length})</button>
+    </div>
+
+    <!-- Providers Tab -->
+    <div id="od-providers">
+      <div class="card">
+        <div class="card-body" style="padding:0;">
+          ${providers.length === 0 ? '<div class="empty-state" style="padding:30px;"><p>No providers in this organization.</p></div>' : `
+            <table>
+              <thead><tr><th>Name</th><th>NPI</th><th>Specialty</th><th>Licenses</th><th>Applications</th><th>Status</th></tr></thead>
+              <tbody>
+                ${providers.map(p => {
+                  const pLic = licenses.filter(l => (l.providerId || l.provider_id) == p.id);
+                  const pApps = apps.filter(a => (a.providerId || a.provider_id) == p.id);
+                  return `
+                    <tr style="cursor:pointer;" onclick="window._selectedProviderId=${p.id};window.app.navigateTo('provider-profile')">
+                      <td><strong>${escHtml((p.firstName || p.first_name || '') + ' ' + (p.lastName || p.last_name || ''))}</strong>${p.credentials || p.credential ? '<br><span class="text-sm text-muted">' + escHtml(p.credentials || p.credential) + '</span>' : ''}</td>
+                      <td><code style="color:var(--brand-700);">${p.npi || '—'}</code></td>
+                      <td class="text-sm">${escHtml(p.specialty || p.taxonomyDesc || '') || '—'}</td>
+                      <td><strong>${pLic.filter(l => l.status === 'active').length}</strong><span class="text-muted">/${pLic.length}</span></td>
+                      <td>${pApps.length}</td>
+                      <td><span class="badge badge-${(p.status === 'active' || p.isActive || p.active !== false) ? 'approved' : 'denied'}">${(p.status === 'active' || p.isActive || p.active !== false) ? 'Active' : 'Inactive'}</span></td>
+                    </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+      </div>
+    </div>
+
+    <!-- Applications Tab -->
+    <div id="od-applications" class="hidden">
+      <div class="card">
+        <div class="card-body" style="padding:0;">
+          ${orgApps.length === 0 ? '<div class="empty-state" style="padding:30px;"><p>No applications for this organization.</p></div>' : `
+            <table>
+              <thead><tr><th>Provider</th><th>Payer</th><th>State</th><th>Status</th><th>Wave</th><th>Submitted</th></tr></thead>
+              <tbody>
+                ${orgApps.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 50).map(a => {
+                  const prov = providers.find(p => p.id == (a.providerId || a.provider_id));
+                  const provName = prov ? `${prov.firstName || prov.first_name || ''} ${prov.lastName || prov.last_name || ''}`.trim() : '—';
+                  return `
+                    <tr>
+                      <td class="text-sm">${escHtml(provName)}</td>
+                      <td><strong>${escHtml(a.payerName || a.payer_name || '')}</strong></td>
+                      <td>${a.state || '—'}</td>
+                      <td><span class="badge badge-${a.status}">${(a.status || '').replace(/_/g, ' ')}</span></td>
+                      <td>${a.wave ? `<span class="wave-badge wave-${a.wave}">W${a.wave}</span>` : '—'}</td>
+                      <td class="text-sm">${a.submittedDate || a.submitted_date || '—'}</td>
+                    </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+      </div>
+    </div>
+
+    <!-- Contacts Tab -->
+    <div id="od-contacts" class="hidden">
+      <div style="margin-bottom:12px;">
+        <button class="btn btn-gold btn-sm" onclick="window.app.openOrgContactForm(${orgId})">+ Add Contact</button>
+      </div>
+      ${orgContacts.length === 0 ? '<div class="empty-state" style="padding:30px;"><p>No contacts. Click "+ Add Contact" to add one.</p></div>' : `
+        <div class="card">
+          <div class="card-body" style="padding:0;">
+            <table>
+              <thead><tr><th>Name</th><th>Title</th><th>Role</th><th>Email</th><th>Phone</th><th>Actions</th></tr></thead>
+              <tbody>
+                ${orgContacts.map(c => `
+                  <tr>
+                    <td><strong>${escHtml(c.name || '')}</strong></td>
+                    <td class="text-sm">${escHtml(c.title || '') || '—'}</td>
+                    <td>${_orgContactRoleBadge(c.role)}</td>
+                    <td class="text-sm">${c.email ? `<a href="mailto:${escAttr(c.email)}">${escHtml(c.email)}</a>` : '—'}</td>
+                    <td class="text-sm">${escHtml(c.phone || '') || '—'}</td>
+                    <td>
+                      <button class="btn btn-sm" onclick="window.app.editOrgContact(${orgId}, ${c.id})">Edit</button>
+                      <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteOrgContact(${orgId}, ${c.id})">Del</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `}
+    </div>
   `;
+}
+
+function _orgContactRoleBadge(role) {
+  const colors = { owner: 'var(--brand-700)', admin: 'var(--green)', billing: 'var(--gold)', credentialing: 'var(--blue,#1d4ed8)' };
+  return `<span class="badge" style="background:${colors[role] || 'var(--gray-400)'};color:white;">${(role || '').replace(/_/g, ' ')}</span>`;
+}
+
+async function openOrgModal(orgId) {
+  let existing = null;
+  if (orgId) { try { existing = await store.getOne('organizations', orgId); } catch {} }
+  const modal = document.getElementById('log-modal');
+  document.getElementById('log-modal-title').textContent = existing ? 'Edit Organization' : 'Add Organization';
+  document.getElementById('log-modal-body').innerHTML = `
+    <input type="hidden" id="edit-org-id" value="${orgId || ''}">
+    <div class="form-group"><label>Organization Name *</label><input type="text" class="form-control" id="org-name" value="${escAttr(existing?.name || '')}" placeholder="e.g. EnnHealth Psychiatry"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Group NPI</label><input type="text" class="form-control" id="org-npi" value="${escAttr(existing?.npi || '')}" placeholder="10-digit NPI"></div>
+      <div class="form-group"><label>Tax ID</label><input type="text" class="form-control" id="org-taxid" value="${escAttr(existing?.taxId || existing?.tax_id || '')}" placeholder="XX-XXXXXXX"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Phone</label><input type="text" class="form-control" id="org-phone" value="${escAttr(existing?.phone || '')}" placeholder="(555) 123-4567"></div>
+      <div class="form-group"><label>Email</label><input type="email" class="form-control" id="org-email" value="${escAttr(existing?.email || '')}" placeholder="contact@org.com"></div>
+    </div>
+    <div class="form-group"><label>Taxonomy Code</label><input type="text" class="form-control" id="org-taxonomy" value="${escAttr(existing?.taxonomy || existing?.taxonomyCode || '')}" placeholder="e.g. 2084P0800X"></div>
+    <div class="form-group"><label>Street Address</label><input type="text" class="form-control" id="org-street" value="${escAttr(existing?.address?.street || existing?.addressStreet || existing?.address_street || '')}" placeholder="123 Main St, Suite 100"></div>
+    <div class="form-row">
+      <div class="form-group"><label>City</label><input type="text" class="form-control" id="org-city" value="${escAttr(existing?.address?.city || existing?.addressCity || existing?.address_city || '')}"></div>
+      <div class="form-group" style="flex:0 0 80px;"><label>State</label><input type="text" class="form-control" id="org-state" value="${escAttr(existing?.address?.state || existing?.addressState || existing?.address_state || '')}" maxlength="2" placeholder="FL"></div>
+      <div class="form-group" style="flex:0 0 100px;"><label>ZIP</label><input type="text" class="form-control" id="org-zip" value="${escAttr(existing?.address?.zip || existing?.addressZip || existing?.address_zip || '')}" placeholder="12345"></div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn" onclick="window.closeLogModal()">Cancel</button>
+      ${existing ? `<button class="btn" style="color:var(--red);" onclick="window.app.deleteOrg(${orgId})">Delete</button>` : ''}
+      <button class="btn btn-primary" onclick="window.app.saveOrg()">Save Organization</button>
+    </div>
+  `;
+  modal.classList.add('active');
+}
+
+async function openOrgContactForm(orgId, contactId) {
+  let existing = null;
+  if (contactId) {
+    try {
+      const contacts = await store._fetch(`${store._url('organizations').replace('/organizations', '')}/organizations/${orgId}/contacts`);
+      const list = (contacts.data || contacts) || [];
+      existing = Array.isArray(list) ? list.find(c => c.id == contactId) : null;
+    } catch {}
+  }
+  const modal = document.getElementById('log-modal');
+  document.getElementById('log-modal-title').textContent = existing ? 'Edit Contact' : 'Add Contact';
+  document.getElementById('log-modal-body').innerHTML = `
+    <input type="hidden" id="ocon-id" value="${contactId || ''}">
+    <input type="hidden" id="ocon-org" value="${orgId}">
+    <div class="form-group"><label>Name *</label><input type="text" class="form-control" id="ocon-name" value="${escAttr(existing?.name || '')}"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Title</label><input type="text" class="form-control" id="ocon-title" value="${escAttr(existing?.title || '')}" placeholder="e.g. Office Manager"></div>
+      <div class="form-group"><label>Role</label><select class="form-control" id="ocon-role">
+        <option value="owner" ${existing?.role === 'owner' ? 'selected' : ''}>Owner</option>
+        <option value="admin" ${existing?.role === 'admin' ? 'selected' : ''}>Admin</option>
+        <option value="billing" ${existing?.role === 'billing' ? 'selected' : ''}>Billing</option>
+        <option value="credentialing" ${existing?.role === 'credentialing' ? 'selected' : ''}>Credentialing</option>
+      </select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Email</label><input type="email" class="form-control" id="ocon-email" value="${escAttr(existing?.email || '')}"></div>
+      <div class="form-group"><label>Phone</label><input type="text" class="form-control" id="ocon-phone" value="${escAttr(existing?.phone || '')}"></div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn" onclick="window.closeLogModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="window.app.saveOrgContact()">Save Contact</button>
+    </div>
+  `;
+  modal.classList.add('active');
 }
 
 async function renderUsersStub() {
