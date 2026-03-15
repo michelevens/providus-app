@@ -1,5 +1,5 @@
 /**
- * Providus — App Controller
+ * Credentik — App Controller
  *
  * Main application entry point. Manages navigation, page rendering,
  * and coordinates between data layer and UI components.
@@ -4334,7 +4334,7 @@ window.app = {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `providus-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `credentik-backup-${new Date().toISOString().split('T')[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
       showToast('Data exported');
@@ -4468,7 +4468,7 @@ window.app = {
       header.className = 'print-header';
       document.querySelector('.main-content').prepend(header);
     }
-    header.textContent = `Providus Telehealth Strategy — ${document.getElementById('page-title').textContent} — Printed ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`;
+    header.textContent = `Credentik Telehealth Strategy — ${document.getElementById('page-title').textContent} — Printed ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`;
     window.print();
   },
 
@@ -4605,7 +4605,7 @@ window.app = {
       const byStatus = {};
       apps.forEach(a => { byStatus[a.status] = (byStatus[a.status] || 0) + 1; });
       report = `EXECUTIVE SUMMARY — CREDENTIALING STATUS REPORT\n`;
-      report += `Organization: ${org.name || 'Providus Psychiatry'}\n`;
+      report += `Organization: ${org.name || 'Credentik Agency'}\n`;
       report += `Generated: ${now}\n`;
       report += `${'═'.repeat(50)}\n\n`;
       report += `APPLICATIONS: ${apps.length} total\n`;
@@ -4995,7 +4995,7 @@ function handleNppesProxy(payload) {
     const prov = providers[0] || {};
     const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const provName = `${prov.firstName || 'Provider'} ${prov.lastName || ''}`.trim();
-    const orgName = org.name || 'Providus Psychiatry';
+    const orgName = org.name || 'Credentik Agency';
     const payerName = payer?.name || '[Payer Name]';
     const stateName = stateCode ? getStateName(stateCode) : '[State]';
 

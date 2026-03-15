@@ -1,5 +1,5 @@
 /**
- * Providus — Workflow Engine
+ * Credentik — Workflow Engine
  *
  * Manages application status transitions, follow-up scheduling,
  * and business rule enforcement.

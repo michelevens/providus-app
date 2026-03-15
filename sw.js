@@ -1,4 +1,4 @@
-const CACHE_NAME = 'providus-v1';
+const CACHE_NAME = 'credentik-v2';
 const SHELL_FILES = [
   './',
   './index.html',

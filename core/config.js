@@ -1,17 +1,17 @@
-// Providus App Configuration
+// Credentik App Configuration
 const CONFIG = {
-    APP_NAME: 'Providus',
-    APP_VERSION: '1.0.0',
+    APP_NAME: 'Credentik',
+    APP_VERSION: '2.0.0',
 
     // API Configuration
-    API_URL: 'https://providus-web-production.up.railway.app/api',
+    API_URL: 'https://api.credentik.com/api',
 
     // Auth
-    TOKEN_KEY: 'providus_token',
-    USER_KEY: 'providus_user',
+    TOKEN_KEY: 'credentik_token',
+    USER_KEY: 'credentik_user',
 
     // Cache
-    CACHE_PREFIX: 'providus_',
+    CACHE_PREFIX: 'credentik_',
     CACHE_TTL: 5 * 60 * 1000, // 5 minutes
 
     // Collections that map to API endpoints

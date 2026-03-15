@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Providus">
+  <meta name="apple-mobile-web-app-title" content="Credentik">
   <meta name="robots" content="noindex, nofollow">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0f172a">
-  <meta name="description" content="Providus — Credentialing & Licensing Operations Platform">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://providus-web-production.up.railway.app https://cdn.jsdelivr.net https://npiregistry.cms.hhs.gov;">
-  <title>Providus — Credentialing Platform</title>
+  <meta name="description" content="Credentik — Credentialing & Licensing Operations Platform">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.credentik.com https://cdn.jsdelivr.net https://npiregistry.cms.hhs.gov;">
+  <title>Credentik — Credentialing Platform</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/favicon.svg">
   <link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
@@ -35,7 +35,7 @@
             <path d="M34 20v12l4 4" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
-        <h2>Providus</h2>
+        <h2>Credentik</h2>
         <p>Credentialing & licensing operations platform.<br>Sign in to your account to continue.</p>
         <div class="auth-field">
           <label for="login-email">Email</label>
@@ -60,7 +60,7 @@
           </svg>
         </div>
         <h2>Create Account</h2>
-        <p>Set up your Providus agency account.</p>
+        <p>Set up your Credentik agency account.</p>
         <div class="auth-field">
           <label for="reg-agency">Agency Name</label>
           <input type="text" id="reg-agency" placeholder="Your agency name" autocomplete="organization">
@@ -107,7 +107,7 @@
             <path d="M34 20v12l4 4" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           <div>
-            <h1 id="sidebar-agency-name">Providus</h1>
+            <h1 id="sidebar-agency-name">Credentik</h1>
             <div class="version">Credentialing Platform</div>
           </div>
         </div>
@@ -526,7 +526,7 @@
               <path d="M34 20v12l4 4" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
-          <h2>Providus</h2>
+          <h2>Credentik</h2>
           <p>Validating your onboarding link...</p>
         </div>
 
@@ -630,7 +630,7 @@
 
   <!-- Public Onboarding Logic -->
   <script>
-    const API_BASE = 'https://providus-web-production.up.railway.app/api';
+    const API_BASE = 'https://api.credentik.com/api';
     let _onboardToken = null;
     let _orgSearchTimer = null;
 
@@ -830,7 +830,7 @@
       }
 
       try {
-        const res = await fetch('https://providus-web-production.up.railway.app/api/auth/login', {
+        const res = await fetch('https://api.credentik.com/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })
@@ -842,8 +842,8 @@
           return;
         }
 
-        localStorage.setItem('providus_token', data.token);
-        localStorage.setItem('providus_user', JSON.stringify(data.user));
+        localStorage.setItem('credentik_token', data.token);
+        localStorage.setItem('credentik_user', JSON.stringify(data.user));
         showApp(data.user);
         // Dynamically import and init the app after first login
         import('./ui/app.js').then(m => m.initApp());
@@ -874,7 +874,7 @@
       }
 
       try {
-        const res = await fetch('https://providus-web-production.up.railway.app/api/auth/register', {
+        const res = await fetch('https://api.credentik.com/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ agency_name: agency, first_name: firstName, last_name: lastName, email, password, password_confirmation: confirm })
@@ -886,8 +886,8 @@
           return;
         }
 
-        localStorage.setItem('providus_token', data.token);
-        localStorage.setItem('providus_user', JSON.stringify(data.user));
+        localStorage.setItem('credentik_token', data.token);
+        localStorage.setItem('credentik_user', JSON.stringify(data.user));
         showApp(data.user);
         import('./ui/app.js').then(m => m.initApp());
       } catch (err) {
@@ -912,8 +912,8 @@
     }
 
     function handleLogout() {
-      localStorage.removeItem('providus_token');
-      localStorage.removeItem('providus_user');
+      localStorage.removeItem('credentik_token');
+      localStorage.removeItem('credentik_user');
       location.reload();
     }
 
@@ -924,15 +924,15 @@
     // Auto-login if token exists (skip if in onboard mode)
     (function checkAuth() {
       if (_onboardToken) return; // Skip auth check in onboard portal mode
-      const token = localStorage.getItem('providus_token');
-      const userJson = localStorage.getItem('providus_user');
+      const token = localStorage.getItem('credentik_token');
+      const userJson = localStorage.getItem('credentik_user');
       if (token && userJson) {
         try {
           const user = JSON.parse(userJson);
           showApp(user);
         } catch (e) {
-          localStorage.removeItem('providus_token');
-          localStorage.removeItem('providus_user');
+          localStorage.removeItem('credentik_token');
+          localStorage.removeItem('credentik_user');
         }
       }
     })();
@@ -958,7 +958,7 @@
   <script type="module">
     import { initApp } from './ui/app.js';
     document.addEventListener('DOMContentLoaded', () => {
-      const token = localStorage.getItem('providus_token');
+      const token = localStorage.getItem('credentik_token');
       if (token) {
         initApp();
       }

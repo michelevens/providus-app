@@ -1,10 +1,10 @@
 /**
- * Providus — NPPES NPI Registry & Taxonomy API
+ * Credentik — NPPES NPI Registry & Taxonomy API
  *
  * NPPES is a free public API from CMS — no auth required.
  * https://npiregistry.cms.hhs.gov/api-page
  *
- * All requests are proxied through the Providus backend via
+ * All requests are proxied through the Credentik backend via
  * store.nppesLookup() and store.nppesSearch() to avoid CORS issues
  * and centralize rate limiting.
  *

@@ -1,9 +1,9 @@
 /**
- * Providus — Batch Generator
+ * Credentik — Batch Generator
  *
  * Generates application batches from strategy profiles.
  * Creates sets of applications for expansion into new states/payers.
- * Uses the Providus API via the store for all data operations.
+ * Uses the Credentik API via the store for all data operations.
  */
 
 import store from './store.js';

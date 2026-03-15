@@ -1,5 +1,5 @@
 /**
- * Providus — Email Generator
+ * Credentik — Email Generator
  *
  * Generates email templates for credentialing workflows:
  * - Initial application inquiry

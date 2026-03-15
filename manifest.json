@@ -1,6 +1,6 @@
 {
-  "name": "Providus — Credentialing Platform",
-  "short_name": "Providus",
+  "name": "Credentik — Credentialing Platform",
+  "short_name": "Credentik",
   "description": "Multi-tenant credentialing & licensing operations platform",
   "start_url": ".",
   "display": "standalone",

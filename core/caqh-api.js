@@ -1,7 +1,7 @@
 /**
- * Providus — CAQH ProView API Integration
+ * Credentik — CAQH ProView API Integration
  *
- * All CAQH API calls are proxied through the Providus backend
+ * All CAQH API calls are proxied through the Credentik backend
  * via store.caqhAction() to keep credentials server-side.
  *
  * CAQH ProView API capabilities:
@@ -36,7 +36,7 @@ function isCaqhConfigured() {
     return !!c.orgId;
 }
 
-// ── API Proxy Calls (via Providus backend) ──
+// ── API Proxy Calls (via Credentik backend) ──
 
 async function caqhProxy(action, params = {}) {
     const config = getCaqhConfig();
