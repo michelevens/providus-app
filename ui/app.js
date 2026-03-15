@@ -364,6 +364,48 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderOnboardingStub();
       break;
+    case 'exclusions':
+      pageTitle.textContent = 'Exclusion Screening';
+      pageSubtitle.textContent = 'OIG/SAM exclusion checks for all providers';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.screenAllProviders()">Screen All Providers</button>' + printBtn;
+      await renderExclusionsPage();
+      break;
+    case 'facilities':
+      pageTitle.textContent = 'Facilities';
+      pageSubtitle.textContent = 'Manage healthcare facility locations';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openFacilityModal()">+ Add Facility</button> <button class="btn" onclick="window.app.openNpiFacilityModal()">+ Add from NPI</button>' + printBtn;
+      await renderFacilitiesPage();
+      break;
+    case 'billing':
+      pageTitle.textContent = 'Billing & Invoicing';
+      pageSubtitle.textContent = 'Manage invoices, services, and payments';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openInvoiceModal()">+ Create Invoice</button>' + printBtn;
+      await renderBillingPage();
+      break;
+    case 'import':
+      pageTitle.textContent = 'Bulk Import';
+      pageSubtitle.textContent = 'Import providers, organizations, licenses, and facilities from CSV';
+      pageActions.innerHTML = printBtn;
+      await renderImportPage();
+      break;
+    case 'compliance':
+      pageTitle.textContent = 'Compliance Center';
+      pageSubtitle.textContent = 'Compliance dashboard, reports, and exports';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.generateComplianceReport()">Generate Report</button> <button class="btn" onclick="window.app.exportComplianceData()">Export</button>' + printBtn;
+      await renderCompliancePage();
+      break;
+    case 'faq':
+      pageTitle.textContent = 'Knowledge Base';
+      pageSubtitle.textContent = 'FAQs and help articles';
+      pageActions.innerHTML = editButton('+ Add FAQ', 'window.app.openFaqModal()') + printBtn;
+      await renderFaqPage();
+      break;
+    case 'provider-profile':
+      pageTitle.textContent = 'Provider Profile';
+      pageSubtitle.textContent = 'Comprehensive provider credentialing profile';
+      pageActions.innerHTML = printBtn;
+      await renderProviderProfilePage(window._selectedProviderId);
+      break;
     case 'admin':
       pageTitle.textContent = 'Super Admin';
       pageSubtitle.textContent = 'Manage all agencies and system settings';
@@ -5198,6 +5240,583 @@ function handleNppesProxy(payload) {
       showToast('Error loading agency: ' + e.message);
     }
   },
+
+  // ── Exclusion Screening ──
+  async screenAllProviders() {
+    if (!await appConfirm('Screen all providers against OIG/SAM exclusion databases? This may take a moment.', { title: 'Screen All Providers', okLabel: 'Screen All' })) return;
+    try {
+      showToast('Screening all providers...');
+      await store.screenAllProviders();
+      showToast('All providers screened successfully');
+      await renderExclusionsPage();
+    } catch (e) { showToast('Screening failed: ' + e.message); }
+  },
+  async screenSingleProvider(id) {
+    try {
+      showToast('Screening provider...');
+      await store.screenProvider(id);
+      showToast('Provider screened successfully');
+      if (currentPage === 'exclusions') await renderExclusionsPage();
+      if (currentPage === 'compliance') await renderCompliancePage();
+    } catch (e) { showToast('Screening failed: ' + e.message); }
+  },
+  viewExclusionDetail(providerId) {
+    showToast('Loading exclusion details...');
+    // Navigate to the provider profile exclusion info
+    window._selectedProviderId = providerId;
+    navigateTo('provider-profile');
+  },
+  filterExclusions() {
+    const search = (document.getElementById('excl-search')?.value || '').toLowerCase();
+    const statusFilter = document.getElementById('excl-status-filter')?.value || '';
+    document.querySelectorAll('.excl-row').forEach(row => {
+      const name = row.dataset.name || '';
+      const status = row.dataset.status || '';
+      const matchSearch = !search || name.includes(search);
+      const matchStatus = !statusFilter || status === statusFilter;
+      row.style.display = (matchSearch && matchStatus) ? '' : 'none';
+    });
+  },
+
+  // ── Facilities ──
+  openFacilityModal(id) {
+    const modal = document.getElementById('facility-modal');
+    const title = document.getElementById('facility-modal-title');
+    document.getElementById('fac-edit-id').value = id || '';
+    title.textContent = id ? 'Edit Facility' : 'Add Facility';
+    if (!id) {
+      ['fac-name','fac-npi','fac-type','fac-phone','fac-address','fac-city','fac-state','fac-zip'].forEach(f => {
+        const el = document.getElementById(f); if (el) el.value = '';
+      });
+      const statusEl = document.getElementById('fac-status'); if (statusEl) statusEl.value = 'active';
+    }
+    modal.classList.add('active');
+  },
+  async editFacility(id) {
+    try {
+      const facilities = await store.getFacilities();
+      const f = (Array.isArray(facilities) ? facilities : []).find(x => x.id === id);
+      if (!f) { showToast('Facility not found'); return; }
+      document.getElementById('fac-edit-id').value = id;
+      document.getElementById('facility-modal-title').textContent = 'Edit Facility';
+      const set = (el, val) => { const e = document.getElementById(el); if (e) e.value = val || ''; };
+      set('fac-name', f.name);
+      set('fac-npi', f.npi);
+      set('fac-type', f.facilityType || f.type);
+      set('fac-phone', f.phone);
+      set('fac-address', f.address);
+      set('fac-city', f.city);
+      set('fac-state', f.state);
+      set('fac-zip', f.zip || f.zipCode);
+      set('fac-status', f.status || 'active');
+      document.getElementById('facility-modal').classList.add('active');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async saveFacility() {
+    const name = document.getElementById('fac-name')?.value?.trim();
+    if (!name) { showToast('Facility name is required'); return; }
+    const data = {
+      name,
+      npi: document.getElementById('fac-npi')?.value?.trim() || '',
+      facilityType: document.getElementById('fac-type')?.value || '',
+      phone: document.getElementById('fac-phone')?.value?.trim() || '',
+      address: document.getElementById('fac-address')?.value?.trim() || '',
+      city: document.getElementById('fac-city')?.value?.trim() || '',
+      state: document.getElementById('fac-state')?.value?.trim().toUpperCase() || '',
+      zip: document.getElementById('fac-zip')?.value?.trim() || '',
+      status: document.getElementById('fac-status')?.value || 'active',
+    };
+    const editId = document.getElementById('fac-edit-id')?.value;
+    try {
+      if (editId) {
+        await store.updateFacility(editId, data);
+        showToast('Facility updated');
+      } else {
+        await store.createFacility(data);
+        showToast('Facility created');
+      }
+      document.getElementById('facility-modal').classList.remove('active');
+      await renderFacilitiesPage();
+    } catch (e) { showToast('Error saving facility: ' + e.message); }
+  },
+  async deleteFacility(id) {
+    if (!await appConfirm('Delete this facility?', { title: 'Delete Facility', okLabel: 'Delete', okClass: 'btn-danger' })) return;
+    try {
+      await store.deleteFacility(id);
+      showToast('Facility deleted');
+      await renderFacilitiesPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  openNpiFacilityModal() {
+    document.getElementById('fac-npi-lookup').value = '';
+    document.getElementById('fac-npi-result').style.display = 'none';
+    document.getElementById('npi-facility-modal').classList.add('active');
+  },
+  async createFacilityFromNpiLookup() {
+    const npi = document.getElementById('fac-npi-lookup')?.value?.trim();
+    if (!/^\d{10}$/.test(npi)) { showToast('Enter a valid 10-digit NPI'); return; }
+    try {
+      showToast('Looking up NPI and creating facility...');
+      await store.createFacilityFromNpi(npi);
+      showToast('Facility created from NPI');
+      document.getElementById('npi-facility-modal').classList.remove('active');
+      await renderFacilitiesPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  filterFacilities() {
+    const search = (document.getElementById('facility-search')?.value || '').toLowerCase();
+    document.querySelectorAll('.facility-row').forEach(row => {
+      row.style.display = !search || (row.dataset.name || '').includes(search) ? '' : 'none';
+    });
+  },
+
+  // ── Billing & Invoicing ──
+  openInvoiceModal() {
+    document.getElementById('invoice-modal-title').textContent = 'Create Invoice';
+    ['inv-client','inv-amount','inv-due','inv-desc'].forEach(f => {
+      const el = document.getElementById(f); if (el) el.value = '';
+    });
+    document.getElementById('inv-status').value = 'draft';
+    document.getElementById('inv-edit-id').value = '';
+    document.getElementById('invoice-modal').classList.add('active');
+  },
+  async saveInvoice() {
+    const client = document.getElementById('inv-client')?.value?.trim();
+    const amount = parseFloat(document.getElementById('inv-amount')?.value);
+    const due = document.getElementById('inv-due')?.value;
+    if (!client) { showToast('Client name is required'); return; }
+    if (!amount || amount <= 0) { showToast('Enter a valid amount'); return; }
+    if (!due) { showToast('Due date is required'); return; }
+    const data = {
+      clientName: client,
+      totalAmount: amount,
+      dueDate: due,
+      description: document.getElementById('inv-desc')?.value?.trim() || '',
+      status: document.getElementById('inv-status')?.value || 'draft',
+    };
+    const editId = document.getElementById('inv-edit-id')?.value;
+    try {
+      if (editId) {
+        await store.updateInvoice(editId, data);
+        showToast('Invoice updated');
+      } else {
+        await store.createInvoice(data);
+        showToast('Invoice created');
+      }
+      document.getElementById('invoice-modal').classList.remove('active');
+      await renderBillingPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async viewInvoice(id) {
+    try {
+      const invoices = await store.getInvoices();
+      const inv = (Array.isArray(invoices) ? invoices : []).find(x => x.id === id);
+      if (!inv) { showToast('Invoice not found'); return; }
+      document.getElementById('inv-edit-id').value = id;
+      document.getElementById('invoice-modal-title').textContent = 'Edit Invoice #' + (inv.invoiceNumber || inv.invoice_number || inv.id);
+      const set = (el, val) => { const e = document.getElementById(el); if (e) e.value = val || ''; };
+      set('inv-client', inv.clientName || inv.client_name);
+      set('inv-amount', inv.totalAmount || inv.total_amount || inv.amount);
+      set('inv-due', inv.dueDate || inv.due_date);
+      set('inv-desc', inv.description);
+      set('inv-status', inv.status);
+      document.getElementById('invoice-modal').classList.add('active');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async deleteInvoice(id) {
+    if (!await appConfirm('Delete this invoice?', { title: 'Delete Invoice', okLabel: 'Delete', okClass: 'btn-danger' })) return;
+    try {
+      await store.deleteInvoice(id);
+      showToast('Invoice deleted');
+      await renderBillingPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  openPaymentModal(invoiceId) {
+    document.getElementById('pay-invoice-id').value = invoiceId;
+    document.getElementById('pay-amount').value = '';
+    document.getElementById('pay-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('pay-method').value = 'check';
+    document.getElementById('pay-ref').value = '';
+    document.getElementById('payment-modal').classList.add('active');
+  },
+  async savePayment() {
+    const invoiceId = document.getElementById('pay-invoice-id')?.value;
+    const amount = parseFloat(document.getElementById('pay-amount')?.value);
+    if (!amount || amount <= 0) { showToast('Enter a valid payment amount'); return; }
+    const data = {
+      amount,
+      paymentDate: document.getElementById('pay-date')?.value || new Date().toISOString().split('T')[0],
+      paymentMethod: document.getElementById('pay-method')?.value || 'check',
+      reference: document.getElementById('pay-ref')?.value?.trim() || '',
+    };
+    try {
+      await store.addPayment(invoiceId, data);
+      showToast('Payment recorded');
+      document.getElementById('payment-modal').classList.remove('active');
+      await renderBillingPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  openServiceModal() {
+    ['svc-name','svc-code','svc-rate','svc-desc'].forEach(f => {
+      const el = document.getElementById(f); if (el) el.value = '';
+    });
+    document.getElementById('service-modal').classList.add('active');
+  },
+  async saveService() {
+    const name = document.getElementById('svc-name')?.value?.trim();
+    if (!name) { showToast('Service name is required'); return; }
+    const data = {
+      name,
+      code: document.getElementById('svc-code')?.value?.trim() || '',
+      defaultRate: parseFloat(document.getElementById('svc-rate')?.value) || 0,
+      description: document.getElementById('svc-desc')?.value?.trim() || '',
+    };
+    try {
+      await store.createService(data);
+      showToast('Service created');
+      document.getElementById('service-modal').classList.remove('active');
+      await renderBillingPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  filterInvoices() {
+    const search = (document.getElementById('invoice-search')?.value || '').toLowerCase();
+    const statusFilter = document.getElementById('invoice-status-filter')?.value || '';
+    document.querySelectorAll('.invoice-row').forEach(row => {
+      const matchSearch = !search || (row.dataset.search || '').includes(search);
+      const matchStatus = !statusFilter || row.dataset.status === statusFilter;
+      row.style.display = (matchSearch && matchStatus) ? '' : 'none';
+    });
+  },
+
+  // ── Bulk Import ──
+  previewImportFile() {
+    const fileInput = document.getElementById('import-file');
+    const importType = document.getElementById('import-type')?.value;
+    const preview = document.getElementById('import-preview');
+    const previewTable = document.getElementById('import-preview-table');
+    const mappingDiv = document.getElementById('import-mapping');
+    const previewTitle = document.getElementById('import-preview-title');
+    const resultDiv = document.getElementById('import-result');
+
+    if (!importType) { showToast('Select an import type first'); fileInput.value = ''; return; }
+    if (!fileInput.files || !fileInput.files[0]) return;
+
+    resultDiv.style.display = 'none';
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+      const text = e.target.result;
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) { showToast('CSV file must have a header row and at least one data row'); return; }
+
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      const rows = [];
+      for (let i = 1; i < Math.min(lines.length, 51); i++) {
+        const vals = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const row = {};
+        headers.forEach((h, idx) => { row[h] = vals[idx] || ''; });
+        rows.push(row);
+      }
+
+      // Column mapping suggestions based on import type
+      const fieldMaps = {
+        providers: ['firstName', 'lastName', 'npi', 'email', 'phone', 'specialty', 'taxonomyCode', 'state', 'credential'],
+        organizations: ['name', 'npi', 'taxId', 'address', 'city', 'state', 'zip', 'phone', 'email'],
+        licenses: ['providerNpi', 'state', 'licenseNumber', 'licenseType', 'status', 'issueDate', 'expirationDate'],
+        facilities: ['name', 'npi', 'facilityType', 'address', 'city', 'state', 'zip', 'phone'],
+      };
+      const targetFields = fieldMaps[importType] || [];
+
+      // Auto-map columns
+      const mapping = {};
+      headers.forEach(h => {
+        const hLower = h.toLowerCase().replace(/[_\s-]/g, '');
+        const match = targetFields.find(f => f.toLowerCase() === hLower || f.toLowerCase().includes(hLower) || hLower.includes(f.toLowerCase()));
+        mapping[h] = match || '';
+      });
+
+      // Store parsed data
+      window._importData = { headers, rows, mapping, allRows: lines.length - 1, importType };
+
+      previewTitle.textContent = `Preview: ${rows.length} of ${lines.length - 1} rows`;
+
+      // Render mapping UI
+      mappingDiv.innerHTML = `
+        <div class="card" style="margin-bottom:12px;">
+          <div class="card-header"><h4 style="margin:0;">Column Mapping</h4></div>
+          <div class="card-body" style="padding:12px;">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">
+              ${headers.map(h => `
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span class="text-sm" style="min-width:80px;font-weight:600;">${escHtml(h)}</span>
+                  <select class="form-control" style="height:30px;font-size:12px;flex:1;" data-source-col="${escHtml(h)}" onchange="window._importData.mapping['${escHtml(h)}'] = this.value">
+                    <option value="">-- Skip --</option>
+                    ${targetFields.map(f => `<option value="${f}" ${mapping[h] === f ? 'selected' : ''}>${f}</option>`).join('')}
+                  </select>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>`;
+
+      // Render preview table
+      previewTable.innerHTML = `
+        <table>
+          <thead><tr>${headers.map(h => `<th style="font-size:12px;">${escHtml(h)}</th>`).join('')}</tr></thead>
+          <tbody>
+            ${rows.slice(0, 20).map(row => `
+              <tr>${headers.map(h => `<td style="font-size:12px;">${escHtml(row[h] || '')}</td>`).join('')}</tr>
+            `).join('')}
+          </tbody>
+        </table>`;
+
+      preview.style.display = '';
+    };
+
+    reader.readAsText(file);
+  },
+  async executeImportAction() {
+    if (!window._importData) { showToast('No import data loaded'); return; }
+    const { rows, mapping, importType } = window._importData;
+    const resultDiv = document.getElementById('import-result');
+
+    // Transform rows using mapping
+    const mappedRows = rows.map(row => {
+      const mapped = {};
+      Object.entries(mapping).forEach(([source, target]) => {
+        if (target && row[source] !== undefined) mapped[target] = row[source];
+      });
+      return mapped;
+    }).filter(r => Object.keys(r).length > 0);
+
+    if (mappedRows.length === 0) { showToast('No valid mapped data to import'); return; }
+    if (!await appConfirm(`Import ${mappedRows.length} ${importType} records?`, { title: 'Confirm Import', okLabel: 'Import' })) return;
+
+    resultDiv.style.display = '';
+    resultDiv.innerHTML = '<div style="text-align:center;padding:24px;"><div class="spinner"></div><div style="margin-top:8px;color:var(--gray-500);font-size:13px;">Importing data...</div></div>';
+
+    try {
+      const result = await store.executeImport({ type: importType, records: mappedRows });
+      const success = result.successCount || result.success_count || result.success || result.imported || mappedRows.length;
+      const errors = result.errorCount || result.error_count || result.errors || 0;
+      const skipped = result.skippedCount || result.skipped_count || result.skipped || 0;
+
+      resultDiv.innerHTML = `
+        <div class="card" style="border-left:3px solid var(--green);">
+          <div class="card-header"><h3>Import Complete</h3></div>
+          <div class="card-body">
+            <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
+              <div class="stat-card"><div class="label">Imported</div><div class="value" style="color:var(--green);">${success}</div></div>
+              <div class="stat-card"><div class="label">Errors</div><div class="value" style="color:var(--red);">${errors}</div></div>
+              <div class="stat-card"><div class="label">Skipped</div><div class="value" style="color:var(--gray-500);">${skipped}</div></div>
+            </div>
+            ${result.errors && Array.isArray(result.errors) && result.errors.length > 0 ? `
+              <div style="margin-top:12px;"><h4>Error Details:</h4>
+                <div style="max-height:200px;overflow-y:auto;font-size:12px;background:var(--gray-50);padding:8px;border-radius:8px;">
+                  ${result.errors.map(err => `<div style="padding:2px 0;color:var(--red);">Row ${err.row || '?'}: ${escHtml(err.message || err.error || JSON.stringify(err))}</div>`).join('')}
+                </div>
+              </div>` : ''}
+          </div>
+        </div>`;
+
+      document.getElementById('import-preview').style.display = 'none';
+      window._importData = null;
+    } catch (e) {
+      resultDiv.innerHTML = `<div class="alert alert-danger">Import failed: ${escHtml(e.message)}</div>`;
+    }
+  },
+
+  // ── Compliance Center ──
+  async generateComplianceReport() {
+    showToast('Generating compliance report...');
+    try {
+      const report = await store.getComplianceReport();
+      showToast('Compliance report generated');
+      await renderCompliancePage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async exportComplianceData() {
+    try {
+      const result = await store.exportData('compliance');
+      if (result.url || result.downloadUrl) {
+        window.open(result.url || result.downloadUrl, '_blank');
+      } else if (result.data) {
+        const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'compliance-report.json'; a.click();
+        URL.revokeObjectURL(url);
+      }
+      showToast('Compliance data exported');
+    } catch (e) { showToast('Export failed: ' + e.message); }
+  },
+
+  // ── FAQ / Knowledge Base ──
+  openFaqModal(id) {
+    document.getElementById('faq-modal-title').textContent = id ? 'Edit FAQ' : 'Add FAQ';
+    document.getElementById('faq-edit-id').value = id || '';
+    if (!id) {
+      ['faq-question','faq-answer'].forEach(f => { const el = document.getElementById(f); if (el) el.value = ''; });
+      document.getElementById('faq-category').value = 'general';
+    }
+    document.getElementById('faq-modal').classList.add('active');
+  },
+  async editFaq(id) {
+    try {
+      const faqs = await store.getFaqs();
+      const faq = (Array.isArray(faqs) ? faqs : []).find(f => f.id === id);
+      if (!faq) { showToast('FAQ not found'); return; }
+      document.getElementById('faq-edit-id').value = id;
+      document.getElementById('faq-modal-title').textContent = 'Edit FAQ';
+      document.getElementById('faq-question').value = faq.question || '';
+      document.getElementById('faq-answer').value = faq.answer || '';
+      document.getElementById('faq-category').value = faq.category || 'general';
+      document.getElementById('faq-modal').classList.add('active');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async saveFaq() {
+    const question = document.getElementById('faq-question')?.value?.trim();
+    const answer = document.getElementById('faq-answer')?.value?.trim();
+    if (!question) { showToast('Question is required'); return; }
+    if (!answer) { showToast('Answer is required'); return; }
+    const data = {
+      question,
+      answer,
+      category: document.getElementById('faq-category')?.value || 'general',
+    };
+    const editId = document.getElementById('faq-edit-id')?.value;
+    try {
+      if (editId) {
+        await store.updateFaq(editId, data);
+        showToast('FAQ updated');
+      } else {
+        await store.createFaq(data);
+        showToast('FAQ created');
+      }
+      document.getElementById('faq-modal').classList.remove('active');
+      await renderFaqPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async deleteFaqItem(id) {
+    if (!await appConfirm('Delete this FAQ?', { title: 'Delete FAQ', okLabel: 'Delete', okClass: 'btn-danger' })) return;
+    try {
+      await store.deleteFaq(id);
+      showToast('FAQ deleted');
+      await renderFaqPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async rateFaq(id, vote) {
+    try {
+      const faqs = await store.getFaqs();
+      const faq = (Array.isArray(faqs) ? faqs : []).find(f => f.id === id);
+      if (!faq) return;
+      const data = vote === 'yes'
+        ? { helpfulYes: (faq.helpfulYes || faq.helpful_yes || 0) + 1 }
+        : { helpfulNo: (faq.helpfulNo || faq.helpful_no || 0) + 1 };
+      await store.updateFaq(id, data);
+      showToast('Thanks for your feedback!');
+      await renderFaqPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  filterFaqs() {
+    const search = (document.getElementById('faq-search')?.value || '').toLowerCase();
+    document.querySelectorAll('.faq-item').forEach(item => {
+      const match = !search || (item.dataset.search || '').includes(search);
+      item.style.display = match ? '' : 'none';
+    });
+  },
+  filterFaqCategory(cat) {
+    // Update tab buttons
+    document.querySelectorAll('#faq-category-tabs .btn').forEach(btn => {
+      btn.classList.toggle('btn-primary', btn.dataset.cat === cat);
+    });
+    document.querySelectorAll('.faq-item').forEach(item => {
+      if (cat === 'all') { item.style.display = ''; return; }
+      item.style.display = (item.dataset.category === cat) ? '' : 'none';
+    });
+  },
+
+  // ── Provider Profile ──
+  openProviderProfile(providerId) {
+    window._selectedProviderId = providerId;
+    navigateTo('provider-profile');
+  },
+  switchProfileTab(tabId) {
+    document.querySelectorAll('.profile-tab-content').forEach(el => { el.style.display = 'none'; });
+    document.querySelectorAll('.profile-tab').forEach(btn => {
+      btn.classList.toggle('btn-primary', btn.dataset.tab === tabId);
+      btn.style.borderBottom = btn.dataset.tab === tabId ? '2px solid var(--brand-600)' : 'none';
+    });
+    const tab = document.getElementById('tab-' + tabId);
+    if (tab) tab.style.display = '';
+  },
+  openEducationModal(providerId) {
+    ['edu-institution','edu-degree','edu-field','edu-start','edu-end'].forEach(f => {
+      const el = document.getElementById(f); if (el) el.value = '';
+    });
+    document.getElementById('education-modal').classList.add('active');
+  },
+  async saveEducation(providerId) {
+    const institution = document.getElementById('edu-institution')?.value?.trim();
+    if (!institution) { showToast('Institution is required'); return; }
+    try {
+      await store.createProviderEducation(providerId, {
+        institution,
+        degree: document.getElementById('edu-degree')?.value || '',
+        fieldOfStudy: document.getElementById('edu-field')?.value?.trim() || '',
+        startDate: document.getElementById('edu-start')?.value || '',
+        endDate: document.getElementById('edu-end')?.value || '',
+      });
+      showToast('Education record added');
+      document.getElementById('education-modal').classList.remove('active');
+      await renderProviderProfilePage(providerId);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  openBoardModal(providerId) {
+    ['board-name','board-specialty','board-cert-num','board-issue','board-exp'].forEach(f => {
+      const el = document.getElementById(f); if (el) el.value = '';
+    });
+    document.getElementById('board-modal').classList.add('active');
+  },
+  async saveBoard(providerId) {
+    const boardName = document.getElementById('board-name')?.value?.trim();
+    if (!boardName) { showToast('Board name is required'); return; }
+    try {
+      await store.createProviderBoard(providerId, {
+        boardName,
+        specialty: document.getElementById('board-specialty')?.value?.trim() || '',
+        certificateNumber: document.getElementById('board-cert-num')?.value?.trim() || '',
+        issueDate: document.getElementById('board-issue')?.value || '',
+        expirationDate: document.getElementById('board-exp')?.value || '',
+      });
+      showToast('Board certification added');
+      document.getElementById('board-modal').classList.remove('active');
+      await renderProviderProfilePage(providerId);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  openMalpracticeModal(providerId) {
+    ['mal-carrier','mal-policy','mal-coverage','mal-effective','mal-expiration'].forEach(f => {
+      const el = document.getElementById(f); if (el) el.value = '';
+    });
+    document.getElementById('malpractice-modal').classList.add('active');
+  },
+  async saveMalpractice(providerId) {
+    const carrier = document.getElementById('mal-carrier')?.value?.trim();
+    if (!carrier) { showToast('Insurance carrier is required'); return; }
+    try {
+      await store.createProviderMalpractice(providerId, {
+        carrier,
+        policyNumber: document.getElementById('mal-policy')?.value?.trim() || '',
+        coverageAmount: document.getElementById('mal-coverage')?.value?.trim() || '',
+        effectiveDate: document.getElementById('mal-effective')?.value || '',
+        expirationDate: document.getElementById('mal-expiration')?.value || '',
+      });
+      showToast('Malpractice policy added');
+      document.getElementById('malpractice-modal').classList.remove('active');
+      await renderProviderProfilePage(providerId);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
 };
 
 // ─── Application Modal ───
@@ -7038,6 +7657,1096 @@ async function renderOnboardingStub() {
             </tbody>
           </table></div>
         ` : '<div class="text-sm text-muted" style="text-align:center;padding:2rem;">No onboarding tokens yet. Create one above to invite a provider.</div>'}
+      </div>
+    </div>
+  `;
+}
+
+// ─── Exclusion Screening Page ───
+
+async function renderExclusionsPage() {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div><div style="margin-top:12px;color:var(--gray-500);font-size:13px;">Loading exclusion data...</div></div>';
+
+  let summary = { totalProviders: 0, screened: 0, clear: 0, excluded: 0, needsRecheck: 0, neverScreened: 0, errors: 0 };
+  let exclusions = [];
+  let providers = [];
+
+  try { summary = await store.getExclusionSummary(); } catch (e) { console.error('Exclusion summary error:', e); }
+  try { exclusions = await store.getExclusions(); } catch (e) { console.error('Exclusions error:', e); }
+  try { providers = await store.getAll('providers'); } catch (e) { console.error('Providers error:', e); }
+
+  // Build a map of provider id -> latest exclusion result
+  const exclusionMap = {};
+  (Array.isArray(exclusions) ? exclusions : []).forEach(ex => {
+    const pid = ex.providerId || ex.provider_id;
+    if (pid) exclusionMap[pid] = ex;
+  });
+
+  const statusBadge = (status) => {
+    const colors = { clear: 'approved', excluded: 'denied', pending: 'pending', error: 'inactive', unknown: 'inactive' };
+    return `<span class="badge badge-${colors[status] || 'inactive'}">${escHtml(status || 'Not Screened')}</span>`;
+  };
+
+  body.innerHTML = `
+    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
+      <div class="stat-card"><div class="label">Total Providers</div><div class="value">${summary.totalProviders || providers.length}</div></div>
+      <div class="stat-card"><div class="label">Screened</div><div class="value" style="color:var(--brand-600);">${summary.screened || 0}</div></div>
+      <div class="stat-card"><div class="label">Clear</div><div class="value" style="color:var(--green);">${summary.clear || 0}</div></div>
+      <div class="stat-card"><div class="label">Excluded</div><div class="value" style="color:var(--red);">${summary.excluded || 0}</div></div>
+      <div class="stat-card"><div class="label">Needs Recheck</div><div class="value" style="color:var(--amber);">${summary.needsRecheck || 0}</div></div>
+      <div class="stat-card"><div class="label">Never Screened</div><div class="value" style="color:var(--gray-500);">${summary.neverScreened || 0}</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>Provider Screening Status</h3>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="excl-search" placeholder="Search providers..." class="form-control" style="width:220px;height:34px;font-size:13px;" oninput="window.app.filterExclusions()">
+          <select id="excl-status-filter" class="form-control" style="width:140px;height:34px;font-size:13px;" onchange="window.app.filterExclusions()">
+            <option value="">All Statuses</option>
+            <option value="clear">Clear</option>
+            <option value="excluded">Excluded</option>
+            <option value="pending">Pending</option>
+            <option value="not_screened">Not Screened</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>NPI</th>
+                <th>Status</th>
+                <th>Last Screened</th>
+                <th>Source</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="excl-table-body">
+              ${providers.map(p => {
+                const ex = exclusionMap[p.id];
+                const status = ex ? (ex.status || ex.result || 'pending') : 'not_screened';
+                const lastScreened = ex ? (ex.screenedAt || ex.screened_at || ex.createdAt || ex.created_at || '') : '';
+                const source = ex ? (ex.source || 'OIG/SAM') : '—';
+                const name = `${escHtml(p.firstName || p.first_name || '')} ${escHtml(p.lastName || p.last_name || '')}`.trim();
+                return `
+                <tr class="excl-row" data-name="${name.toLowerCase()}" data-status="${status}">
+                  <td><strong>${name}</strong>${p.specialty ? '<br><span class="text-sm text-muted">' + escHtml(p.specialty) + '</span>' : ''}</td>
+                  <td><code>${escHtml(p.npi || '—')}</code></td>
+                  <td>${statusBadge(status)}</td>
+                  <td>${lastScreened ? formatDateDisplay(lastScreened) : '<span class="text-muted">Never</span>'}</td>
+                  <td class="text-sm text-muted">${escHtml(source)}</td>
+                  <td>
+                    ${editButton('Screen', `window.app.screenSingleProvider(${p.id})`, 'btn-primary')}
+                    ${status === 'excluded' ? '<button class="btn btn-sm btn-danger" onclick="window.app.viewExclusionDetail(' + p.id + ')" style="margin-left:4px;">Details</button>' : ''}
+                  </td>
+                </tr>`;
+              }).join('')}
+              ${providers.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--gray-500);">No providers found.</td></tr>' : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Facilities Page ───
+
+async function renderFacilitiesPage() {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  let facilities = [];
+  try { facilities = await store.getFacilities(); } catch (e) { console.error('Facilities error:', e); }
+  if (!Array.isArray(facilities)) facilities = [];
+
+  body.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <h3>All Facilities (${facilities.length})</h3>
+        <input type="text" id="facility-search" placeholder="Search facilities..." class="form-control" style="width:240px;height:34px;font-size:13px;" oninput="window.app.filterFacilities()">
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>NPI</th><th>Type</th><th>City / State</th><th>Phone</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="facility-table-body">
+              ${facilities.map(f => {
+                const statusClass = (f.status === 'active' || f.isActive) ? 'approved' : 'inactive';
+                const statusLabel = (f.status === 'active' || f.isActive) ? 'Active' : (f.status || 'Inactive');
+                return `
+                <tr class="facility-row" data-name="${escHtml((f.name || '').toLowerCase())}">
+                  <td><strong>${escHtml(f.name || '—')}</strong></td>
+                  <td><code>${escHtml(f.npi || '—')}</code></td>
+                  <td>${escHtml(f.facilityType || f.type || '—')}</td>
+                  <td>${escHtml(f.city || '')}${f.state ? ', ' + escHtml(f.state) : ''}</td>
+                  <td>${escHtml(f.phone || '—')}</td>
+                  <td><span class="badge badge-${statusClass}">${statusLabel}</span></td>
+                  <td>
+                    ${editButton('Edit', `window.app.editFacility(${f.id})`)}
+                    ${deleteButton('Delete', `window.app.deleteFacility(${f.id})`)}
+                  </td>
+                </tr>`;
+              }).join('')}
+              ${facilities.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-500);">No facilities yet. Add one above.</td></tr>' : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Facility Modal -->
+    <div class="modal" id="facility-modal">
+      <div class="modal-content" style="max-width:560px;">
+        <div class="modal-header">
+          <h3 id="facility-modal-title">Add Facility</h3>
+          <button class="modal-close" onclick="document.getElementById('facility-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body" id="facility-modal-body">
+          <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Facility Name *</label><input type="text" id="fac-name" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>NPI</label><input type="text" id="fac-npi" class="form-control" maxlength="10"></div>
+            <div class="auth-field" style="margin:0;"><label>Type</label>
+              <select id="fac-type" class="form-control">
+                <option value="">Select Type</option>
+                <option value="hospital">Hospital</option>
+                <option value="clinic">Clinic</option>
+                <option value="office">Office</option>
+                <option value="urgent_care">Urgent Care</option>
+                <option value="surgical_center">Surgical Center</option>
+                <option value="lab">Laboratory</option>
+                <option value="imaging">Imaging Center</option>
+                <option value="pharmacy">Pharmacy</option>
+                <option value="telehealth">Telehealth</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Phone</label><input type="tel" id="fac-phone" class="form-control"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Address</label><input type="text" id="fac-address" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>City</label><input type="text" id="fac-city" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>State</label><input type="text" id="fac-state" class="form-control" maxlength="2" placeholder="e.g. TX"></div>
+            <div class="auth-field" style="margin:0;"><label>ZIP</label><input type="text" id="fac-zip" class="form-control" maxlength="10"></div>
+            <div class="auth-field" style="margin:0;"><label>Status</label>
+              <select id="fac-status" class="form-control">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+          <input type="hidden" id="fac-edit-id" value="">
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('facility-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveFacility()">Save Facility</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NPI Facility Modal -->
+    <div class="modal" id="npi-facility-modal">
+      <div class="modal-content" style="max-width:420px;">
+        <div class="modal-header">
+          <h3>Add Facility from NPI</h3>
+          <button class="modal-close" onclick="document.getElementById('npi-facility-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="auth-field" style="margin:0;">
+            <label>Organization NPI (10 digits)</label>
+            <input type="text" id="fac-npi-lookup" class="form-control" maxlength="10" placeholder="e.g. 1234567890">
+          </div>
+          <div id="fac-npi-result" style="display:none;margin-top:12px;"></div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('npi-facility-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.createFacilityFromNpiLookup()">Create from NPI</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Billing & Invoicing Page ───
+
+async function renderBillingPage() {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  let stats = { totalRevenue: 0, outstanding: 0, overdue: 0, drafts: 0 };
+  let invoices = [];
+  let services = [];
+
+  try { stats = await store.getBillingStats(); } catch (e) { console.error('Billing stats error:', e); }
+  try { invoices = await store.getInvoices(); } catch (e) { console.error('Invoices error:', e); }
+  try { services = await store.getServices(); } catch (e) { console.error('Services error:', e); }
+  if (!Array.isArray(invoices)) invoices = [];
+  if (!Array.isArray(services)) services = [];
+
+  const fmt = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const invoiceStatusBadge = (status) => {
+    const map = { draft: 'inactive', sent: 'pending', partial: 'pending', paid: 'approved', overdue: 'denied', cancelled: 'inactive', void: 'inactive' };
+    return `<span class="badge badge-${map[status] || 'inactive'}">${escHtml(status || 'draft')}</span>`;
+  };
+
+  body.innerHTML = `
+    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));">
+      <div class="stat-card"><div class="label">Total Revenue</div><div class="value" style="color:var(--green);">${fmt(stats.totalRevenue)}</div></div>
+      <div class="stat-card"><div class="label">Outstanding</div><div class="value" style="color:var(--brand-600);">${fmt(stats.outstanding)}</div></div>
+      <div class="stat-card"><div class="label">Overdue</div><div class="value" style="color:var(--red);">${fmt(stats.overdue)}</div></div>
+      <div class="stat-card"><div class="label">Drafts</div><div class="value" style="color:var(--gray-500);">${stats.drafts || 0}</div></div>
+    </div>
+
+    <!-- Services Section -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-header" style="cursor:pointer;" onclick="this.parentElement.querySelector('.card-body').classList.toggle('collapsed');">
+        <h3>Services (${services.length})</h3>
+        ${editButton('+ Add Service', 'window.app.openServiceModal()')}
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Service</th><th>Code</th><th>Rate</th><th>Description</th></tr></thead>
+            <tbody>
+              ${services.map(s => `
+                <tr>
+                  <td><strong>${escHtml(s.name || s.serviceName || '—')}</strong></td>
+                  <td><code>${escHtml(s.code || s.serviceCode || '—')}</code></td>
+                  <td>${fmt(s.rate || s.defaultRate)}</td>
+                  <td class="text-sm text-muted">${escHtml(s.description || '—')}</td>
+                </tr>`).join('')}
+              ${services.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:1rem;color:var(--gray-500);">No services defined yet.</td></tr>' : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Invoices Table -->
+    <div class="card">
+      <div class="card-header">
+        <h3>Invoices (${invoices.length})</h3>
+        <div style="display:flex;gap:8px;">
+          <select id="invoice-status-filter" class="form-control" style="width:140px;height:34px;font-size:13px;" onchange="window.app.filterInvoices()">
+            <option value="">All Statuses</option>
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="partial">Partial</option>
+            <option value="paid">Paid</option>
+            <option value="overdue">Overdue</option>
+          </select>
+          <input type="text" id="invoice-search" placeholder="Search invoices..." class="form-control" style="width:200px;height:34px;font-size:13px;" oninput="window.app.filterInvoices()">
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Invoice #</th><th>Client</th><th>Amount</th><th>Paid</th><th>Status</th><th>Due Date</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="invoice-table-body">
+              ${invoices.map(inv => {
+                const invStatus = inv.status || 'draft';
+                const client = inv.clientName || inv.client_name || inv.organizationName || '—';
+                return `
+                <tr class="invoice-row" data-status="${invStatus}" data-search="${(inv.invoiceNumber || '').toLowerCase()} ${client.toLowerCase()}">
+                  <td><strong>${escHtml(inv.invoiceNumber || inv.invoice_number || '#' + inv.id)}</strong></td>
+                  <td>${escHtml(client)}</td>
+                  <td>${fmt(inv.totalAmount || inv.total_amount || inv.amount)}</td>
+                  <td>${fmt(inv.paidAmount || inv.paid_amount || 0)}</td>
+                  <td>${invoiceStatusBadge(invStatus)}</td>
+                  <td>${inv.dueDate || inv.due_date ? formatDateDisplay(inv.dueDate || inv.due_date) : '—'}</td>
+                  <td>
+                    ${editButton('View', `window.app.viewInvoice(${inv.id})`)}
+                    ${invStatus !== 'paid' ? editButton('Payment', `window.app.openPaymentModal(${inv.id})`, 'btn-primary') : ''}
+                    ${invStatus === 'draft' ? deleteButton('Delete', `window.app.deleteInvoice(${inv.id})`) : ''}
+                  </td>
+                </tr>`;
+              }).join('')}
+              ${invoices.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-500);">No invoices yet.</td></tr>' : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Invoice Modal -->
+    <div class="modal" id="invoice-modal">
+      <div class="modal-content" style="max-width:600px;">
+        <div class="modal-header">
+          <h3 id="invoice-modal-title">Create Invoice</h3>
+          <button class="modal-close" onclick="document.getElementById('invoice-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Client Name *</label><input type="text" id="inv-client" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Amount *</label><input type="number" id="inv-amount" class="form-control" step="0.01" min="0"></div>
+            <div class="auth-field" style="margin:0;"><label>Due Date *</label><input type="date" id="inv-due" class="form-control"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Description</label><textarea id="inv-desc" class="form-control" rows="3" style="resize:vertical;"></textarea></div>
+            <div class="auth-field" style="margin:0;"><label>Status</label>
+              <select id="inv-status" class="form-control">
+                <option value="draft">Draft</option>
+                <option value="sent">Sent</option>
+              </select>
+            </div>
+          </div>
+          <input type="hidden" id="inv-edit-id" value="">
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('invoice-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveInvoice()">Save Invoice</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Payment Modal -->
+    <div class="modal" id="payment-modal">
+      <div class="modal-content" style="max-width:420px;">
+        <div class="modal-header">
+          <h3>Record Payment</h3>
+          <button class="modal-close" onclick="document.getElementById('payment-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="auth-field" style="margin:0 0 12px;"><label>Payment Amount *</label><input type="number" id="pay-amount" class="form-control" step="0.01" min="0"></div>
+          <div class="auth-field" style="margin:0 0 12px;"><label>Payment Date *</label><input type="date" id="pay-date" class="form-control" value="${new Date().toISOString().split('T')[0]}"></div>
+          <div class="auth-field" style="margin:0 0 12px;"><label>Payment Method</label>
+            <select id="pay-method" class="form-control">
+              <option value="check">Check</option>
+              <option value="ach">ACH</option>
+              <option value="wire">Wire Transfer</option>
+              <option value="credit_card">Credit Card</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="auth-field" style="margin:0;"><label>Reference / Notes</label><input type="text" id="pay-ref" class="form-control" placeholder="Check #, transaction ID, etc."></div>
+          <input type="hidden" id="pay-invoice-id" value="">
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('payment-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.savePayment()">Record Payment</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Service Modal -->
+    <div class="modal" id="service-modal">
+      <div class="modal-content" style="max-width:420px;">
+        <div class="modal-header">
+          <h3>Add Service</h3>
+          <button class="modal-close" onclick="document.getElementById('service-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="auth-field" style="margin:0 0 12px;"><label>Service Name *</label><input type="text" id="svc-name" class="form-control"></div>
+          <div class="auth-field" style="margin:0 0 12px;"><label>Code</label><input type="text" id="svc-code" class="form-control" placeholder="e.g. CPT code"></div>
+          <div class="auth-field" style="margin:0 0 12px;"><label>Default Rate</label><input type="number" id="svc-rate" class="form-control" step="0.01" min="0"></div>
+          <div class="auth-field" style="margin:0;"><label>Description</label><textarea id="svc-desc" class="form-control" rows="2"></textarea></div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('service-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveService()">Save Service</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Bulk Import Page ───
+
+async function renderImportPage() {
+  const body = document.getElementById('page-body');
+
+  let importHistory = [];
+  try { importHistory = await store.getImports(); } catch (e) { console.error('Imports error:', e); }
+  if (!Array.isArray(importHistory)) importHistory = [];
+
+  body.innerHTML = `
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-header"><h3>Import Data from CSV</h3></div>
+      <div class="card-body">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+          <div class="auth-field" style="margin:0;flex:1;min-width:180px;">
+            <label>Import Type *</label>
+            <select id="import-type" class="form-control">
+              <option value="">Select type...</option>
+              <option value="providers">Providers</option>
+              <option value="organizations">Organizations</option>
+              <option value="licenses">Licenses</option>
+              <option value="facilities">Facilities</option>
+            </select>
+          </div>
+          <div class="auth-field" style="margin:0;flex:2;min-width:250px;">
+            <label>CSV File *</label>
+            <input type="file" id="import-file" class="form-control" accept=".csv,.xlsx,.xls" onchange="window.app.previewImportFile()">
+          </div>
+        </div>
+
+        <!-- Preview Area -->
+        <div id="import-preview" style="display:none;margin-top:20px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h4 style="margin:0;" id="import-preview-title">Preview</h4>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary" onclick="window.app.executeImportAction()">Import Data</button>
+              <button class="btn" onclick="document.getElementById('import-preview').style.display='none';">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Column Mapping -->
+          <div id="import-mapping" style="margin-bottom:16px;"></div>
+
+          <!-- Data Preview Table -->
+          <div id="import-preview-table" class="table-wrap" style="max-height:400px;overflow-y:auto;"></div>
+        </div>
+
+        <!-- Import Result -->
+        <div id="import-result" style="display:none;margin-top:20px;"></div>
+      </div>
+    </div>
+
+    <!-- Import History -->
+    <div class="card">
+      <div class="card-header"><h3>Import History</h3></div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Type</th><th>File</th><th>Records</th><th>Success</th><th>Errors</th><th>Status</th></tr></thead>
+            <tbody>
+              ${importHistory.map(h => {
+                const st = h.status || 'completed';
+                const badge = st === 'completed' ? 'approved' : st === 'failed' ? 'denied' : 'pending';
+                return `
+                <tr>
+                  <td>${formatDateDisplay(h.createdAt || h.created_at || h.date)}</td>
+                  <td>${escHtml(h.importType || h.import_type || h.type || '—')}</td>
+                  <td class="text-sm">${escHtml(h.fileName || h.file_name || '—')}</td>
+                  <td>${h.totalRecords || h.total_records || h.total || 0}</td>
+                  <td style="color:var(--green);">${h.successCount || h.success_count || h.success || 0}</td>
+                  <td style="color:var(--red);">${h.errorCount || h.error_count || h.errors || 0}</td>
+                  <td><span class="badge badge-${badge}">${st}</span></td>
+                </tr>`;
+              }).join('')}
+              ${importHistory.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-500);">No imports yet.</td></tr>' : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Compliance Center Page ───
+
+async function renderCompliancePage() {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div><div style="margin-top:12px;color:var(--gray-500);font-size:13px;">Generating compliance report...</div></div>';
+
+  let report = {};
+  let licenses = [];
+  let providers = [];
+  let exclusionSummary = {};
+
+  try { report = await store.getComplianceReport(); } catch (e) { console.error('Compliance report error:', e); }
+  try { licenses = await store.getAll('licenses'); } catch (e) {}
+  try { providers = await store.getAll('providers'); } catch (e) {}
+  try { exclusionSummary = await store.getExclusionSummary(); } catch (e) {}
+
+  const today = new Date();
+  const in30 = new Date(Date.now() + 30 * 86400000);
+  const in90 = new Date(Date.now() + 90 * 86400000);
+
+  // Compute locally if API report is sparse
+  const expiringLicenses30 = licenses.filter(l => {
+    if (!l.expirationDate && !l.expiration_date) return false;
+    const exp = new Date(l.expirationDate || l.expiration_date);
+    return exp > today && exp <= in30;
+  });
+  const expiringLicenses90 = licenses.filter(l => {
+    if (!l.expirationDate && !l.expiration_date) return false;
+    const exp = new Date(l.expirationDate || l.expiration_date);
+    return exp > today && exp <= in90;
+  });
+  const expiredLicenses = licenses.filter(l => {
+    if (!l.expirationDate && !l.expiration_date) return false;
+    return new Date(l.expirationDate || l.expiration_date) < today;
+  });
+
+  const expiringMalpractice = report.expiringMalpractice || [];
+  const expiringBoards = report.expiringBoards || [];
+  const neverScreened = report.neverScreened || [];
+
+  const renderCollapsible = (id, title, count, badgeClass, content) => `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header" style="cursor:pointer;" onclick="
+        const b = document.getElementById('${id}-body');
+        const a = document.getElementById('${id}-arrow');
+        b.style.display = b.style.display === 'none' ? '' : 'none';
+        a.style.transform = b.style.display === 'none' ? '' : 'rotate(90deg)';
+      ">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg id="${id}-arrow" width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style="transition:transform 0.2s;flex-shrink:0;"><path d="M4 2l5 4-5 4z"/></svg>
+          <h3 style="margin:0;">${title}</h3>
+          <span class="badge badge-${badgeClass}">${count}</span>
+        </div>
+      </div>
+      <div class="card-body" id="${id}-body" style="display:none;padding:0;">
+        ${content}
+      </div>
+    </div>`;
+
+  body.innerHTML = `
+    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
+      <div class="stat-card"><div class="label">Expired Licenses</div><div class="value" style="color:var(--red);">${expiredLicenses.length}</div></div>
+      <div class="stat-card"><div class="label">Expiring (30 days)</div><div class="value" style="color:var(--amber);">${expiringLicenses30.length}</div></div>
+      <div class="stat-card"><div class="label">Expiring (90 days)</div><div class="value" style="color:var(--brand-600);">${expiringLicenses90.length}</div></div>
+      <div class="stat-card"><div class="label">Exclusion Flags</div><div class="value" style="color:var(--red);">${exclusionSummary.excluded || 0}</div></div>
+      <div class="stat-card"><div class="label">Never Screened</div><div class="value" style="color:var(--gray-500);">${exclusionSummary.neverScreened || neverScreened.length || 0}</div></div>
+    </div>
+
+    ${renderCollapsible('expired-lic', 'Expired Licenses', expiredLicenses.length, 'denied',
+      expiredLicenses.length > 0 ? `
+        <table>
+          <thead><tr><th>Provider</th><th>License #</th><th>State</th><th>Expired On</th></tr></thead>
+          <tbody>
+            ${expiredLicenses.map(l => {
+              const prov = providers.find(p => p.id === (l.providerId || l.provider_id));
+              const provName = prov ? `${prov.firstName || prov.first_name || ''} ${prov.lastName || prov.last_name || ''}`.trim() : '—';
+              return `<tr>
+                <td>${escHtml(provName)}</td>
+                <td><code>${escHtml(l.licenseNumber || l.license_number || '—')}</code></td>
+                <td>${escHtml(l.state || '—')}</td>
+                <td style="color:var(--red);">${formatDateDisplay(l.expirationDate || l.expiration_date)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>` : '<div style="padding:1rem;text-align:center;color:var(--gray-500);">No expired licenses.</div>'
+    )}
+
+    ${renderCollapsible('expiring-30', 'Expiring Within 30 Days', expiringLicenses30.length, 'pending',
+      expiringLicenses30.length > 0 ? `
+        <table>
+          <thead><tr><th>Provider</th><th>License #</th><th>State</th><th>Expires</th></tr></thead>
+          <tbody>
+            ${expiringLicenses30.map(l => {
+              const prov = providers.find(p => p.id === (l.providerId || l.provider_id));
+              const provName = prov ? `${prov.firstName || prov.first_name || ''} ${prov.lastName || prov.last_name || ''}`.trim() : '—';
+              return `<tr>
+                <td>${escHtml(provName)}</td>
+                <td><code>${escHtml(l.licenseNumber || l.license_number || '—')}</code></td>
+                <td>${escHtml(l.state || '—')}</td>
+                <td style="color:var(--amber);">${formatDateDisplay(l.expirationDate || l.expiration_date)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>` : '<div style="padding:1rem;text-align:center;color:var(--gray-500);">No licenses expiring within 30 days.</div>'
+    )}
+
+    ${renderCollapsible('expiring-90', 'Expiring Within 90 Days', expiringLicenses90.length, 'pending',
+      expiringLicenses90.length > 0 ? `
+        <table>
+          <thead><tr><th>Provider</th><th>License #</th><th>State</th><th>Expires</th></tr></thead>
+          <tbody>
+            ${expiringLicenses90.map(l => {
+              const prov = providers.find(p => p.id === (l.providerId || l.provider_id));
+              const provName = prov ? `${prov.firstName || prov.first_name || ''} ${prov.lastName || prov.last_name || ''}`.trim() : '—';
+              return `<tr>
+                <td>${escHtml(provName)}</td>
+                <td><code>${escHtml(l.licenseNumber || l.license_number || '—')}</code></td>
+                <td>${escHtml(l.state || '—')}</td>
+                <td>${formatDateDisplay(l.expirationDate || l.expiration_date)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>` : '<div style="padding:1rem;text-align:center;color:var(--gray-500);">No licenses expiring within 90 days.</div>'
+    )}
+
+    ${renderCollapsible('malpractice', 'Expiring Malpractice Insurance', expiringMalpractice.length, 'pending',
+      expiringMalpractice.length > 0 ? `
+        <table>
+          <thead><tr><th>Provider</th><th>Carrier</th><th>Policy #</th><th>Expires</th></tr></thead>
+          <tbody>
+            ${expiringMalpractice.map(m => `<tr>
+              <td>${escHtml(m.providerName || '—')}</td>
+              <td>${escHtml(m.carrier || m.insuranceCarrier || '—')}</td>
+              <td><code>${escHtml(m.policyNumber || m.policy_number || '—')}</code></td>
+              <td style="color:var(--amber);">${formatDateDisplay(m.expirationDate || m.expiration_date)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>` : '<div style="padding:1rem;text-align:center;color:var(--gray-500);">No expiring malpractice policies.</div>'
+    )}
+
+    ${renderCollapsible('boards', 'Expiring Board Certifications', expiringBoards.length, 'pending',
+      expiringBoards.length > 0 ? `
+        <table>
+          <thead><tr><th>Provider</th><th>Board</th><th>Specialty</th><th>Expires</th></tr></thead>
+          <tbody>
+            ${expiringBoards.map(b => `<tr>
+              <td>${escHtml(b.providerName || '—')}</td>
+              <td>${escHtml(b.boardName || b.board_name || '—')}</td>
+              <td>${escHtml(b.specialty || '—')}</td>
+              <td style="color:var(--amber);">${formatDateDisplay(b.expirationDate || b.expiration_date)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>` : '<div style="padding:1rem;text-align:center;color:var(--gray-500);">No expiring board certifications.</div>'
+    )}
+
+    ${renderCollapsible('excl-flags', 'Exclusion Flags', exclusionSummary.excluded || 0, 'denied',
+      `<div style="padding:1rem;">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;">
+          <div><span class="text-sm text-muted">Total Screened:</span> <strong>${exclusionSummary.screened || 0}</strong></div>
+          <div><span class="text-sm text-muted">Clear:</span> <strong style="color:var(--green);">${exclusionSummary.clear || 0}</strong></div>
+          <div><span class="text-sm text-muted">Excluded:</span> <strong style="color:var(--red);">${exclusionSummary.excluded || 0}</strong></div>
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="window.app.navigateTo('exclusions')">View Full Screening Report</button>
+      </div>`
+    )}
+
+    ${renderCollapsible('never-screened', 'Never-Screened Providers', exclusionSummary.neverScreened || neverScreened.length || 0, 'inactive',
+      neverScreened.length > 0 ? `
+        <table>
+          <thead><tr><th>Provider</th><th>NPI</th><th>Action</th></tr></thead>
+          <tbody>
+            ${neverScreened.map(p => `<tr>
+              <td>${escHtml(p.name || ((p.firstName || '') + ' ' + (p.lastName || '')).trim() || '—')}</td>
+              <td><code>${escHtml(p.npi || '—')}</code></td>
+              <td><button class="btn btn-sm btn-primary" onclick="window.app.screenSingleProvider(${p.id})">Screen Now</button></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>` : '<div style="padding:1rem;text-align:center;color:var(--gray-500);">All providers have been screened, or navigate to Exclusion Screening for details.</div>'
+    )}
+  `;
+}
+
+// ─── FAQ / Knowledge Base Page ───
+
+async function renderFaqPage() {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  let faqs = [];
+  try { faqs = await store.getFaqs(); } catch (e) { console.error('FAQs error:', e); }
+  if (!Array.isArray(faqs)) faqs = [];
+
+  const categories = ['all', 'general', 'credentialing', 'billing', 'compliance'];
+
+  body.innerHTML = `
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:center;">
+      <input type="text" id="faq-search" placeholder="Search knowledge base..." class="form-control" style="flex:1;min-width:250px;height:40px;font-size:14px;" oninput="window.app.filterFaqs()">
+      <div style="display:flex;gap:4px;" id="faq-category-tabs">
+        ${categories.map(c => `
+          <button class="btn btn-sm ${c === 'all' ? 'btn-primary' : ''}" data-cat="${c}" onclick="window.app.filterFaqCategory('${c}')" style="text-transform:capitalize;">${c}</button>
+        `).join('')}
+      </div>
+    </div>
+
+    <div id="faq-list">
+      ${faqs.length > 0 ? faqs.map((faq, idx) => `
+        <div class="card faq-item" data-category="${(faq.category || 'general').toLowerCase()}" data-search="${escHtml((faq.question || '').toLowerCase() + ' ' + (faq.answer || '').toLowerCase())}" style="margin-bottom:12px;">
+          <div class="card-header" style="cursor:pointer;padding:16px 20px;" onclick="
+            const b = document.getElementById('faq-body-${idx}');
+            const a = document.getElementById('faq-arrow-${idx}');
+            b.style.display = b.style.display === 'none' ? '' : 'none';
+            a.style.transform = b.style.display === 'none' ? '' : 'rotate(90deg)';
+          ">
+            <div style="display:flex;align-items:center;gap:10px;flex:1;">
+              <svg id="faq-arrow-${idx}" width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style="transition:transform 0.2s;flex-shrink:0;"><path d="M4 2l5 4-5 4z"/></svg>
+              <div style="flex:1;">
+                <div style="font-weight:600;font-size:14px;color:var(--gray-900);">${escHtml(faq.question || 'Untitled')}</div>
+              </div>
+              <span class="badge badge-${faq.category === 'credentialing' ? 'pending' : faq.category === 'billing' ? 'approved' : faq.category === 'compliance' ? 'denied' : 'inactive'}" style="font-size:11px;">${escHtml(faq.category || 'general')}</span>
+            </div>
+            <div style="display:flex;gap:4px;margin-left:8px;">
+              ${editButton('Edit', `window.app.editFaq(${faq.id})`, 'btn-sm')}
+              ${deleteButton('Delete', `window.app.deleteFaqItem(${faq.id})`)}
+            </div>
+          </div>
+          <div id="faq-body-${idx}" style="display:none;padding:0 20px 16px 42px;font-size:14px;color:var(--gray-600);line-height:1.7;">
+            ${escHtml(faq.answer || 'No answer provided.')}
+            <div style="margin-top:12px;display:flex;gap:12px;align-items:center;">
+              <span class="text-sm text-muted">Was this helpful?</span>
+              <button class="btn btn-sm" onclick="window.app.rateFaq(${faq.id}, 'yes')" style="font-size:12px;">Yes (${faq.helpfulYes || faq.helpful_yes || 0})</button>
+              <button class="btn btn-sm" onclick="window.app.rateFaq(${faq.id}, 'no')" style="font-size:12px;">No (${faq.helpfulNo || faq.helpful_no || 0})</button>
+            </div>
+          </div>
+        </div>
+      `).join('') : '<div class="card"><div class="card-body" style="text-align:center;padding:3rem;color:var(--gray-500);">No FAQs yet. Add one to get started.</div></div>'}
+    </div>
+
+    <!-- FAQ Modal -->
+    <div class="modal" id="faq-modal">
+      <div class="modal-content" style="max-width:560px;">
+        <div class="modal-header">
+          <h3 id="faq-modal-title">Add FAQ</h3>
+          <button class="modal-close" onclick="document.getElementById('faq-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="auth-field" style="margin:0 0 12px;"><label>Question *</label><input type="text" id="faq-question" class="form-control"></div>
+          <div class="auth-field" style="margin:0 0 12px;"><label>Answer *</label><textarea id="faq-answer" class="form-control" rows="5" style="resize:vertical;"></textarea></div>
+          <div class="auth-field" style="margin:0;"><label>Category</label>
+            <select id="faq-category" class="form-control">
+              <option value="general">General</option>
+              <option value="credentialing">Credentialing</option>
+              <option value="billing">Billing</option>
+              <option value="compliance">Compliance</option>
+            </select>
+          </div>
+          <input type="hidden" id="faq-edit-id" value="">
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('faq-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveFaq()">Save FAQ</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Provider Profile Page (Enhanced with Tabs) ───
+
+async function renderProviderProfilePage(providerId) {
+  const body = document.getElementById('page-body');
+
+  if (!providerId) {
+    body.innerHTML = '<div class="alert alert-warning">No provider selected. Go to Providers and click a provider to view their profile.</div>';
+    return;
+  }
+
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div><div style="margin-top:12px;color:var(--gray-500);font-size:13px;">Loading provider profile...</div></div>';
+
+  let provider = {};
+  let profile = {};
+  let education = [];
+  let boards = [];
+  let malpractice = [];
+  let providerLicenses = [];
+
+  try { provider = await store.getOne('providers', providerId); } catch (e) { console.error('Provider error:', e); }
+  try { profile = await store.getProviderProfile(providerId); } catch (e) { console.error('Profile error:', e); }
+  try { education = await store.getProviderEducation(providerId); } catch (e) {}
+  try { boards = await store.getProviderBoards(providerId); } catch (e) {}
+  try { malpractice = await store.getProviderMalpractice(providerId); } catch (e) {}
+  try {
+    const allLic = await store.getAll('licenses');
+    providerLicenses = allLic.filter(l => (l.providerId || l.provider_id) === providerId);
+  } catch (e) {}
+
+  if (!Array.isArray(education)) education = [];
+  if (!Array.isArray(boards)) boards = [];
+  if (!Array.isArray(malpractice)) malpractice = [];
+
+  const provName = `${provider.firstName || provider.first_name || ''} ${provider.lastName || provider.last_name || ''}`.trim() || 'Unknown Provider';
+  const credential = provider.credential || provider.credentials || '';
+  const workHistory = profile.workHistory || profile.work_history || [];
+  const cme = profile.cme || profile.continuingEducation || [];
+  const references = profile.references || [];
+  const documents = profile.documents || [];
+
+  const tabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'education', label: 'Education' },
+    { id: 'boards', label: 'Board Certs' },
+    { id: 'malpractice', label: 'Malpractice' },
+    { id: 'work-history', label: 'Work History' },
+    { id: 'cme', label: 'CME' },
+    { id: 'references', label: 'References' },
+    { id: 'documents', label: 'Documents' },
+  ];
+
+  const pageSubtitle = document.getElementById('page-subtitle');
+  if (pageSubtitle) pageSubtitle.textContent = provName + (credential ? ', ' + credential : '');
+
+  body.innerHTML = `
+    <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap;border-bottom:1px solid var(--gray-200);padding-bottom:0;">
+      ${tabs.map((t, i) => `
+        <button class="btn btn-sm profile-tab ${i === 0 ? 'btn-primary' : ''}" data-tab="${t.id}" onclick="window.app.switchProfileTab('${t.id}')" style="border-radius:8px 8px 0 0;border-bottom:none;margin-bottom:-1px;${i === 0 ? 'border-bottom:2px solid var(--brand-600);' : ''}">${t.label}</button>
+      `).join('')}
+    </div>
+
+    <!-- Overview Tab -->
+    <div class="profile-tab-content" id="tab-overview">
+      <div class="card">
+        <div class="card-header"><h3>Provider Information</h3></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div><span class="text-sm text-muted">Full Name</span><div style="font-weight:600;margin-top:2px;">${escHtml(provName)}${credential ? ', ' + escHtml(credential) : ''}</div></div>
+            <div><span class="text-sm text-muted">NPI</span><div style="font-weight:600;margin-top:2px;"><code>${escHtml(provider.npi || '—')}</code></div></div>
+            <div><span class="text-sm text-muted">Specialty</span><div style="margin-top:2px;">${escHtml(provider.specialty || provider.taxonomyDesc || '—')}</div></div>
+            <div><span class="text-sm text-muted">Taxonomy Code</span><div style="margin-top:2px;"><code>${escHtml(provider.taxonomyCode || provider.taxonomy_code || '—')}</code></div></div>
+            <div><span class="text-sm text-muted">Phone</span><div style="margin-top:2px;">${escHtml(provider.phone || '—')}</div></div>
+            <div><span class="text-sm text-muted">Email</span><div style="margin-top:2px;">${escHtml(provider.email || '—')}</div></div>
+            <div><span class="text-sm text-muted">State</span><div style="margin-top:2px;">${escHtml(provider.state || '—')}</div></div>
+            <div><span class="text-sm text-muted">Status</span><div style="margin-top:2px;"><span class="badge badge-${provider.status === 'active' ? 'approved' : 'inactive'}">${escHtml(provider.status || 'unknown')}</span></div></div>
+            ${profile.ssn ? `<div><span class="text-sm text-muted">SSN (last 4)</span><div style="margin-top:2px;">***-**-${escHtml(String(profile.ssn).slice(-4))}</div></div>` : ''}
+            ${profile.dob || profile.dateOfBirth ? `<div><span class="text-sm text-muted">Date of Birth</span><div style="margin-top:2px;">${formatDateDisplay(profile.dob || profile.dateOfBirth)}</div></div>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Licenses -->
+      <div class="card" style="margin-top:16px;">
+        <div class="card-header"><h3>Licenses (${providerLicenses.length})</h3></div>
+        <div class="card-body" style="padding:0;">
+          ${providerLicenses.length > 0 ? `<table>
+            <thead><tr><th>State</th><th>License #</th><th>Type</th><th>Status</th><th>Expires</th></tr></thead>
+            <tbody>
+              ${providerLicenses.map(l => `<tr>
+                <td>${escHtml(l.state || '—')}</td>
+                <td><code>${escHtml(l.licenseNumber || l.license_number || '—')}</code></td>
+                <td>${escHtml(l.licenseType || l.license_type || '—')}</td>
+                <td><span class="badge badge-${l.status === 'active' ? 'approved' : l.status === 'pending' ? 'pending' : 'denied'}">${escHtml(l.status || '—')}</span></td>
+                <td>${formatDateDisplay(l.expirationDate || l.expiration_date)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No licenses on file.</div>'}
+        </div>
+      </div>
+    </div>
+
+    <!-- Education Tab -->
+    <div class="profile-tab-content" id="tab-education" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h3>Education History</h3>
+          ${editButton('+ Add Education', `window.app.openEducationModal(${providerId})`)}
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${education.length > 0 ? `<table>
+            <thead><tr><th>Institution</th><th>Degree</th><th>Field</th><th>Start</th><th>End</th></tr></thead>
+            <tbody>
+              ${education.map(e => `<tr>
+                <td><strong>${escHtml(e.institution || e.schoolName || '—')}</strong></td>
+                <td>${escHtml(e.degree || e.degreeType || '—')}</td>
+                <td>${escHtml(e.fieldOfStudy || e.field || e.specialty || '—')}</td>
+                <td>${formatDateDisplay(e.startDate || e.start_date)}</td>
+                <td>${formatDateDisplay(e.endDate || e.end_date || e.graduationDate)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No education records. Add medical school, residency, or fellowship records.</div>'}
+        </div>
+      </div>
+
+      <!-- Education Modal -->
+      <div class="modal" id="education-modal">
+        <div class="modal-content" style="max-width:520px;">
+          <div class="modal-header">
+            <h3>Add Education</h3>
+            <button class="modal-close" onclick="document.getElementById('education-modal').classList.remove('active')">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="auth-field" style="margin:0 0 12px;"><label>Institution *</label><input type="text" id="edu-institution" class="form-control" placeholder="e.g. Johns Hopkins University"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="auth-field" style="margin:0;"><label>Degree</label>
+                <select id="edu-degree" class="form-control">
+                  <option value="">Select...</option>
+                  <option value="MD">MD</option>
+                  <option value="DO">DO</option>
+                  <option value="PhD">PhD</option>
+                  <option value="MSN">MSN</option>
+                  <option value="DNP">DNP</option>
+                  <option value="PA">PA</option>
+                  <option value="Residency">Residency</option>
+                  <option value="Fellowship">Fellowship</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="auth-field" style="margin:0;"><label>Field / Specialty</label><input type="text" id="edu-field" class="form-control"></div>
+              <div class="auth-field" style="margin:0;"><label>Start Date</label><input type="date" id="edu-start" class="form-control"></div>
+              <div class="auth-field" style="margin:0;"><label>End Date</label><input type="date" id="edu-end" class="form-control"></div>
+            </div>
+          </div>
+          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+            <button class="btn" onclick="document.getElementById('education-modal').classList.remove('active')">Cancel</button>
+            <button class="btn btn-primary" onclick="window.app.saveEducation(${providerId})">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Board Certifications Tab -->
+    <div class="profile-tab-content" id="tab-boards" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h3>Board Certifications</h3>
+          ${editButton('+ Add Certification', `window.app.openBoardModal(${providerId})`)}
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${boards.length > 0 ? `<table>
+            <thead><tr><th>Board</th><th>Specialty</th><th>Certificate #</th><th>Issued</th><th>Expires</th><th>Status</th></tr></thead>
+            <tbody>
+              ${boards.map(b => {
+                const isExpired = b.expirationDate && new Date(b.expirationDate) < new Date();
+                return `<tr>
+                  <td><strong>${escHtml(b.boardName || b.board_name || '—')}</strong></td>
+                  <td>${escHtml(b.specialty || '—')}</td>
+                  <td><code>${escHtml(b.certificateNumber || b.certificate_number || '—')}</code></td>
+                  <td>${formatDateDisplay(b.issueDate || b.issue_date)}</td>
+                  <td style="${isExpired ? 'color:var(--red);' : ''}">${formatDateDisplay(b.expirationDate || b.expiration_date)}</td>
+                  <td><span class="badge badge-${isExpired ? 'denied' : 'approved'}">${isExpired ? 'Expired' : 'Active'}</span></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No board certifications on file.</div>'}
+        </div>
+      </div>
+
+      <!-- Board Modal -->
+      <div class="modal" id="board-modal">
+        <div class="modal-content" style="max-width:520px;">
+          <div class="modal-header">
+            <h3>Add Board Certification</h3>
+            <button class="modal-close" onclick="document.getElementById('board-modal').classList.remove('active')">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="auth-field" style="margin:0 0 12px;"><label>Board Name *</label><input type="text" id="board-name" class="form-control" placeholder="e.g. American Board of Psychiatry"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="auth-field" style="margin:0;"><label>Specialty</label><input type="text" id="board-specialty" class="form-control"></div>
+              <div class="auth-field" style="margin:0;"><label>Certificate #</label><input type="text" id="board-cert-num" class="form-control"></div>
+              <div class="auth-field" style="margin:0;"><label>Issue Date</label><input type="date" id="board-issue" class="form-control"></div>
+              <div class="auth-field" style="margin:0;"><label>Expiration Date</label><input type="date" id="board-exp" class="form-control"></div>
+            </div>
+          </div>
+          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+            <button class="btn" onclick="document.getElementById('board-modal').classList.remove('active')">Cancel</button>
+            <button class="btn btn-primary" onclick="window.app.saveBoard(${providerId})">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Malpractice Tab -->
+    <div class="profile-tab-content" id="tab-malpractice" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h3>Malpractice Insurance</h3>
+          ${editButton('+ Add Policy', `window.app.openMalpracticeModal(${providerId})`)}
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${malpractice.length > 0 ? `<table>
+            <thead><tr><th>Carrier</th><th>Policy #</th><th>Coverage</th><th>Effective</th><th>Expires</th><th>Status</th></tr></thead>
+            <tbody>
+              ${malpractice.map(m => {
+                const isExpired = (m.expirationDate || m.expiration_date) && new Date(m.expirationDate || m.expiration_date) < new Date();
+                return `<tr>
+                  <td><strong>${escHtml(m.carrier || m.insuranceCarrier || m.insurance_carrier || '—')}</strong></td>
+                  <td><code>${escHtml(m.policyNumber || m.policy_number || '—')}</code></td>
+                  <td>${escHtml(m.coverageAmount || m.coverage_amount || m.coverage || '—')}</td>
+                  <td>${formatDateDisplay(m.effectiveDate || m.effective_date)}</td>
+                  <td style="${isExpired ? 'color:var(--red);' : ''}">${formatDateDisplay(m.expirationDate || m.expiration_date)}</td>
+                  <td><span class="badge badge-${isExpired ? 'denied' : 'approved'}">${isExpired ? 'Expired' : 'Active'}</span></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No malpractice insurance on file.</div>'}
+        </div>
+      </div>
+
+      <!-- Malpractice Modal -->
+      <div class="modal" id="malpractice-modal">
+        <div class="modal-content" style="max-width:520px;">
+          <div class="modal-header">
+            <h3>Add Malpractice Insurance</h3>
+            <button class="modal-close" onclick="document.getElementById('malpractice-modal').classList.remove('active')">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="auth-field" style="margin:0 0 12px;"><label>Insurance Carrier *</label><input type="text" id="mal-carrier" class="form-control"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="auth-field" style="margin:0;"><label>Policy Number</label><input type="text" id="mal-policy" class="form-control"></div>
+              <div class="auth-field" style="margin:0;"><label>Coverage Amount</label><input type="text" id="mal-coverage" class="form-control" placeholder="e.g. $1M/$3M"></div>
+              <div class="auth-field" style="margin:0;"><label>Effective Date</label><input type="date" id="mal-effective" class="form-control"></div>
+              <div class="auth-field" style="margin:0;"><label>Expiration Date</label><input type="date" id="mal-expiration" class="form-control"></div>
+            </div>
+          </div>
+          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+            <button class="btn" onclick="document.getElementById('malpractice-modal').classList.remove('active')">Cancel</button>
+            <button class="btn btn-primary" onclick="window.app.saveMalpractice(${providerId})">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Work History Tab -->
+    <div class="profile-tab-content" id="tab-work-history" style="display:none;">
+      <div class="card">
+        <div class="card-header"><h3>Work History</h3></div>
+        <div class="card-body" style="padding:0;">
+          ${Array.isArray(workHistory) && workHistory.length > 0 ? `<table>
+            <thead><tr><th>Employer</th><th>Position</th><th>Start</th><th>End</th><th>Reason for Leaving</th></tr></thead>
+            <tbody>
+              ${workHistory.map(w => `<tr>
+                <td><strong>${escHtml(w.employer || w.organization || '—')}</strong></td>
+                <td>${escHtml(w.position || w.title || '—')}</td>
+                <td>${formatDateDisplay(w.startDate || w.start_date)}</td>
+                <td>${w.endDate || w.end_date ? formatDateDisplay(w.endDate || w.end_date) : '<span class="badge badge-approved">Current</span>'}</td>
+                <td class="text-sm text-muted">${escHtml(w.reasonForLeaving || w.reason_for_leaving || '—')}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No work history on file.</div>'}
+        </div>
+      </div>
+    </div>
+
+    <!-- CME Tab -->
+    <div class="profile-tab-content" id="tab-cme" style="display:none;">
+      <div class="card">
+        <div class="card-header"><h3>Continuing Medical Education (CME)</h3></div>
+        <div class="card-body" style="padding:0;">
+          ${Array.isArray(cme) && cme.length > 0 ? `<table>
+            <thead><tr><th>Course / Activity</th><th>Provider</th><th>Credits</th><th>Date Completed</th></tr></thead>
+            <tbody>
+              ${cme.map(c => `<tr>
+                <td><strong>${escHtml(c.title || c.courseName || c.course_name || '—')}</strong></td>
+                <td>${escHtml(c.provider || c.accreditingBody || '—')}</td>
+                <td>${c.credits || c.hours || '—'}</td>
+                <td>${formatDateDisplay(c.completionDate || c.completion_date || c.date)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No CME records on file.</div>'}
+        </div>
+      </div>
+    </div>
+
+    <!-- References Tab -->
+    <div class="profile-tab-content" id="tab-references" style="display:none;">
+      <div class="card">
+        <div class="card-header"><h3>Professional References</h3></div>
+        <div class="card-body" style="padding:0;">
+          ${Array.isArray(references) && references.length > 0 ? `<table>
+            <thead><tr><th>Name</th><th>Title / Position</th><th>Organization</th><th>Phone</th><th>Email</th><th>Relationship</th></tr></thead>
+            <tbody>
+              ${references.map(r => `<tr>
+                <td><strong>${escHtml(r.name || ((r.firstName || '') + ' ' + (r.lastName || '')).trim() || '—')}</strong></td>
+                <td>${escHtml(r.title || r.position || '—')}</td>
+                <td>${escHtml(r.organization || '—')}</td>
+                <td>${escHtml(r.phone || '—')}</td>
+                <td>${escHtml(r.email || '—')}</td>
+                <td class="text-sm text-muted">${escHtml(r.relationship || '—')}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No references on file.</div>'}
+        </div>
+      </div>
+    </div>
+
+    <!-- Documents Tab -->
+    <div class="profile-tab-content" id="tab-documents" style="display:none;">
+      <div class="card">
+        <div class="card-header"><h3>Documents</h3></div>
+        <div class="card-body" style="padding:0;">
+          ${Array.isArray(documents) && documents.length > 0 ? `<table>
+            <thead><tr><th>Document</th><th>Type</th><th>Uploaded</th><th>Status</th></tr></thead>
+            <tbody>
+              ${documents.map(d => `<tr>
+                <td><strong>${escHtml(d.name || d.fileName || d.file_name || '—')}</strong></td>
+                <td>${escHtml(d.type || d.documentType || d.document_type || '—')}</td>
+                <td>${formatDateDisplay(d.uploadedAt || d.uploaded_at || d.createdAt || d.created_at)}</td>
+                <td><span class="badge badge-${d.verified ? 'approved' : 'pending'}">${d.verified ? 'Verified' : 'Pending'}</span></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No documents on file.</div>'}
+        </div>
       </div>
     </div>
   `;

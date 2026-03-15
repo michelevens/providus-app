@@ -512,6 +512,164 @@ class Store {
         const result = await this._fetch(`${CONFIG.API_URL}/admin/agencies/${id}`);
         return result.data || result;
     }
+
+    // ── Exclusion Screening ──
+    async getExclusions(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/exclusions${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
+    async getExclusionSummary() {
+        const result = await this._fetch(`${CONFIG.API_URL}/exclusions/summary`);
+        return result.data || result;
+    }
+    async screenProvider(providerId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/exclusions/screen/${providerId}`, { method: 'POST' });
+        return result.data || result;
+    }
+    async screenAllProviders() {
+        const result = await this._fetch(`${CONFIG.API_URL}/exclusions/screen-all`, { method: 'POST' });
+        return result.data || result;
+    }
+
+    // ── Facilities ──
+    async getFacilities(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/facilities${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
+    async createFacility(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/facilities`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async updateFacility(id, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/facilities/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async deleteFacility(id) {
+        return this._fetch(`${CONFIG.API_URL}/facilities/${id}`, { method: 'DELETE' });
+    }
+    async createFacilityFromNpi(npi) {
+        const result = await this._fetch(`${CONFIG.API_URL}/facilities/from-npi`, { method: 'POST', body: JSON.stringify({ npi }) });
+        return result.data || result;
+    }
+
+    // ── Billing & Invoicing ──
+    async getBillingStats() {
+        const result = await this._fetch(`${CONFIG.API_URL}/billing/stats`);
+        return result.data || result;
+    }
+    async getServices() {
+        const result = await this._fetch(`${CONFIG.API_URL}/billing/services`);
+        return result.data || result;
+    }
+    async createService(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/billing/services`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async getInvoices(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/invoices${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
+    async createInvoice(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/invoices`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async updateInvoice(id, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/invoices/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async deleteInvoice(id) {
+        return this._fetch(`${CONFIG.API_URL}/invoices/${id}`, { method: 'DELETE' });
+    }
+    async addPayment(invoiceId, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/invoices/${invoiceId}/payments`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+
+    // ── Provider Profile (extended) ──
+    async getProviderProfile(providerId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/profile`);
+        return result.data || result;
+    }
+    async getProviderMalpractice(providerId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/malpractice`);
+        return result.data || result;
+    }
+    async createProviderMalpractice(providerId, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/malpractice`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async getProviderEducation(providerId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/education`);
+        return result.data || result;
+    }
+    async createProviderEducation(providerId, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/education`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async getProviderBoards(providerId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/boards`);
+        return result.data || result;
+    }
+    async createProviderBoard(providerId, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/boards`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+
+    // ── Bulk Import ──
+    async previewImport(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/imports/preview`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async executeImport(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/imports/execute`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async getImports() {
+        const result = await this._fetch(`${CONFIG.API_URL}/imports`);
+        return result.data || result;
+    }
+
+    // ── Reports ──
+    async getProviderPacket(providerId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/reports/provider/${providerId}`);
+        return result.data || result;
+    }
+    async getComplianceReport() {
+        const result = await this._fetch(`${CONFIG.API_URL}/reports/compliance`);
+        return result.data || result;
+    }
+    async exportData(type) {
+        const result = await this._fetch(`${CONFIG.API_URL}/reports/export?type=${type}`);
+        return result.data || result;
+    }
+
+    // ── FAQ ──
+    async getFaqs(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/faqs${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
+    async createFaq(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/faqs`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async updateFaq(id, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/faqs/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async deleteFaq(id) {
+        return this._fetch(`${CONFIG.API_URL}/faqs/${id}`, { method: 'DELETE' });
+    }
+
+    // ── Licensing Boards ──
+    async getLicensingBoards(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/licensing-boards${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
 }
 
 const store = new Store();
