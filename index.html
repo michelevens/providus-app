@@ -47,6 +47,7 @@
         </div>
         <button class="btn-enter" onclick="handleLogin()">Sign In</button>
         <div class="error" id="auth-error"></div>
+        <p class="auth-switch"><a href="#" onclick="toggleAuthView('forgot');return false;">Forgot password?</a></p>
         <p class="auth-switch">Don't have an account? <a href="#" onclick="toggleAuthView('register');return false;">Create an account</a></p>
       </div>
 
@@ -90,6 +91,53 @@
         <button class="btn-enter" onclick="handleRegister()">Create Account</button>
         <div class="error" id="register-error"></div>
         <p class="auth-switch">Already have an account? <a href="#" onclick="toggleAuthView('login');return false;">Sign in</a></p>
+      </div>
+
+      <!-- Forgot Password -->
+      <div id="forgot-view" style="display:none;">
+        <h2>Reset Password</h2>
+        <p>Enter your email and we'll send you a reset link.</p>
+        <div class="auth-field">
+          <label for="forgot-email">Email</label>
+          <input type="email" id="forgot-email" placeholder="you@agency.com" onkeydown="if(event.key==='Enter')handleForgotPassword()">
+        </div>
+        <button class="btn-enter" onclick="handleForgotPassword()">Send Reset Link</button>
+        <div class="error" id="forgot-error"></div>
+        <div class="success" id="forgot-success" style="display:none;color:#10b981;margin-top:12px;"></div>
+        <p class="auth-switch"><a href="#" onclick="toggleAuthView('login');return false;">Back to sign in</a></p>
+      </div>
+
+      <!-- Reset Password (via token) -->
+      <div id="reset-view" style="display:none;">
+        <h2>Set New Password</h2>
+        <p>Enter your new password below.</p>
+        <div class="auth-field">
+          <label for="reset-password">New Password</label>
+          <input type="password" id="reset-password" placeholder="New password" autocomplete="new-password">
+        </div>
+        <div class="auth-field">
+          <label for="reset-confirm">Confirm Password</label>
+          <input type="password" id="reset-confirm" placeholder="Confirm password" onkeydown="if(event.key==='Enter')handleResetPassword()">
+        </div>
+        <button class="btn-enter" onclick="handleResetPassword()">Reset Password</button>
+        <div class="error" id="reset-error"></div>
+        <div class="success" id="reset-success" style="display:none;color:#10b981;margin-top:12px;"></div>
+      </div>
+
+      <!-- Accept Invite -->
+      <div id="invite-view" style="display:none;">
+        <h2>Welcome to Credentik</h2>
+        <p>Set your password to activate your account.</p>
+        <div class="auth-field">
+          <label for="invite-password">Password</label>
+          <input type="password" id="invite-password" placeholder="Create a password" autocomplete="new-password">
+        </div>
+        <div class="auth-field">
+          <label for="invite-confirm">Confirm Password</label>
+          <input type="password" id="invite-confirm" placeholder="Confirm password" onkeydown="if(event.key==='Enter')handleAcceptInvite()">
+        </div>
+        <button class="btn-enter" onclick="handleAcceptInvite()">Activate Account</button>
+        <div class="error" id="invite-error"></div>
       </div>
     </div>
   </div>
@@ -805,13 +853,43 @@
 
   <!-- Auth Logic (JWT-based) -->
   <script>
+    let _resetToken = null;
+    let _inviteToken2 = null;
+
     function toggleAuthView(view) {
-      document.getElementById('login-view').style.display = view === 'login' ? '' : 'none';
-      document.getElementById('register-view').style.display = view === 'register' ? '' : 'none';
-      document.getElementById('auth-error').textContent = '';
-      document.getElementById('auth-error').style.display = 'none';
-      document.getElementById('register-error').textContent = '';
-      document.getElementById('register-error').style.display = 'none';
+      ['login-view','register-view','forgot-view','reset-view','invite-view'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+      const target = document.getElementById(view + '-view');
+      if (target) target.style.display = '';
+      // Clear errors
+      ['auth-error','register-error','forgot-error','reset-error','invite-error'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = ''; el.style.display = 'none'; }
+      });
+    }
+
+    // Check hash for reset-password or invite tokens
+    function checkAuthHash() {
+      const hash = location.hash;
+      const resetMatch = hash.match(/^#reset-password\/(.+)/);
+      const inviteMatch = hash.match(/^#invite\/(.+)/);
+      if (resetMatch) {
+        _resetToken = resetMatch[1];
+        toggleAuthView('reset');
+        return true;
+      }
+      if (inviteMatch) {
+        _inviteToken2 = inviteMatch[1];
+        toggleAuthView('invite');
+        return true;
+      }
+      if (hash === '#register') {
+        toggleAuthView('register');
+        return true;
+      }
+      return false;
     }
 
     function showError(elementId, message) {
@@ -895,6 +973,69 @@
       }
     }
 
+    async function handleForgotPassword() {
+      const email = document.getElementById('forgot-email').value.trim();
+      if (!email) { showError('forgot-error', 'Please enter your email.'); return; }
+      try {
+        const res = await fetch('https://api.credentik.com/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        const el = document.getElementById('forgot-success');
+        el.textContent = data.message || 'If that email exists, a reset link has been sent.';
+        el.style.display = 'block';
+      } catch (err) {
+        showError('forgot-error', 'Unable to connect. Please try again.');
+      }
+    }
+
+    async function handleResetPassword() {
+      const password = document.getElementById('reset-password').value;
+      const confirm = document.getElementById('reset-confirm').value;
+      if (!password || password.length < 8) { showError('reset-error', 'Password must be at least 8 characters.'); return; }
+      if (password !== confirm) { showError('reset-error', 'Passwords do not match.'); return; }
+      try {
+        const res = await fetch('https://api.credentik.com/api/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ token: _resetToken, password, password_confirmation: confirm })
+        });
+        const data = await res.json();
+        if (!res.ok) { showError('reset-error', data.message || 'Reset failed.'); return; }
+        const el = document.getElementById('reset-success');
+        el.textContent = 'Password reset! Redirecting to login...';
+        el.style.display = 'block';
+        setTimeout(() => { location.hash = ''; toggleAuthView('login'); }, 2000);
+      } catch (err) {
+        showError('reset-error', 'Unable to connect. Please try again.');
+      }
+    }
+
+    async function handleAcceptInvite() {
+      const password = document.getElementById('invite-password').value;
+      const confirm = document.getElementById('invite-confirm').value;
+      if (!password || password.length < 8) { showError('invite-error', 'Password must be at least 8 characters.'); return; }
+      if (password !== confirm) { showError('invite-error', 'Passwords do not match.'); return; }
+      try {
+        const res = await fetch('https://api.credentik.com/api/auth/accept-invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ token: _inviteToken2, password, password_confirmation: confirm })
+        });
+        const data = await res.json();
+        if (!res.ok) { showError('invite-error', data.message || data.errors?.token?.[0] || 'Invitation invalid or expired.'); return; }
+        localStorage.setItem('credentik_token', data.token);
+        localStorage.setItem('credentik_user', JSON.stringify(data.user));
+        location.hash = '';
+        showApp(data.user);
+        import('./ui/app.js').then(m => m.initApp());
+      } catch (err) {
+        showError('invite-error', 'Unable to connect. Please try again.');
+      }
+    }
+
     function showApp(user) {
       document.getElementById('auth-gate').style.display = 'none';
       document.getElementById('app-shell').style.display = '';
@@ -903,11 +1044,19 @@
         const agencyName = (user.agency && user.agency.name) || user.agency_name || 'My Agency';
         document.getElementById('sidebar-agency-name').textContent = agencyName;
 
+        // Role-based sidebar visibility
+        const role = user.role || 'provider';
+        const roleLevel = { superadmin: 4, agency: 3, organization: 2, provider: 1 }[role] || 1;
+
+        // Hide nav items based on role
+        document.querySelectorAll('[data-min-role]').forEach(el => {
+          const minLevel = { superadmin: 4, agency: 3, organization: 2, provider: 1 }[el.dataset.minRole] || 1;
+          el.style.display = roleLevel >= minLevel ? '' : 'none';
+        });
+
         // Show Super Admin nav for superadmin users
         const adminNav = document.getElementById('nav-admin');
-        if (adminNav && user.role === 'superadmin') {
-          adminNav.style.display = '';
-        }
+        if (adminNav) adminNav.style.display = role === 'superadmin' ? '' : 'none';
       }
     }
 
@@ -921,9 +1070,10 @@
       document.getElementById('app-modal').classList.remove('active');
     }
 
-    // Auto-login if token exists (skip if in onboard mode)
+    // Auto-login if token exists (skip if in onboard/reset/invite mode)
     (function checkAuth() {
-      if (_onboardToken) return; // Skip auth check in onboard portal mode
+      if (_onboardToken) return;
+      if (checkAuthHash()) return; // Handle reset-password / invite hash
       const token = localStorage.getItem('credentik_token');
       const userJson = localStorage.getItem('credentik_user');
       if (token && userJson) {
@@ -936,6 +1086,9 @@
         }
       }
     })();
+    window.addEventListener('hashchange', () => {
+      if (location.hash.match(/^#(reset-password|invite)\//)) checkAuthHash();
+    });
   </script>
 
   <!-- Mobile sidebar toggle -->
