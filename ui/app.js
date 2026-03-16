@@ -217,9 +217,9 @@ async function navigateTo(page) {
       await renderProviders();
       break;
     case 'licenses':
-      pageTitle.textContent = 'Licenses';
-      pageSubtitle.textContent = 'State licenses and certifications';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openLicenseModal()">+ Add License</button>' + printBtn;
+      pageTitle.textContent = 'License Monitoring';
+      pageSubtitle.textContent = 'Licenses, verification, and DEA tracking';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openLicenseModal()">+ Add License</button> <button class="btn" onclick="window.app.openDeaModal()">+ Add DEA</button>' + printBtn;
       await renderLicenses();
       break;
     case 'payers':
@@ -2220,6 +2220,8 @@ window.saveProvider = async function() {
 
 // ─── Licenses Page ───
 
+let _licTab = 'licenses';
+
 async function renderLicenses() {
   const body = document.getElementById('page-body');
   const providers = await store.getAll('providers');
@@ -2233,75 +2235,245 @@ async function renderLicenses() {
     return new Date(l.expirationDate) < new Date();
   });
 
+  // Fetch monitoring summary (non-blocking)
+  let monitoring = null;
+  try { monitoring = await store.getLicenseMonitoringSummary(); } catch(e) { console.warn('Monitoring unavailable', e); }
+
+  const tab = _licTab || 'licenses';
+
   body.innerHTML = `
-    ${providers.length > 1 ? `
-    <div class="card" style="margin-bottom:16px;">
-      <div class="card-body" style="padding:12px 16px;">
-        <div class="form-group" style="margin:0;max-width:300px;">
-          <label style="font-size:12px;margin-bottom:4px;">Filter by Provider</label>
-          <select class="form-control" onchange="window.app.filterLicByProvider(this.value)">
-            <option value="">All Providers</option>
-            ${providers.map(p => `<option value="${p.id}" ${selectedProvider === p.id ? 'selected' : ''}>${p.firstName} ${p.lastName}</option>`).join('')}
-          </select>
+    <!-- Tab bar -->
+    <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid var(--gray-200);padding-bottom:0;">
+      <button class="btn btn-sm ${tab === 'licenses' ? 'btn-primary' : ''}" onclick="window.app.switchLicTab('licenses')" style="border-radius:8px 8px 0 0;border-bottom:none;">Licenses</button>
+      <button class="btn btn-sm ${tab === 'monitoring' ? 'btn-primary' : ''}" onclick="window.app.switchLicTab('monitoring')" style="border-radius:8px 8px 0 0;border-bottom:none;">Monitoring</button>
+      <button class="btn btn-sm ${tab === 'dea' ? 'btn-primary' : ''}" onclick="window.app.switchLicTab('dea')" style="border-radius:8px 8px 0 0;border-bottom:none;">DEA Registrations</button>
+    </div>
+
+    <!-- Licenses tab -->
+    <div id="lic-tab-licenses" style="display:${tab === 'licenses' ? 'block' : 'none'};">
+      ${providers.length > 1 ? `
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-body" style="padding:12px 16px;">
+          <div class="form-group" style="margin:0;max-width:300px;">
+            <label style="font-size:12px;margin-bottom:4px;">Filter by Provider</label>
+            <select class="form-control" onchange="window.app.filterLicByProvider(this.value)">
+              <option value="">All Providers</option>
+              ${providers.map(p => `<option value="${p.id}" ${selectedProvider === p.id ? 'selected' : ''}>${p.firstName} ${p.lastName}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+      </div>` : ''}
+
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
+        <div class="stat-card"><div class="label">Total Licenses</div><div class="value">${licenses.length}</div></div>
+        <div class="stat-card"><div class="label">Active</div><div class="value green">${active.length}</div></div>
+        <div class="stat-card"><div class="label">Pending</div><div class="value" style="color:var(--warning-500);">${pending.length}</div></div>
+        <div class="stat-card"><div class="label">Expiring/Expired</div><div class="value red">${expired.length}</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>All State Licenses</h3>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <table>
+            <thead>
+              <tr>
+                <th>State</th>
+                <th>License #</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Issue Date</th>
+                <th>Expiration</th>
+                <th>Compact</th>
+                <th style="width:140px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${licenses.sort((a, b) => (a.state||'').localeCompare(b.state||'')).map(l => {
+                const isExpired = l.expirationDate && new Date(l.expirationDate) < new Date();
+                const isExpiringSoon = l.expirationDate && !isExpired &&
+                  new Date(l.expirationDate) < new Date(Date.now() + 90 * 86400000);
+                const expClass = isExpired ? 'color:var(--red);font-weight:600;' :
+                  isExpiringSoon ? 'color:var(--warning-500);font-weight:600;' : '';
+                return `
+                  <tr>
+                    <td><strong>${getStateName(l.state)}</strong> (${l.state})</td>
+                    <td><code>${escHtml(l.licenseNumber) || '-'}</code></td>
+                    <td>${escHtml(l.licenseType) || '-'}</td>
+                    <td><span class="badge badge-${l.status}">${l.status}</span></td>
+                    <td>${formatDateDisplay(l.issueDate)}</td>
+                    <td style="${expClass}">${formatDateDisplay(l.expirationDate)}</td>
+                    <td>${l.compactState ? 'Yes' : '-'}</td>
+                    <td>
+                      <button class="btn btn-sm" onclick="window.app.verifyOneLicense('${l.id}')" title="Verify via NPPES">Verify</button>
+                      <button class="btn btn-sm" onclick="window.app.editLicense('${l.id}')">Edit</button>
+                      <button class="btn btn-sm btn-danger" onclick="window.app.deleteLicense('${l.id}')">Del</button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
         </div>
       </div>
-    </div>` : ''}
-
-    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
-      <div class="stat-card"><div class="label">Total Licenses</div><div class="value">${licenses.length}</div></div>
-      <div class="stat-card"><div class="label">Active</div><div class="value green">${active.length}</div></div>
-      <div class="stat-card"><div class="label">Pending</div><div class="value" style="color:var(--warning-500);">${pending.length}</div></div>
-      <div class="stat-card"><div class="label">Expiring/Expired</div><div class="value red">${expired.length}</div></div>
     </div>
 
-    <div class="card">
-      <div class="card-header">
-        <h3>All State Licenses</h3>
-      </div>
-      <div class="card-body" style="padding:0;">
-        <table>
-          <thead>
-            <tr>
-              <th>State</th>
-              <th>License #</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Issue Date</th>
-              <th>Expiration</th>
-              <th>Compact</th>
-              <th>Notes</th>
-              <th style="width:100px;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${licenses.sort((a, b) => a.state.localeCompare(b.state)).map(l => {
-              const isExpired = l.expirationDate && new Date(l.expirationDate) < new Date();
-              const isExpiringSoon = l.expirationDate && !isExpired &&
-                new Date(l.expirationDate) < new Date(Date.now() + 90 * 86400000);
-              const expClass = isExpired ? 'color:var(--red);font-weight:600;' :
-                isExpiringSoon ? 'color:var(--warning-500);font-weight:600;' : '';
-              return `
-                <tr>
-                  <td><strong>${getStateName(l.state)}</strong> (${l.state})</td>
-                  <td><code>${escHtml(l.licenseNumber) || '-'}</code></td>
-                  <td>${escHtml(l.licenseType) || '-'}</td>
-                  <td><span class="badge badge-${l.status}">${l.status}</span></td>
-                  <td>${formatDateDisplay(l.issueDate)}</td>
-                  <td style="${expClass}">${formatDateDisplay(l.expirationDate)}</td>
-                  <td>${l.compactState ? 'Yes' : '-'}</td>
-                  <td class="text-sm text-muted">${escHtml(l.notes) || ''}</td>
-                  <td>
-                    <button class="btn btn-sm" onclick="window.app.editLicense('${l.id}')">Edit</button>
-                    <button class="btn btn-sm btn-danger" onclick="window.app.deleteLicense('${l.id}')">Del</button>
-                  </td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
+    <!-- Monitoring tab -->
+    <div id="lic-tab-monitoring" style="display:${tab === 'monitoring' ? 'block' : 'none'};">
+      <div id="monitoring-content">Loading monitoring data...</div>
+    </div>
+
+    <!-- DEA tab -->
+    <div id="lic-tab-dea" style="display:${tab === 'dea' ? 'block' : 'none'};">
+      <div id="dea-content">Loading DEA registrations...</div>
     </div>
   `;
+
+  // Load sub-tabs asynchronously
+  if (tab === 'monitoring') renderMonitoringTab();
+  if (tab === 'dea') renderDeaTab(providers);
+}
+
+async function renderMonitoringTab() {
+  const container = document.getElementById('monitoring-content');
+  try {
+    const [summary, expiring] = await Promise.all([
+      store.getLicenseMonitoringSummary(),
+      store.getExpiringLicenses(),
+    ]);
+
+    const lic = summary.licenses || {};
+    const ver = summary.verifications || {};
+    const dea = summary.dea || {};
+
+    container.innerHTML = `
+      <!-- Summary cards -->
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">
+        <div class="stat-card"><div class="label">Total Licenses</div><div class="value">${lic.total || 0}</div></div>
+        <div class="stat-card"><div class="label">Verified via NPPES</div><div class="value green">${ver.verified || 0}</div></div>
+        <div class="stat-card"><div class="label">Mismatches Found</div><div class="value" style="color:var(--warning-500);">${ver.mismatch || 0}</div></div>
+        <div class="stat-card"><div class="label">Never Verified</div><div class="value red">${ver.neverVerified || 0}</div></div>
+      </div>
+
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">
+        <div class="stat-card"><div class="label">Expired</div><div class="value red">${lic.expired || 0}</div></div>
+        <div class="stat-card"><div class="label">Expiring ≤30 days</div><div class="value" style="color:var(--red);">${lic.expiring30 || lic.expiring_30 || 0}</div></div>
+        <div class="stat-card"><div class="label">Expiring 31-60 days</div><div class="value" style="color:var(--warning-500);">${lic.expiring60 || lic.expiring_60 || 0}</div></div>
+        <div class="stat-card"><div class="label">Expiring 61-90 days</div><div class="value" style="color:var(--blue);">${lic.expiring90 || lic.expiring_90 || 0}</div></div>
+      </div>
+
+      <!-- Bulk verify button -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+          <h3>NPPES License Verification</h3>
+          <button class="btn btn-gold" id="bulk-verify-btn" onclick="window.app.bulkVerifyLicenses()">Verify All Licenses</button>
+        </div>
+        <div class="card-body">
+          <p style="margin:0;color:var(--gray-500);font-size:13px;">
+            Verifies each license against the NPPES registry by matching NPI, state, and license number.
+            ${ver.lastRun || ver.last_run ? `Last run: <strong>${new Date(ver.lastRun || ver.last_run).toLocaleDateString()}</strong>` : 'Never run.'}
+            Auto-runs weekly on Mondays.
+          </p>
+        </div>
+      </div>
+
+      <!-- Expiring items -->
+      <div class="card">
+        <div class="card-header"><h3>Expiring Licenses & DEA (Next 90 Days)</h3></div>
+        <div class="card-body" style="padding:0;">
+          ${renderExpiringTable(expiring)}
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = `<div class="card"><div class="card-body" style="color:var(--red);">Error loading monitoring data: ${escHtml(err.message)}</div></div>`;
+  }
+}
+
+function renderExpiringTable(data) {
+  const all = [
+    ...(data.expired || []).map(i => ({...i, severity: 'expired'})),
+    ...(data.critical || []).map(i => ({...i, severity: 'critical'})),
+    ...(data.warning || []).map(i => ({...i, severity: 'warning'})),
+    ...(data.notice || []).map(i => ({...i, severity: 'notice'})),
+  ];
+
+  if (all.length === 0) {
+    return '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No expiring items in the next 90 days.</div>';
+  }
+
+  return `<table>
+    <thead><tr><th>Severity</th><th>Type</th><th>Provider</th><th>Item</th><th>Expires</th><th>Days Left</th></tr></thead>
+    <tbody>
+      ${all.map(i => {
+        const sevStyle = i.severity === 'expired' ? 'background:var(--red);color:#fff;' :
+          i.severity === 'critical' ? 'background:var(--warning-500);color:#fff;' :
+          i.severity === 'warning' ? 'background:#f59e0b;color:#fff;' : 'background:var(--blue);color:#fff;';
+        const sevLabel = i.severity === 'expired' ? 'EXPIRED' :
+          i.severity === 'critical' ? 'CRITICAL' :
+          i.severity === 'warning' ? 'WARNING' : 'NOTICE';
+        return `<tr>
+          <td><span class="badge" style="${sevStyle};font-size:11px;padding:2px 8px;border-radius:4px;">${sevLabel}</span></td>
+          <td>${i.type === 'dea' ? 'DEA' : 'License'}</td>
+          <td>${escHtml(i.providerName || i.provider_name || '')}</td>
+          <td>${escHtml(i.item || '')}</td>
+          <td>${formatDateDisplay(i.expirationDate || i.expiration_date)}</td>
+          <td style="font-weight:600;${i.daysLeft < 0 || i.days_left < 0 ? 'color:var(--red);' : ''}">${i.daysLeft ?? i.days_left ?? ''}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
+}
+
+async function renderDeaTab(providers) {
+  const container = document.getElementById('dea-content');
+  try {
+    const deas = await store.getDeaRegistrations();
+
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);flex:1;margin-right:16px;">
+          <div class="stat-card"><div class="label">Total DEA</div><div class="value">${deas.length}</div></div>
+          <div class="stat-card"><div class="label">Active</div><div class="value green">${deas.filter(d => d.status === 'active').length}</div></div>
+          <div class="stat-card"><div class="label">Expired</div><div class="value red">${deas.filter(d => d.status === 'expired' || (d.expirationDate && new Date(d.expirationDate) < new Date())).length}</div></div>
+        </div>
+        <button class="btn btn-gold" onclick="window.app.openDeaModal()">+ Add DEA</button>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>DEA Registrations</h3></div>
+        <div class="card-body" style="padding:0;">
+          ${deas.length === 0 ? '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No DEA registrations on file.</div>' : `
+          <table>
+            <thead><tr><th>Provider</th><th>DEA Number</th><th>State</th><th>Schedules</th><th>Status</th><th>Expiration</th><th style="width:120px;">Actions</th></tr></thead>
+            <tbody>
+              ${deas.map(d => {
+                const isExp = d.expirationDate && new Date(d.expirationDate) < new Date();
+                const isSoon = d.expirationDate && !isExp && new Date(d.expirationDate) < new Date(Date.now() + 90*86400000);
+                const expStyle = isExp ? 'color:var(--red);font-weight:600;' : isSoon ? 'color:var(--warning-500);font-weight:600;' : '';
+                const schedules = Array.isArray(d.schedules) ? d.schedules.join(', ') : (d.schedules || '-');
+                return `<tr>
+                  <td>${escHtml(d.provider ? (d.provider.firstName + ' ' + d.provider.lastName) : '')}</td>
+                  <td><code>${escHtml(d.deaNumber || d.dea_number || '')}</code></td>
+                  <td>${d.state || '-'}</td>
+                  <td>${schedules}</td>
+                  <td><span class="badge badge-${d.status}">${d.status}</span></td>
+                  <td style="${expStyle}">${formatDateDisplay(d.expirationDate || d.expiration_date)}</td>
+                  <td>
+                    <button class="btn btn-sm" onclick="window.app.openDeaModal('${d.id}')">Edit</button>
+                    <button class="btn btn-sm btn-danger" onclick="window.app.deleteDea('${d.id}')">Del</button>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>`}
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = `<div class="card"><div class="card-body" style="color:var(--red);">Error loading DEA data: ${escHtml(err.message)}</div></div>`;
+  }
 }
 
 // ─── Payers Page ───
@@ -4761,6 +4933,10 @@ window.app = {
     filters._licProvider = providerId;
     await renderLicenses();
   },
+  async switchLicTab(tab) {
+    _licTab = tab;
+    await renderLicenses();
+  },
   async openLicenseModal(id) { await openLicenseModal(id); },
   async editLicense(id) { await openLicenseModal(id); },
   async deleteLicense(id) {
@@ -4768,6 +4944,42 @@ window.app = {
     await store.remove('licenses', id);
     await renderLicenses();
     showToast('License deleted');
+  },
+  async verifyOneLicense(licenseId) {
+    showToast('Verifying license...');
+    try {
+      const result = await store.verifyLicense(licenseId);
+      const status = result.status || 'unknown';
+      const msg = status === 'verified' ? 'License verified successfully!' :
+        status === 'mismatch' ? 'Verification found discrepancies: ' + (result.discrepancies || '') :
+        'Verification error: ' + (result.discrepancies || 'Unknown error');
+      showToast(msg);
+    } catch (err) { showToast('Verification failed: ' + err.message); }
+  },
+  async bulkVerifyLicenses() {
+    if (!await appConfirm('This will verify all licenses against NPPES. This may take a moment for large provider lists.', { title: 'Bulk Verify', okLabel: 'Verify All' })) return;
+    const btn = document.getElementById('bulk-verify-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Verifying...'; }
+    try {
+      const result = await store.verifyAllLicenses();
+      showToast(`Verification complete: ${result.verified || 0} verified, ${result.mismatch || 0} mismatches, ${result.error || 0} errors`);
+      _licTab = 'monitoring';
+      await renderLicenses();
+    } catch (err) {
+      showToast('Bulk verification failed: ' + err.message);
+      if (btn) { btn.disabled = false; btn.textContent = 'Verify All Licenses'; }
+    }
+  },
+  // DEA
+  async openDeaModal(id) { await openDeaModal(id); },
+  async deleteDea(id) {
+    if (!await appConfirm('Delete this DEA registration?', { title: 'Delete DEA', okLabel: 'Delete', okClass: 'btn-danger' })) return;
+    try {
+      await store.deleteDeaRegistration(id);
+      showToast('DEA registration deleted');
+      _licTab = 'dea';
+      await renderLicenses();
+    } catch (err) { showToast('Error: ' + err.message); }
   },
 
   // State Policies
@@ -6973,6 +7185,123 @@ window.saveLicense = async function() {
 
   closeLicModal();
   await navigateTo('licenses');
+};
+
+// ─── DEA Registration Modal ───
+
+async function openDeaModal(id) {
+  const modal = document.getElementById('dea-modal');
+  const title = document.getElementById('dea-modal-title');
+  const form = document.getElementById('dea-modal-form');
+
+  const existing = id ? (await store.getDeaRegistrations()).find(d => String(d.id) === String(id)) : null;
+  title.textContent = existing ? 'Edit DEA Registration' : 'Add DEA Registration';
+
+  const providers = await store.getAll('providers');
+
+  form.innerHTML = `
+    <input type="hidden" id="edit-dea-id" value="${id || ''}">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Provider</label>
+        <select class="form-control" id="dea-provider">
+          ${providers.map(p => `<option value="${p.id}" ${existing?.providerId === p.id || existing?.provider_id === p.id ? 'selected' : ''}>${p.firstName} ${p.lastName} (${p.credentials || ''})</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>DEA Number</label>
+        <input type="text" class="form-control" id="dea-number" value="${escAttr(existing?.deaNumber || existing?.dea_number || '')}" placeholder="e.g. AB1234567">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>State</label>
+        <select class="form-control" id="dea-state">
+          <option value="">Select state...</option>
+          ${STATES.map(s => `<option value="${s.code}" ${existing?.state === s.code ? 'selected' : ''}>${s.name} (${s.code})</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select class="form-control" id="dea-status">
+          <option value="active" ${existing?.status === 'active' ? 'selected' : ''}>Active</option>
+          <option value="expired" ${existing?.status === 'expired' ? 'selected' : ''}>Expired</option>
+          <option value="revoked" ${existing?.status === 'revoked' ? 'selected' : ''}>Revoked</option>
+          <option value="surrendered" ${existing?.status === 'surrendered' ? 'selected' : ''}>Surrendered</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Schedules</label>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;padding:8px 0;">
+          ${['II', 'II-N', 'III', 'III-N', 'IV', 'V'].map(s => {
+            const checked = (existing?.schedules || []).includes(s) ? 'checked' : '';
+            return `<label style="display:flex;align-items:center;gap:4px;font-size:13px;"><input type="checkbox" class="dea-schedule-cb" value="${s}" ${checked}> ${s}</label>`;
+          }).join('')}
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Expiration Date</label>
+        <input type="date" class="form-control" id="dea-expiration" value="${existing?.expirationDate || existing?.expiration_date || ''}">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Business Activity</label>
+        <select class="form-control" id="dea-activity">
+          <option value="">Select...</option>
+          <option value="practitioner" ${existing?.businessActivity === 'practitioner' || existing?.business_activity === 'practitioner' ? 'selected' : ''}>Practitioner</option>
+          <option value="mid-level" ${existing?.businessActivity === 'mid-level' || existing?.business_activity === 'mid-level' ? 'selected' : ''}>Mid-Level Practitioner</option>
+          <option value="pharmacy" ${existing?.businessActivity === 'pharmacy' || existing?.business_activity === 'pharmacy' ? 'selected' : ''}>Pharmacy</option>
+          <option value="hospital" ${existing?.businessActivity === 'hospital' || existing?.business_activity === 'hospital' ? 'selected' : ''}>Hospital/Clinic</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Drug Category</label>
+        <input type="text" class="form-control" id="dea-drug-cat" value="${escAttr(existing?.drugCategory || existing?.drug_category || '')}" placeholder="e.g. Controlled Substances">
+      </div>
+    </div>
+    <div class="form-group"><label>Notes</label><textarea class="form-control" id="dea-notes">${existing?.notes || ''}</textarea></div>
+  `;
+
+  modal.classList.add('active');
+}
+
+window.closeDeaModal = function() {
+  document.getElementById('dea-modal').classList.remove('active');
+};
+
+window.saveDeaRegistration = async function() {
+  const id = document.getElementById('edit-dea-id').value;
+  const schedules = Array.from(document.querySelectorAll('.dea-schedule-cb:checked')).map(cb => cb.value);
+
+  const data = {
+    providerId: document.getElementById('dea-provider').value,
+    deaNumber: document.getElementById('dea-number').value.trim(),
+    state: document.getElementById('dea-state').value,
+    status: document.getElementById('dea-status').value,
+    schedules,
+    expirationDate: document.getElementById('dea-expiration').value,
+    businessActivity: document.getElementById('dea-activity').value,
+    drugCategory: document.getElementById('dea-drug-cat').value.trim(),
+    notes: document.getElementById('dea-notes').value,
+  };
+
+  if (!data.deaNumber) { showToast('DEA number is required'); return; }
+
+  try {
+    if (id) {
+      await store.updateDeaRegistration(id, data);
+      showToast('DEA registration updated');
+    } else {
+      await store.createDeaRegistration(data);
+      showToast('DEA registration added');
+    }
+    closeDeaModal();
+    _licTab = 'dea';
+    await renderLicenses();
+  } catch (err) { showToast('Error: ' + err.message); }
 };
 
 // ─── Activity Log ───

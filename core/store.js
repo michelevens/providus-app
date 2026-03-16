@@ -768,6 +768,47 @@ class Store {
         const result = await this._fetch(`${CONFIG.API_URL}/licensing-boards${query ? '?' + query : ''}`);
         return result.data || result;
     }
+
+    // ── License Monitoring ──
+    async getLicenseMonitoringSummary() {
+        const result = await this._fetch(`${CONFIG.API_URL}/licenses-monitoring/summary`);
+        return result.data || result;
+    }
+    async getExpiringLicenses() {
+        const result = await this._fetch(`${CONFIG.API_URL}/licenses-monitoring/expiring`);
+        return result.data || result;
+    }
+    async verifyLicense(licenseId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/licenses/${licenseId}/verify`, { method: 'POST' });
+        return result.data || result;
+    }
+    async verifyAllLicenses() {
+        const result = await this._fetch(`${CONFIG.API_URL}/licenses-monitoring/verify-all`, { method: 'POST' });
+        return result.data || result;
+    }
+    async getLicenseVerifications(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/licenses-monitoring/verifications${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
+
+    // ── DEA Registrations ──
+    async getDeaRegistrations(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/dea-registrations${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
+    async createDeaRegistration(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/dea-registrations`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async updateDeaRegistration(id, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/dea-registrations/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async deleteDeaRegistration(id) {
+        return this._fetch(`${CONFIG.API_URL}/dea-registrations/${id}`, { method: 'DELETE' });
+    }
 }
 
 const store = new Store();

@@ -515,6 +515,21 @@
     </div>
   </div>
 
+  <!-- DEA Registration Modal -->
+  <div class="modal-overlay" id="dea-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="dea-modal-title">Add DEA Registration</h2>
+        <button class="modal-close" onclick="closeDeaModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="dea-modal-form"></div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeDeaModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveDeaRegistration()">Save</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Activity Log Modal -->
   <div class="modal-overlay" id="log-modal">
     <div class="modal" style="max-width:720px;">
