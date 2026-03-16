@@ -4129,9 +4129,21 @@ window.app = {
     }
   },
 
+  async _notifFetch(path, opts = {}) {
+    const token = localStorage.getItem(CONFIG.TOKEN_KEY);
+    if (!token) return null;
+    const res = await fetch(`${CONFIG.API_URL}${path}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' },
+      ...opts,
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  },
+
   async loadNotifications() {
     try {
-      const result = await store._fetch(`${CONFIG.API_URL}/notifications`);
+      const result = await this._notifFetch('/notifications');
+      if (!result) return;
       const items = result.data || [];
       const list = document.getElementById('notif-list');
       if (!items.length) {
@@ -4152,30 +4164,34 @@ window.app = {
         </div>
       `).join('');
     } catch (e) {
-      document.getElementById('notif-list').innerHTML = '<p style="padding:16px;text-align:center;color:#ef4444;font-size:13px;">Failed to load</p>';
+      // silently fail
     }
   },
 
   async handleNotifClick(id, link) {
-    try { await store._fetch(`${CONFIG.API_URL}/notifications/${id}/read`, { method: 'POST' }); } catch {}
+    await this._notifFetch(`/notifications/${id}/read`, { method: 'POST' });
     if (link) navigateTo(link.split('/')[0]);
     document.getElementById('notif-panel').classList.remove('active');
     this.refreshNotifBadge();
   },
 
   async markAllNotificationsRead() {
-    try {
-      await store._fetch(`${CONFIG.API_URL}/notifications/read-all`, { method: 'POST' });
-      showToast('All notifications marked as read');
-      await this.loadNotifications();
-      this.refreshNotifBadge();
-    } catch {}
+    await this._notifFetch('/notifications/read-all', { method: 'POST' });
+    showToast('All notifications marked as read');
+    await this.loadNotifications();
+    this.refreshNotifBadge();
   },
 
   async refreshNotifBadge() {
     try {
-      const result = await store._fetch(`${CONFIG.API_URL}/notifications/unread-count`);
-      const count = result.data?.count || 0;
+      const token = localStorage.getItem(CONFIG.TOKEN_KEY);
+      if (!token) return;
+      const res = await fetch(`${CONFIG.API_URL}/notifications/unread-count`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      });
+      if (!res.ok) return; // silently fail — never trigger logout
+      const json = await res.json();
+      const count = json.data?.count || 0;
       const badge = document.getElementById('notif-badge');
       if (badge) {
         badge.textContent = count;
