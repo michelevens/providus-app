@@ -9273,8 +9273,8 @@ async function renderBillingPage() {
     </div>
 
     <!-- Invoice/Estimate Modal (shared) -->
-    <div class="modal" id="invoice-modal">
-      <div class="modal-content" style="max-width:720px;">
+    <div class="modal-overlay" id="invoice-modal">
+      <div class="modal" style="max-width:720px;">
         <div class="modal-header">
           <h3 id="invoice-modal-title">Create Invoice</h3>
           <button class="modal-close" onclick="document.getElementById('invoice-modal').classList.remove('active')">&times;</button>
@@ -9315,8 +9315,8 @@ async function renderBillingPage() {
     </div>
 
     <!-- Payment Modal -->
-    <div class="modal" id="payment-modal">
-      <div class="modal-content" style="max-width:420px;">
+    <div class="modal-overlay" id="payment-modal">
+      <div class="modal" style="max-width:420px;">
         <div class="modal-header">
           <h3>Record Payment</h3>
           <button class="modal-close" onclick="document.getElementById('payment-modal').classList.remove('active')">&times;</button>
@@ -9344,8 +9344,8 @@ async function renderBillingPage() {
     </div>
 
     <!-- Service Modal -->
-    <div class="modal" id="service-modal">
-      <div class="modal-content" style="max-width:420px;">
+    <div class="modal-overlay" id="service-modal">
+      <div class="modal" style="max-width:420px;">
         <div class="modal-header">
           <h3 id="service-modal-title">Add Service</h3>
           <button class="modal-close" onclick="document.getElementById('service-modal').classList.remove('active')">&times;</button>
