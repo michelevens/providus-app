@@ -130,7 +130,29 @@
         <p>Set your password to activate your account.</p>
         <div class="auth-field">
           <label for="invite-password">Password</label>
-          <input type="password" id="invite-password" placeholder="Create a password" autocomplete="new-password">
+          <div style="position:relative;">
+            <input type="password" id="invite-password" placeholder="Create a password" autocomplete="new-password" oninput="checkPasswordStrength(this.value)">
+            <button type="button" onclick="togglePasswordVisibility('invite-password', this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:4px;" title="Show password">Show</button>
+          </div>
+        </div>
+        <div id="invite-pw-strength" style="margin:-6px 0 10px;font-size:12px;display:none;">
+          <div style="display:flex;gap:4px;margin-bottom:4px;">
+            <div id="pw-bar-1" style="flex:1;height:4px;border-radius:2px;background:#334155;transition:background 0.3s;"></div>
+            <div id="pw-bar-2" style="flex:1;height:4px;border-radius:2px;background:#334155;transition:background 0.3s;"></div>
+            <div id="pw-bar-3" style="flex:1;height:4px;border-radius:2px;background:#334155;transition:background 0.3s;"></div>
+            <div id="pw-bar-4" style="flex:1;height:4px;border-radius:2px;background:#334155;transition:background 0.3s;"></div>
+          </div>
+          <span id="pw-strength-label" style="color:#94a3b8;"></span>
+        </div>
+        <div style="margin-bottom:12px;">
+          <button type="button" onclick="suggestStrongPassword()" style="background:none;border:1px solid #334155;color:#67e8f9;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px;transition:all 0.2s;" onmouseover="this.style.borderColor='#67e8f9'" onmouseout="this.style.borderColor='#334155'">Suggest Strong Password</button>
+          <div id="suggested-pw-box" style="display:none;margin-top:8px;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <code id="suggested-pw-text" style="font-size:15px;letter-spacing:0.5px;color:#f0fdf4;word-break:break-all;"></code>
+              <button type="button" onclick="useSuggestedPassword()" style="background:#0891b2;color:white;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap;">Use This</button>
+            </div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:6px;">Save this password in a password manager before proceeding.</div>
+          </div>
         </div>
         <div class="auth-field">
           <label for="invite-confirm">Confirm Password</label>
@@ -1011,6 +1033,68 @@
       } catch (err) {
         showError('reset-error', 'Unable to connect. Please try again.');
       }
+    }
+
+    function generateStrongPassword(length = 16) {
+      const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+      const lower = 'abcdefghjkmnpqrstuvwxyz';
+      const digits = '23456789';
+      const symbols = '!@#$%&*?';
+      const all = upper + lower + digits + symbols;
+      let pw = [
+        upper[Math.floor(Math.random() * upper.length)],
+        lower[Math.floor(Math.random() * lower.length)],
+        digits[Math.floor(Math.random() * digits.length)],
+        symbols[Math.floor(Math.random() * symbols.length)],
+      ];
+      for (let i = pw.length; i < length; i++) {
+        pw.push(all[Math.floor(Math.random() * all.length)]);
+      }
+      for (let i = pw.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pw[i], pw[j]] = [pw[j], pw[i]];
+      }
+      return pw.join('');
+    }
+
+    function suggestStrongPassword() {
+      const pw = generateStrongPassword(16);
+      document.getElementById('suggested-pw-text').textContent = pw;
+      document.getElementById('suggested-pw-box').style.display = 'block';
+    }
+
+    function useSuggestedPassword() {
+      const pw = document.getElementById('suggested-pw-text').textContent;
+      document.getElementById('invite-password').value = pw;
+      document.getElementById('invite-confirm').value = pw;
+      document.getElementById('suggested-pw-box').style.display = 'none';
+      checkPasswordStrength(pw);
+    }
+
+    function togglePasswordVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (input.type === 'password') { input.type = 'text'; btn.textContent = 'Hide'; }
+      else { input.type = 'password'; btn.textContent = 'Show'; }
+    }
+
+    function checkPasswordStrength(pw) {
+      const el = document.getElementById('invite-pw-strength');
+      if (!pw) { el.style.display = 'none'; return; }
+      el.style.display = 'block';
+      let score = 0;
+      if (pw.length >= 8) score++;
+      if (pw.length >= 12) score++;
+      if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
+      if (/[0-9]/.test(pw)) score++;
+      if (/[^A-Za-z0-9]/.test(pw)) score++;
+      score = Math.min(score, 4);
+      const colors = ['#ef4444', '#f59e0b', '#eab308', '#10b981'];
+      const labels = ['Weak', 'Fair', 'Good', 'Strong'];
+      for (let i = 1; i <= 4; i++) {
+        document.getElementById('pw-bar-' + i).style.background = i <= score ? colors[score - 1] : '#334155';
+      }
+      document.getElementById('pw-strength-label').textContent = labels[score - 1] || '';
+      document.getElementById('pw-strength-label').style.color = colors[score - 1] || '#94a3b8';
     }
 
     async function handleAcceptInvite() {
