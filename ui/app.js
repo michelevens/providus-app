@@ -2113,16 +2113,32 @@ async function openProviderModal(id) {
   form.innerHTML = `
     <input type="hidden" id="edit-prov-id" value="${id || ''}">
 
-    <!-- NPI Lookup Bar -->
-    <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:20px;padding:14px 16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-lg);">
-      <div style="flex:1;">
-        <label style="display:block;font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">NPI Lookup</label>
-        <input type="text" class="form-control" id="prov-npi-lookup" placeholder="Enter 10-digit NPI to auto-fill" value="${escAttr(existing?.npi || '')}" style="font-size:15px;letter-spacing:0.5px;">
+    <!-- NPI & Provider Search Bar -->
+    <div style="margin-bottom:20px;padding:14px 16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-lg);">
+      <label style="display:block;font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Search NPI Registry</label>
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <button class="btn btn-sm ${!existing ? 'btn-primary' : ''}" id="npi-search-mode-npi" onclick="window.app.setNpiSearchMode('npi')" style="font-size:12px;">By NPI</button>
+        <button class="btn btn-sm" id="npi-search-mode-name" onclick="window.app.setNpiSearchMode('name')" style="font-size:12px;">By Name</button>
       </div>
-      <button class="btn btn-primary" onclick="window.app.lookupProviderNPI()" id="npi-lookup-btn" style="height:40px;white-space:nowrap;">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg>
-        Lookup
-      </button>
+      <div id="npi-search-npi" style="display:flex;gap:8px;align-items:flex-end;">
+        <input type="text" class="form-control" id="prov-npi-lookup" placeholder="Enter 10-digit NPI" value="${escAttr(existing?.npi || '')}" style="flex:1;font-size:15px;letter-spacing:0.5px;" onkeydown="if(event.key==='Enter'){event.preventDefault();window.app.lookupProviderNPI();}">
+        <button class="btn btn-primary" onclick="window.app.lookupProviderNPI()" id="npi-lookup-btn" style="height:40px;white-space:nowrap;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg> Lookup
+        </button>
+      </div>
+      <div id="npi-search-name" style="display:none;">
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <input type="text" class="form-control" id="prov-search-first" placeholder="First name" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();window.app.searchProviderByName();}">
+          <input type="text" class="form-control" id="prov-search-last" placeholder="Last name" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();window.app.searchProviderByName();}">
+          <select class="form-control" id="prov-search-state" style="width:70px;">
+            <option value="">State</option>
+            ${['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'].map(s => `<option value="${s}">${s}</option>`).join('')}
+          </select>
+          <button class="btn btn-primary" onclick="window.app.searchProviderByName()" id="name-search-btn" style="height:40px;white-space:nowrap;">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg> Search
+          </button>
+        </div>
+      </div>
     </div>
     <div id="npi-lookup-result" style="display:none;margin-bottom:16px;"></div>
 
@@ -4043,15 +4059,16 @@ window.app = {
       }
 
       // Show result with auto-fill button
+      const allTax = prov.allTaxonomies || [];
       resultDiv.innerHTML = `
         <div style="padding:14px;background:var(--success-50);border:1px solid var(--success-100);border-radius:var(--radius-lg);">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
             <div>
-              <div style="font-weight:700;font-size:15px;color:var(--gray-900);">${escHtml(prov.prefix ? prov.prefix + ' ' : '')}${escHtml(prov.firstName)} ${escHtml(prov.middleName ? prov.middleName + ' ' : '')}${escHtml(prov.lastName)}${escHtml(prov.suffix ? ', ' + prov.suffix : '')}${escHtml(prov.credential ? ', ' + prov.credential : '')}</div>
-              <div style="font-size:12px;color:var(--gray-600);margin-top:3px;">NPI: ${escHtml(prov.npi)} &middot; Status: <strong>${escHtml(prov.status)}</strong> &middot; Enumerated: ${escHtml(prov.enumerationDate)}</div>
-              <div style="font-size:12px;color:var(--gray-600);margin-top:2px;">Taxonomy: <strong>${escHtml(prov.taxonomyCode)}</strong> &mdash; ${escHtml(prov.taxonomyDesc)}</div>
-              <div style="font-size:12px;color:var(--gray-600);margin-top:2px;">${escHtml(prov.city)}, ${escHtml(prov.state)} ${escHtml(prov.zip)} &middot; ${escHtml(prov.phone)}</div>
-              ${prov.allTaxonomies.length > 1 ? `<div style="font-size:11px;color:var(--gray-500);margin-top:4px;">+ ${prov.allTaxonomies.length - 1} additional taxonomy code(s)</div>` : ''}
+              <div style="font-weight:700;font-size:15px;color:var(--gray-900);">${escHtml(prov.prefix ? prov.prefix + ' ' : '')}${escHtml(prov.firstName || prov.first_name || '')} ${escHtml(prov.middleName || '')}${escHtml(prov.lastName || prov.last_name || '')}${escHtml(prov.suffix ? ', ' + prov.suffix : '')}${escHtml(prov.credential ? ', ' + prov.credential : '')}</div>
+              <div style="font-size:12px;color:var(--gray-600);margin-top:3px;">NPI: ${escHtml(prov.npi || npi)} &middot; Status: <strong>${escHtml(prov.status || 'Active')}</strong>${prov.enumerationDate ? ' &middot; Enumerated: ' + escHtml(prov.enumerationDate) : ''}</div>
+              <div style="font-size:12px;color:var(--gray-600);margin-top:2px;">Taxonomy: <strong>${escHtml(prov.taxonomyCode || prov.taxonomy_code || '')}</strong>${prov.taxonomyDesc || prov.taxonomy_desc ? ' &mdash; ' + escHtml(prov.taxonomyDesc || prov.taxonomy_desc) : ''}</div>
+              <div style="font-size:12px;color:var(--gray-600);margin-top:2px;">${escHtml(prov.city || '')}, ${escHtml(prov.state || '')} ${escHtml(prov.zip || '')}${prov.phone ? ' &middot; ' + escHtml(prov.phone) : ''}</div>
+              ${allTax.length > 1 ? `<div style="font-size:11px;color:var(--gray-500);margin-top:4px;">+ ${allTax.length - 1} additional taxonomy code(s)</div>` : ''}
             </div>
             <button class="btn btn-primary btn-sm" onclick="window.app._fillProviderFromNPI()" style="flex-shrink:0;">Auto-Fill</button>
           </div>
@@ -4067,17 +4084,80 @@ window.app = {
     }
   },
 
+  setNpiSearchMode(mode) {
+    const npiDiv = document.getElementById('npi-search-npi');
+    const nameDiv = document.getElementById('npi-search-name');
+    const npiBtn = document.getElementById('npi-search-mode-npi');
+    const nameBtn = document.getElementById('npi-search-mode-name');
+    if (mode === 'name') {
+      npiDiv.style.display = 'none'; nameDiv.style.display = 'block';
+      npiBtn.classList.remove('btn-primary'); nameBtn.classList.add('btn-primary');
+    } else {
+      npiDiv.style.display = 'flex'; nameDiv.style.display = 'none';
+      npiBtn.classList.add('btn-primary'); nameBtn.classList.remove('btn-primary');
+    }
+    document.getElementById('npi-lookup-result').style.display = 'none';
+  },
+
+  async searchProviderByName() {
+    const firstName = document.getElementById('prov-search-first')?.value?.trim();
+    const lastName = document.getElementById('prov-search-last')?.value?.trim();
+    const state = document.getElementById('prov-search-state')?.value || '';
+    const resultDiv = document.getElementById('npi-lookup-result');
+    const btn = document.getElementById('name-search-btn');
+    if (!firstName && !lastName) { resultDiv.style.display = 'block'; resultDiv.innerHTML = '<div class="alert alert-warning" style="margin:0;">Enter a first or last name to search.</div>'; return; }
+    btn.disabled = true; btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0;border-width:2px;"></div>';
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<div style="text-align:center;padding:8px;color:var(--gray-500);font-size:13px;">Searching NPI Registry...</div>';
+    try {
+      const opts = { limit: 20 };
+      if (firstName) opts.firstName = firstName;
+      if (lastName) opts.lastName = lastName;
+      if (state) opts.state = state;
+      const results = await taxonomyApi.searchProviders(opts);
+      if (!results || results.length === 0) {
+        resultDiv.innerHTML = '<div class="alert alert-info" style="margin:0;">No providers found. Try different search criteria.</div>';
+        return;
+      }
+      window._npiSearchResults = results;
+      resultDiv.innerHTML = `
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;">${results.length} provider(s) found — click to auto-fill</div>
+        <div style="max-height:240px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:var(--radius-lg);">
+          ${results.map((p, i) => `
+            <div style="padding:10px 14px;border-bottom:1px solid var(--gray-100);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;transition:background 0.15s;" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''" onclick="window._npiLookupResult=window._npiSearchResults[${i}];window.app._fillProviderFromNPI();">
+              <div>
+                <div style="font-weight:600;font-size:14px;color:var(--gray-900);">${escHtml(p.firstName)} ${escHtml(p.lastName)}${p.credential ? ', ' + escHtml(p.credential) : ''}</div>
+                <div style="font-size:12px;color:var(--gray-600);">NPI: <strong>${escHtml(p.npi)}</strong> &middot; ${escHtml(p.taxonomyDesc || p.taxonomyCode || '')} &middot; ${escHtml(p.city || '')}${p.state ? ', ' + escHtml(p.state) : ''}</div>
+              </div>
+              <span style="font-size:11px;color:var(--brand-600);white-space:nowrap;">Select</span>
+            </div>
+          `).join('')}
+        </div>`;
+    } catch (err) {
+      resultDiv.innerHTML = '<div class="alert alert-danger" style="margin:0;">Search failed: ' + escHtml(err.message) + '</div>';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg> Search';
+    }
+  },
+
   _fillProviderFromNPI() {
     const prov = window._npiLookupResult;
     if (!prov) return;
     const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
-    set('prov-first', prov.firstName);
-    set('prov-last', prov.lastName);
-    set('prov-creds', prov.credential);
+    set('prov-first', prov.firstName || prov.first_name);
+    set('prov-last', prov.lastName || prov.last_name);
+    set('prov-creds', prov.credential || prov.credentials);
     set('prov-npi', prov.npi);
-    set('prov-specialty', prov.taxonomyDesc);
-    set('prov-taxonomy', prov.taxonomyCode);
+    set('prov-specialty', prov.taxonomyDesc || prov.taxonomy_desc || prov.specialty);
+    set('prov-taxonomy', prov.taxonomyCode || prov.taxonomy_code || prov.taxonomy);
     set('prov-phone', prov.phone);
+    set('prov-email', prov.email);
+    // Also fill the NPI lookup input
+    set('prov-npi-lookup', prov.npi);
+    // Hide the result panel after filling
+    const resultDiv = document.getElementById('npi-lookup-result');
+    if (resultDiv) { setTimeout(() => { resultDiv.style.display = 'none'; }, 1500); }
     showToast('Provider data auto-filled from NPI Registry');
   },
 
