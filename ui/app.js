@@ -2381,6 +2381,10 @@ async function renderSettings() {
   const providers = await store.getAll('providers');
   const licenses = await store.getAll('licenses');
   const apps = await store.getAll('applications');
+  let agency = {};
+  try { agency = await store.getAgency(); } catch (e) { /* ignore */ }
+  const embedBase = CONFIG.API_URL.replace('/api', '');
+  const agencySlug = agency.slug || 'your-slug';
 
   body.innerHTML = `
     <div class="tabs">
@@ -2388,6 +2392,7 @@ async function renderSettings() {
       <button class="tab" onclick="window.app.settingsTab(this, 'settings-org')">Organization</button>
       <button class="tab" onclick="window.app.settingsTab(this, 'settings-licenses')">Licenses (${licenses.length})</button>
       <button class="tab" onclick="window.app.settingsTab(this, 'settings-caqh')">CAQH API</button>
+      <button class="tab" onclick="window.app.settingsTab(this, 'settings-integrations')">Integrations</button>
       <button class="tab" onclick="window.app.settingsTab(this, 'settings-danger')">Danger Zone</button>
     </div>
 
@@ -2513,6 +2518,84 @@ async function renderSettings() {
           </p>
           <button class="btn btn-sm" onclick="window.app.showCaqhProxyCode()">View Proxy Code</button>
           <div id="caqh-proxy-code" style="margin-top:12px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-integrations" class="hidden">
+      <div class="card">
+        <div class="card-header"><h3>Embed Widgets</h3></div>
+        <div class="card-body">
+          <p class="text-sm text-muted mb-4">
+            Add booking, testimonials, or insurance verification to your website with a single script tag.
+            Widgets automatically match your agency branding.
+          </p>
+
+          <label class="form-label" style="font-weight:600;">Widget Type</label>
+          <select class="form-control" id="embed-widget-type" onchange="window.app.updateEmbedCode()" style="max-width:300px;margin-bottom:12px;">
+            <option value="booking">Booking Form</option>
+            <option value="testimonials">Testimonials</option>
+            <option value="eligibility">Insurance Verification</option>
+          </select>
+
+          <label class="form-label" style="font-weight:600;">Theme</label>
+          <select class="form-control" id="embed-widget-theme" onchange="window.app.updateEmbedCode()" style="max-width:300px;margin-bottom:16px;">
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+
+          <label class="form-label" style="font-weight:600;">Embed Code</label>
+          <div style="position:relative;">
+            <pre id="embed-code-preview" style="background:#1f2937;color:#e5e7eb;padding:16px;border-radius:8px;font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin:0 0 8px;">&lt;div id="credentik-widget"&gt;&lt;/div&gt;
+&lt;script src="${embedBase}/embed.js" data-agency="${agencySlug}" data-widget="booking" data-theme="light"&gt;&lt;/script&gt;</pre>
+            <button class="btn btn-sm btn-primary" onclick="window.app.copyEmbedCode()" style="margin-bottom:16px;">Copy to Clipboard</button>
+          </div>
+
+          <div class="alert alert-info" style="margin-top:8px;">
+            <strong>Preview:</strong> Paste this code into any HTML page to embed the widget.
+            The widget fetches data from your Credentik account in real-time.
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Allowed Domains</h3></div>
+        <div class="card-body">
+          <p class="text-sm text-muted mb-4">
+            Restrict which websites can embed your widgets. Leave empty to allow any domain.
+          </p>
+          <label class="form-label">Domains (one per line)</label>
+          <textarea class="form-control" id="embed-allowed-domains" rows="4" placeholder="example.com&#10;mywebsite.org">${(agency.allowed_domains || []).join('\\n')}</textarea>
+          <button class="btn btn-primary" onclick="window.app.saveAllowedDomains()" style="margin-top:8px;">Save Domains</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Public Pages</h3></div>
+        <div class="card-body">
+          <p class="text-sm text-muted mb-4">
+            These public URLs are accessible without login and can be shared with patients.
+          </p>
+          <table>
+            <thead><tr><th>Page</th><th>URL</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td>Booking Page</td>
+                <td class="text-sm"><code>${embedBase.replace('/api', '')}/api/public/${agencySlug}/availability</code></td>
+                <td><button class="btn btn-sm" onclick="window.app.copyText('${embedBase}/public/${agencySlug}/availability')">Copy</button></td>
+              </tr>
+              <tr>
+                <td>Testimonials</td>
+                <td class="text-sm"><code>${embedBase}/public/${agencySlug}/testimonials</code></td>
+                <td><button class="btn btn-sm" onclick="window.app.copyText('${embedBase}/public/${agencySlug}/testimonials')">Copy</button></td>
+              </tr>
+              <tr>
+                <td>Office Hours</td>
+                <td class="text-sm"><code>${embedBase}/public/${agencySlug}/office-hours</code></td>
+                <td><button class="btn btn-sm" onclick="window.app.copyText('${embedBase}/public/${agencySlug}/office-hours')">Copy</button></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -4483,10 +4566,46 @@ window.app = {
   settingsTab(el, tabId) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    ['settings-import', 'settings-org', 'settings-licenses', 'settings-caqh', 'settings-danger'].forEach(id => {
+    ['settings-import', 'settings-org', 'settings-licenses', 'settings-caqh', 'settings-integrations', 'settings-danger'].forEach(id => {
       const section = document.getElementById(id);
       if (section) section.classList.toggle('hidden', id !== tabId);
     });
+  },
+
+  updateEmbedCode() {
+    const widget = document.getElementById('embed-widget-type').value;
+    const theme = document.getElementById('embed-widget-theme').value;
+    const base = CONFIG.API_URL.replace('/api', '');
+    let slug = 'your-slug';
+    try { slug = document.getElementById('embed-allowed-domains')?.closest('.card')?.parentElement?.dataset?.slug || slug; } catch (e) {}
+    store.getAgency().then(a => {
+      slug = a.slug || slug;
+      const code = `<div id="credentik-widget"></div>\n<script src="${base}/embed.js" data-agency="${slug}" data-widget="${widget}" data-theme="${theme}"></script>`;
+      const pre = document.getElementById('embed-code-preview');
+      if (pre) pre.textContent = code;
+    });
+  },
+
+  copyEmbedCode() {
+    const pre = document.getElementById('embed-code-preview');
+    if (pre) {
+      navigator.clipboard.writeText(pre.textContent).then(() => showToast('Embed code copied!'));
+    }
+  },
+
+  copyText(text) {
+    navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard!'));
+  },
+
+  async saveAllowedDomains() {
+    const raw = document.getElementById('embed-allowed-domains').value;
+    const domains = raw.split('\n').map(d => d.trim()).filter(Boolean);
+    try {
+      await store.updateAgency({ allowed_domains: domains });
+      showToast('Allowed domains saved');
+    } catch (e) {
+      showToast('Failed to save: ' + e.message, 'error');
+    }
   },
 
   async previewJsonImport() {
