@@ -2754,6 +2754,91 @@ const PRESET_TASKS = [
   { title: 'Check Nursys e-Notify alerts', category: 'audit', priority: 'normal' },
 ];
 
+// ─── Task Link Helpers ───
+
+const LINK_TYPES = [
+  { id: '',             label: 'None (no link)' },
+  { id: 'application',  label: 'Application' },
+  { id: 'provider',     label: 'Provider' },
+  { id: 'organization', label: 'Organization' },
+  { id: 'license',      label: 'License' },
+  { id: 'payer',        label: 'Payer' },
+];
+
+function _renderLinkedToSelector(prefix, existingType, existingId) {
+  return `
+    <div style="display:flex;gap:6px;">
+      <select id="${prefix}-link-type" class="form-control" style="flex:0 0 140px;" onchange="window.app.onLinkTypeChange('${prefix}')">
+        ${LINK_TYPES.map(t => `<option value="${t.id}" ${existingType === t.id ? 'selected' : ''}>${t.label}</option>`).join('')}
+      </select>
+      <select id="${prefix}-link-id" class="form-control" style="flex:1;" ${!existingType ? 'disabled' : ''}>
+        <option value="">Select...</option>
+      </select>
+    </div>`;
+}
+
+async function _loadLinkOptions(prefix, type, selectedId) {
+  const sel = document.getElementById(`${prefix}-link-id`);
+  if (!sel) return;
+  if (!type) { sel.innerHTML = '<option value="">Select...</option>'; sel.disabled = true; return; }
+  sel.disabled = false;
+  sel.innerHTML = '<option value="">Loading...</option>';
+  try {
+    let items = [];
+    if (type === 'application') {
+      items = (await store.getAll('applications')).map(a => ({ id: a.id, label: `${getStateName(a.state)} — ${a.payerName || getPayerById(a.payerId)?.name || 'Unknown'} (${a.status})` }));
+    } else if (type === 'provider') {
+      items = (await store.getAll('providers')).map(p => ({ id: p.id, label: `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''} — ${p.credentials || p.credential || ''}`.trim() }));
+    } else if (type === 'organization') {
+      items = (await store.getAll('organizations')).map(o => ({ id: o.id, label: o.name }));
+    } else if (type === 'license') {
+      const licenses = await store.getAll('licenses');
+      const providers = await store.getAll('providers');
+      const provMap = Object.fromEntries(providers.map(p => [p.id, p]));
+      items = licenses.map(l => {
+        const p = provMap[l.providerId || l.provider_id];
+        const pName = p ? `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim() : '';
+        return { id: l.id, label: `${pName} — ${l.state} ${l.licenseType || l.license_type || ''} (${l.status})` };
+      });
+    } else if (type === 'payer') {
+      items = (await store.getAll('payers') || []).map(p => ({ id: p.id, label: p.name }));
+      if (!items.length) {
+        // payers might come from reference endpoint
+        try {
+          const ref = await store._fetch(store._url('organizations').replace('/organizations', '/reference/payers'));
+          items = ((ref.data || ref) || []).map(p => ({ id: p.id, label: p.name }));
+        } catch {}
+      }
+    }
+    sel.innerHTML = '<option value="">Select...</option>' + items.map(i => `<option value="${i.id}" ${String(i.id) === String(selectedId) ? 'selected' : ''}>${escHtml(i.label)}</option>`).join('');
+  } catch {
+    sel.innerHTML = '<option value="">Error loading</option>';
+  }
+}
+
+function _getLinkedLabel(task, appsMap, extraMaps) {
+  const type = task.linkableType || task.linkable_type || (task.linkedApplicationId || task.linkedAppId ? 'application' : '');
+  const id = task.linkableId || task.linkable_id || task.linkedApplicationId || task.linkedAppId || '';
+  if (!type || !id) return '';
+  const typeObj = LINK_TYPES.find(t => t.id === type);
+  const typeLabel = typeObj?.label || type;
+  if (type === 'application' && appsMap) {
+    const app = appsMap[id];
+    if (app) {
+      const payer = getPayerById(app.payerId) || { name: app.payerName };
+      return `<span style="font-size:12px;color:var(--brand-600);">${payer?.name || 'Unknown'} — ${getStateName(app.state)}</span>`;
+    }
+  }
+  if (extraMaps && extraMaps[type]) {
+    const entity = extraMaps[type][id];
+    if (entity) {
+      const name = entity.name || entity.title || entity.firstName && `${entity.firstName} ${entity.lastName}` || `#${id}`;
+      return `<span style="font-size:12px;color:var(--brand-600);">${typeLabel}: ${escHtml(name)}</span>`;
+    }
+  }
+  return `<span style="font-size:12px;color:var(--text-muted);">${typeLabel} #${id}</span>`;
+}
+
 // ─── Tasks Page (full page, under Operations) ───
 
 async function renderTasksPage() {
@@ -2821,10 +2906,7 @@ async function renderTasksPage() {
           ${TASK_PRIORITIES.map(p => `<option value="${p.id}" ${p.id === 'normal' ? 'selected' : ''}>${p.label}</option>`).join('')}
         </select>
         <input type="date" id="task-page-due" class="form-control">
-        <select id="task-page-link-app" class="form-control">
-          <option value="">Link to application (optional)</option>
-          ${(await store.getAll('applications')).map(a => `<option value="${a.id}">${getStateName(a.state)} — ${a.payerName || getPayerById(a.payerId)?.name || 'Unknown'}</option>`).join('')}
-        </select>
+        ${_renderLinkedToSelector('task-page', '', '')}
         <select id="task-page-recurrence" class="form-control">
           <option value="">No recurrence</option>
           <option value="daily">Daily</option>
@@ -2895,8 +2977,7 @@ function renderTaskPageRow(task, today, appsMap) {
   const cat = TASK_CATEGORIES.find(c => c.id === task.category) || TASK_CATEGORIES[TASK_CATEGORIES.length - 1];
   const pri = TASK_PRIORITIES.find(p => p.id === task.priority) || TASK_PRIORITIES[2];
   const isOverdue = !task.isCompleted && !task.completed && task.dueDate && task.dueDate < today;
-  const linkedApp = task.linkedApplicationId || task.linkedAppId ? (appsMap || {})[task.linkedApplicationId || task.linkedAppId] : null;
-  const linkedPayer = linkedApp ? (getPayerById(linkedApp.payerId) || { name: linkedApp.payerName }) : null;
+  const linkedLabel = _getLinkedLabel(task, appsMap);
 
   const isDone = task.isCompleted || task.completed;
   return `<tr class="${isOverdue ? 'overdue' : ''}" style="${isDone ? 'opacity:0.6;' : ''}">
@@ -2908,7 +2989,7 @@ function renderTaskPageRow(task, today, appsMap) {
     <td><span style="font-size:12px;">${cat.icon} ${cat.label}</span></td>
     <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${pri.color}15;color:${pri.color};font-weight:600;">${pri.label}</span></td>
     <td style="white-space:nowrap;${isOverdue ? 'color:var(--red);font-weight:600;' : ''}">${task.dueDate ? formatDateDisplay(task.dueDate) : '-'}</td>
-    <td>${linkedApp ? `<span style="font-size:12px;color:var(--brand-600);">${linkedPayer?.name || 'Unknown'} — ${getStateName(linkedApp.state)}</span>` : '-'}</td>
+    <td>${linkedLabel || '-'}</td>
     <td style="white-space:nowrap;">
       <button onclick="window.app.editTaskPage('${task.id}')" style="background:none;border:none;color:var(--brand-600);cursor:pointer;font-size:13px;" title="Edit">&#9998;</button>
       <button onclick="window.app.deleteTaskPage('${task.id}')" style="background:none;border:none;color:var(--text-light);cursor:pointer;font-size:16px;" title="Delete">&times;</button>
@@ -2977,10 +3058,7 @@ async function renderTaskModal() {
           ${TASK_PRIORITIES.map(p => `<option value="${p.id}" ${p.id === 'normal' ? 'selected' : ''}>${p.label}</option>`).join('')}
         </select>
         <input type="date" id="task-due" class="form-control" placeholder="Due date">
-        <select id="task-link-app" class="form-control">
-          <option value="">Link to application (optional)</option>
-          ${(await store.getAll('applications')).map(a => `<option value="${a.id}">${getStateName(a.state)} — ${a.payerName}</option>`).join('')}
-        </select>
+        ${_renderLinkedToSelector('task', '', '')}
         <select id="task-recurrence" class="form-control">
           <option value="">No recurrence</option>
           <option value="daily">Daily</option>
@@ -3029,7 +3107,7 @@ function renderTaskItem(task, today, appsMap) {
   const cat = TASK_CATEGORIES.find(c => c.id === task.category) || TASK_CATEGORIES[TASK_CATEGORIES.length - 1];
   const pri = TASK_PRIORITIES.find(p => p.id === task.priority) || TASK_PRIORITIES[2];
   const isOverdue = !task.isCompleted && !task.completed && task.dueDate && task.dueDate < today;
-  const linkedApp = task.linkedApplicationId || task.linkedAppId ? (appsMap || {})[task.linkedApplicationId || task.linkedAppId] : null;
+  const linkedLabel = _getLinkedLabel(task, appsMap);
 
   const isDone = task.isCompleted || task.completed;
   return `
@@ -3043,7 +3121,7 @@ function renderTaskItem(task, today, appsMap) {
         </div>
         <div style="font-size:13px;font-weight:${isDone ? '400' : '600'};${isDone ? 'text-decoration:line-through;' : ''}">${escHtml(task.title)}</div>
         ${task.notes ? `<div style="font-size:11px;color:#64748b;margin-top:2px;">${escHtml(task.notes)}</div>` : ''}
-        ${linkedApp ? `<div style="font-size:10px;color:var(--brand-600);margin-top:2px;">Linked: ${getStateName(linkedApp.state)} — ${linkedApp.payerName}</div>` : ''}
+        ${linkedLabel ? `<div style="font-size:10px;margin-top:2px;">Linked: ${linkedLabel}</div>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;gap:2px;">
         <button onclick="window.app.editTask('${task.id}')" style="background:none;border:none;color:var(--brand-600);cursor:pointer;font-size:12px;" title="Edit">&#9998;</button>
@@ -3833,6 +3911,10 @@ window.app = {
   openTaskEditModal,
   closeTaskEditModal,
   saveTaskEdit,
+  onLinkTypeChange(prefix) {
+    const type = document.getElementById(`${prefix}-link-type`)?.value || '';
+    _loadLinkOptions(prefix, type, '');
+  },
 
   // Document Checklist
   async openDocChecklist(appId) { await openDocChecklist(appId); },
@@ -3885,12 +3967,16 @@ window.app = {
     const title = document.getElementById('task-page-title')?.value?.trim();
     if (!title) { showToast('Enter a task title'); return; }
     try {
+      const pgLinkType = document.getElementById('task-page-link-type')?.value || '';
+      const pgLinkId = document.getElementById('task-page-link-id')?.value || '';
       await store.create('tasks', {
         title,
         category: document.getElementById('task-page-category')?.value || 'other',
         priority: document.getElementById('task-page-priority')?.value || 'normal',
         dueDate: document.getElementById('task-page-due')?.value || '',
-        linkedApplicationId: document.getElementById('task-page-link-app')?.value || '',
+        linkableType: pgLinkType || '',
+        linkableId: pgLinkId || '',
+        linkedApplicationId: pgLinkType === 'application' ? pgLinkId : '',
         recurrence: document.getElementById('task-page-recurrence')?.value || '',
         notes: document.getElementById('task-page-notes')?.value?.trim() || '',
         isCompleted: false,
@@ -3966,12 +4052,16 @@ window.app = {
     const title = document.getElementById('task-title')?.value?.trim();
     if (!title) { showToast('Enter a task title'); return; }
     try {
+      const modalLinkType = document.getElementById('task-link-type')?.value || '';
+      const modalLinkId = document.getElementById('task-link-id')?.value || '';
       await store.create('tasks', {
         title,
         category: document.getElementById('task-category')?.value || 'other',
         priority: document.getElementById('task-priority')?.value || 'normal',
         dueDate: document.getElementById('task-due')?.value || '',
-        linkedApplicationId: document.getElementById('task-link-app')?.value || '',
+        linkableType: modalLinkType || '',
+        linkableId: modalLinkId || '',
+        linkedApplicationId: modalLinkType === 'application' ? modalLinkId : '',
         recurrence: document.getElementById('task-recurrence')?.value || '',
         notes: document.getElementById('task-notes')?.value?.trim() || '',
         isCompleted: false,
@@ -7830,14 +7920,8 @@ async function openTaskEditModal(id) {
       </div>
     </div>
     <div class="form-group" style="margin-bottom:12px;">
-      <label>Linked Application</label>
-      <select id="edit-task-link-app" class="form-control">
-        <option value="">None</option>
-        ${apps.map(a => {
-          const payer = getPayerById(a.payerId);
-          return `<option value="${a.id}" ${(task.linkedApplicationId || task.linkedAppId) === a.id ? 'selected' : ''}>${payer?.name || 'Unknown'} — ${getStateName(a.state)} (${a.status})</option>`;
-        }).join('')}
-      </select>
+      <label>Linked To</label>
+      ${_renderLinkedToSelector('edit-task', task.linkableType || task.linkable_type || (task.linkedApplicationId || task.linkedAppId ? 'application' : ''), task.linkableId || task.linkable_id || task.linkedApplicationId || task.linkedAppId || '')}
     </div>
     <div class="form-group">
       <label>Notes</label>
@@ -7845,6 +7929,9 @@ async function openTaskEditModal(id) {
     </div>
   `;
   document.getElementById('task-edit-modal').classList.add('active');
+  // Load linked entity options if type is set
+  const editLinkType = task.linkableType || task.linkable_type || (task.linkedApplicationId || task.linkedAppId ? 'application' : '');
+  if (editLinkType) _loadLinkOptions('edit-task', editLinkType, task.linkableId || task.linkable_id || task.linkedApplicationId || task.linkedAppId || '');
 }
 
 function closeTaskEditModal() {
@@ -7855,13 +7942,17 @@ async function saveTaskEdit() {
   const id = document.getElementById('edit-task-id').value;
   const title = document.getElementById('edit-task-title').value.trim();
   if (!title) { showToast('Title is required'); return; }
+  const linkType = document.getElementById('edit-task-link-type')?.value || '';
+  const linkId = document.getElementById('edit-task-link-id')?.value || '';
   await store.update('tasks', id, {
     title,
     category: document.getElementById('edit-task-category').value,
     priority: document.getElementById('edit-task-priority').value,
     dueDate: document.getElementById('edit-task-due').value || '',
     recurrence: document.getElementById('edit-task-recurrence').value || '',
-    linkedApplicationId: document.getElementById('edit-task-link-app').value || '',
+    linkableType: linkType,
+    linkableId: linkId || null,
+    linkedApplicationId: linkType === 'application' ? linkId : '',
     notes: document.getElementById('edit-task-notes').value || '',
   });
   closeTaskEditModal();
