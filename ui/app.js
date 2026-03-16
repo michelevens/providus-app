@@ -6426,6 +6426,68 @@ function handleNppesProxy(payload) {
     } catch (e) { showToast('Error: ' + e.message); }
   },
 
+  // ─── Document Upload/Download ───
+  openDocUploadModal(providerId) {
+    ['doc-upload-type','doc-upload-name','doc-upload-file','doc-upload-expiry','doc-upload-notes'].forEach(f => {
+      const el = document.getElementById(f); if (el) el.value = '';
+    });
+    document.getElementById('doc-upload-modal').classList.add('active');
+  },
+  async saveDocUpload(providerId) {
+    const docType = document.getElementById('doc-upload-type')?.value;
+    const docName = document.getElementById('doc-upload-name')?.value?.trim();
+    const fileInput = document.getElementById('doc-upload-file');
+    const file = fileInput?.files?.[0];
+    if (!docType) { showToast('Please select a document type'); return; }
+    if (!docName) { showToast('Please enter a document name'); return; }
+    if (!file) { showToast('Please select a file to upload'); return; }
+    if (file.size > 20 * 1024 * 1024) { showToast('File must be under 20MB'); return; }
+
+    const btn = document.getElementById('doc-upload-save-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Uploading...'; }
+    try {
+      await store.uploadProviderDocument(
+        providerId, file, docType, docName,
+        document.getElementById('doc-upload-expiry')?.value || null,
+        document.getElementById('doc-upload-notes')?.value?.trim() || null
+      );
+      showToast('Document uploaded successfully');
+      document.getElementById('doc-upload-modal').classList.remove('active');
+      await renderProviderProfilePage(providerId);
+      window.app.switchProfileTab('documents');
+    } catch (e) {
+      showToast('Upload failed: ' + e.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Upload'; }
+    }
+  },
+  async downloadDocument(providerId, documentId) {
+    try {
+      const result = await store.downloadProviderDocument(providerId, documentId);
+      if (result.url) {
+        window.open(result.url, '_blank');
+      } else {
+        showToast('No download URL available');
+      }
+    } catch (e) { showToast('Download failed: ' + e.message); }
+  },
+  async deleteDocument(providerId, documentId) {
+    if (!await appConfirm('Delete this document and its file? This cannot be undone.', { title: 'Delete Document', okLabel: 'Delete', okClass: 'btn-danger' })) return;
+    try {
+      await store.deleteProviderDocument(providerId, documentId);
+      showToast('Document deleted');
+      await renderProviderProfilePage(providerId);
+      window.app.switchProfileTab('documents');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async downloadProviderPacket(providerId) {
+    showToast('Generating PDF packet...');
+    try {
+      await store.downloadProviderPacketPdf(providerId);
+      showToast('PDF downloaded');
+    } catch (e) { showToast('PDF generation failed: ' + e.message); }
+  },
+
   // ─── Organization Management ───
   viewOrg(id) {
     window._selectedOrgId = id;
@@ -10168,19 +10230,90 @@ async function renderProviderProfilePage(providerId) {
     <!-- Documents Tab -->
     <div class="profile-tab-content" id="tab-documents" style="display:none;">
       <div class="card">
-        <div class="card-header"><h3>Documents</h3></div>
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+          <h3>Documents</h3>
+          <div style="display:flex;gap:8px;">
+            ${editButton('Upload Document', `window.app.openDocUploadModal(${providerId})`, 'btn-primary')}
+            <button class="btn btn-sm" onclick="window.app.downloadProviderPacket(${providerId})" title="Download full credentialing packet as PDF">PDF Packet</button>
+          </div>
+        </div>
         <div class="card-body" style="padding:0;">
           ${Array.isArray(documents) && documents.length > 0 ? `<table>
-            <thead><tr><th>Document</th><th>Type</th><th>Uploaded</th><th>Status</th></tr></thead>
+            <thead><tr><th>Document</th><th>Type</th><th>Status</th><th>Received</th><th>Expires</th><th>File</th><th></th></tr></thead>
             <tbody>
-              ${documents.map(d => `<tr>
-                <td><strong>${escHtml(d.name || d.fileName || d.file_name || '—')}</strong></td>
-                <td>${escHtml(d.type || d.documentType || d.document_type || '—')}</td>
-                <td>${formatDateDisplay(d.uploadedAt || d.uploaded_at || d.createdAt || d.created_at)}</td>
-                <td><span class="badge badge-${d.verified ? 'approved' : 'pending'}">${d.verified ? 'Verified' : 'Pending'}</span></td>
-              </tr>`).join('')}
+              ${documents.map(d => {
+                const hasFile = d.filePath || d.file_path;
+                const statusClass = (d.status === 'verified' || d.status === 'received') ? 'approved' : d.status === 'expired' ? 'denied' : d.status === 'missing' ? 'denied' : 'pending';
+                const fileSize = d.fileSize || d.file_size;
+                const fileSizeStr = fileSize ? (fileSize > 1048576 ? (fileSize / 1048576).toFixed(1) + ' MB' : (fileSize / 1024).toFixed(0) + ' KB') : '';
+                return `<tr>
+                <td><strong>${escHtml(d.documentName || d.document_name || d.name || '—')}</strong></td>
+                <td>${escHtml(d.documentType || d.document_type || d.type || '—')}</td>
+                <td><span class="badge badge-${statusClass}">${escHtml(d.status || 'pending')}</span></td>
+                <td>${formatDateDisplay(d.receivedDate || d.received_date || d.createdAt || d.created_at)}</td>
+                <td>${d.expirationDate || d.expiration_date ? formatDateDisplay(d.expirationDate || d.expiration_date) : '—'}</td>
+                <td>${hasFile ? `<span style="color:var(--green-600);cursor:pointer;" onclick="window.app.downloadDocument(${providerId}, ${d.id})" title="${escHtml(d.originalFilename || d.original_filename || '')} ${fileSizeStr}">Download</span>` : '<span style="color:var(--gray-400);">No file</span>'}</td>
+                <td>${!auth.isReadonly() ? `<button class="btn btn-sm btn-danger" onclick="window.app.deleteDocument(${providerId}, ${d.id})" style="padding:2px 8px;font-size:11px;">Delete</button>` : ''}</td>
+              </tr>`;
+              }).join('')}
             </tbody>
-          </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No documents on file.</div>'}
+          </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No documents on file. Upload your first document above.</div>'}
+        </div>
+      </div>
+
+      <!-- Upload Document Modal -->
+      <div class="modal-overlay" id="doc-upload-modal">
+        <div class="modal" style="max-width:500px;">
+          <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <h3>Upload Document</h3>
+            <button class="btn btn-sm" onclick="document.getElementById('doc-upload-modal').classList.remove('active')">&times;</button>
+          </div>
+          <div class="modal-body" style="padding:1rem;">
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Document Type *</label>
+              <select id="doc-upload-type" class="form-control">
+                <option value="">Select type...</option>
+                <option value="cv_resume">CV / Resume</option>
+                <option value="state_license">State License</option>
+                <option value="dea_certificate">DEA Certificate</option>
+                <option value="board_certification">Board Certification</option>
+                <option value="malpractice_coi">Malpractice COI</option>
+                <option value="diploma">Diploma / Degree</option>
+                <option value="cds_certificate">CDS Certificate</option>
+                <option value="w9">W-9</option>
+                <option value="government_id">Government ID</option>
+                <option value="proof_of_insurance">Proof of Insurance</option>
+                <option value="clia_certificate">CLIA Certificate</option>
+                <option value="collaborative_agreement">Collaborative Agreement</option>
+                <option value="supervision_agreement">Supervision Agreement</option>
+                <option value="immunization_record">Immunization Record</option>
+                <option value="background_check">Background Check</option>
+                <option value="reference_letter">Reference Letter</option>
+                <option value="attestation">Attestation</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Document Name *</label>
+              <input type="text" id="doc-upload-name" class="form-control" placeholder="e.g. NY Medical License">
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">File * <span style="color:var(--gray-400);font-size:11px;">(PDF, JPG, PNG — max 20MB)</span></label>
+              <input type="file" id="doc-upload-file" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.tif,.tiff">
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Expiration Date</label>
+              <input type="date" id="doc-upload-expiry" class="form-control">
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Notes</label>
+              <textarea id="doc-upload-notes" class="form-control" rows="2" placeholder="Optional notes..."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:1rem;">
+            <button class="btn" onclick="document.getElementById('doc-upload-modal').classList.remove('active')">Cancel</button>
+            <button class="btn btn-primary" id="doc-upload-save-btn" onclick="window.app.saveDocUpload(${providerId})">Upload</button>
+          </div>
         </div>
       </div>
     </div>

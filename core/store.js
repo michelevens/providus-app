@@ -705,6 +705,63 @@ class Store {
         return this._fetch(`${CONFIG.API_URL}/faqs/${id}`, { method: 'DELETE' });
     }
 
+    // ── Document Upload/Download ──
+    async uploadProviderDocument(providerId, file, documentType, documentName, expirationDate = null, notes = null) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('document_type', documentType);
+        formData.append('document_name', documentName);
+        if (expirationDate) formData.append('expiration_date', expirationDate);
+        if (notes) formData.append('notes', notes);
+
+        const headers = { 'Accept': 'application/json' };
+        const token = auth.getToken();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (this.activeAgencyId) headers['X-Agency-Id'] = String(this.activeAgencyId);
+
+        const response = await fetch(`${CONFIG.API_URL}/providers/${providerId}/documents/upload`, {
+            method: 'POST', headers, body: formData,
+        });
+        if (response.status === 401) { auth._clearSession(); window.location.reload(); throw new Error('Session expired'); }
+        if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.message || err.error || `HTTP ${response.status}`); }
+        const json = await response.json();
+        return this._snakeToCamel(json);
+    }
+
+    async getProviderDocuments(providerId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/documents`);
+        return result;
+    }
+
+    async downloadProviderDocument(providerId, documentId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/documents/${documentId}/download`);
+        return result.data || result;
+    }
+
+    async deleteProviderDocument(providerId, documentId) {
+        return this._fetch(`${CONFIG.API_URL}/providers/${providerId}/documents/${documentId}`, { method: 'DELETE' });
+    }
+
+    async downloadProviderPacketPdf(providerId) {
+        const headers = { 'Accept': 'application/pdf' };
+        const token = auth.getToken();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (this.activeAgencyId) headers['X-Agency-Id'] = String(this.activeAgencyId);
+
+        const response = await fetch(`${CONFIG.API_URL}/reports/provider/${providerId}/pdf`, { headers });
+        if (response.status === 401) { auth._clearSession(); window.location.reload(); throw new Error('Session expired'); }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Credentialing_Packet_${providerId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
     // ── Licensing Boards ──
     async getLicensingBoards(params = {}) {
         const query = new URLSearchParams(params).toString();
