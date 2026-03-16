@@ -3069,8 +3069,7 @@ function renderTaskPageRow(task, today, appsMap) {
   return `<tr class="${isOverdue ? 'overdue' : ''}" style="${isDone ? 'opacity:0.6;' : ''}">
     <td><input type="checkbox" ${isDone ? 'checked' : ''} onchange="window.app.toggleTaskPage('${task.id}')" style="cursor:pointer;accent-color:var(--brand-600);transform:scale(1.2);"></td>
     <td>
-      <div style="font-weight:${isDone ? '400' : '600'};${isDone ? 'text-decoration:line-through;' : ''}">${escHtml(task.title)}${task.recurrence ? ` <span style="font-size:10px;padding:1px 5px;background:var(--teal);color:white;border-radius:3px;">&#8635; ${task.recurrence}</span>` : ''}</div>
-      ${task.notes ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${escHtml(task.notes)}</div>` : ''}
+      <div style="font-weight:${isDone ? '400' : '600'};${isDone ? 'text-decoration:line-through;' : ''}cursor:${task.notes ? 'help' : 'default'};" ${task.notes ? `title="${escAttr(task.notes)}"` : ''}>${escHtml(task.title)}${task.recurrence ? ` <span style="font-size:10px;padding:1px 5px;background:var(--teal);color:white;border-radius:3px;">&#8635; ${task.recurrence}</span>` : ''}${task.notes ? ' <span style="font-size:10px;color:var(--text-muted);">&#x1f4dd;</span>' : ''}</div>
     </td>
     <td><span style="font-size:12px;">${cat.icon} ${cat.label}</span></td>
     <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${pri.color}15;color:${pri.color};font-weight:600;">${pri.label}</span></td>
@@ -3205,8 +3204,7 @@ function renderTaskItem(task, today, appsMap) {
           <span style="font-size:11px;color:#64748b;" title="${cat.label}">${cat.icon} ${cat.label}</span>
           ${task.dueDate ? `<span style="font-size:11px;color:${isOverdue ? 'var(--red)' : '#64748b'};">${formatDateDisplay(task.dueDate)}</span>` : ''}
         </div>
-        <div style="font-size:13px;font-weight:${isDone ? '400' : '600'};${isDone ? 'text-decoration:line-through;' : ''}">${escHtml(task.title)}</div>
-        ${task.notes ? `<div style="font-size:11px;color:#64748b;margin-top:2px;">${escHtml(task.notes)}</div>` : ''}
+        <div style="font-size:13px;font-weight:${isDone ? '400' : '600'};${isDone ? 'text-decoration:line-through;' : ''}cursor:${task.notes ? 'help' : 'default'};" ${task.notes ? `title="${escAttr(task.notes)}"` : ''}>${escHtml(task.title)}${task.notes ? ' <span style="font-size:10px;color:#94a3b8;">&#x1f4dd;</span>' : ''}</div>
         ${linkedLabel ? `<div style="font-size:10px;margin-top:2px;">Linked: ${linkedLabel}</div>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;gap:2px;">
