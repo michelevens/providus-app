@@ -151,6 +151,9 @@ async function navigateTo(page) {
     el.classList.toggle('active', el.dataset.page === page);
   });
 
+  // Update notification badge
+  if (window.app?.refreshNotifBadge) window.app.refreshNotifBadge();
+
   // Update follow-up badge
   let overdueCount = 0;
   try { const _od = await workflow.getOverdueFollowups(); overdueCount = _od.length; } catch {}
@@ -4110,6 +4113,77 @@ window.app = {
     if (panel.classList.contains('active')) {
       setTimeout(() => document.addEventListener('click', close), 0);
     }
+  },
+
+  // Notifications
+  async toggleNotifications() {
+    const panel = document.getElementById('notif-panel');
+    if (panel) panel.classList.toggle('active');
+    if (panel.classList.contains('active')) {
+      await this.loadNotifications();
+      const close = (e) => {
+        if (!e.target.closest('#notif-dropdown')) {
+          panel.classList.remove('active');
+          document.removeEventListener('click', close);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', close), 0);
+    }
+  },
+
+  async loadNotifications() {
+    try {
+      const result = await store._fetch(`${CONFIG.API_URL}/notifications`);
+      const items = result.data || [];
+      const list = document.getElementById('notif-list');
+      if (!items.length) {
+        list.innerHTML = '<p style="padding:16px;text-align:center;color:#9ca3af;font-size:13px;">No notifications yet</p>';
+        return;
+      }
+      const ICONS = { bell: '\u{1F514}', calendar: '\u{1F4C5}', app: '\u{1F4CB}', star: '\u2B50', task: '\u2705', clock: '\u23F0', alert: '\u26A0\uFE0F', user: '\u{1F464}', shield: '\u{1F6E1}\uFE0F' };
+      list.innerHTML = items.map(n => `
+        <div class="notif-item${n.read_at ? '' : ' unread'}" data-id="${n.id}" onclick="window.app.handleNotifClick(${n.id}, '${escAttr(n.link || '')}')" style="padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;${n.read_at ? 'opacity:.6;' : ''}">
+          <div style="display:flex;gap:8px;align-items:flex-start;">
+            <span style="font-size:16px;flex-shrink:0;">${ICONS[n.icon] || ICONS.bell}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:${n.read_at ? '400' : '600'};color:var(--text-primary);line-height:1.3;">${escHtml(n.title)}</div>
+              ${n.body ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;line-height:1.3;">${escHtml(n.body)}</div>` : ''}
+              <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">${timeAgo(n.created_at)}</div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    } catch (e) {
+      document.getElementById('notif-list').innerHTML = '<p style="padding:16px;text-align:center;color:#ef4444;font-size:13px;">Failed to load</p>';
+    }
+  },
+
+  async handleNotifClick(id, link) {
+    try { await store._fetch(`${CONFIG.API_URL}/notifications/${id}/read`, { method: 'POST' }); } catch {}
+    if (link) navigateTo(link.split('/')[0]);
+    document.getElementById('notif-panel').classList.remove('active');
+    this.refreshNotifBadge();
+  },
+
+  async markAllNotificationsRead() {
+    try {
+      await store._fetch(`${CONFIG.API_URL}/notifications/read-all`, { method: 'POST' });
+      showToast('All notifications marked as read');
+      await this.loadNotifications();
+      this.refreshNotifBadge();
+    } catch {}
+  },
+
+  async refreshNotifBadge() {
+    try {
+      const result = await store._fetch(`${CONFIG.API_URL}/notifications/unread-count`);
+      const count = result.data?.count || 0;
+      const badge = document.getElementById('notif-badge');
+      if (badge) {
+        badge.textContent = count;
+        badge.style.display = count > 0 ? 'inline' : 'none';
+      }
+    } catch {}
   },
 
   // Tasks Modal (quick)
@@ -8103,6 +8177,19 @@ function escHtml(str) {
 
 function escAttr(str) {
   return escHtml(str);
+}
+
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
 }
 
 

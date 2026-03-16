@@ -190,12 +190,12 @@
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="5" height="5" rx="1"/><rect x="9.5" y="1.5" width="5" height="5" rx="1"/><rect x="1.5" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/></svg>
           </span> Dashboard
         </button>
-        <button class="nav-item" data-page="applications">
+        <button class="nav-item" data-page="applications" data-min-role="organization">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 2.5h-11a1 1 0 00-1 1v9a1 1 0 001 1h11a1 1 0 001-1v-9a1 1 0 00-1-1z"/><path d="M1.5 5.5h13"/><path d="M5.5 8.5h5"/><path d="M5.5 10.5h3"/></svg>
           </span> Applications
         </button>
-        <button class="nav-item" data-page="followups">
+        <button class="nav-item" data-page="followups" data-min-role="organization">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4l2.5 1.5"/></svg>
           </span> Follow-ups
@@ -224,85 +224,85 @@
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5"/><path d="M1.5 6.5h13"/></svg>
           </span> Payers
         </button>
-        <button class="nav-item" data-page="organizations">
+        <button class="nav-item" data-page="organizations" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M5 4V2.5a1 1 0 011-1h4a1 1 0 011 1V4"/><path d="M2 8h12"/></svg>
           </span> Organizations
         </button>
-        <button class="nav-item" data-page="facilities">
+        <button class="nav-item" data-page="facilities" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="3" width="13" height="11" rx="1"/><path d="M5.5 3v11"/><path d="M10.5 3v11"/><path d="M1.5 8h13"/></svg>
           </span> Facilities
         </button>
 
         <div class="nav-section">Compliance</div>
-        <button class="nav-item" data-page="exclusions">
+        <button class="nav-item" data-page="exclusions" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5C5 1.5 2.5 3 2.5 3v5.5c0 3 5.5 6 5.5 6s5.5-3 5.5-6V3s-2.5-1.5-5.5-1.5z"/><path d="M6 8l1.5 1.5L10 6"/></svg>
           </span> Exclusion Screening
         </button>
-        <button class="nav-item" data-page="compliance">
+        <button class="nav-item" data-page="compliance" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 1.5h5l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1v-12a1 1 0 011-1z"/><path d="M9 1.5v4h4"/><path d="M6 8h4"/><path d="M6 10h4"/><path d="M6 12h2"/></svg>
           </span> Compliance Center
         </button>
 
         <div class="nav-section">Finance</div>
-        <button class="nav-item" data-page="billing">
+        <button class="nav-item" data-page="billing" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4v8"/><path d="M5.5 6.5c0-.8.8-1.5 2.5-1.5s2.5.7 2.5 1.5c0 1.5-2.5 1.5-2.5 2.5"/><circle cx="8" cy="11.5" r="0.5" fill="currentColor"/></svg>
           </span> Billing & Invoicing
         </button>
 
         <div class="nav-section">Strategy</div>
-        <button class="nav-item" data-page="policies">
+        <button class="nav-item" data-page="policies" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5C5 1.5 2.5 3 2.5 3v5.5c0 3 5.5 6 5.5 6s5.5-3 5.5-6V3s-2.5-1.5-5.5-1.5z"/></svg>
           </span> State Policies
         </button>
-        <button class="nav-item" data-page="coverage">
+        <button class="nav-item" data-page="coverage" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="13" height="13" rx="1"/><path d="M1.5 5.5h13"/><path d="M5.5 1.5v13"/><path d="M9.5 1.5v13"/><path d="M1.5 9.5h13"/></svg>
           </span> Coverage Matrix
         </button>
-        <button class="nav-item" data-page="forecast">
+        <button class="nav-item" data-page="forecast" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13l4-5 3 2 5-7"/><path d="M11 3h3v3"/></svg>
           </span> Revenue Forecast
         </button>
-        <button class="nav-item" data-page="reimbursement">
+        <button class="nav-item" data-page="reimbursement" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M6 6.5c0-1 .8-1.5 2-1.5s2 .5 2 1.5c0 1.5-2 1.5-2 2.5"/><circle cx="8" cy="11.5" r="0.5" fill="currentColor"/></svg>
           </span> Reimbursement
         </button>
-        <button class="nav-item" data-page="renewal-calendar">
+        <button class="nav-item" data-page="renewal-calendar" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M1.5 6h13"/><path d="M5 1v3"/><path d="M11 1v3"/></svg>
           </span> Renewal Calendar
         </button>
-        <button class="nav-item" data-page="service-lines">
+        <button class="nav-item" data-page="service-lines" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h3l2-5 2 10 2-5h3"/></svg>
           </span> Service Lines
         </button>
 
         <div class="nav-section">Admin</div>
-        <button class="nav-item" data-page="settings">
+        <button class="nav-item" data-page="settings" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M13.5 8a5.5 5.5 0 01-.3 1.8l1.3 1-1.2 2-1.5-.6a5.5 5.5 0 01-1.6.9L10 14.5H7.8l-.2-1.4a5.5 5.5 0 01-1.6-.9l-1.5.6-1.2-2 1.3-1A5.5 5.5 0 014.5 8c0-.6.1-1.2.3-1.8l-1.3-1 1.2-2 1.5.6A5.5 5.5 0 017.8 3l.2-1.5h2.2l.2 1.4a5.5 5.5 0 011.6.9l1.5-.6 1.2 2-1.3 1c.2.6.3 1.2.3 1.8z"/></svg>
           </span> Agency Settings
         </button>
-        <button class="nav-item" data-page="users">
+        <button class="nav-item" data-page="users" data-min-role="owner">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.5"/><path d="M1.5 13c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/><circle cx="12" cy="5.5" r="2"/><path d="M14.5 13c0-2 -1.5-3.5-3-3.5"/></svg>
           </span> Users
         </button>
-        <button class="nav-item" data-page="onboarding">
+        <button class="nav-item" data-page="onboarding" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 1.5h5l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1v-12a1 1 0 011-1z"/><path d="M9 1.5v4h4"/><path d="M6 9h4M6 11h2"/></svg>
           </span> Onboarding
         </button>
-        <button class="nav-item" data-page="import">
+        <button class="nav-item" data-page="import" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V2"/><path d="M4.5 5.5L8 2l3.5 3.5"/><path d="M2.5 10v3a1 1 0 001 1h9a1 1 0 001-1v-3"/></svg>
           </span> Bulk Import
@@ -347,6 +347,21 @@
             <button class="header-icon-btn" onclick="window.app.showQuickTask()" title="Tasks & Reminders">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>
             </button>
+            <div class="header-icon-dropdown" id="notif-dropdown">
+              <button class="header-icon-btn" onclick="window.app.toggleNotifications()" title="Notifications" style="position:relative;">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 14.5c.8 0 1.5-.5 1.5-1.5h-3c0 1 .7 1.5 1.5 1.5z"/><path d="M12 7c0-2.2-1.3-4-4-4S4 4.8 4 7c0 3-1.5 4-1.5 4h11S12 10 12 7z"/></svg>
+                <span class="badge" id="notif-badge" style="display:none;position:absolute;top:-2px;right:-2px;font-size:10px;min-width:16px;height:16px;line-height:16px;padding:0 4px;">0</span>
+              </button>
+              <div class="tools-dropdown-panel" id="notif-panel" style="width:340px;max-height:400px;overflow-y:auto;">
+                <div class="tools-dropdown-header" style="display:flex;justify-content:space-between;align-items:center;">
+                  <span>Notifications</span>
+                  <button class="btn btn-sm" onclick="window.app.markAllNotificationsRead()" style="font-size:11px;padding:2px 8px;">Mark all read</button>
+                </div>
+                <div id="notif-list" style="padding:0;">
+                  <p style="padding:16px;text-align:center;color:#9ca3af;font-size:13px;">No notifications</p>
+                </div>
+              </div>
+            </div>
             <div class="header-icon-dropdown" id="tools-dropdown">
               <button class="header-icon-btn" onclick="window.app.toggleToolsMenu()" title="Tools">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M13.5 8a5.5 5.5 0 01-.3 1.8l1.3 1-1.2 2-1.5-.6a5.5 5.5 0 01-1.6.9L10 14.5H7.8l-.2-1.4a5.5 5.5 0 01-1.6-.9l-1.5.6-1.2-2 1.3-1A5.5 5.5 0 014.5 8c0-.6.1-1.2.3-1.8l-1.3-1 1.2-2 1.5.6A5.5 5.5 0 017.8 3l.2-1.5h2.2l.2 1.4a5.5 5.5 0 011.6.9l1.5-.6 1.2 2-1.3 1c.2.6.3 1.2.3 1.8z"/></svg>
@@ -1130,12 +1145,24 @@
 
         // Role-based sidebar visibility
         const role = user.role || 'provider';
-        const roleLevel = { superadmin: 4, agency: 3, organization: 2, provider: 1 }[role] || 1;
+        const ROLE_LEVELS = { superadmin: 5, owner: 4, agency: 3, organization: 2, provider: 1 };
+        const roleLevel = ROLE_LEVELS[role] || 1;
 
         // Hide nav items based on role
         document.querySelectorAll('[data-min-role]').forEach(el => {
-          const minLevel = { superadmin: 4, agency: 3, organization: 2, provider: 1 }[el.dataset.minRole] || 1;
+          const minLevel = ROLE_LEVELS[el.dataset.minRole] || 1;
           el.style.display = roleLevel >= minLevel ? '' : 'none';
+        });
+
+        // Hide nav sections if all children are hidden
+        document.querySelectorAll('.nav-section').forEach(section => {
+          let next = section.nextElementSibling;
+          let anyVisible = false;
+          while (next && !next.classList.contains('nav-section')) {
+            if (next.style.display !== 'none') anyVisible = true;
+            next = next.nextElementSibling;
+          }
+          section.style.display = anyVisible ? '' : 'none';
         });
 
         // Show Super Admin nav for superadmin users
