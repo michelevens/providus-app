@@ -809,6 +809,26 @@ class Store {
     async deleteDeaRegistration(id) {
         return this._fetch(`${CONFIG.API_URL}/dea-registrations/${id}`, { method: 'DELETE' });
     }
+
+    // ── AI Features ──
+    async aiExtractDocument(documentId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/ai/extract-document/${documentId}`, { method: 'POST' });
+        return result.data || result;
+    }
+    async aiDraftEmail(applicationId, type, context = null) {
+        const body = { type };
+        if (context) body.context = context;
+        const result = await this._fetch(`${CONFIG.API_URL}/ai/draft-email/${applicationId}`, { method: 'POST', body: JSON.stringify(body) });
+        return result.data || result;
+    }
+    async aiDetectAnomalies(providerId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/ai/anomalies/${providerId}`);
+        return result.data || result;
+    }
+    async aiPredictTimeline(applicationId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/ai/predict-timeline/${applicationId}`);
+        return result.data || result;
+    }
 }
 
 const store = new Store();

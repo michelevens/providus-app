@@ -1161,6 +1161,7 @@ async function renderAppTable() {
           <button class="btn btn-sm btn-primary" onclick="window.app.openLogEntry('${a.id}')" title="Log activity">Log</button>
           <button class="btn btn-sm" onclick="window.app.viewTimeline('${a.id}')" title="View timeline">TL</button>
           <button class="btn btn-sm" onclick="window.app.openDocChecklist('${a.id}')" title="Document checklist">Docs</button>
+          <button class="btn btn-sm" onclick="window.app.aiPredictTimeline('${a.id}')" title="AI Timeline Prediction">AI</button>
           <button class="btn btn-sm" onclick="window.app.editApplication('${a.id}')">Edit</button>
           <button class="btn btn-sm btn-danger" onclick="window.app.deleteApplication('${a.id}')">Del</button>
         </div>
@@ -2022,7 +2023,14 @@ async function renderEmailGenerator() {
               ${templates.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
             </select>
           </div>
-          <button class="btn btn-primary" onclick="window.app.generateAppEmail()">Generate Email</button>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button class="btn btn-primary" onclick="window.app.generateAppEmail()">Generate Email</button>
+            <button class="btn btn-gold" onclick="window.app.aiDraftEmail()">AI Draft Email</button>
+          </div>
+          <div class="form-group" style="margin-top:8px;">
+            <label>Additional context for AI <span style="font-size:11px;color:var(--text-muted);">(optional)</span></label>
+            <textarea class="form-control" id="ai-email-context" rows="2" placeholder="e.g. They asked for additional docs last call..."></textarea>
+          </div>
         </div>
       </div>
       <div class="card">
@@ -4980,6 +4988,79 @@ window.app = {
       _licTab = 'dea';
       await renderLicenses();
     } catch (err) { showToast('Error: ' + err.message); }
+  },
+
+  // AI Features
+  async aiExtractDoc(providerId, documentId) {
+    showToast('AI extracting document data...');
+    try {
+      const data = await store.aiExtractDocument(documentId);
+      const container = document.getElementById('ai-scan-result') || document.getElementById('page-body');
+      const html = `<div class="card" style="margin-bottom:16px;border-left:3px solid var(--gold);">
+        <div class="card-header" style="display:flex;justify-content:space-between;"><h3>AI Extracted Data</h3><button class="btn btn-sm" onclick="this.closest('.card').remove()">Dismiss</button></div>
+        <div class="card-body"><pre style="white-space:pre-wrap;font-size:12px;">${escHtml(JSON.stringify(data, null, 2))}</pre></div>
+      </div>`;
+      container.insertAdjacentHTML('afterbegin', html);
+      showToast('Document data extracted');
+    } catch (err) { showToast('AI extraction failed: ' + err.message); }
+  },
+  async aiDraftEmail() {
+    const appId = document.getElementById('email-app')?.value;
+    if (!appId) { showToast('Select an application first'); return; }
+    const type = document.getElementById('email-template')?.value || 'followup';
+    const typeMap = { initial_inquiry: 'initial_submission', status_followup: 'followup', document_submission: 'document_request', escalation: 'escalation', expansion_outreach: 'followup' };
+    const aiType = typeMap[type] || 'followup';
+    const context = document.getElementById('ai-email-context')?.value || '';
+    showToast('AI drafting email...');
+    try {
+      const data = await store.aiDraftEmail(appId, aiType, context);
+      const output = document.getElementById('email-output');
+      output.innerHTML = `<div class="card"><div class="card-header" style="display:flex;justify-content:space-between;"><h3>AI Generated Email</h3><span class="badge badge-approved" style="font-size:11px;">AI Draft — ${data.tone || 'professional'}</span></div>
+        <div class="card-body"><div class="email-preview"><div class="subject-line"><strong>Subject:</strong> ${escHtml(data.subject || '')}</div><div style="white-space:pre-wrap;margin-top:12px;">${escHtml(data.body || '')}</div></div>
+        ${data.suggested_followup_days ? `<p style="margin-top:12px;font-size:12px;color:var(--text-muted);">Suggested follow-up: ${data.suggested_followup_days} days</p>` : ''}
+        </div><div class="card-footer"><button class="btn btn-primary" onclick="navigator.clipboard.writeText(document.querySelector('.email-preview').innerText);showToast('Copied!')">Copy to Clipboard</button></div></div>`;
+    } catch (err) { showToast('AI email draft failed: ' + err.message); }
+  },
+  async aiComplianceScan(providerId) {
+    const btn = document.getElementById('ai-scan-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Scanning...'; }
+    try {
+      const data = await store.aiDetectAnomalies(providerId);
+      const container = document.getElementById('ai-scan-result');
+      if (!container) return;
+      const riskColors = { critical: 'var(--red)', high: '#ef4444', medium: 'var(--warning-500)', low: 'var(--green-600)' };
+      const anomalies = data.anomalies || [];
+      container.style.display = 'block';
+      container.innerHTML = `<div class="card" style="border-left:3px solid ${riskColors[data.risk_level] || 'var(--gray-400)'};">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+          <h3>AI Compliance Scan</h3>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span class="badge" style="background:${riskColors[data.risk_level] || '#888'};color:#fff;">${(data.risk_level || 'unknown').toUpperCase()} RISK</span>
+            <span style="font-weight:700;font-size:18px;">${data.score ?? '?'}/100</span>
+            <button class="btn btn-sm" onclick="document.getElementById('ai-scan-result').style.display='none'">Dismiss</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <p style="margin-bottom:12px;">${escHtml(data.summary || '')}</p>
+          ${anomalies.length > 0 ? `<table><thead><tr><th>Severity</th><th>Category</th><th>Issue</th><th>Recommendation</th></tr></thead><tbody>
+            ${anomalies.map(a => {
+              const sevColor = a.severity === 'critical' ? 'var(--red)' : a.severity === 'high' ? '#ef4444' : a.severity === 'medium' ? 'var(--warning-500)' : 'var(--blue)';
+              return `<tr><td><span class="badge" style="background:${sevColor};color:#fff;font-size:10px;">${(a.severity||'').toUpperCase()}</span></td><td>${escHtml(a.category||'')}</td><td>${escHtml(a.item||'')}${a.detail ? '<br><span style="font-size:11px;color:var(--text-muted);">'+escHtml(a.detail)+'</span>' : ''}</td><td style="font-size:12px;">${escHtml(a.recommendation||'')}</td></tr>`;
+            }).join('')}
+          </tbody></table>` : '<p style="color:var(--green-600);">No anomalies detected.</p>'}
+        </div>
+      </div>`;
+    } catch (err) { showToast('AI scan failed: ' + err.message); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = 'AI Compliance Scan'; } }
+  },
+  async aiPredictTimeline(appId) {
+    showToast('AI predicting timeline...');
+    try {
+      const data = await store.aiPredictTimeline(appId);
+      const msg = `Estimated: ${data.estimated_days_total || '?'} days total (${data.estimated_days_remaining || '?'} remaining). Approval probability: ${data.approval_probability || '?'}%. Confidence: ${data.confidence || '?'}`;
+      const detail = `Completion: ${data.estimated_completion_date || 'N/A'}\n\nRisk factors:\n${(data.risk_factors || []).map(r => '• ' + r).join('\n')}\n\nRecommendations:\n${(data.recommendations || []).map(r => '• ' + r).join('\n')}\n\n${data.reasoning || ''}`;
+      await appConfirm(msg + '\n\n' + detail, { title: 'AI Timeline Prediction', okLabel: 'OK' });
+    } catch (err) { showToast('Timeline prediction failed: ' + err.message); }
   },
 
   // State Policies
@@ -10293,6 +10374,10 @@ async function renderProviderProfilePage(providerId) {
 
     <!-- Overview Tab -->
     <div class="profile-tab-content" id="tab-overview">
+      <div style="margin-bottom:12px;text-align:right;">
+        <button class="btn btn-sm btn-gold" onclick="window.app.aiComplianceScan(${providerId})" id="ai-scan-btn">AI Compliance Scan</button>
+      </div>
+      <div id="ai-scan-result" style="display:none;margin-bottom:16px;"></div>
       <div class="card">
         <div class="card-header"><h3>Provider Information</h3></div>
         <div class="card-body">
@@ -10582,7 +10667,10 @@ async function renderProviderProfilePage(providerId) {
                 <td>${formatDateDisplay(d.receivedDate || d.received_date || d.createdAt || d.created_at)}</td>
                 <td>${d.expirationDate || d.expiration_date ? formatDateDisplay(d.expirationDate || d.expiration_date) : '—'}</td>
                 <td>${hasFile ? `<span style="color:var(--green-600);cursor:pointer;" onclick="window.app.downloadDocument(${providerId}, ${d.id})" title="${escHtml(d.originalFilename || d.original_filename || '')} ${fileSizeStr}">Download</span>` : '<span style="color:var(--gray-400);">No file</span>'}</td>
-                <td>${!auth.isReadonly() ? `<button class="btn btn-sm btn-danger" onclick="window.app.deleteDocument(${providerId}, ${d.id})" style="padding:2px 8px;font-size:11px;">Delete</button>` : ''}</td>
+                <td style="white-space:nowrap;">
+                  ${hasFile ? `<button class="btn btn-sm" onclick="window.app.aiExtractDoc(${providerId}, ${d.id})" style="padding:2px 8px;font-size:11px;" title="AI Extract Data">AI Extract</button>` : ''}
+                  ${!auth.isReadonly() ? `<button class="btn btn-sm btn-danger" onclick="window.app.deleteDocument(${providerId}, ${d.id})" style="padding:2px 8px;font-size:11px;">Delete</button>` : ''}
+                </td>
               </tr>`;
               }).join('')}
             </tbody>
