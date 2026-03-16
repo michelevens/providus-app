@@ -6217,6 +6217,135 @@ function handleNppesProxy(payload) {
       await renderOrgDetailPage(orgId);
     } catch (e) { showToast('Error: ' + e.message); }
   },
+
+  // ─── Organization NPI Lookup ───
+  setOrgSearchMode(mode) {
+    const npiDiv = document.getElementById('org-search-npi');
+    const nameDiv = document.getElementById('org-search-name');
+    const npiBtn = document.getElementById('org-search-mode-npi');
+    const nameBtn = document.getElementById('org-search-mode-name');
+    if (mode === 'name') {
+      npiDiv.style.display = 'none'; nameDiv.style.display = 'block';
+      npiBtn.classList.remove('btn-primary'); nameBtn.classList.add('btn-primary');
+    } else {
+      npiDiv.style.display = 'flex'; nameDiv.style.display = 'none';
+      npiBtn.classList.add('btn-primary'); nameBtn.classList.remove('btn-primary');
+    }
+    document.getElementById('org-npi-lookup-result').style.display = 'none';
+  },
+
+  async lookupOrgNPI() {
+    const npiInput = document.getElementById('org-npi-lookup');
+    const resultDiv = document.getElementById('org-npi-lookup-result');
+    const btn = document.getElementById('org-npi-lookup-btn');
+    if (!npiInput || !resultDiv) return;
+
+    const npi = npiInput.value.trim();
+    if (!/^\d{10}$/.test(npi)) {
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = '<div class="alert alert-warning" style="margin:0;">Enter a valid 10-digit NPI number.</div>';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0;border-width:2px;"></div>';
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<div style="text-align:center;padding:8px;color:var(--gray-500);font-size:13px;">Looking up NPI...</div>';
+
+    try {
+      const org = await taxonomyApi.lookupNPI(npi);
+      if (!org) {
+        resultDiv.innerHTML = '<div class="alert alert-warning" style="margin:0;">No organization found for NPI ' + escHtml(npi) + '.</div>';
+        return;
+      }
+
+      const name = org.orgName || org.organization_name || `${org.firstName || ''} ${org.lastName || ''}`.trim() || 'Unknown';
+      resultDiv.innerHTML = `
+        <div style="padding:14px;background:var(--success-50);border:1px solid var(--success-100);border-radius:var(--radius-lg);">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+            <div>
+              <div style="font-weight:700;font-size:15px;color:var(--gray-900);">${escHtml(name)}</div>
+              <div style="font-size:12px;color:var(--gray-600);margin-top:3px;">NPI: ${escHtml(org.npi || npi)} &middot; Status: <strong>${escHtml(org.status || 'Active')}</strong>${org.enumerationDate ? ' &middot; Enumerated: ' + escHtml(org.enumerationDate) : ''}</div>
+              <div style="font-size:12px;color:var(--gray-600);margin-top:2px;">Taxonomy: <strong>${escHtml(org.taxonomyCode || '')}</strong>${org.taxonomyDesc ? ' &mdash; ' + escHtml(org.taxonomyDesc) : ''}</div>
+              <div style="font-size:12px;color:var(--gray-600);margin-top:2px;">${escHtml(org.address1 || '')}${org.address2 ? ', ' + escHtml(org.address2) : ''}</div>
+              <div style="font-size:12px;color:var(--gray-600);margin-top:1px;">${escHtml(org.city || '')}, ${escHtml(org.state || '')} ${escHtml(org.zip || '')}${org.phone ? ' &middot; ' + escHtml(org.phone) : ''}</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="window.app._fillOrgFromNPI()" style="flex-shrink:0;">Auto-Fill</button>
+          </div>
+        </div>`;
+
+      window._orgNpiLookupResult = org;
+    } catch (err) {
+      resultDiv.innerHTML = '<div class="alert alert-danger" style="margin:0;">Lookup failed: ' + escHtml(err.message) + '</div>';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg> Lookup';
+    }
+  },
+
+  async searchOrgByName() {
+    const orgName = document.getElementById('org-search-orgname')?.value?.trim();
+    const state = document.getElementById('org-search-state')?.value || '';
+    const resultDiv = document.getElementById('org-npi-lookup-result');
+    const btn = document.getElementById('org-name-search-btn');
+    if (!orgName) { resultDiv.style.display = 'block'; resultDiv.innerHTML = '<div class="alert alert-warning" style="margin:0;">Enter an organization name to search.</div>'; return; }
+    btn.disabled = true; btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0;border-width:2px;"></div>';
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<div style="text-align:center;padding:8px;color:var(--gray-500);font-size:13px;">Searching NPI Registry...</div>';
+    try {
+      const params = { organization_name: orgName, enumeration_type: 'NPI-2', limit: 20 };
+      if (state) params.state = state;
+      const data = await store.nppesSearch(params);
+      const results = data.results ? data.results.map(r => {
+        const basic = r.basic || {};
+        const taxonomies = r.taxonomies || [];
+        const addr = (r.addresses || []).find(a => a.address_purpose === 'LOCATION') || (r.addresses || [])[0] || {};
+        const tax = taxonomies.find(t => t.primary) || taxonomies[0] || {};
+        return { npi: r.number, orgName: basic.organization_name || '', taxonomyCode: tax.code || '', taxonomyDesc: tax.desc || '', address1: addr.address_1 || '', city: addr.city || '', state: addr.state || '', zip: addr.postal_code || '', phone: addr.telephone_number || '', status: basic.status === 'A' ? 'Active' : basic.status || '' };
+      }) : (Array.isArray(data) ? data : []);
+      if (!results.length) {
+        resultDiv.innerHTML = '<div class="alert alert-info" style="margin:0;">No organizations found. Try different search criteria.</div>';
+        return;
+      }
+      window._orgSearchResults = results;
+      resultDiv.innerHTML = `
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;">${results.length} organization(s) found — click to auto-fill</div>
+        <div style="max-height:240px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:var(--radius-lg);">
+          ${results.map((o, i) => `
+            <div style="padding:10px 14px;border-bottom:1px solid var(--gray-100);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;transition:background 0.15s;" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''" onclick="window._orgNpiLookupResult=window._orgSearchResults[${i}];window.app._fillOrgFromNPI();">
+              <div>
+                <div style="font-weight:600;font-size:14px;color:var(--gray-900);">${escHtml(o.orgName)}</div>
+                <div style="font-size:12px;color:var(--gray-600);">NPI: <strong>${escHtml(o.npi)}</strong> &middot; ${escHtml(o.taxonomyDesc || o.taxonomyCode || '')} &middot; ${escHtml(o.city || '')}${o.state ? ', ' + escHtml(o.state) : ''}</div>
+              </div>
+              <span style="font-size:11px;color:var(--brand-600);white-space:nowrap;">Select</span>
+            </div>
+          `).join('')}
+        </div>`;
+    } catch (err) {
+      resultDiv.innerHTML = '<div class="alert alert-danger" style="margin:0;">Search failed: ' + escHtml(err.message) + '</div>';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg> Search';
+    }
+  },
+
+  _fillOrgFromNPI() {
+    const org = window._orgNpiLookupResult;
+    if (!org) return;
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+    set('org-name', org.orgName || org.organization_name || '');
+    set('org-npi', org.npi);
+    set('org-taxonomy', org.taxonomyCode || org.taxonomy_code || '');
+    set('org-phone', org.phone);
+    set('org-street', org.address1 || org.address_1 || '');
+    set('org-city', org.city);
+    set('org-state', org.state);
+    set('org-zip', org.zip);
+    set('org-npi-lookup', org.npi);
+    const resultDiv = document.getElementById('org-npi-lookup-result');
+    if (resultDiv) { setTimeout(() => { resultDiv.style.display = 'none'; }, 1500); }
+    showToast('Organization data auto-filled from NPI Registry');
+  },
 };
 
 // ─── Application Modal ───
@@ -7996,6 +8125,35 @@ async function openOrgModal(orgId) {
   document.getElementById('log-modal-title').textContent = existing ? 'Edit Organization' : 'Add Organization';
   document.getElementById('log-modal-body').innerHTML = `
     <input type="hidden" id="edit-org-id" value="${orgId || ''}">
+
+    <!-- NPI Lookup for Organizations -->
+    <div style="margin-bottom:16px;padding:12px 14px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-lg);">
+      <label style="display:block;font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Search NPI Registry</label>
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <button class="btn btn-sm btn-primary" id="org-search-mode-npi" onclick="window.app.setOrgSearchMode('npi')" style="font-size:12px;">By NPI</button>
+        <button class="btn btn-sm" id="org-search-mode-name" onclick="window.app.setOrgSearchMode('name')" style="font-size:12px;">By Name</button>
+      </div>
+      <div id="org-search-npi" style="display:flex;gap:8px;align-items:flex-end;">
+        <input type="text" class="form-control" id="org-npi-lookup" placeholder="Enter 10-digit organization NPI" value="${escAttr(existing?.npi || '')}" style="flex:1;font-size:14px;letter-spacing:0.5px;" onkeydown="if(event.key==='Enter'){event.preventDefault();window.app.lookupOrgNPI();}">
+        <button class="btn btn-primary" onclick="window.app.lookupOrgNPI()" id="org-npi-lookup-btn" style="height:38px;white-space:nowrap;font-size:13px;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg> Lookup
+        </button>
+      </div>
+      <div id="org-search-name" style="display:none;">
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <input type="text" class="form-control" id="org-search-orgname" placeholder="Organization name" style="flex:2;" onkeydown="if(event.key==='Enter'){event.preventDefault();window.app.searchOrgByName();}">
+          <select class="form-control" id="org-search-state" style="width:70px;">
+            <option value="">State</option>
+            ${['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'].map(s => `<option value="${s}">${s}</option>`).join('')}
+          </select>
+          <button class="btn btn-primary" onclick="window.app.searchOrgByName()" id="org-name-search-btn" style="height:38px;white-space:nowrap;font-size:13px;">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg> Search
+          </button>
+        </div>
+      </div>
+    </div>
+    <div id="org-npi-lookup-result" style="display:none;margin-bottom:14px;"></div>
+
     <div class="form-group"><label>Organization Name *</label><input type="text" class="form-control" id="org-name" value="${escAttr(existing?.name || '')}" placeholder="e.g. EnnHealth Psychiatry"></div>
     <div class="form-row">
       <div class="form-group"><label>Group NPI</label><input type="text" class="form-control" id="org-npi" value="${escAttr(existing?.npi || '')}" placeholder="10-digit NPI"></div>
