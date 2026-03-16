@@ -106,6 +106,10 @@ export async function initApp() {
   try { DEFAULT_STRATEGIES = await store.getAll('strategies') || []; } catch (e) { console.error('Failed to load strategies:', e); }
   US_TOTAL_POP = STATES.reduce((sum, s) => sum + (s.population || 0), 0);
 
+  // Display app version
+  const versionEl = document.getElementById('app-version');
+  if (versionEl) versionEl.textContent = `v${CONFIG.APP_VERSION}`;
+
   bindNavigation();
   await checkRecurringTasks();
   await navigateTo('dashboard');
@@ -143,6 +147,30 @@ function bindNavigation() {
   });
 }
 
+// Non-blocking badge updater — fires in background so navigation isn't delayed
+async function updateNavBadges() {
+  try {
+    const [overdue, allTasks] = await Promise.all([
+      workflow.getOverdueFollowups(),
+      store.getAll('tasks'),
+    ]);
+
+    const badge = document.getElementById('followup-badge');
+    if (badge) {
+      badge.textContent = overdue.length;
+      badge.style.display = overdue.length > 0 ? 'inline' : 'none';
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const pendingTaskCount = allTasks.filter(t => !t.isCompleted && !t.completed && t.dueDate && t.dueDate <= today).length;
+    const taskBadge = document.getElementById('task-badge');
+    if (taskBadge) {
+      taskBadge.textContent = pendingTaskCount;
+      taskBadge.style.display = pendingTaskCount > 0 ? 'inline' : 'none';
+    }
+  } catch {}
+}
+
 async function navigateTo(page) {
   currentPage = page;
 
@@ -154,27 +182,8 @@ async function navigateTo(page) {
   // Update notification badge
   if (window.app?.refreshNotifBadge) window.app.refreshNotifBadge();
 
-  // Update follow-up badge
-  let overdueCount = 0;
-  try { const _od = await workflow.getOverdueFollowups(); overdueCount = _od.length; } catch {}
-  const badge = document.getElementById('followup-badge');
-  if (badge) {
-    badge.textContent = overdueCount;
-    badge.style.display = overdueCount > 0 ? 'inline' : 'none';
-  }
-
-  // Update task badge
-  const today = new Date().toISOString().split('T')[0];
-  let pendingTaskCount = 0;
-  try {
-    const _allTasks = await store.getAll('tasks');
-    pendingTaskCount = _allTasks.filter(t => !t.isCompleted && !t.completed && t.dueDate && t.dueDate <= today).length;
-  } catch {}
-  const taskBadge = document.getElementById('task-badge');
-  if (taskBadge) {
-    taskBadge.textContent = pendingTaskCount;
-    taskBadge.style.display = pendingTaskCount > 0 ? 'inline' : 'none';
-  }
+  // Update badges in background (non-blocking — don't delay page render)
+  updateNavBadges();
 
   // Render page
   const pageBody = document.getElementById('page-body');
@@ -435,17 +444,20 @@ async function navigateTo(page) {
 // ─── Dashboard ───
 
 async function renderDashboard() {
-  const stats = await store.getApplicationStats();
-  const overdue = await workflow.getOverdueFollowups();
-  const upcoming = await workflow.getUpcomingFollowups();
-  const escalations = await workflow.getEscalationCandidates();
-  const licenses = await store.getAll('licenses');
-  const providers = await store.getAll('providers');
-  const orgs = await store.getAll('organizations');
+  // Parallel fetch — all independent data at once
+  const [stats, overdue, upcoming, escalations, licenses, providers, orgs, apps, tasks] = await Promise.all([
+    store.getApplicationStats(),
+    workflow.getOverdueFollowups(),
+    workflow.getUpcomingFollowups(),
+    workflow.getEscalationCandidates(),
+    store.getAll('licenses'),
+    store.getAll('providers'),
+    store.getAll('organizations'),
+    store.getAll('applications'),
+    store.getAll('tasks'),
+  ]);
   const org = orgs[0] || {};
 
-  const apps = await store.getAll('applications');
-  const tasks = await store.getAll('tasks');
   const activeLic = licenses.filter(l => l.status === 'active');
   const pendingLic = licenses.filter(l => l.status === 'pending');
   const today = new Date();
@@ -475,13 +487,16 @@ async function renderDashboard() {
     return { ...a, docPct: pct, docDone: done };
   }).filter(a => a.docPct < 100).sort((a, b) => a.docPct - b.docPct);
 
-  // Pre-resolve overdue followup application details
-  const overdueRows = [];
-  for (const fu of overdue.slice(0, 5)) {
-    const app = await store.getOne('applications', fu.applicationId).catch(() => null);
+  // Pre-resolve overdue followup application details (parallel)
+  const overdueSlice = overdue.slice(0, 5);
+  const overdueApps = await Promise.all(
+    overdueSlice.map(fu => store.getOne('applications', fu.applicationId).catch(() => null))
+  );
+  const overdueRows = overdueSlice.map((fu, i) => {
+    const app = overdueApps[i];
     const payer = app ? (getPayerById(app.payerId) || { name: app.payerName }) : {};
-    overdueRows.push({ fu, app, payer });
-  }
+    return { fu, app, payer };
+  });
 
   // Telehealth policy data
   const licensedStates = [...new Set(licenses.map(l => l.state))];
@@ -511,15 +526,15 @@ async function renderDashboard() {
         <div style="display:flex;align-items:center;gap:14px;">
           <div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,var(--brand-500),var(--brand-600));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;flex-shrink:0;">${(org.name || 'E').charAt(0)}</div>
           <div>
-            <div style="font-size:17px;font-weight:700;color:var(--gray-900);letter-spacing:-0.01em;">${escHtml(org.name) || 'Not Set'}</div>
-            <div style="font-size:12px;color:var(--gray-500);margin-top:1px;">NPI: ${org.npi || '—'} &nbsp;&middot;&nbsp; EIN: ${org.taxId || '—'}</div>
+            <div style="font-size:17px;font-weight:700;color:var(--gray-900);letter-spacing:-0.01em;">${escHtml(org.name) || 'Not Set'} <span style="font-size:11px;font-weight:400;color:var(--gray-400);">#${toHexId(org.id)}</span></div>
+            <div style="font-size:12px;color:var(--gray-500);margin-top:1px;">Org ID: <strong style="font-family:monospace;">${toHexId(org.id)}</strong> &nbsp;&middot;&nbsp; NPI: ${org.npi || '—'} &nbsp;&middot;&nbsp; EIN: ${org.taxId || '—'}</div>
           </div>
         </div>
         ${providers.map(p => `
           <div style="border-left:1px solid var(--gray-200);padding-left:24px;display:flex;align-items:center;gap:12px;">
             <div style="width:36px;height:36px;border-radius:50%;background:var(--gray-100);display:flex;align-items:center;justify-content:center;color:var(--gray-600);font-weight:700;font-size:13px;flex-shrink:0;">${(p.firstName || '?').charAt(0)}${(p.lastName || '?').charAt(0)}</div>
             <div>
-              <div style="font-size:15px;font-weight:600;color:var(--gray-800);">${escHtml(p.firstName)} ${escHtml(p.lastName)}, ${escHtml(p.credentials)}</div>
+              <div style="font-size:15px;font-weight:600;color:var(--gray-800);">${escHtml(p.firstName)} ${escHtml(p.lastName)}, ${escHtml(p.credentials)} <span style="font-size:11px;font-weight:400;color:var(--gray-400);">#${toHexId(p.id)}</span></div>
               <div style="font-size:12px;color:var(--gray-500);margin-top:1px;">NPI: ${p.npi || '—'} &nbsp;&middot;&nbsp; ${escHtml(p.specialty)}</div>
             </div>
           </div>
@@ -1062,6 +1077,7 @@ async function renderApplications() {
         <thead>
           <tr>
             <th style="width:30px;"><input type="checkbox" onchange="document.querySelectorAll('.app-checkbox').forEach(c=>c.checked=this.checked);window.app.onBulkCheckChange();"></th>
+            <th style="width:70px;">ID</th>
             <th onclick="window.app.sortBy('wave')">Wave ${sortArrow('wave')}</th>
             <th onclick="window.app.sortBy('state')">State ${sortArrow('state')}</th>
             <th onclick="window.app.sortBy('payerName')">Payer ${sortArrow('payerName')}</th>
@@ -1084,11 +1100,11 @@ async function renderApplications() {
     </div>
   `;
 
-  await renderAppTable();
+  await renderAppTable(apps);
 }
 
-async function renderAppTable() {
-  const apps = await store.getAll('applications');
+async function renderAppTable(prefetchedApps = null) {
+  const apps = prefetchedApps || await store.getAll('applications');
   const tbody = document.getElementById('app-table-body');
   const empty = document.getElementById('app-empty');
   if (!tbody) return;
@@ -1147,6 +1163,7 @@ async function renderAppTable() {
 
     return `<tr>
       <td><input type="checkbox" class="app-checkbox" data-app-id="${a.id}" onchange="window.app.onBulkCheckChange()"></td>
+      <td><span style="font-family:monospace;font-size:11px;color:var(--brand-600);">${toHexId(a.id)}</span></td>
       <td><span class="wave-badge wave-${a.wave || 1}">W${a.wave || '-'}</span></td>
       <td><strong>${getStateName(a.state)}</strong></td>
       <td title="${a.payerContactName ? escAttr(a.payerContactName + (a.payerContactPhone ? ' | ' + a.payerContactPhone : '')) : ''}">${payerName}${a.payerContactName ? ' <span class="text-sm text-muted">&#128222;</span>' : ''}</td>
@@ -2082,7 +2099,7 @@ async function renderProviders() {
       return `
         <div class="card">
           <div class="card-header">
-            <h3>${escHtml(p.firstName)} ${escHtml(p.lastName)}, ${escHtml(p.credentials)}</h3>
+            <h3>${escHtml(p.firstName)} ${escHtml(p.lastName)}, ${escHtml(p.credentials)} <span style="font-size:12px;font-weight:500;color:var(--gray-400);margin-left:8px;">#${toHexId(p.id)}</span></h3>
             <div style="display:flex;gap:8px;">
               <button class="btn btn-sm" onclick="window.app.editProvider('${p.id}')">Edit</button>
               <button class="btn btn-sm btn-danger" onclick="window.app.deleteProvider('${p.id}')">Delete</button>
@@ -2090,6 +2107,7 @@ async function renderProviders() {
           </div>
           <div class="card-body">
             <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:16px;">
+              <div><span class="text-sm text-muted">System ID:</span> <strong style="font-family:monospace;color:var(--brand-600);">${toHexId(p.id)}</strong></div>
               <div><span class="text-sm text-muted">NPI:</span> <strong>${p.npi || '—'}</strong></div>
               <div><span class="text-sm text-muted">Specialty:</span> <strong>${escHtml(p.specialty) || '—'}</strong></div>
               <div><span class="text-sm text-muted">Taxonomy:</span> <strong>${p.taxonomy || '—'}</strong></div>
@@ -4459,7 +4477,7 @@ window.app = {
       currentSort.field = field;
       currentSort.dir = 'asc';
     }
-    await renderApplications();
+    await renderAppTable(); // Only re-render table, not rebuild entire page
   },
   renderAppTable,
 
@@ -8661,6 +8679,11 @@ function escHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function toHexId(id) {
+  if (!id) return '------';
+  return Number(id).toString(16).toUpperCase().padStart(6, '0');
+}
+
 function escAttr(str) {
   return escHtml(str);
 }
@@ -8706,13 +8729,14 @@ async function renderOrganizationsPage() {
       return `
         <div class="card" style="cursor:pointer;" onclick="window.app.viewOrg(${o.id})">
           <div class="card-header">
-            <h3>${escHtml(o.name || 'Unnamed')}</h3>
+            <h3>${escHtml(o.name || 'Unnamed')} <span style="font-size:12px;font-weight:500;color:var(--gray-400);margin-left:8px;">#${toHexId(o.id)}</span></h3>
             <div style="display:flex;gap:8px;" onclick="event.stopPropagation();">
               <button class="btn btn-sm" onclick="window.app.editOrg(${o.id})">Edit</button>
             </div>
           </div>
           <div class="card-body">
             <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:12px;font-size:13px;color:var(--gray-600);">
+              <div>Org ID: <strong style="font-family:monospace;color:var(--brand-600);">${toHexId(o.id)}</strong></div>
               <div>NPI: <strong>${o.npi || '—'}</strong></div>
               <div>Tax ID: <strong>${o.taxId || o.tax_id || '—'}</strong></div>
               <div>Phone: ${escHtml(o.phone) || '—'}</div>
@@ -8777,8 +8801,9 @@ async function renderOrgDetailPage(orgId) {
     <!-- Org Header -->
     <div class="card" style="border-top:3px solid var(--brand-600);margin-bottom:20px;">
       <div class="card-body">
-        <div style="font-size:22px;font-weight:800;color:var(--gray-900);">${escHtml(o.name)}</div>
+        <div style="font-size:22px;font-weight:800;color:var(--gray-900);">${escHtml(o.name)} <span style="font-size:13px;font-weight:500;color:var(--gray-400);margin-left:10px;">#${toHexId(o.id)}</span></div>
         <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--gray-600);">
+          <div>Org ID: <strong style="font-family:monospace;color:var(--brand-600);">${toHexId(o.id)}</strong></div>
           <div>Group NPI: <strong style="color:var(--brand-700);">${o.npi || '—'}</strong></div>
           <div>Tax ID: <strong>${o.taxId || o.tax_id || '—'}</strong></div>
           <div>Taxonomy: <strong>${o.taxonomy || o.taxonomyCode || '—'}</strong></div>
@@ -9096,7 +9121,7 @@ async function renderUsersStub() {
               const isSelf = u.id === auth.getUser()?.id;
               return `
               <tr style="${!isActive ? 'opacity:0.5;' : ''}">
-                <td><strong>${name}</strong></td>
+                <td><strong>${name}</strong> <span style="font-family:monospace;font-size:11px;color:var(--gray-400);">#${toHexId(u.id)}</span></td>
                 <td>${escHtml(u.email || '')}</td>
                 <td>${roleBadge(u.role)}</td>
                 <td>${scope}</td>
@@ -10363,7 +10388,7 @@ async function renderProviderProfilePage(providerId) {
   ];
 
   const pageSubtitle = document.getElementById('page-subtitle');
-  if (pageSubtitle) pageSubtitle.textContent = provName + (credential ? ', ' + credential : '');
+  if (pageSubtitle) pageSubtitle.textContent = provName + (credential ? ', ' + credential : '') + ` | ID: ${toHexId(providerId)}`;
 
   body.innerHTML = `
     <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap;border-bottom:1px solid var(--gray-200);padding-bottom:0;">

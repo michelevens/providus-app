@@ -1,7 +1,7 @@
 // Credentik App Configuration
 const CONFIG = {
     APP_NAME: 'Credentik',
-    APP_VERSION: '2.0.0',
+    APP_VERSION: '2.2.0',
 
     // API Configuration
     API_URL: 'https://api.credentik.com/api',
@@ -12,7 +12,8 @@ const CONFIG = {
 
     // Cache
     CACHE_PREFIX: 'credentik_',
-    CACHE_TTL: 5 * 60 * 1000, // 5 minutes
+    CACHE_TTL: 15 * 60 * 1000, // 15 minutes
+    CACHE_TTL_STATS: 10 * 60 * 1000, // 10 minutes for stats/aggregates
 
     // Collections that map to API endpoints
     COLLECTIONS: {

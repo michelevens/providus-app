@@ -183,13 +183,25 @@ async function getAgedApplications(minDays = 90) {
 
 async function getEscalationCandidates() {
     try {
-        const apps = await store.getAll('applications');
+        // Fetch apps and all followups in parallel (avoids N+1)
+        const [apps, allFollowups] = await Promise.all([
+            store.getAll('applications'),
+            store.getAll('followups'),
+        ]);
         const active = apps.filter(a => ['submitted', 'in_review', 'pending_info'].includes(a.status));
+
+        // Group followups by application ID in memory
+        const followupsByApp = {};
+        for (const f of allFollowups) {
+            const appId = f.applicationId || f.application_id;
+            if (!followupsByApp[appId]) followupsByApp[appId] = [];
+            followupsByApp[appId].push(f);
+        }
 
         const candidates = [];
 
         for (const app of active) {
-            const followups = await getFollowupsForApplication(app.id);
+            const followups = followupsByApp[app.id] || [];
             const completedFollowups = followups.filter(f => f.completed_date || f.completedDate);
             const age = getApplicationAge(app);
 

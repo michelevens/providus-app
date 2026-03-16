@@ -321,7 +321,10 @@
 
       <div class="sidebar-footer">
         <span id="sync-status" class="sync-indicator"></span>
-        <button class="btn-logout" onclick="handleLogout()">Sign Out</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+          <button class="btn-logout" onclick="handleLogout()">Sign Out</button>
+          <span id="app-version" style="font-size:10px;color:var(--gray-400);"></span>
+        </div>
       </div>
     </aside>
 
@@ -653,9 +656,9 @@
           <p id="onboard-agency-label">Complete your profile to join <strong id="onboard-agency-name"></strong></p>
 
           <div class="auth-field">
-            <label>Organization <span style="color:#94a3b8;font-weight:normal;">(search by name or enter ID)</span></label>
+            <label>Organization <span style="color:#94a3b8;font-weight:normal;">(search by name, NPI, or Org ID)</span></label>
             <div style="position:relative;">
-              <input type="text" id="onboard-org-search" placeholder="Search organization name or NPI..." autocomplete="off">
+              <input type="text" id="onboard-org-search" placeholder="Search by name, NPI, or 6-digit Org ID..." autocomplete="off">
               <input type="hidden" id="onboard-org-id">
               <div id="onboard-org-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--gray-900,#1e293b);border:1px solid var(--gray-700,#374151);border-radius:8px;max-height:200px;overflow-y:auto;z-index:100;margin-top:4px;"></div>
             </div>
@@ -734,6 +737,11 @@
     let _onboardToken = null;
     let _orgSearchTimer = null;
 
+    function toHexId(id) {
+      if (!id) return '------';
+      return Number(id).toString(16).toUpperCase().padStart(6, '0');
+    }
+
     // Check if URL is an onboarding link
     function checkOnboardHash() {
       const hash = location.hash;
@@ -805,7 +813,14 @@
         const url = `${API_BASE}/onboard/${token}/organizations${search ? '?search=' + encodeURIComponent(search) : ''}`;
         const res = await fetch(url);
         const data = await res.json();
-        const orgs = data.data || [];
+        let orgs = data.data || [];
+
+        // Client-side hex ID matching — if search looks like a hex ID, filter locally
+        if (search && /^[0-9A-Fa-f]{1,6}$/.test(search)) {
+          const hexSearch = search.toUpperCase();
+          const hexMatches = orgs.filter(o => toHexId(o.id).includes(hexSearch));
+          if (hexMatches.length > 0) orgs = hexMatches;
+        }
 
         if (orgs.length === 0) {
           results.innerHTML = '<div style="padding:12px;color:#94a3b8;font-size:13px;text-align:center;">No organizations found</div>';
@@ -813,8 +828,8 @@
           results.innerHTML = orgs.map(o => `
             <div class="onboard-org-item" onclick="selectOrg(${o.id}, '${(o.name || '').replace(/'/g, "\\'")}', '${o.npi || ''}', '${o.city || ''}', '${o.state || ''}')"
                  style="padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05);transition:background 0.15s;">
-              <div style="font-weight:500;font-size:14px;color:#f1f5f9;">${o.name || 'Unnamed'}</div>
-              <div style="font-size:12px;color:#94a3b8;">${[o.npi ? 'NPI: ' + o.npi : '', o.city, o.state].filter(Boolean).join(' · ')}</div>
+              <div style="font-weight:500;font-size:14px;color:#f1f5f9;">${o.name || 'Unnamed'} <span style="font-family:monospace;font-size:11px;color:#0891b2;margin-left:6px;">#${toHexId(o.id)}</span></div>
+              <div style="font-size:12px;color:#94a3b8;">${['Org ID: ' + toHexId(o.id), o.npi ? 'NPI: ' + o.npi : '', o.city, o.state].filter(Boolean).join(' · ')}</div>
             </div>
           `).join('');
         }
@@ -831,7 +846,7 @@
       document.getElementById('onboard-org-results').style.display = 'none';
 
       const sel = document.getElementById('onboard-org-selected');
-      document.getElementById('onboard-org-selected-text').textContent = `${name}${npi ? ' (NPI: ' + npi + ')' : ''}${city ? ' — ' + city + ', ' + state : ''}`;
+      document.getElementById('onboard-org-selected-text').textContent = `${name} [#${toHexId(id)}]${npi ? ' · NPI: ' + npi : ''}${city ? ' — ' + city + ', ' + state : ''}`;
       sel.style.display = 'block';
     }
 

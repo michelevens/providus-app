@@ -6,6 +6,7 @@ class Store {
         this.cache = {};
         this.listeners = {};
         this.loading = {};
+        this.inflight = {}; // In-flight request deduplication
         this.activeAgencyId = null; // SuperAdmin agency override
     }
 
@@ -132,14 +133,28 @@ class Store {
 
     _invalidateCache(collection) {
         const prefix = this._cacheKey(collection);
+        const onePrefix = this._cacheKey(`${collection}_one_`);
         // Clear all cache entries for this collection (with or without params)
         Object.keys(this.cache).forEach(k => {
-            if (k.startsWith(prefix)) delete this.cache[k];
+            if (k.startsWith(prefix) || k.startsWith(onePrefix)) delete this.cache[k];
         });
         // Clear from localStorage too
         Object.keys(localStorage).forEach(k => {
-            if (k.startsWith(prefix)) localStorage.removeItem(k);
+            if (k.startsWith(prefix) || k.startsWith(onePrefix)) localStorage.removeItem(k);
         });
+        // Invalidate derived caches
+        if (collection === 'applications') {
+            delete this.cache[this._cacheKey('application_stats')];
+            try { localStorage.removeItem(this._cacheKey('application_stats')); } catch {}
+        }
+        if (collection === 'followups') {
+            delete this.cache[this._cacheKey('followups_overdue')];
+            delete this.cache[this._cacheKey('followups_upcoming')];
+            try {
+                localStorage.removeItem(this._cacheKey('followups_overdue'));
+                localStorage.removeItem(this._cacheKey('followups_upcoming'));
+            } catch {}
+        }
     }
 
     _clearOldCache() {
@@ -147,6 +162,27 @@ class Store {
         keys.sort();
         // Remove oldest half
         keys.slice(0, Math.ceil(keys.length / 2)).forEach(k => localStorage.removeItem(k));
+    }
+
+    clearCache() {
+        this.cache = {};
+        Object.keys(localStorage)
+            .filter(k => k.startsWith(CONFIG.CACHE_PREFIX))
+            .forEach(k => localStorage.removeItem(k));
+    }
+
+    // Request deduplication — share in-flight GET promises
+    _dedupFetch(url, options = {}) {
+        const method = (options.method || 'GET').toUpperCase();
+        if (method !== 'GET') return this._fetch(url, options);
+
+        if (this.inflight[url]) return this.inflight[url];
+
+        const promise = this._fetch(url, options).finally(() => {
+            delete this.inflight[url];
+        });
+        this.inflight[url] = promise;
+        return promise;
     }
 
     // ── Event system ──
@@ -181,7 +217,7 @@ class Store {
         try {
             const query = new URLSearchParams(params).toString();
             const url = this._url(collection) + (query ? `?${query}` : '');
-            const result = await this._fetch(url);
+            const result = await this._dedupFetch(url);
             const data = result.data || result;
 
             // Handle paginated responses
@@ -200,8 +236,14 @@ class Store {
     }
 
     async getOne(collection, id) {
-        const result = await this._fetch(`${this._url(collection)}/${id}`);
-        return result.data || result;
+        const cacheKey = `${collection}_one_${id}`;
+        const cached = this._getCache(cacheKey);
+        if (cached) return cached;
+
+        const result = await this._dedupFetch(`${this._url(collection)}/${id}`);
+        const data = result.data || result;
+        this._setCache(cacheKey, data);
+        return data;
     }
 
     async create(collection, data) {
@@ -239,7 +281,7 @@ class Store {
         const cached = this._getCache(cacheKey);
         if (cached) return cached;
 
-        const result = await this._fetch(this._refUrl(key));
+        const result = await this._dedupFetch(this._refUrl(key));
         const data = result.data || result;
         this._setCache(cacheKey, data);
         return data;
@@ -258,13 +300,17 @@ class Store {
     }
 
     async getApplicationStats() {
-        const result = await this._fetch(`${CONFIG.API_URL}/applications-stats`);
+        const cacheKey = 'application_stats';
+        const cached = this._getCache(cacheKey);
+        if (cached) return cached;
+
+        const result = await this._dedupFetch(`${CONFIG.API_URL}/applications-stats`);
         const raw = result.data || result;
         // Transform to format expected by dashboard
         const byStatus = raw.byStatus || {};
         const inProgressStatuses = ['gathering_docs', 'gatheringDocs', 'submitted', 'in_review', 'inReview', 'pending_info', 'pendingInfo'];
         const inProgress = inProgressStatuses.reduce((sum, s) => sum + (byStatus[s] || 0), 0);
-        return {
+        const transformed = {
             ...raw,
             total: raw.total || 0,
             approved: (byStatus.approved || 0) + (byStatus.credentialed || 0),
@@ -272,6 +318,8 @@ class Store {
             denied: byStatus.denied || 0,
             estMonthlyRevenue: raw.totalApprovedRevenue || 0,
         };
+        this._setCache(cacheKey, transformed);
+        return transformed;
     }
 
     async completeFollowup(id) {
@@ -284,13 +332,25 @@ class Store {
     }
 
     async getOverdueFollowups() {
-        const result = await this._fetch(`${CONFIG.API_URL}/followups-overdue`);
-        return result.data || result;
+        const cacheKey = 'followups_overdue';
+        const cached = this._getCache(cacheKey);
+        if (cached) return cached;
+
+        const result = await this._dedupFetch(`${CONFIG.API_URL}/followups-overdue`);
+        const data = result.data || result;
+        this._setCache(cacheKey, data);
+        return data;
     }
 
     async getUpcomingFollowups() {
-        const result = await this._fetch(`${CONFIG.API_URL}/followups-upcoming`);
-        return result.data || result;
+        const cacheKey = 'followups_upcoming';
+        const cached = this._getCache(cacheKey);
+        if (cached) return cached;
+
+        const result = await this._dedupFetch(`${CONFIG.API_URL}/followups-upcoming`);
+        const data = result.data || result;
+        this._setCache(cacheKey, data);
+        return data;
     }
 
     async completeTask(id) {
