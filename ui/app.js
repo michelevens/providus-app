@@ -6192,7 +6192,7 @@ function handleNppesProxy(payload) {
   addServiceLineItem(serviceId) {
     const svc = _billingServices.find(s => s.id === serviceId);
     if (!svc) return;
-    _invoiceLineItems.push({ description: svc.name || svc.serviceName, qty: 1, rate: svc.rate || svc.defaultRate || 0 });
+    _invoiceLineItems.push({ description: svc.name || svc.serviceName, qty: 1, rate: svc.rate || svc.defaultRate || svc.defaultPrice || svc.default_price || 0 });
     const editor = document.getElementById('line-items-editor');
     if (editor) editor.innerHTML = _renderLineItemsEditor();
   },
@@ -6357,7 +6357,7 @@ function handleNppesProxy(payload) {
     const set = (el, val) => { const e = document.getElementById(el); if (e) e.value = val || ''; };
     set('svc-name', svc.name || svc.serviceName);
     set('svc-code', svc.code || svc.serviceCode);
-    set('svc-rate', svc.rate || svc.defaultRate);
+    set('svc-rate', svc.rate || svc.defaultRate || svc.defaultPrice || svc.default_price);
     set('svc-desc', svc.description);
     document.getElementById('svc-edit-id').value = id;
     form.style.display = '';
@@ -6377,7 +6377,7 @@ function handleNppesProxy(payload) {
     const data = {
       name,
       code: document.getElementById('svc-code')?.value?.trim() || '',
-      defaultRate: parseFloat(document.getElementById('svc-rate')?.value) || 0,
+      defaultPrice: parseFloat(document.getElementById('svc-rate')?.value) || 0,
       description: document.getElementById('svc-desc')?.value?.trim() || '',
     };
     const editId = document.getElementById('svc-edit-id')?.value;
@@ -9854,7 +9854,7 @@ async function renderBillingPage() {
                   <tr>
                     <td><strong>${escHtml(s.name || s.serviceName || '—')}</strong></td>
                     <td><code>${escHtml(s.code || s.serviceCode || '—')}</code></td>
-                    <td>${_fmtMoney(s.rate || s.defaultRate)}</td>
+                    <td>${_fmtMoney(s.rate || s.defaultRate || s.defaultPrice || s.default_price)}</td>
                     <td class="text-sm text-muted">${escHtml(s.description || '—')}</td>
                     <td>
                       <button class="btn btn-sm" onclick="window.app.editService(${s.id})">Edit</button>
@@ -9908,7 +9908,7 @@ async function renderBillingPage() {
                   ${services.map(s => `<tr style="border-top:1px solid var(--gray-100);">
                     <td style="padding:6px 10px;">${escHtml(s.name || s.serviceName || '—')}</td>
                     <td style="padding:6px 10px;"><code style="font-size:12px;">${escHtml(s.code || s.serviceCode || '—')}</code></td>
-                    <td style="padding:6px 10px;text-align:right;">${_fmtMoney(s.rate || s.defaultRate)}</td>
+                    <td style="padding:6px 10px;text-align:right;">${_fmtMoney(s.rate || s.defaultRate || s.defaultPrice || s.default_price)}</td>
                     <td style="padding:4px 10px;text-align:center;"><button class="btn btn-sm btn-primary" style="font-size:11px;padding:2px 10px;" onclick="window.app.addServiceLineItem(${s.id})">+ Add</button></td>
                   </tr>`).join('')}
                 </tbody>
