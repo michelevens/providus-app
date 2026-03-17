@@ -6338,25 +6338,31 @@ function handleNppesProxy(payload) {
   },
 
   // Services
-  openServiceModal(editId) {
+  toggleInlineServiceForm(show = true) {
+    const form = document.getElementById('inline-service-form');
+    if (!form) return;
+    if (!show) { form.style.display = 'none'; return; }
     ['svc-name','svc-code','svc-rate','svc-desc'].forEach(f => {
       const el = document.getElementById(f); if (el) el.value = '';
     });
-    document.getElementById('svc-edit-id').value = editId || '';
-    document.getElementById('service-modal-title').textContent = editId ? 'Edit Service' : 'Add Service';
-    if (editId) {
-      const svc = _billingServices.find(s => s.id === editId);
-      if (svc) {
-        const set = (el, val) => { const e = document.getElementById(el); if (e) e.value = val || ''; };
-        set('svc-name', svc.name || svc.serviceName);
-        set('svc-code', svc.code || svc.serviceCode);
-        set('svc-rate', svc.rate || svc.defaultRate);
-        set('svc-desc', svc.description);
-      }
-    }
-    document.getElementById('service-modal').classList.add('active');
+    document.getElementById('svc-edit-id').value = '';
+    form.style.display = '';
+    document.getElementById('svc-name')?.focus();
   },
-  async editService(id) { this.openServiceModal(id); },
+  editService(id) {
+    const form = document.getElementById('inline-service-form');
+    if (!form) return;
+    const svc = _billingServices.find(s => s.id === id);
+    if (!svc) return;
+    const set = (el, val) => { const e = document.getElementById(el); if (e) e.value = val || ''; };
+    set('svc-name', svc.name || svc.serviceName);
+    set('svc-code', svc.code || svc.serviceCode);
+    set('svc-rate', svc.rate || svc.defaultRate);
+    set('svc-desc', svc.description);
+    document.getElementById('svc-edit-id').value = id;
+    form.style.display = '';
+    document.getElementById('svc-name')?.focus();
+  },
   async deleteService(id) {
     if (!await appConfirm('Delete this service?', { title: 'Delete Service', okLabel: 'Delete', okClass: 'btn-danger' })) return;
     try {
@@ -6383,7 +6389,8 @@ function handleNppesProxy(payload) {
         await store.createService(data);
         showToast('Service created');
       }
-      document.getElementById('service-modal').classList.remove('active');
+      const form = document.getElementById('inline-service-form');
+      if (form) form.style.display = 'none';
       await renderBillingPage();
     } catch (e) { showToast('Error: ' + e.message); }
   },
@@ -9820,8 +9827,24 @@ async function renderBillingPage() {
       <div class="card">
         <div class="card-header">
           <h3>Service Catalog</h3>
-          ${editButton('+ Add Service', 'window.app.openServiceModal()')}
+          ${editButton('+ Add Service', 'window.app.toggleInlineServiceForm()')}
         </div>
+
+        <!-- Inline Add/Edit Service Form -->
+        <div id="inline-service-form" style="display:none;padding:16px 24px;border-bottom:1px solid var(--gray-200);background:var(--gray-50);">
+          <input type="hidden" id="svc-edit-id" value="">
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 2fr auto;gap:10px;align-items:end;">
+            <div class="auth-field" style="margin:0;"><label style="font-size:11px;">Service Name *</label><input type="text" id="svc-name" class="form-control" style="height:34px;font-size:13px;" placeholder="e.g. Initial Evaluation"></div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:11px;">Code (CPT)</label><input type="text" id="svc-code" class="form-control" style="height:34px;font-size:13px;" placeholder="e.g. 90834"></div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:11px;">Default Rate</label><input type="number" id="svc-rate" class="form-control" style="height:34px;font-size:13px;" step="0.01" min="0" placeholder="0.00"></div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:11px;">Description</label><input type="text" id="svc-desc" class="form-control" style="height:34px;font-size:13px;" placeholder="Optional description"></div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-primary btn-sm" onclick="window.app.saveService()" style="height:34px;white-space:nowrap;">Save</button>
+              <button class="btn btn-sm" onclick="window.app.toggleInlineServiceForm(false)" style="height:34px;">Cancel</button>
+            </div>
+          </div>
+        </div>
+
         <div class="card-body" style="padding:0;">
           <div class="table-wrap">
             <table>
@@ -9838,7 +9861,7 @@ async function renderBillingPage() {
                       <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteService(${s.id})">Del</button>
                     </td>
                   </tr>`).join('')}
-                ${services.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:1rem;color:var(--gray-500);">No services defined yet. Add your CPT codes and rates.</td></tr>' : ''}
+                ${services.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:1rem;color:var(--gray-500);">No services defined yet. Click "+ Add Service" to get started.</td></tr>' : ''}
               </tbody>
             </table>
           </div>
@@ -9917,26 +9940,6 @@ async function renderBillingPage() {
       </div>
     </div>
 
-    <!-- Service Modal -->
-    <div class="modal-overlay" id="service-modal">
-      <div class="modal" style="max-width:420px;">
-        <div class="modal-header">
-          <h3 id="service-modal-title">Add Service</h3>
-          <button class="modal-close" onclick="document.getElementById('service-modal').classList.remove('active')">&times;</button>
-        </div>
-        <div class="modal-body">
-          <input type="hidden" id="svc-edit-id" value="">
-          <div class="auth-field" style="margin:0 0 12px;"><label>Service Name *</label><input type="text" id="svc-name" class="form-control"></div>
-          <div class="auth-field" style="margin:0 0 12px;"><label>Code (CPT / HCPCS)</label><input type="text" id="svc-code" class="form-control" placeholder="e.g. 99213, 90834"></div>
-          <div class="auth-field" style="margin:0 0 12px;"><label>Default Rate</label><input type="number" id="svc-rate" class="form-control" step="0.01" min="0"></div>
-          <div class="auth-field" style="margin:0;"><label>Description</label><textarea id="svc-desc" class="form-control" rows="2"></textarea></div>
-        </div>
-        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
-          <button class="btn" onclick="document.getElementById('service-modal').classList.remove('active')">Cancel</button>
-          <button class="btn btn-primary" onclick="window.app.saveService()">Save Service</button>
-        </div>
-      </div>
-    </div>
   `;
 }
 
