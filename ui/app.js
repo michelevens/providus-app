@@ -2212,6 +2212,10 @@ window.closeProvModal = function() {
 };
 
 window.saveProvider = async function() {
+  const btn = document.querySelector('#prov-modal .btn-primary');
+  const btnText = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  try {
   const id = document.getElementById('edit-prov-id').value;
 
   const data = {
@@ -2242,6 +2246,7 @@ window.saveProvider = async function() {
 
   closeProvModal();
   await navigateTo('providers');
+  } finally { if (btn) { btn.disabled = false; btn.textContent = btnText; } }
 };
 
 // ─── Licenses Page ───
@@ -3547,7 +3552,7 @@ async function renderPayerPortalTool() {
               <td><span class="badge badge-${p.category === 'national' ? 'active' : p.category === 'behavioral' ? 'submitted' : 'pending'}">${p.category}</span></td>
               <td>${p.avgCredDays || '—'} days</td>
               <td style="font-size:12px;">${p.credPhone || '—'}</td>
-              <td>${p.credentialingUrl ? `<a href="${p.credentialingUrl}" target="_blank" rel="noopener" class="btn btn-sm btn-primary">Open Portal</a>` : '—'}</td>
+              <td>${p.credentialingUrl && /^https?:\/\//i.test(p.credentialingUrl) ? `<a href="${escAttr(p.credentialingUrl)}" target="_blank" rel="noopener" class="btn btn-sm btn-primary">Open Portal</a>` : '—'}</td>
             </tr>`).join('')}
           </tbody>
         </table>
@@ -3928,7 +3933,7 @@ async function renderTaxonomySearch() {
               <thead><tr><th>Code</th><th>Type</th><th>Specialty</th><th>Classification</th></tr></thead>
               <tbody>
                 ${taxonomyApi.TAXONOMY_CODES.slice(0, 20).map(t => `
-                  <tr style="cursor:pointer;" onclick="navigator.clipboard.writeText('${t.code}');document.getElementById('toast').textContent='Copied ${t.code}';document.getElementById('toast').classList.add('show');setTimeout(()=>document.getElementById('toast').classList.remove('show'),2000);">
+                  <tr style="cursor:pointer;" onclick="navigator.clipboard.writeText('${escAttr(t.code)}');document.getElementById('toast').textContent='Copied ${escAttr(t.code)}';document.getElementById('toast').classList.add('show');setTimeout(()=>document.getElementById('toast').classList.remove('show'),2000);">
                     <td><code style="font-weight:700;color:var(--brand-700);">${escHtml(t.code)}</code></td>
                     <td>${escHtml(t.type)}</td>
                     <td><strong>${escHtml(t.specialty)}</strong></td>
@@ -4636,7 +4641,7 @@ window.app = {
         <div class="table-wrap"><table>
           <thead><tr><th>Code</th><th>Type</th><th>Specialty</th><th>Classification</th></tr></thead>
           <tbody>${results.map(t => `
-            <tr style="cursor:pointer;" onclick="navigator.clipboard.writeText('${t.code}');document.getElementById('toast').textContent='Copied ${t.code}';document.getElementById('toast').classList.add('show');setTimeout(()=>document.getElementById('toast').classList.remove('show'),2000);">
+            <tr style="cursor:pointer;" onclick="navigator.clipboard.writeText('${escAttr(t.code)}');document.getElementById('toast').textContent='Copied ${escAttr(t.code)}';document.getElementById('toast').classList.add('show');setTimeout(()=>document.getElementById('toast').classList.remove('show'),2000);">
               <td><code style="font-weight:700;color:var(--brand-700);">${escHtml(t.code)}</code></td>
               <td>${escHtml(t.type)}</td>
               <td><strong>${escHtml(t.specialty)}</strong></td>
@@ -4715,7 +4720,7 @@ window.app = {
     if (outcome === false || outcome === null) return;
     const nextAction = await appPrompt('Next action (leave blank if none):', { title: 'Next Action', placeholder: 'e.g. Call back in 2 weeks...' });
     if (nextAction === false || nextAction === null) return;
-    workflow.completeFollowup(fuId, outcome, nextAction || '');
+    await workflow.completeFollowup(fuId, outcome, nextAction || '');
     await navigateTo('followups');
     showToast('Follow-up completed');
   },
@@ -4731,7 +4736,7 @@ window.app = {
     const preview = document.getElementById('batch-preview');
 
     if (!result.success) {
-      preview.innerHTML = `<div class="alert alert-danger">${result.error}</div>`;
+      preview.innerHTML = `<div class="alert alert-danger">${escHtml(result.error)}</div>`;
       return;
     }
 
@@ -4793,7 +4798,7 @@ window.app = {
     const output = document.getElementById('email-output');
 
     if (!result.success) {
-      output.innerHTML = `<div class="alert alert-danger">${result.error}</div>`;
+      output.innerHTML = `<div class="alert alert-danger">${escHtml(result.error)}</div>`;
       return;
     }
 
@@ -4809,7 +4814,7 @@ window.app = {
     const output = document.getElementById('email-output');
 
     if (!result.success) {
-      output.innerHTML = `<div class="alert alert-danger">${result.error}</div>`;
+      output.innerHTML = `<div class="alert alert-danger">${escHtml(result.error)}</div>`;
       return;
     }
 
@@ -5433,7 +5438,7 @@ window.app = {
           <div><strong>Last Attested:</strong> ${t.attestationDate || '—'}</div>
           <div><strong>Attestation Expires:</strong> ${t.attestationExpires || '—'}</div>
           <div><strong>Last API Check:</strong> ${t.lastChecked ? new Date(t.lastChecked).toLocaleString() : 'Never'}</div>
-          ${t.error ? `<div style="grid-column:span 2;" class="alert alert-danger">Last error: ${t.error}</div>` : ''}
+          ${t.error ? `<div style="grid-column:span 2;" class="alert alert-danger">Last error: ${escHtml(t.error)}</div>` : ''}
         </div>
         <div style="margin-top:16px;">
           <a href="https://proview.caqh.org" target="_blank" rel="noopener" class="btn btn-primary">Open CAQH ProView</a>
@@ -6168,6 +6173,10 @@ function handleNppesProxy(payload) {
   },
 
   async saveInvoice() {
+    const _btn = document.querySelector('#invoice-modal .btn-primary');
+    const _btnText = _btn?.textContent;
+    if (_btn) { _btn.disabled = true; _btn.textContent = 'Saving...'; }
+    try {
     const client = document.getElementById('inv-client')?.value?.trim();
     const due = document.getElementById('inv-due')?.value;
     if (!client) { showToast('Client name is required'); return; }
@@ -6207,7 +6216,8 @@ function handleNppesProxy(payload) {
       }
       document.getElementById('invoice-modal').classList.remove('active');
       await renderBillingPage();
-    } catch (e) { showToast('Error: ' + e.message); }
+    } catch (e) { showToast('Error: ' + escHtml(e.message)); }
+    } finally { if (_btn) { _btn.disabled = false; _btn.textContent = _btnText; } }
   },
 
   // Invoice detail view
@@ -7130,6 +7140,10 @@ async function openApplicationModal(id) {
 
 
 window.saveApplication = async function() {
+  const btn = document.querySelector('#app-modal .btn-primary');
+  const btnText = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  try {
   const id = document.getElementById('edit-app-id').value;
   const payerId = document.getElementById('field-payer').value;
   const payer = getPayerById(payerId);
@@ -7197,6 +7211,7 @@ window.saveApplication = async function() {
 
   closeModal();
   await navigateTo('applications');
+  } finally { if (btn) { btn.disabled = false; btn.textContent = btnText; } }
 };
 
 // ─── License Modal ───
@@ -7274,6 +7289,10 @@ window.closeLicModal = function() {
 };
 
 window.saveLicense = async function() {
+  const btn = document.querySelector('#lic-modal .btn-primary');
+  const btnText = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  try {
   const id = document.getElementById('edit-lic-id').value;
   const providerId = document.getElementById('lic-provider').value;
   const provider = await store.getOne('providers', providerId);
@@ -7307,6 +7326,7 @@ window.saveLicense = async function() {
 
   closeLicModal();
   await navigateTo('licenses');
+  } finally { if (btn) { btn.disabled = false; btn.textContent = btnText; } }
 };
 
 // ─── DEA Registration Modal ───
@@ -7395,6 +7415,10 @@ window.closeDeaModal = function() {
 };
 
 window.saveDeaRegistration = async function() {
+  const btn = document.querySelector('#dea-modal .btn-primary');
+  const btnText = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  try {
   const id = document.getElementById('edit-dea-id').value;
   const schedules = Array.from(document.querySelectorAll('.dea-schedule-cb:checked')).map(cb => cb.value);
 
@@ -7423,7 +7447,8 @@ window.saveDeaRegistration = async function() {
     closeDeaModal();
     _licTab = 'dea';
     await renderLicenses();
-  } catch (err) { showToast('Error: ' + err.message); }
+  } catch (err) { showToast('Error: ' + escHtml(err.message)); }
+  } finally { if (btn) { btn.disabled = false; btn.textContent = btnText; } }
 };
 
 // ─── Activity Log ───
@@ -9154,11 +9179,11 @@ async function renderUsersStub() {
                     <div style="display:flex;gap:4px;flex-wrap:wrap;">
                       <button class="btn btn-sm" onclick="window.app.editUserRole(${u.id}, '${u.role}')" title="Change role">&#9998;</button>
                       ${isActive
-                        ? `<button class="btn btn-sm" onclick="window.app.deactivateUser(${u.id}, '${name}')" title="Deactivate" style="color:var(--red);">&#10005;</button>`
+                        ? `<button class="btn btn-sm" onclick="window.app.deactivateUser(${u.id}, '${name.replace(/'/g, "\\'")}')" title="Deactivate" style="color:var(--red);">&#10005;</button>`
                         : `<button class="btn btn-sm" onclick="window.app.reactivateUser(${u.id})" title="Reactivate" style="color:var(--green);">&#10003;</button>`
                       }
                       ${auth.isSuperAdmin() ? `
-                        <button class="btn btn-sm" onclick="window.app.resetUserPassword(${u.id}, '${name}')" title="Reset password" style="color:var(--brand-600);">&#128274;</button>
+                        <button class="btn btn-sm" onclick="window.app.resetUserPassword(${u.id}, '${name.replace(/'/g, "\\'")}')" title="Reset password" style="color:var(--brand-600);">&#128274;</button>
                         <button class="btn btn-sm" onclick="window.app.changeUserEmail(${u.id}, '${escAttr(u.email || '')}')" title="Change email" style="color:var(--brand-600);">&#9993;</button>
                       ` : ''}
                     </div>
@@ -9184,7 +9209,7 @@ async function renderAdminPanel() {
 
   let agencies = [];
   try { agencies = await store.getAdminAgencies(); } catch (e) {
-    body.innerHTML = `<div class="alert alert-danger">Failed to load agencies: ${e.message}</div>`;
+    body.innerHTML = `<div class="alert alert-danger">Failed to load agencies: ${escHtml(e.message)}</div>`;
     return;
   }
 
@@ -10296,7 +10321,7 @@ async function renderFaqPage() {
       <input type="text" id="faq-search" placeholder="Search knowledge base..." class="form-control" style="flex:1;min-width:250px;height:40px;font-size:14px;" oninput="window.app.filterFaqs()">
       <div style="display:flex;gap:4px;" id="faq-category-tabs">
         ${categories.map(c => `
-          <button class="btn btn-sm ${c === 'all' ? 'btn-primary' : ''}" data-cat="${c}" onclick="window.app.filterFaqCategory('${c}')" style="text-transform:capitalize;">${c}</button>
+          <button class="btn btn-sm ${c === 'all' ? 'btn-primary' : ''}" data-cat="${escAttr(c)}" onclick="window.app.filterFaqCategory('${escAttr(c)}')" style="text-transform:capitalize;">${escHtml(c)}</button>
         `).join('')}
       </div>
     </div>

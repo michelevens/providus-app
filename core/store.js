@@ -292,7 +292,7 @@ class Store {
     async transitionApplication(id, status, notes = null) {
         const result = await this._fetch(`${CONFIG.API_URL}/applications/${id}/transition`, {
             method: 'POST',
-            body: JSON.stringify({ status, notes }),
+            body: JSON.stringify({ new_status: status, notes }),
         });
         this._invalidateCache('applications');
         this._emit('updated', { collection: 'applications', item: result.data || result });
