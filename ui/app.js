@@ -9892,12 +9892,34 @@ async function renderBillingPage() {
             </div>
           </div>
 
+          <!-- Service Catalog Picker -->
+          ${services.length > 0 ? `
+          <div style="margin-bottom:16px;">
+            <label style="display:block;font-size:12px;font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Service Catalog</label>
+            <div style="border:1px solid var(--gray-200);border-radius:8px;overflow:hidden;max-height:180px;overflow-y:auto;">
+              <table style="width:100%;font-size:13px;margin:0;">
+                <thead><tr style="background:var(--gray-50);">
+                  <th style="padding:6px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--gray-500);">Service</th>
+                  <th style="padding:6px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--gray-500);">Code</th>
+                  <th style="padding:6px 10px;text-align:right;font-size:11px;font-weight:600;color:var(--gray-500);">Rate</th>
+                  <th style="padding:6px 10px;width:60px;"></th>
+                </tr></thead>
+                <tbody>
+                  ${services.map(s => `<tr style="border-top:1px solid var(--gray-100);">
+                    <td style="padding:6px 10px;">${escHtml(s.name || s.serviceName || '—')}</td>
+                    <td style="padding:6px 10px;"><code style="font-size:12px;">${escHtml(s.code || s.serviceCode || '—')}</code></td>
+                    <td style="padding:6px 10px;text-align:right;">${_fmtMoney(s.rate || s.defaultRate)}</td>
+                    <td style="padding:4px 10px;text-align:center;"><button class="btn btn-sm btn-primary" style="font-size:11px;padding:2px 10px;" onclick="window.app.addServiceLineItem(${s.id})">+ Add</button></td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          ` : ''}
+
           <!-- Line Items -->
           <div style="margin-bottom:16px;">
             <label style="display:block;font-size:12px;font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Line Items</label>
-            <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">
-              ${services.map(s => `<button class="btn btn-sm" style="font-size:11px;" onclick="window.app.addServiceLineItem(${s.id})">${escHtml(s.code || s.name)}</button>`).join('')}
-            </div>
             <div id="line-items-editor">${_renderLineItemsEditor()}</div>
           </div>
 
