@@ -14,6 +14,31 @@ import emailGenerator from '../core/email-generator.js';
 import caqhApi from '../core/caqh-api.js';
 import taxonomyApi from '../core/taxonomy-api.js';
 
+// ─── Global Error & Offline Handlers ───
+
+window.addEventListener('unhandledrejection', (event) => {
+  event.preventDefault();
+  const msg = event.reason?.message || 'An unexpected error occurred';
+  if (typeof showToast === 'function') {
+    showToast(msg, 'error');
+  }
+  console.error('Unhandled rejection:', event.reason);
+});
+
+window.addEventListener('offline', () => {
+  const bar = document.createElement('div');
+  bar.id = 'offline-bar';
+  bar.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#dc3545;color:#fff;text-align:center;padding:8px;z-index:99999;font-weight:600;';
+  bar.textContent = 'You are offline. Changes may not be saved.';
+  document.body.prepend(bar);
+});
+
+window.addEventListener('online', () => {
+  const bar = document.getElementById('offline-bar');
+  if (bar) bar.remove();
+  if (typeof showToast === 'function') showToast('Connection restored');
+});
+
 // ─── Reference Data (loaded at init from API) ───
 
 let PAYER_CATALOG = [];

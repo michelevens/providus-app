@@ -176,4 +176,58 @@ class Auth {
 }
 
 const auth = new Auth();
+
+// ─── Session Timeout (HIPAA compliance) ───
+
+const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+const WARNING_BEFORE = 2 * 60 * 1000;   // Warn 2 min before
+let _sessionTimer = null;
+let _warningTimer = null;
+let _lastActivity = 0;
+
+function resetSessionTimer() {
+  if (!auth.isAuthenticated()) return;
+  const now = Date.now();
+  if (now - _lastActivity < 60000) return; // throttle: reset max every 60s
+  _lastActivity = now;
+
+  clearTimeout(_sessionTimer);
+  clearTimeout(_warningTimer);
+
+  _warningTimer = setTimeout(() => {
+    if (typeof window.showToast === 'function') {
+      window.showToast('Session expires in 2 minutes due to inactivity', 'warning');
+    }
+  }, SESSION_TIMEOUT - WARNING_BEFORE);
+
+  _sessionTimer = setTimeout(() => {
+    if (typeof window.showToast === 'function') {
+      window.showToast('Session expired due to inactivity', 'error');
+    }
+    auth.logout();
+  }, SESSION_TIMEOUT);
+}
+
+function initSessionTimeout() {
+  ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evt => {
+    document.addEventListener(evt, resetSessionTimer, { passive: true });
+  });
+  resetSessionTimer();
+}
+
+// Auto-init if already logged in
+if (auth.isAuthenticated()) {
+  initSessionTimeout();
+}
+
+// Re-init on auth state change
+auth.onChange((isAuth) => {
+  if (isAuth) {
+    initSessionTimeout();
+  } else {
+    clearTimeout(_sessionTimer);
+    clearTimeout(_warningTimer);
+  }
+});
+
 export default auth;
