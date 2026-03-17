@@ -8,15 +8,18 @@ class Auth {
     }
 
     isAuthenticated() {
-        return !!this.token && !!this.user;
+        return !!this.getToken() && !!this.getUser();
     }
 
     getToken() {
-        return this.token;
+        return this.token || localStorage.getItem(CONFIG.TOKEN_KEY);
     }
 
     getUser() {
-        return this.user;
+        if (this.user) return this.user;
+        try {
+            return JSON.parse(localStorage.getItem(CONFIG.USER_KEY) || 'null');
+        } catch { return null; }
     }
 
     getAgency() {
