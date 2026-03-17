@@ -781,6 +781,36 @@ class Store {
         return result.data || result;
     }
 
+    // ── Work History ──
+    async getProviderWorkHistory(providerId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/work-history`);
+        return result.data || result;
+    }
+    async createProviderWorkHistory(providerId, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/work-history`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+
+    // ── CME ──
+    async getProviderCme(providerId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/cme`);
+        return result.data || result;
+    }
+    async createProviderCme(providerId, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/cme`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+
+    // ── References ──
+    async getProviderReferences(providerId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/references`);
+        return result.data || result;
+    }
+    async createProviderReference(providerId, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/references`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+
     // ── Bulk Import ──
     async previewImport(data) {
         const result = await this._fetch(`${CONFIG.API_URL}/imports/preview`, { method: 'POST', body: JSON.stringify(data) });

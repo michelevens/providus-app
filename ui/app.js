@@ -674,7 +674,7 @@ async function renderDashboard() {
         <div style="display:flex;align-items:center;gap:14px;">
           <div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,var(--brand-500),var(--brand-600));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;flex-shrink:0;">${(org.name || 'E').charAt(0)}</div>
           <div>
-            <div style="font-size:17px;font-weight:700;color:var(--gray-900);letter-spacing:-0.01em;">${escHtml(org.name) || 'Not Set'} <span style="font-size:11px;font-weight:400;color:var(--gray-400);">#${toHexId(org.id)}</span></div>
+            <div style="font-size:17px;font-weight:700;color:var(--gray-900);letter-spacing:-0.01em;"><a href="#" onclick="event.preventDefault();window._selectedOrgId=${org.id};window.app.navigateTo('org-detail')" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--gray-300);" onmouseover="this.style.color='var(--brand-600)'" onmouseout="this.style.color='inherit'">${escHtml(org.name) || 'Not Set'}</a> <span style="font-size:11px;font-weight:400;color:var(--gray-400);">#${toHexId(org.id)}</span></div>
             <div style="font-size:12px;color:var(--gray-500);margin-top:1px;">Org ID: <strong style="font-family:monospace;">${toHexId(org.id)}</strong> &nbsp;&middot;&nbsp; NPI: ${org.npi || '—'} &nbsp;&middot;&nbsp; EIN: ${org.taxId || '—'}</div>
           </div>
         </div>
@@ -682,7 +682,7 @@ async function renderDashboard() {
           <div style="border-left:1px solid var(--gray-200);padding-left:24px;display:flex;align-items:center;gap:12px;">
             <div style="width:36px;height:36px;border-radius:50%;background:var(--gray-100);display:flex;align-items:center;justify-content:center;color:var(--gray-600);font-weight:700;font-size:13px;flex-shrink:0;">${(p.firstName || '?').charAt(0)}${(p.lastName || '?').charAt(0)}</div>
             <div>
-              <div style="font-size:15px;font-weight:600;color:var(--gray-800);">${escHtml(p.firstName)} ${escHtml(p.lastName)}, ${escHtml(p.credentials)} <span style="font-size:11px;font-weight:400;color:var(--gray-400);">#${toHexId(p.id)}</span></div>
+              <div style="font-size:15px;font-weight:600;color:var(--gray-800);"><a href="#" onclick="event.preventDefault();window.app.openProviderProfile('${p.id}')" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--gray-300);" onmouseover="this.style.color='var(--brand-600)'" onmouseout="this.style.color='inherit'">${escHtml(p.firstName)} ${escHtml(p.lastName)}, ${escHtml(p.credentials)}</a> <span style="font-size:11px;font-weight:400;color:var(--gray-400);">#${toHexId(p.id)}</span></div>
               <div style="font-size:12px;color:var(--gray-500);margin-top:1px;">NPI: ${p.npi || '—'} &nbsp;&middot;&nbsp; ${escHtml(p.specialty)}</div>
             </div>
           </div>
@@ -2247,7 +2247,7 @@ async function renderProviders() {
       return `
         <div class="card">
           <div class="card-header">
-            <h3>${escHtml(p.firstName)} ${escHtml(p.lastName)}, ${escHtml(p.credentials)} <span style="font-size:12px;font-weight:500;color:var(--gray-400);margin-left:8px;">#${toHexId(p.id)}</span></h3>
+            <h3><a href="#" onclick="event.preventDefault();window.app.openProviderProfile('${p.id}')" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--gray-300);" onmouseover="this.style.color='var(--brand-600)'" onmouseout="this.style.color='inherit'">${escHtml(p.firstName)} ${escHtml(p.lastName)}, ${escHtml(p.credentials)}</a> <span style="font-size:12px;font-weight:500;color:var(--gray-400);margin-left:8px;">#${toHexId(p.id)}</span></h3>
             <div style="display:flex;gap:8px;">
               <button class="btn btn-sm" onclick="window.app.openProviderProfile('${p.id}')" title="View Profile">Profile</button>
               <button class="btn btn-sm" onclick="window.app.openProviderPrintout('${p.id}')" title="Print Credential Sheet" style="display:inline-flex;align-items:center;gap:4px;">
@@ -2599,7 +2599,7 @@ function renderExpiringTable(data) {
         return `<tr>
           <td><span class="badge" style="${sevStyle};font-size:11px;padding:2px 8px;border-radius:4px;">${sevLabel}</span></td>
           <td>${i.type === 'dea' ? 'DEA' : 'License'}</td>
-          <td>${escHtml(i.providerName || i.provider_name || '')}</td>
+          <td>${i.providerId || i.provider_id ? `<a href="#" onclick="event.preventDefault();window.app.openProviderProfile('${i.providerId || i.provider_id}')" style="color:var(--brand-600);text-decoration:none;font-weight:600;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${escHtml(i.providerName || i.provider_name || '')}</a>` : escHtml(i.providerName || i.provider_name || '')}</td>
           <td>${escHtml(i.item || '')}</td>
           <td>${formatDateDisplay(i.expirationDate || i.expiration_date)}</td>
           <td style="font-weight:600;${i.daysLeft < 0 || i.days_left < 0 ? 'color:var(--red);' : ''}">${i.daysLeft ?? i.days_left ?? ''}</td>
@@ -2637,7 +2637,7 @@ async function renderDeaTab(providers) {
                 const expStyle = isExp ? 'color:var(--red);font-weight:600;' : isSoon ? 'color:var(--warning-500);font-weight:600;' : '';
                 const schedules = Array.isArray(d.schedules) ? d.schedules.join(', ') : (d.schedules || '-');
                 return `<tr>
-                  <td>${escHtml(d.provider ? (d.provider.firstName + ' ' + d.provider.lastName) : '')}</td>
+                  <td>${d.provider ? `<a href="#" onclick="event.preventDefault();window.app.openProviderProfile('${d.provider.id || d.providerId || d.provider_id}')" style="color:var(--brand-600);text-decoration:none;font-weight:600;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${escHtml(d.provider.firstName + ' ' + d.provider.lastName)}</a>` : ''}</td>
                   <td><code>${escHtml(d.deaNumber || d.dea_number || '')}</code></td>
                   <td>${d.state || '-'}</td>
                   <td>${schedules}</td>
@@ -6948,6 +6948,82 @@ function handleNppesProxy(payload) {
     } catch (e) { showToast('Error: ' + e.message); }
   },
 
+  // ─── Work History ───
+  openWorkHistoryModal(providerId) {
+    ['wh-employer','wh-position','wh-department','wh-start','wh-end','wh-reason'].forEach(f => {
+      const el = document.getElementById(f); if (el) el.value = '';
+    });
+    document.getElementById('work-history-modal').classList.add('active');
+  },
+  async saveWorkHistory(providerId) {
+    const employer = document.getElementById('wh-employer')?.value?.trim();
+    if (!employer) { showToast('Employer is required'); return; }
+    try {
+      await store.createProviderWorkHistory(providerId, {
+        employer,
+        position: document.getElementById('wh-position')?.value?.trim() || '',
+        department: document.getElementById('wh-department')?.value?.trim() || '',
+        startDate: document.getElementById('wh-start')?.value || '',
+        endDate: document.getElementById('wh-end')?.value || '',
+        reasonForLeaving: document.getElementById('wh-reason')?.value?.trim() || '',
+      });
+      showToast('Work history added');
+      document.getElementById('work-history-modal').classList.remove('active');
+      await renderProviderProfilePage(providerId);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+
+  // ─── CME ───
+  openCmeModal(providerId) {
+    ['cme-title','cme-provider','cme-credits','cme-category','cme-date'].forEach(f => {
+      const el = document.getElementById(f); if (el) el.value = '';
+    });
+    document.getElementById('cme-modal').classList.add('active');
+  },
+  async saveCme(providerId) {
+    const title = document.getElementById('cme-title')?.value?.trim();
+    if (!title) { showToast('Course title is required'); return; }
+    try {
+      await store.createProviderCme(providerId, {
+        title,
+        provider: document.getElementById('cme-provider')?.value?.trim() || '',
+        credits: parseFloat(document.getElementById('cme-credits')?.value) || 0,
+        category: document.getElementById('cme-category')?.value || '',
+        completionDate: document.getElementById('cme-date')?.value || '',
+      });
+      showToast('CME record added');
+      document.getElementById('cme-modal').classList.remove('active');
+      await renderProviderProfilePage(providerId);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+
+  // ─── References ───
+  openReferenceModal(providerId) {
+    ['ref-first','ref-last','ref-title','ref-org','ref-phone','ref-email','ref-relationship'].forEach(f => {
+      const el = document.getElementById(f); if (el) el.value = '';
+    });
+    document.getElementById('reference-modal').classList.add('active');
+  },
+  async saveReference(providerId) {
+    const firstName = document.getElementById('ref-first')?.value?.trim();
+    const lastName = document.getElementById('ref-last')?.value?.trim();
+    if (!firstName || !lastName) { showToast('First and last name are required'); return; }
+    try {
+      await store.createProviderReference(providerId, {
+        firstName,
+        lastName,
+        title: document.getElementById('ref-title')?.value?.trim() || '',
+        organization: document.getElementById('ref-org')?.value?.trim() || '',
+        phone: document.getElementById('ref-phone')?.value?.trim() || '',
+        email: document.getElementById('ref-email')?.value?.trim() || '',
+        relationship: document.getElementById('ref-relationship')?.value || '',
+      });
+      showToast('Reference added');
+      document.getElementById('reference-modal').classList.remove('active');
+      await renderProviderProfilePage(providerId);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+
   // ─── Document Upload/Download ───
   openDocUploadModal(providerId) {
     ['doc-upload-type','doc-upload-name','doc-upload-file','doc-upload-expiry','doc-upload-notes'].forEach(f => {
@@ -10848,12 +10924,18 @@ async function renderProviderProfilePage(providerId) {
   let boards = [];
   let malpractice = [];
   let providerLicenses = [];
+  let workHistory = [];
+  let cme = [];
+  let references = [];
 
   try { provider = await store.getOne('providers', providerId); } catch (e) { console.error('Provider error:', e); }
   try { profile = await store.getProviderProfile(providerId); } catch (e) { console.error('Profile error:', e); }
   try { education = await store.getProviderEducation(providerId); } catch (e) {}
   try { boards = await store.getProviderBoards(providerId); } catch (e) {}
   try { malpractice = await store.getProviderMalpractice(providerId); } catch (e) {}
+  try { workHistory = await store.getProviderWorkHistory(providerId); } catch (e) {}
+  try { cme = await store.getProviderCme(providerId); } catch (e) {}
+  try { references = await store.getProviderReferences(providerId); } catch (e) {}
   try {
     const allLic = await store.getAll('licenses');
     providerLicenses = allLic.filter(l => (l.providerId || l.provider_id) === providerId);
@@ -10862,12 +10944,12 @@ async function renderProviderProfilePage(providerId) {
   if (!Array.isArray(education)) education = [];
   if (!Array.isArray(boards)) boards = [];
   if (!Array.isArray(malpractice)) malpractice = [];
+  if (!Array.isArray(workHistory)) workHistory = profile.workHistory || profile.work_history || [];
+  if (!Array.isArray(cme)) cme = profile.cme || profile.continuingEducation || [];
+  if (!Array.isArray(references)) references = profile.references || [];
 
   const provName = `${provider.firstName || provider.first_name || ''} ${provider.lastName || provider.last_name || ''}`.trim() || 'Unknown Provider';
   const credential = provider.credential || provider.credentials || '';
-  const workHistory = profile.workHistory || profile.work_history || [];
-  const cme = profile.cme || profile.continuingEducation || [];
-  const references = profile.references || [];
   const documents = profile.documents || [];
 
   const tabs = [
@@ -11100,7 +11182,10 @@ async function renderProviderProfilePage(providerId) {
     <!-- Work History Tab -->
     <div class="profile-tab-content" id="tab-work-history" style="display:none;">
       <div class="card">
-        <div class="card-header"><h3>Work History</h3></div>
+        <div class="card-header">
+          <h3>Work History</h3>
+          ${editButton('+ Add Work History', `window.app.openWorkHistoryModal(${providerId})`)}
+        </div>
         <div class="card-body" style="padding:0;">
           ${Array.isArray(workHistory) && workHistory.length > 0 ? `<table>
             <thead><tr><th>Employer</th><th>Position</th><th>Start</th><th>End</th><th>Reason for Leaving</th></tr></thead>
@@ -11116,12 +11201,39 @@ async function renderProviderProfilePage(providerId) {
           </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No work history on file.</div>'}
         </div>
       </div>
+
+      <!-- Work History Modal -->
+      <div class="modal" id="work-history-modal">
+        <div class="modal-content" style="max-width:520px;">
+          <div class="modal-header">
+            <h3>Add Work History</h3>
+            <button class="modal-close" onclick="document.getElementById('work-history-modal').classList.remove('active')">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="auth-field" style="margin:0 0 12px;"><label>Employer / Organization *</label><input type="text" id="wh-employer" class="form-control" placeholder="e.g. Johns Hopkins Hospital"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="auth-field" style="margin:0;"><label>Position / Title</label><input type="text" id="wh-position" class="form-control" placeholder="e.g. Attending Psychiatrist"></div>
+              <div class="auth-field" style="margin:0;"><label>Department</label><input type="text" id="wh-department" class="form-control"></div>
+              <div class="auth-field" style="margin:0;"><label>Start Date</label><input type="date" id="wh-start" class="form-control"></div>
+              <div class="auth-field" style="margin:0;"><label>End Date</label><input type="date" id="wh-end" class="form-control"><div style="font-size:11px;color:var(--gray-400);margin-top:2px;">Leave blank if current</div></div>
+            </div>
+            <div class="auth-field" style="margin:12px 0 0;"><label>Reason for Leaving</label><input type="text" id="wh-reason" class="form-control"></div>
+          </div>
+          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+            <button class="btn" onclick="document.getElementById('work-history-modal').classList.remove('active')">Cancel</button>
+            <button class="btn btn-primary" onclick="window.app.saveWorkHistory(${providerId})">Save</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- CME Tab -->
     <div class="profile-tab-content" id="tab-cme" style="display:none;">
       <div class="card">
-        <div class="card-header"><h3>Continuing Medical Education (CME)</h3></div>
+        <div class="card-header">
+          <h3>Continuing Medical Education (CME)</h3>
+          ${editButton('+ Add CME', `window.app.openCmeModal(${providerId})`)}
+        </div>
         <div class="card-body" style="padding:0;">
           ${Array.isArray(cme) && cme.length > 0 ? `<table>
             <thead><tr><th>Course / Activity</th><th>Provider</th><th>Credits</th><th>Date Completed</th></tr></thead>
@@ -11136,12 +11248,47 @@ async function renderProviderProfilePage(providerId) {
           </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No CME records on file.</div>'}
         </div>
       </div>
+
+      <!-- CME Modal -->
+      <div class="modal" id="cme-modal">
+        <div class="modal-content" style="max-width:520px;">
+          <div class="modal-header">
+            <h3>Add CME Record</h3>
+            <button class="modal-close" onclick="document.getElementById('cme-modal').classList.remove('active')">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="auth-field" style="margin:0 0 12px;"><label>Course / Activity Title *</label><input type="text" id="cme-title" class="form-control" placeholder="e.g. Psychopharmacology Update 2026"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="auth-field" style="margin:0;"><label>Accrediting Body / Provider</label><input type="text" id="cme-provider" class="form-control" placeholder="e.g. APA, ACCME"></div>
+              <div class="auth-field" style="margin:0;"><label>Credits / Hours</label><input type="number" id="cme-credits" class="form-control" step="0.5" min="0" placeholder="e.g. 20"></div>
+              <div class="auth-field" style="margin:0;"><label>Category</label>
+                <select id="cme-category" class="form-control">
+                  <option value="">Select...</option>
+                  <option value="Category 1">Category 1 (AMA PRA)</option>
+                  <option value="Category 2">Category 2</option>
+                  <option value="CME">CME</option>
+                  <option value="CE">CE (Continuing Education)</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="auth-field" style="margin:0;"><label>Date Completed</label><input type="date" id="cme-date" class="form-control"></div>
+            </div>
+          </div>
+          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+            <button class="btn" onclick="document.getElementById('cme-modal').classList.remove('active')">Cancel</button>
+            <button class="btn btn-primary" onclick="window.app.saveCme(${providerId})">Save</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- References Tab -->
     <div class="profile-tab-content" id="tab-references" style="display:none;">
       <div class="card">
-        <div class="card-header"><h3>Professional References</h3></div>
+        <div class="card-header">
+          <h3>Professional References</h3>
+          ${editButton('+ Add Reference', `window.app.openReferenceModal(${providerId})`)}
+        </div>
         <div class="card-body" style="padding:0;">
           ${Array.isArray(references) && references.length > 0 ? `<table>
             <thead><tr><th>Name</th><th>Title / Position</th><th>Organization</th><th>Phone</th><th>Email</th><th>Relationship</th></tr></thead>
@@ -11156,6 +11303,41 @@ async function renderProviderProfilePage(providerId) {
               </tr>`).join('')}
             </tbody>
           </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No references on file.</div>'}
+        </div>
+      </div>
+
+      <!-- Reference Modal -->
+      <div class="modal" id="reference-modal">
+        <div class="modal-content" style="max-width:520px;">
+          <div class="modal-header">
+            <h3>Add Professional Reference</h3>
+            <button class="modal-close" onclick="document.getElementById('reference-modal').classList.remove('active')">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="auth-field" style="margin:0;"><label>First Name *</label><input type="text" id="ref-first" class="form-control"></div>
+              <div class="auth-field" style="margin:0;"><label>Last Name *</label><input type="text" id="ref-last" class="form-control"></div>
+              <div class="auth-field" style="margin:0;"><label>Title / Position</label><input type="text" id="ref-title" class="form-control" placeholder="e.g. Medical Director"></div>
+              <div class="auth-field" style="margin:0;"><label>Organization</label><input type="text" id="ref-org" class="form-control"></div>
+              <div class="auth-field" style="margin:0;"><label>Phone</label><input type="tel" id="ref-phone" class="form-control"></div>
+              <div class="auth-field" style="margin:0;"><label>Email</label><input type="email" id="ref-email" class="form-control"></div>
+            </div>
+            <div class="auth-field" style="margin:12px 0 0;"><label>Relationship</label>
+              <select id="ref-relationship" class="form-control">
+                <option value="">Select...</option>
+                <option value="Supervisor">Supervisor</option>
+                <option value="Colleague">Colleague</option>
+                <option value="Department Head">Department Head</option>
+                <option value="Program Director">Program Director</option>
+                <option value="Attending Physician">Attending Physician</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+            <button class="btn" onclick="document.getElementById('reference-modal').classList.remove('active')">Cancel</button>
+            <button class="btn btn-primary" onclick="window.app.saveReference(${providerId})">Save</button>
+          </div>
         </div>
       </div>
     </div>
