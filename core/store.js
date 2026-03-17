@@ -418,6 +418,21 @@ class Store {
         return result;
     }
 
+    async resetUserPassword(id) {
+        const result = await this._fetch(`${CONFIG.API_URL}/agency/users/${id}/reset-password`, {
+            method: 'POST',
+        });
+        return result.data || result;
+    }
+
+    async changeUserEmail(id, email) {
+        const result = await this._fetch(`${CONFIG.API_URL}/agency/users/${id}/change-email`, {
+            method: 'PUT',
+            body: JSON.stringify({ email }),
+        });
+        return result.data || result;
+    }
+
     // ── Onboarding tokens ──
 
     async getOnboardTokens() {

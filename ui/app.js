@@ -5876,6 +5876,29 @@ function handleNppesProxy(payload) {
       showToast('Error: ' + (e.message || 'Failed to reactivate user'));
     }
   },
+  async resetUserPassword(userId, userName) {
+    if (!confirm(`Send a password reset email to ${userName}? They will receive a link to set a new password.`)) return;
+    try {
+      await store.resetUserPassword(userId);
+      showToast('Password reset email sent to ' + userName);
+    } catch (e) {
+      showToast('Error: ' + (e.message || 'Failed to send reset email'));
+    }
+  },
+  async changeUserEmail(userId, currentEmail) {
+    const newEmail = prompt(`Change email for this user.\n\nCurrent: ${currentEmail}\n\nEnter new email address:`);
+    if (!newEmail || !newEmail.trim()) return;
+    if (newEmail.trim() === currentEmail) { showToast('Email is the same'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) { showToast('Invalid email format'); return; }
+    if (!confirm(`Change email from:\n${currentEmail}\n\nTo:\n${newEmail.trim()}\n\nThe user will need to use the new email to log in.`)) return;
+    try {
+      await store.changeUserEmail(userId, newEmail.trim());
+      showToast('Email updated successfully');
+      await renderUsersStub();
+    } catch (e) {
+      showToast('Error: ' + (e.message || 'Failed to change email'));
+    }
+  },
 
   // ── SuperAdmin: Agency Switcher ──────────────────────────
   async switchToAgency(agencyId, agencyName) {
@@ -9128,12 +9151,16 @@ async function renderUsersStub() {
                 <td><span class="badge badge-${isActive ? 'approved' : 'denied'}">${isActive ? 'Active' : 'Inactive'}</span></td>
                 <td>
                   ${!isSelf && u.role !== 'superadmin' ? `
-                    <div style="display:flex;gap:4px;">
+                    <div style="display:flex;gap:4px;flex-wrap:wrap;">
                       <button class="btn btn-sm" onclick="window.app.editUserRole(${u.id}, '${u.role}')" title="Change role">&#9998;</button>
                       ${isActive
                         ? `<button class="btn btn-sm" onclick="window.app.deactivateUser(${u.id}, '${name}')" title="Deactivate" style="color:var(--red);">&#10005;</button>`
                         : `<button class="btn btn-sm" onclick="window.app.reactivateUser(${u.id})" title="Reactivate" style="color:var(--green);">&#10003;</button>`
                       }
+                      ${auth.isSuperAdmin() ? `
+                        <button class="btn btn-sm" onclick="window.app.resetUserPassword(${u.id}, '${name}')" title="Reset password" style="color:var(--brand-600);">&#128274;</button>
+                        <button class="btn btn-sm" onclick="window.app.changeUserEmail(${u.id}, '${escAttr(u.email || '')}')" title="Change email" style="color:var(--brand-600);">&#9993;</button>
+                      ` : ''}
                     </div>
                   ` : isSelf ? '<span class="text-muted text-sm">You</span>' : ''}
                 </td>
