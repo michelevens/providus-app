@@ -342,6 +342,24 @@
         <div>
           <h2 id="page-title">Dashboard</h2>
           <div class="subtitle" id="page-subtitle">Telehealth strategy overview</div>
+          <!-- Scope Selector -->
+          <div id="scope-selector" style="display:none;margin-top:4px;">
+            <button id="scope-btn" onclick="window.app.toggleScopeDropdown()" style="
+              display:inline-flex;align-items:center;gap:6px;padding:3px 10px;
+              font-size:12px;border:1px solid var(--gray-200);border-radius:6px;
+              background:var(--gray-50);color:var(--gray-700);cursor:pointer;
+              transition:all .15s ease;">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 2h14M3 6h10M5 10h6M7 14h2"/></svg>
+              <span id="scope-label">All Providers</span>
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg>
+            </button>
+            <div id="scope-panel" style="
+              display:none;position:absolute;top:100%;left:0;z-index:1000;
+              min-width:280px;max-height:360px;overflow-y:auto;
+              background:#fff;border:1px solid var(--gray-200);border-radius:8px;
+              box-shadow:0 8px 24px rgba(0,0,0,.12);margin-top:4px;padding:6px 0;">
+            </div>
+          </div>
         </div>
         <div class="header-actions-group">
           <div class="page-header-actions" id="page-actions"></div>

@@ -8,6 +8,53 @@ class Store {
         this.loading = {};
         this.inflight = {}; // In-flight request deduplication
         this.activeAgencyId = null; // SuperAdmin agency override
+        // Scope selector: filter all data by org or provider
+        this._scope = { type: 'all', orgId: null, providerId: null, orgName: '', providerName: '' };
+    }
+
+    // ── Scope selector ──
+
+    getScope() {
+        return { ...this._scope };
+    }
+
+    setScope(type, orgId = null, providerId = null, orgName = '', providerName = '') {
+        this._scope = { type, orgId, providerId, orgName, providerName };
+        this.clearCache(); // Force fresh data on scope change
+        this._emit('scope-changed', this._scope);
+    }
+
+    clearScope() {
+        this.setScope('all');
+    }
+
+    /**
+     * Client-side scope filter. Call on arrays returned by getAll().
+     * Works for any item with providerId, organizationId, or provider.organizationId.
+     */
+    filterByScope(items) {
+        if (!Array.isArray(items) || this._scope.type === 'all') return items;
+
+        if (this._scope.type === 'provider' && this._scope.providerId) {
+            const pid = this._scope.providerId;
+            return items.filter(item =>
+                item.id === pid ||                          // item IS the provider
+                item.providerId == pid ||                   // has providerId field
+                item.provider?.id == pid                    // nested provider object
+            );
+        }
+
+        if (this._scope.type === 'organization' && this._scope.orgId) {
+            const oid = this._scope.orgId;
+            return items.filter(item =>
+                item.id === oid ||                          // item IS the org
+                item.organizationId == oid ||               // has organizationId field
+                item.organization?.id == oid ||             // nested org object
+                item.provider?.organizationId == oid        // nested through provider
+            );
+        }
+
+        return items;
     }
 
     // ── Key converters (snake_case <-> camelCase) ──

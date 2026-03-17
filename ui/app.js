@@ -135,6 +135,9 @@ export async function initApp() {
   const versionEl = document.getElementById('app-version');
   if (versionEl) versionEl.textContent = `v${CONFIG.APP_VERSION}`;
 
+  // Initialize scope selector
+  initScopeSelector();
+
   bindNavigation();
   await checkRecurringTasks();
   await navigateTo('dashboard');
@@ -156,6 +159,112 @@ export async function initApp() {
     if (currentPage === 'tasks') await renderTasksPage();
     await updateNotificationBell();
   });
+
+  // Re-render current page when scope changes
+  store.on('scope-changed', async () => {
+    updateScopeLabel();
+    await navigateTo(currentPage);
+  });
+}
+
+// ─── Scope Selector ───
+
+function initScopeSelector() {
+  const el = document.getElementById('scope-selector');
+  if (el) el.style.display = '';
+
+  // Close dropdown on outside click
+  document.addEventListener('click', (e) => {
+    const panel = document.getElementById('scope-panel');
+    const btn = document.getElementById('scope-btn');
+    if (panel && !panel.contains(e.target) && !btn?.contains(e.target)) {
+      panel.style.display = 'none';
+    }
+  });
+}
+
+function updateScopeLabel() {
+  const label = document.getElementById('scope-label');
+  if (!label) return;
+  const scope = store.getScope();
+  if (scope.type === 'provider') {
+    label.textContent = scope.providerName || 'Provider';
+  } else if (scope.type === 'organization') {
+    label.textContent = scope.orgName || 'Organization';
+  } else {
+    label.textContent = 'All Providers';
+  }
+  // Style the button to show active filter
+  const btn = document.getElementById('scope-btn');
+  if (btn) {
+    btn.style.background = scope.type === 'all' ? 'var(--gray-50)' : 'var(--primary-light, #dbeafe)';
+    btn.style.borderColor = scope.type === 'all' ? 'var(--gray-200)' : 'var(--primary, #3B82F6)';
+    btn.style.color = scope.type === 'all' ? 'var(--gray-700)' : 'var(--primary, #3B82F6)';
+  }
+}
+
+async function toggleScopeDropdown() {
+  const panel = document.getElementById('scope-panel');
+  if (!panel) return;
+
+  if (panel.style.display !== 'none' && panel.style.display !== '') {
+    panel.style.display = 'none';
+    return;
+  }
+
+  // Load orgs and providers
+  let orgs = [], providers = [];
+  try {
+    [orgs, providers] = await Promise.all([
+      store.getAll('organizations'),
+      store.getAll('providers'),
+    ]);
+  } catch (e) { console.error('Scope data load error:', e); }
+
+  const scope = store.getScope();
+  const esc = (s) => (s || '').replace(/</g, '&lt;');
+  const isActive = (type, id) => scope.type === type && (type === 'all' || (type === 'organization' ? scope.orgId == id : scope.providerId == id));
+
+  let html = `
+    <button onclick="window.app.setScopeAll()" style="
+      display:flex;align-items:center;gap:8px;width:100%;padding:8px 14px;border:none;
+      background:${isActive('all') ? 'var(--primary-light, #dbeafe)' : 'transparent'};
+      cursor:pointer;text-align:left;font-size:13px;color:var(--gray-800);">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M6 2v12M2 6h12"/></svg>
+      <strong>All Providers</strong>
+    </button>
+    <div style="height:1px;background:var(--gray-100);margin:4px 0;"></div>`;
+
+  if (orgs.length > 0) {
+    html += `<div style="padding:4px 14px;font-size:10px;text-transform:uppercase;color:var(--gray-400);font-weight:700;letter-spacing:.5px;">Organizations</div>`;
+    orgs.forEach(org => {
+      const name = esc(org.name || org.organizationName || '');
+      const provCount = providers.filter(p => p.organizationId == org.id).length;
+      html += `<button onclick="window.app.setScopeOrg(${org.id}, '${name.replace(/'/g, "\\'")}')" style="
+        display:flex;align-items:center;justify-content:space-between;width:100%;padding:6px 14px;border:none;
+        background:${isActive('organization', org.id) ? 'var(--primary-light, #dbeafe)' : 'transparent'};
+        cursor:pointer;text-align:left;font-size:13px;color:var(--gray-700);">
+        <span>${name}</span>
+        <span style="font-size:11px;color:var(--gray-400);">${provCount} provider${provCount !== 1 ? 's' : ''}</span>
+      </button>`;
+    });
+    html += `<div style="height:1px;background:var(--gray-100);margin:4px 0;"></div>`;
+  }
+
+  html += `<div style="padding:4px 14px;font-size:10px;text-transform:uppercase;color:var(--gray-400);font-weight:700;letter-spacing:.5px;">Providers</div>`;
+  providers.forEach(p => {
+    const name = esc(`${p.firstName || ''} ${p.lastName || ''}`.trim() || p.name || '');
+    const cred = esc(p.credentials || '');
+    html += `<button onclick="window.app.setScopeProvider(${p.id}, '${name.replace(/'/g, "\\'")}', ${p.organizationId || 'null'})" style="
+      display:flex;align-items:center;justify-content:space-between;width:100%;padding:6px 14px;border:none;
+      background:${isActive('provider', p.id) ? 'var(--primary-light, #dbeafe)' : 'transparent'};
+      cursor:pointer;text-align:left;font-size:13px;color:var(--gray-700);">
+      <span>${name}${cred ? ` <span style="color:var(--gray-400);font-size:11px;">${cred}</span>` : ''}</span>
+    </button>`;
+  });
+
+  panel.innerHTML = html;
+  panel.style.display = 'block';
 }
 
 // ─── Navigation ───
@@ -455,6 +564,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderProviderProfilePage(window._selectedProviderId);
       break;
+    case 'provider-printout':
+      pageTitle.textContent = 'Provider Credential Sheet';
+      pageSubtitle.textContent = '';
+      pageActions.innerHTML = printBtn;
+      await renderProviderPrintout(window._selectedProviderId);
+      break;
     case 'admin':
       pageTitle.textContent = 'Super Admin';
       pageSubtitle.textContent = 'Manage all agencies and system settings';
@@ -470,7 +585,7 @@ async function navigateTo(page) {
 
 async function renderDashboard() {
   // Parallel fetch — all independent data at once
-  const [stats, overdue, upcoming, escalations, licenses, providers, orgs, apps, tasks] = await Promise.all([
+  const [stats, _overdue, _upcoming, _escalations, _licenses, _providers, orgs, _apps, _tasks] = await Promise.all([
     store.getApplicationStats(),
     workflow.getOverdueFollowups(),
     workflow.getUpcomingFollowups(),
@@ -481,6 +596,14 @@ async function renderDashboard() {
     store.getAll('applications'),
     store.getAll('tasks'),
   ]);
+  // Apply scope filter
+  const overdue = store.filterByScope(_overdue);
+  const upcoming = store.filterByScope(_upcoming);
+  const escalations = store.filterByScope(_escalations);
+  const licenses = store.filterByScope(_licenses);
+  const providers = store.filterByScope(_providers);
+  const apps = store.filterByScope(_apps);
+  const tasks = store.filterByScope(_tasks);
   const org = orgs[0] || {};
 
   const activeLic = licenses.filter(l => l.status === 'active');
@@ -1066,7 +1189,7 @@ async function renderDashboardCharts(stats, apps, licenses) {
 
 async function renderApplications() {
   const body = document.getElementById('page-body');
-  const apps = await store.getAll('applications');
+  const apps = store.filterByScope(await store.getAll('applications'));
 
   // Build filter options
   const states = [...new Set(apps.map(a => a.state).filter(Boolean))].sort();
@@ -1216,10 +1339,10 @@ async function renderAppTable(prefetchedApps = null) {
 
 async function renderFollowups() {
   const body = document.getElementById('page-body');
-  const overdue = await workflow.getOverdueFollowups();
-  const upcoming = await workflow.getUpcomingFollowups();
-  const allOpen = (await store.getAll('followups')).filter(f => !f.completedDate);
-  const completed = (await store.getAll('followups')).filter(f => f.completedDate)
+  const overdue = store.filterByScope(await workflow.getOverdueFollowups());
+  const upcoming = store.filterByScope(await workflow.getUpcomingFollowups());
+  const allOpen = store.filterByScope((await store.getAll('followups')).filter(f => !f.completedDate));
+  const completed = store.filterByScope((await store.getAll('followups')).filter(f => f.completedDate))
     .sort((a, b) => (b.completedDate || '').localeCompare(a.completedDate || ''));
 
   const overdueHtml = overdue.length > 0 ? await renderFollowupTable('Overdue', overdue, true) : '';
@@ -1482,8 +1605,8 @@ async function renderStatePolicies() {
 
 async function renderRevenueForecast() {
   const body = document.getElementById('page-body');
-  const apps = await store.getAll('applications');
-  const licenses = await store.getAll('licenses');
+  const apps = store.filterByScope(await store.getAll('applications'));
+  const licenses = store.filterByScope(await store.getAll('licenses'));
 
   // Categorize applications
   const approved = apps.filter(a => a.status === 'approved');
@@ -1775,8 +1898,8 @@ async function renderForecastCharts(projectedMonths, revenueByPayer, catLabels) 
 
 async function renderCoverageMatrix() {
   const body = document.getElementById('page-body');
-  const apps = await store.getAll('applications');
-  const licenses = await store.getAll('licenses');
+  const apps = store.filterByScope(await store.getAll('applications'));
+  const licenses = store.filterByScope(await store.getAll('licenses'));
   const licensedStates = [...new Set(licenses.map(l => l.state))].sort();
 
   // Get payers that have applications
@@ -2105,9 +2228,9 @@ async function renderEmailGenerator() {
 
 async function renderProviders() {
   const body = document.getElementById('page-body');
-  const providers = await store.getAll('providers');
-  const licenses = await store.getAll('licenses');
-  const apps = await store.getAll('applications');
+  const providers = store.filterByScope(await store.getAll('providers'));
+  const licenses = store.filterByScope(await store.getAll('licenses'));
+  const apps = store.filterByScope(await store.getAll('applications'));
 
   body.innerHTML = `
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
@@ -2126,6 +2249,10 @@ async function renderProviders() {
           <div class="card-header">
             <h3>${escHtml(p.firstName)} ${escHtml(p.lastName)}, ${escHtml(p.credentials)} <span style="font-size:12px;font-weight:500;color:var(--gray-400);margin-left:8px;">#${toHexId(p.id)}</span></h3>
             <div style="display:flex;gap:8px;">
+              <button class="btn btn-sm" onclick="window.app.openProviderProfile('${p.id}')" title="View Profile">Profile</button>
+              <button class="btn btn-sm" onclick="window.app.openProviderPrintout('${p.id}')" title="Print Credential Sheet" style="display:inline-flex;align-items:center;gap:4px;">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11H2.5A1 1 0 011.5 10V6.5A1 1 0 012.5 5.5h11a1 1 0 011 1V10a1 1 0 01-1 1H12"/><path d="M4 5.5V1.5h8v4"/><rect x="4" y="9" width="8" height="5.5" rx="0.5"/></svg> Credential Sheet
+              </button>
               <button class="btn btn-sm" onclick="window.app.editProvider('${p.id}')">Edit</button>
               <button class="btn btn-sm btn-danger" onclick="window.app.deleteProvider('${p.id}')">Delete</button>
             </div>
@@ -2280,8 +2407,8 @@ let _licTab = 'licenses';
 
 async function renderLicenses() {
   const body = document.getElementById('page-body');
-  const providers = await store.getAll('providers');
-  const allLicenses = await store.getAll('licenses');
+  const providers = store.filterByScope(await store.getAll('providers'));
+  const allLicenses = store.filterByScope(await store.getAll('licenses'));
   const selectedProvider = filters._licProvider || '';
   const licenses = selectedProvider ? allLicenses.filter(l => l.providerId === selectedProvider) : allLicenses;
   const active = licenses.filter(l => l.status === 'active');
@@ -3157,8 +3284,8 @@ function _getLinkedLabel(task, appsMap, extraMaps) {
 
 async function renderTasksPage() {
   const body = document.getElementById('page-body');
-  const tasks = await store.getAll('tasks');
-  const allApps = await store.getAll('applications');
+  const tasks = store.filterByScope(await store.getAll('tasks'));
+  const allApps = store.filterByScope(await store.getAll('applications'));
   const appsMap = {};
   allApps.forEach(a => { appsMap[a.id] = a; });
   const today = new Date().toISOString().split('T')[0];
@@ -3587,8 +3714,8 @@ async function renderPayerPortalTool() {
 }
 
 async function renderExpirationAlertsTool() {
-  const licenses = await store.getAll('licenses');
-  const apps = await store.getAll('applications');
+  const licenses = store.filterByScope(await store.getAll('licenses'));
+  const apps = store.filterByScope(await store.getAll('applications'));
   const now = new Date();
   const alerts = [];
 
@@ -4220,6 +4347,21 @@ window.app = {
   filters,
   showToast,
   closeConfirmModal,
+
+  // Scope selector
+  toggleScopeDropdown,
+  setScopeAll() {
+    store.clearScope();
+    document.getElementById('scope-panel').style.display = 'none';
+  },
+  setScopeOrg(orgId, orgName) {
+    store.setScope('organization', orgId, null, orgName);
+    document.getElementById('scope-panel').style.display = 'none';
+  },
+  setScopeProvider(providerId, providerName, orgId) {
+    store.setScope('provider', orgId, providerId, '', providerName);
+    document.getElementById('scope-panel').style.display = 'none';
+  },
   openTaskEditModal,
   closeTaskEditModal,
   saveTaskEdit,
@@ -6726,6 +6868,10 @@ function handleNppesProxy(payload) {
     window._selectedProviderId = providerId;
     navigateTo('provider-profile');
   },
+  openProviderPrintout(providerId) {
+    window._selectedProviderId = providerId;
+    navigateTo('provider-printout');
+  },
   switchProfileTab(tabId) {
     document.querySelectorAll('.profile-tab-content').forEach(el => { el.style.display = 'none'; });
     document.querySelectorAll('.profile-tab').forEach(btn => {
@@ -7874,7 +8020,7 @@ async function checkRecurringTasks() {
 
 async function renderDocumentTracker() {
   const body = document.getElementById('page-body');
-  const apps = await store.getAll('applications');
+  const apps = store.filterByScope(await store.getAll('applications'));
 
   if (apps.length === 0) {
     body.innerHTML = '<div class="card" style="text-align:center;padding:40px;"><h3>No applications</h3><p>Add applications first to track documents.</p></div>';
@@ -8067,7 +8213,7 @@ async function renderReimbursement() {
 
 async function renderRenewalCalendar() {
   const body = document.getElementById('page-body');
-  const licenses = await store.getAll('licenses');
+  const licenses = store.filterByScope(await store.getAll('licenses'));
   const today = new Date();
   const currentYear = today.getFullYear();
 
@@ -9384,8 +9530,8 @@ async function renderExclusionsPage() {
   let providers = [];
 
   try { summary = await store.getExclusionSummary(); } catch (e) { console.error('Exclusion summary error:', e); }
-  try { exclusions = await store.getExclusions(); } catch (e) { console.error('Exclusions error:', e); }
-  try { providers = await store.getAll('providers'); } catch (e) { console.error('Providers error:', e); }
+  try { exclusions = store.filterByScope(await store.getExclusions()); } catch (e) { console.error('Exclusions error:', e); }
+  try { providers = store.filterByScope(await store.getAll('providers')); } catch (e) { console.error('Providers error:', e); }
 
   // Build a map of provider id -> latest exclusion result
   const exclusionMap = {};
@@ -9646,9 +9792,9 @@ async function renderBillingPage() {
   let estimates = [];
 
   try { stats = await store.getBillingStats(); } catch (e) { console.error('Billing stats error:', e); }
-  try { invoices = await store.getInvoices(); } catch (e) { console.error('Invoices error:', e); }
+  try { invoices = store.filterByScope(await store.getInvoices()); } catch (e) { console.error('Invoices error:', e); }
   try { services = await store.getServices(); } catch (e) { console.error('Services error:', e); }
-  try { estimates = await store.getEstimates(); } catch (e) { /* estimates endpoint may not exist yet */ }
+  try { estimates = store.filterByScope(await store.getEstimates()); } catch (e) { /* estimates endpoint may not exist yet */ }
   if (!Array.isArray(invoices)) invoices = [];
   if (!Array.isArray(services)) services = [];
   if (!Array.isArray(estimates)) estimates = [];
@@ -10184,8 +10330,8 @@ async function renderCompliancePage() {
   let exclusionSummary = {};
 
   try { report = await store.getComplianceReport(); } catch (e) { console.error('Compliance report error:', e); }
-  try { licenses = await store.getAll('licenses'); } catch (e) {}
-  try { providers = await store.getAll('providers'); } catch (e) {}
+  try { licenses = store.filterByScope(await store.getAll('licenses')); } catch (e) {}
+  try { providers = store.filterByScope(await store.getAll('providers')); } catch (e) {}
   try { exclusionSummary = await store.getExclusionSummary(); } catch (e) {}
 
   const today = new Date();
@@ -10433,6 +10579,252 @@ async function renderFaqPage() {
           <button class="btn" onclick="document.getElementById('faq-modal').classList.remove('active')">Cancel</button>
           <button class="btn btn-primary" onclick="window.app.saveFaq()">Save FAQ</button>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Provider Credential / License Printout ───
+
+async function renderProviderPrintout(providerId) {
+  const body = document.getElementById('page-body');
+
+  if (!providerId) {
+    body.innerHTML = '<div class="alert alert-warning">No provider selected. Go to Providers and click the print icon to generate a credential sheet.</div>';
+    return;
+  }
+
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div><div style="margin-top:12px;color:var(--gray-500);font-size:13px;">Generating credential sheet...</div></div>';
+
+  let provider = {};
+  let providerLicenses = [];
+  let apps = [];
+  let education = [];
+  let boards = [];
+  let agency = null;
+
+  try { provider = await store.getOne('providers', providerId); } catch (e) {}
+  try {
+    const allLic = await store.getAll('licenses');
+    providerLicenses = allLic.filter(l => (l.providerId || l.provider_id) == providerId);
+  } catch (e) {}
+  try {
+    const allApps = await store.getAll('applications');
+    apps = allApps.filter(a => (a.providerId || a.provider_id) == providerId);
+  } catch (e) {}
+  try { education = await store.getProviderEducation(providerId); } catch (e) {}
+  try { boards = await store.getProviderBoards(providerId); } catch (e) {}
+  try { agency = auth.getAgency(); } catch (e) {}
+
+  if (!Array.isArray(education)) education = [];
+  if (!Array.isArray(boards)) boards = [];
+
+  const provName = `${provider.firstName || ''} ${provider.lastName || ''}`.trim() || 'Unknown Provider';
+  const credential = provider.credentials || provider.credential || '';
+  const npi = provider.npi || '';
+  const taxonomy = provider.taxonomy || '';
+  const specialty = provider.specialty || '';
+  const email = provider.email || '';
+  const phone = provider.phone || '';
+  const caqhId = provider.caqhId || '';
+  const orgName = provider.organization?.name || provider.organizationName || '';
+  const agencyName = agency?.name || agency?.agencyName || '';
+  const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  // Active licenses sorted by state
+  const activeLicenses = providerLicenses
+    .filter(l => l.status === 'active')
+    .sort((a, b) => (a.state || '').localeCompare(b.state || ''));
+  const otherLicenses = providerLicenses
+    .filter(l => l.status !== 'active')
+    .sort((a, b) => (a.state || '').localeCompare(b.state || ''));
+
+  // Credentialed insurance (approved applications)
+  const credentialedApps = apps
+    .filter(a => a.status === 'approved' || a.status === 'credentialed')
+    .sort((a, b) => {
+      const pa = getPayerById(a.payerId);
+      const pb = getPayerById(b.payerId);
+      return (pa?.name || a.payerName || '').localeCompare(pb?.name || b.payerName || '');
+    });
+
+  // In-progress applications
+  const pendingApps = apps
+    .filter(a => ['submitted', 'in_review', 'pending_info', 'gathering_docs'].includes(a.status))
+    .sort((a, b) => (a.payerName || '').localeCompare(b.payerName || ''));
+
+  const esc = (s) => (s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+
+  const pageSubtitle = document.getElementById('page-subtitle');
+  if (pageSubtitle) pageSubtitle.textContent = `${provName}${credential ? ', ' + credential : ''} | Generated ${today}`;
+
+  body.innerHTML = `
+    <style>
+      @media print {
+        .no-print { display: none !important; }
+        .printout-page { box-shadow: none !important; border: none !important; margin: 0 !important; padding: 24px !important; }
+        body { background: #fff !important; }
+      }
+      .printout-page { max-width: 800px; margin: 0 auto; background: #fff; border: 1px solid var(--gray-200); border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.06); padding: 40px; }
+      .printout-header { text-align: center; border-bottom: 2px solid var(--brand-600, #1e40af); padding-bottom: 20px; margin-bottom: 24px; }
+      .printout-header h1 { font-size: 22px; font-weight: 700; color: var(--gray-900); margin: 0 0 4px; }
+      .printout-header .subtitle { font-size: 14px; color: var(--gray-500); }
+      .printout-section { margin-bottom: 24px; }
+      .printout-section h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--brand-600, #1e40af); border-bottom: 1px solid var(--gray-200); padding-bottom: 6px; margin: 0 0 12px; font-weight: 700; }
+      .printout-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; font-size: 13px; }
+      .printout-grid dt { color: var(--gray-500); font-weight: 500; }
+      .printout-grid dd { color: var(--gray-900); font-weight: 600; margin: 0; }
+      .printout-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      .printout-table th { text-align: left; padding: 6px 10px; background: var(--gray-50); border: 1px solid var(--gray-200); font-weight: 600; color: var(--gray-700); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+      .printout-table td { padding: 6px 10px; border: 1px solid var(--gray-200); color: var(--gray-800); }
+      .printout-table tr:nth-child(even) { background: var(--gray-50); }
+      .printout-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+      .badge-active { background: #d1fae5; color: #065f46; }
+      .badge-pending { background: #fef3c7; color: #92400e; }
+      .badge-expired { background: #fee2e2; color: #991b1b; }
+      .printout-footer { text-align: center; border-top: 1px solid var(--gray-200); padding-top: 16px; margin-top: 32px; font-size: 11px; color: var(--gray-400); }
+    </style>
+
+    <div class="no-print" style="text-align:center;margin-bottom:16px;">
+      <button class="btn btn-gold" onclick="window.print()">Print / Save as PDF</button>
+      <button class="btn" onclick="window.app.navigateTo('providers')" style="margin-left:8px;">Back to Providers</button>
+    </div>
+
+    <div class="printout-page">
+      <div class="printout-header">
+        ${agencyName ? `<div style="font-size:11px;color:var(--gray-400);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">${esc(agencyName)}</div>` : ''}
+        <h1>Provider Credential Verification Sheet</h1>
+        <div class="subtitle">Generated ${today}</div>
+      </div>
+
+      <!-- Provider Information -->
+      <div class="printout-section">
+        <h3>Provider Information</h3>
+        <dl class="printout-grid">
+          <dt>Full Name</dt><dd>${esc(provName)}${credential ? ', ' + esc(credential) : ''}</dd>
+          <dt>NPI</dt><dd>${esc(npi) || '—'}</dd>
+          <dt>Specialty</dt><dd>${esc(specialty) || '—'}</dd>
+          <dt>Taxonomy</dt><dd>${esc(taxonomy) || '—'}</dd>
+          ${orgName ? `<dt>Organization</dt><dd>${esc(orgName)}</dd>` : ''}
+          ${caqhId ? `<dt>CAQH ID</dt><dd>${esc(caqhId)}</dd>` : ''}
+          ${email ? `<dt>Email</dt><dd>${esc(email)}</dd>` : ''}
+          ${phone ? `<dt>Phone</dt><dd>${esc(phone)}</dd>` : ''}
+        </dl>
+      </div>
+
+      <!-- Education -->
+      ${education.length > 0 ? `
+      <div class="printout-section">
+        <h3>Education</h3>
+        <table class="printout-table">
+          <thead><tr><th>Institution</th><th>Degree</th><th>Year</th></tr></thead>
+          <tbody>
+            ${education.map(e => `<tr>
+              <td>${esc(e.institution || e.school || '')}</td>
+              <td>${esc(e.degree || '')}</td>
+              <td>${e.graduationYear || e.graduation_year || '—'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : ''}
+
+      <!-- Board Certifications -->
+      ${boards.length > 0 ? `
+      <div class="printout-section">
+        <h3>Board Certifications</h3>
+        <table class="printout-table">
+          <thead><tr><th>Board</th><th>Specialty</th><th>Status</th><th>Expiration</th></tr></thead>
+          <tbody>
+            ${boards.map(b => `<tr>
+              <td>${esc(b.boardName || b.board_name || b.certifyingBoard || '')}</td>
+              <td>${esc(b.specialty || '')}</td>
+              <td><span class="printout-badge ${b.status === 'active' ? 'badge-active' : 'badge-pending'}">${esc(b.status || 'Active')}</span></td>
+              <td>${fmtDate(b.expirationDate || b.expiration_date)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : ''}
+
+      <!-- Active Licenses -->
+      <div class="printout-section">
+        <h3>State Licenses (${activeLicenses.length} Active${otherLicenses.length > 0 ? `, ${otherLicenses.length} Other` : ''})</h3>
+        ${activeLicenses.length > 0 ? `
+        <table class="printout-table">
+          <thead><tr><th>State</th><th>License #</th><th>Type</th><th>Status</th><th>Issued</th><th>Expires</th></tr></thead>
+          <tbody>
+            ${activeLicenses.map(l => `<tr>
+              <td><strong>${esc(l.state)}</strong> — ${esc(getStateName(l.state))}</td>
+              <td>${esc(l.licenseNumber || l.license_number || '')}</td>
+              <td>${esc(l.licenseType || l.license_type || '')}</td>
+              <td><span class="printout-badge badge-active">Active</span></td>
+              <td>${fmtDate(l.issueDate || l.issue_date)}</td>
+              <td>${fmtDate(l.expirationDate || l.expiration_date)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>` : '<p style="color:var(--gray-500);font-size:13px;">No active licenses on file.</p>'}
+
+        ${otherLicenses.length > 0 ? `
+        <div style="margin-top:12px;">
+          <div style="font-size:12px;color:var(--gray-500);font-weight:600;margin-bottom:6px;">Other Licenses</div>
+          <table class="printout-table">
+            <thead><tr><th>State</th><th>License #</th><th>Status</th><th>Expires</th></tr></thead>
+            <tbody>
+              ${otherLicenses.map(l => `<tr>
+                <td>${esc(l.state)} — ${esc(getStateName(l.state))}</td>
+                <td>${esc(l.licenseNumber || l.license_number || '')}</td>
+                <td><span class="printout-badge ${l.status === 'pending' ? 'badge-pending' : 'badge-expired'}">${esc(l.status || '')}</span></td>
+                <td>${fmtDate(l.expirationDate || l.expiration_date)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>` : ''}
+      </div>
+
+      <!-- Credentialed Insurance -->
+      <div class="printout-section">
+        <h3>Credentialed Insurance (${credentialedApps.length})</h3>
+        ${credentialedApps.length > 0 ? `
+        <table class="printout-table">
+          <thead><tr><th>Payer</th><th>State</th><th>Effective Date</th><th>Enrollment ID</th></tr></thead>
+          <tbody>
+            ${credentialedApps.map(a => {
+              const payer = getPayerById(a.payerId);
+              return `<tr>
+                <td><strong>${esc(payer?.name || a.payerName || '')}</strong></td>
+                <td>${esc(a.state || '')}</td>
+                <td>${fmtDate(a.effectiveDate || a.effective_date)}</td>
+                <td>${esc(a.enrollmentId || a.enrollment_id || a.applicationRef || '—')}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>` : '<p style="color:var(--gray-500);font-size:13px;">No credentialed insurance on file.</p>'}
+      </div>
+
+      <!-- In-Progress Applications -->
+      ${pendingApps.length > 0 ? `
+      <div class="printout-section">
+        <h3>Pending Applications (${pendingApps.length})</h3>
+        <table class="printout-table">
+          <thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th></tr></thead>
+          <tbody>
+            ${pendingApps.map(a => {
+              const payer = getPayerById(a.payerId);
+              const statusInfo = APPLICATION_STATUSES.find(s => s.value === a.status) || {};
+              return `<tr>
+                <td>${esc(payer?.name || a.payerName || '')}</td>
+                <td>${esc(a.state || '')}</td>
+                <td><span class="printout-badge" style="background:${statusInfo.bg || '#f3f4f6'};color:${statusInfo.color || '#6b7280'};">${statusInfo.label || a.status}</span></td>
+                <td>${fmtDate(a.submittedDate || a.submitted_date)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>` : ''}
+
+      <div class="printout-footer">
+        <p>This document was generated by ${esc(agencyName || 'Credentik')} on ${today}.</p>
+        <p>This is an informational summary and does not constitute primary source verification.</p>
       </div>
     </div>
   `;
