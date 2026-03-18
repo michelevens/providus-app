@@ -6704,15 +6704,31 @@ function handleNppesProxy(payload) {
     if (autoRenew) autoRenew.checked = false;
     document.getElementById('ctr-renewal-terms-wrap').style.display = 'none';
 
-    // Pre-populate terms with professional template for new contracts
-    const termsEl = document.getElementById('ctr-terms');
-    if (termsEl) {
-      termsEl.value = editData ? (editData.terms || '') : _defaultContractTerms();
-    }
-
     const editor = document.getElementById('contract-line-items-editor');
     if (editor) editor.innerHTML = _renderContractLineItems();
     document.getElementById('contract-modal').classList.add('active');
+
+    // Initialize Quill rich text editor for terms
+    const editorContainer = document.getElementById('ctr-terms-editor');
+    if (editorContainer && typeof Quill !== 'undefined') {
+      editorContainer.innerHTML = '';
+      if (window._ctrQuill) { try { window._ctrQuill = null; } catch(e) {} }
+      window._ctrQuill = new Quill('#ctr-terms-editor', {
+        theme: 'snow',
+        placeholder: 'Service terms, refund policy, client duties, responsibilities...',
+        modules: {
+          toolbar: [
+            [{ 'header': [2, 3, false] }],
+            ['bold', 'italic', 'underline'],
+            [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+            ['clean']
+          ]
+        }
+      });
+      const defaultHtml = editData ? (editData.terms || '') : _defaultContractTerms();
+      window._ctrQuill.root.innerHTML = defaultHtml;
+    }
+
     // Toggle renewal terms visibility
     autoRenew?.addEventListener('change', function() {
       document.getElementById('ctr-renewal-terms-wrap').style.display = this.checked ? 'block' : 'none';
@@ -6812,7 +6828,7 @@ function handleNppesProxy(payload) {
       payment_terms: document.getElementById('ctr-payment-terms')?.value?.trim() || '',
       tax_rate: parseFloat(document.getElementById('ctr-tax-rate')?.value) || 0,
       discount_amount: parseFloat(document.getElementById('ctr-discount')?.value) || 0,
-      terms_and_conditions: document.getElementById('ctr-terms')?.value || '',
+      terms_and_conditions: window._ctrQuill ? window._ctrQuill.root.innerHTML : (document.getElementById('ctr-terms')?.value || ''),
       notes: document.getElementById('ctr-notes')?.value?.trim() || '',
       items: validItems.map(i => ({ description: i.description, quantity: i.qty, unit_price: i.rate, service_catalog_id: i.svcId || null })),
     };
@@ -11318,40 +11334,37 @@ async function renderInvoiceDetail(invoiceId) {
 let _contractLineItems = [{ description: '', qty: 1, rate: 0 }];
 
 function _defaultContractTerms() {
-  const agencyName = window._currentUser?.agency?.name || 'Agency';
-  return `SERVICE AGREEMENT TERMS
-
-1. AGREEMENT TERM
-This Service Agreement Term is twelve (12) months and shall commence on the Effective Date. Upon expiration, if Client has opted into Automatic Renewal, the subscription services will automatically renew for a subsequent twelve (12) month period. If Client has opted out of automatic renewal, the services end upon expiration and a new Agreement would be required to continue services.
-
-2. ADD-ON ORDERS
-Client may place orders for additional services at any time during the term. Payment for add-on orders is processed using the payment method on file at the time of order.
-
-3. REIMBURSABLE EXPENSES
-The cost of services purchased does not include any expenses incurred by ${agencyName} that are directly related to providing these services. Reimbursable Expenses include, but are not limited to, costs incurred for postage, primary source verification, hospital or health plan credentialing fees, or licensing agency fees. Reimbursable expenses include the actual cost plus 10%.
-
-4. PAYMENT TERMS
-Payment for services is due in advance. Client is required to keep a payment method on file with ${agencyName} to settle all charges. ${agencyName} will submit an invoice for all outstanding account charges. Payment is due upon receipt unless otherwise specified.
-
-5. REFUND POLICY
-There are no refunds or returns for services for any reason. Fees are based on professional service time and once staff applies time and effort to a service order, payment is expected for services rendered. If there is a dispute or issue about service, Client may contact ${agencyName} to discuss the issue.
-
-6. CLIENT DUTIES
-Client is responsible for supplying ${agencyName} with complete and accurate practitioner and entity information, responding to requests for signature pages or additional documentation throughout the credentialing process. Client is solely responsible for ensuring the formation of legal business entities are within all local, state, and federal requirements; accuracy of all data supplied; and attests that all information supplied for completion of the purchased services are in accordance with all local, state, and federal law and/or government healthcare program guidelines.
-
-7. ${agencyName.toUpperCase()} RESPONSIBILITIES
-${agencyName} is responsible for preparing and submitting credentialing applications and requests to participate with payer networks that Client identifies, and to follow up on applications/requests until each is Complete. Responsibility for enrollment is considered "Complete" when the insurance network approves the application and provides an effective date of participation, or closes the application with a denial of participation; or after four (4) attempts to obtain required documents from Client with no response.
-
-8. OUTCOMES & DISCLAIMERS
-${agencyName} makes no guarantee or warranty with respect to the network approval of practitioners, granting of privileges by a healthcare facility, approval of any type of enrollment or credentialing application, effective date set by payors, issuance of a participation contract, approval of any license application, turnaround time of health plan credentialing and/or contracting, reimbursement by a third party payer network for practitioner services, or profitability of Client.
-
-9. CONFIDENTIALITY
-Both parties agree to maintain the confidentiality of all information exchanged in connection with this Agreement. Client authorizes ${agencyName} to utilize confidential information about healthcare practitioners associated with Client for any reason necessary related to the services ordered.
-
-10. TERMINATION
-Either party may terminate this Agreement with thirty (30) days written notice. Upon termination, Client remains responsible for payment of all services rendered and expenses incurred through the termination date.
-
-By accepting this Agreement, Client acknowledges that they have read, understand, and agree to the terms and conditions stated herein.`;
+  const a = window._currentUser?.agency?.name || 'Agency';
+  return `<h2>SERVICE AGREEMENT TERMS</h2>
+<h3>1. Agreement Term</h3>
+<p>This Service Agreement Term is twelve (12) months and shall commence on the Effective Date. Upon expiration, if Client has opted into <strong>Automatic Renewal</strong>, the subscription services will automatically renew for a subsequent twelve (12) month period. If Client has opted out of automatic renewal, the services end upon expiration and a new Agreement would be required to continue services.</p>
+<h3>2. Add-On Orders</h3>
+<p>Client may place orders for additional services at any time during the term. Payment for add-on orders is processed using the payment method on file at the time of order.</p>
+<h3>3. Reimbursable Expenses</h3>
+<p>The cost of services purchased does not include any expenses incurred by ${a} that are directly related to providing these services. Reimbursable Expenses include, but are not limited to, costs incurred for postage, primary source verification, hospital or health plan credentialing fees, or licensing agency fees. Reimbursable expenses include the actual cost plus <strong>10%</strong>.</p>
+<h3>4. Payment Terms</h3>
+<p>Payment for services is due <strong>in advance</strong>. Client is required to keep a payment method on file with ${a} to settle all charges. ${a} will submit an invoice for all outstanding account charges. Payment is due upon receipt unless otherwise specified.</p>
+<h3>5. Refund Policy</h3>
+<p>There are no refunds or returns for services for any reason. Fees are based on professional service time and once staff applies time and effort to a service order, payment is expected for services rendered. If there is a dispute or issue about service, Client may contact ${a} to discuss the issue.</p>
+<h3>6. Client Duties</h3>
+<p>Client is responsible for supplying ${a} with complete and accurate practitioner and entity information, responding to requests for signature pages or additional documentation throughout the credentialing process. Client is solely responsible for:</p>
+<ul>
+<li>Ensuring the formation of legal business entities are within all local, state, and federal requirements</li>
+<li>Accuracy of all data supplied to ${a}</li>
+<li>Attesting that all information supplied for completion of the purchased services are in accordance with all local, state, and federal law and/or government healthcare program guidelines</li>
+<li>Negotiating any special rates or contract terms with health plans</li>
+</ul>
+<h3>7. ${a} Responsibilities</h3>
+<p>${a} is responsible for preparing and submitting credentialing applications and requests to participate with payer networks that Client identifies, and to follow up on applications/requests until each is Complete.</p>
+<p>Responsibility for enrollment is considered <strong>"Complete"</strong> when the insurance network approves the application and provides an effective date of participation, or closes the application with a denial of participation; or after <strong>four (4) attempts</strong> to obtain required documents from Client with no response.</p>
+<h3>8. Outcomes &amp; Disclaimers</h3>
+<p>${a} makes <strong>no guarantee or warranty</strong> with respect to: network approval of practitioners, granting of privileges by a healthcare facility, approval of any type of enrollment or credentialing application, effective date set by payors, issuance of a participation contract, approval of any license application, turnaround time of health plan credentialing and/or contracting, reimbursement by a third party payer network for practitioner services, or profitability of Client.</p>
+<h3>9. Confidentiality</h3>
+<p>Both parties agree to maintain the confidentiality of all information exchanged in connection with this Agreement. Client authorizes ${a} to utilize confidential information about healthcare practitioners associated with Client for any reason necessary related to the services ordered.</p>
+<h3>10. Termination</h3>
+<p>Either party may terminate this Agreement with <strong>thirty (30) days</strong> written notice. Upon termination, Client remains responsible for payment of all services rendered and expenses incurred through the termination date.</p>
+<p><br></p>
+<p><em>By accepting this Agreement, Client acknowledges that they have read, understand, and agree to the terms and conditions stated herein.</em></p>`;
 }
 
 function _renderContractLineItems() {
@@ -11477,7 +11490,11 @@ async function renderContractsPage() {
               </div>
             </div>
           </div>
-          <div class="auth-field" style="margin:0 0 16px;"><label>Terms & Conditions <span style="font-weight:400;color:var(--gray-400);font-size:11px;">(pre-filled with template — customize as needed)</span></label><textarea id="ctr-terms" class="form-control" rows="12" style="font-size:12px;line-height:1.5;" placeholder="Service terms, refund policy, client duties, responsibilities, disclaimers..."></textarea></div>
+          <div class="auth-field" style="margin:0 0 16px;">
+            <label>Terms & Conditions <span style="font-weight:400;color:var(--gray-400);font-size:11px;">(pre-filled with template — customize as needed)</span></label>
+            <div id="ctr-terms-editor" style="height:280px;background:#fff;border-radius:0 0 8px 8px;"></div>
+            <input type="hidden" id="ctr-terms" value="">
+          </div>
           <div class="auth-field" style="margin:0 0 16px;"><label>Notes (internal, not shown to client)</label><textarea id="ctr-notes" class="form-control" rows="2" placeholder="Internal notes about this contract..."></textarea></div>
           <label style="display:block;font-size:12px;font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Services & Line Items</label>
           <div id="contract-line-items-editor">${_renderContractLineItems()}</div>
@@ -11583,7 +11600,7 @@ async function renderContractDetail(id) {
       </div>
     </div>
 
-    ${c.termsAndConditions || c.terms_and_conditions ? `<div class="card" style="margin-bottom:20px;"><div class="card-header"><h3>Terms & Conditions</h3></div><div class="card-body"><div style="white-space:pre-wrap;font-size:13px;line-height:1.6;">${escHtml(c.termsAndConditions || c.terms_and_conditions)}</div></div></div>` : ''}
+    ${c.termsAndConditions || c.terms_and_conditions ? `<div class="card" style="margin-bottom:20px;"><div class="card-header"><h3>Terms & Conditions</h3></div><div class="card-body"><div class="contract-terms-content" style="font-size:13px;line-height:1.6;">${c.termsAndConditions || c.terms_and_conditions}</div></div></div>` : ''}
 
     ${notes ? `<div class="card" style="margin-bottom:20px;"><div class="card-header"><h3>Internal Notes</h3></div><div class="card-body"><div style="white-space:pre-wrap;font-size:13px;color:var(--gray-600);">${escHtml(notes)}</div></div></div>` : ''}
 

@@ -1909,3 +1909,18 @@ textarea:focus-visible {
   outline: 2px solid var(--brand-500);
   outline-offset: 2px;
 }
+
+/* ── Contract Terms Rich Text ── */
+.contract-terms-content h2 { font-size: 16px; font-weight: 700; margin: 0 0 16px; color: #1e293b; }
+.contract-terms-content h3 { font-size: 14px; font-weight: 700; margin: 20px 0 8px; color: #334155; }
+.contract-terms-content p { margin: 0 0 10px; }
+.contract-terms-content ul, .contract-terms-content ol { margin: 0 0 12px; padding-left: 24px; }
+.contract-terms-content li { margin-bottom: 4px; }
+.contract-terms-content strong { font-weight: 700; }
+.contract-terms-content em { font-style: italic; }
+
+/* Quill editor overrides inside modals */
+.modal .ql-container { font-family: inherit; font-size: 13px; }
+.modal .ql-editor { min-height: 200px; line-height: 1.6; }
+.modal .ql-toolbar { border-radius: 8px 8px 0 0; border-color: var(--gray-200); }
+.modal .ql-container { border-radius: 0 0 8px 8px; border-color: var(--gray-200); }
