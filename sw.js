@@ -1,4 +1,8 @@
-const CACHE_NAME = 'credentik-v3';
+const CACHE_NAME = 'credentik-v4';
+const API_CACHE = 'credentik-api-v1';
+const API_TTL = 60 * 60 * 1000; // 60 minutes
+const API_MAX_ENTRIES = 100;
+
 const SHELL_FILES = [
   './',
   './index.html',
@@ -15,6 +19,19 @@ const SHELL_FILES = [
   './manifest.json',
 ];
 
+// API paths eligible for caching (GET only)
+const CACHEABLE_API = [
+  '/api/v1/providers',
+  '/api/v1/applications',
+  '/api/v1/contracts',
+  '/api/v1/tasks',
+  '/api/v1/payers',
+  '/api/v1/documents',
+  '/api/v1/licenses',
+  '/api/v1/notifications',
+  '/api/v1/dashboard',
+];
+
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(SHELL_FILES)));
   self.skipWaiting();
@@ -23,15 +40,74 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys => Promise.all(
-      keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+      keys.filter(k => k !== CACHE_NAME && k !== API_CACHE).map(k => caches.delete(k))
     ))
   );
   self.clients.claim();
 });
 
+// Trim API cache to max entries
+async function trimCache(cacheName, max) {
+  const cache = await caches.open(cacheName);
+  const keys = await cache.keys();
+  if (keys.length > max) {
+    await Promise.all(keys.slice(0, keys.length - max).map(k => cache.delete(k)));
+  }
+}
+
+// NetworkFirst strategy for API calls
+async function networkFirst(request) {
+  const cache = await caches.open(API_CACHE);
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const clone = response.clone();
+      const headers = new Headers(clone.headers);
+      headers.set('sw-cached-at', Date.now().toString());
+      const body = await clone.blob();
+      const cachedResponse = new Response(body, { status: clone.status, statusText: clone.statusText, headers });
+      await cache.put(request, cachedResponse);
+      trimCache(API_CACHE, API_MAX_ENTRIES);
+    }
+    return response;
+  } catch (err) {
+    const cached = await cache.match(request);
+    if (cached) {
+      const cachedAt = parseInt(cached.headers.get('sw-cached-at') || '0');
+      if (Date.now() - cachedAt < API_TTL) {
+        return cached;
+      }
+    }
+    throw err;
+  }
+}
+
+function isCacheableApi(url) {
+  return CACHEABLE_API.some(path => url.includes(path));
+}
+
 self.addEventListener('fetch', e => {
-  if (e.request.url.includes('/api/')) return; // Don't cache API calls
+  const { request } = e;
+
+  // NetworkFirst for cacheable GET API calls
+  if (request.method === 'GET' && request.url.includes('/api/') && isCacheableApi(request.url)) {
+    e.respondWith(networkFirst(request));
+    return;
+  }
+
+  // Invalidate API cache on mutations
+  if (request.url.includes('/api/') && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
+    e.waitUntil(caches.open(API_CACHE).then(c => c.keys().then(keys =>
+      Promise.all(keys.map(k => c.delete(k)))
+    )));
+    return;
+  }
+
+  // Skip non-cacheable API calls
+  if (request.url.includes('/api/')) return;
+
+  // Cache-first for shell assets
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request))
+    caches.match(request).then(r => r || fetch(request))
   );
 });

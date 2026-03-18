@@ -366,6 +366,43 @@
     <!-- Mobile Menu Overlay -->
     <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
 
+    <!-- Mobile Bottom Navigation -->
+    <nav class="bottom-nav" id="bottom-nav">
+      <div class="bottom-nav-items">
+        <button class="bottom-nav-item active" onclick="window.app?.navigateTo('dashboard')" data-page="dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+          Home
+        </button>
+        <button class="bottom-nav-item" onclick="window.app?.navigateTo('providers')" data-page="providers">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          Providers
+        </button>
+        <button class="bottom-nav-item" onclick="window.app?.navigateTo('applications')" data-page="applications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+          Apps
+        </button>
+        <button class="bottom-nav-item" onclick="window.app?.navigateTo('tasks')" data-page="tasks" style="position:relative;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          Tasks
+        </button>
+        <button class="bottom-nav-item" onclick="toggleSidebar()" data-page="more">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+          More
+        </button>
+      </div>
+    </nav>
+
+    <!-- PWA Install Prompt -->
+    <div class="pwa-install-banner" id="pwa-install-banner">
+      <div class="pwa-icon">&#128241;</div>
+      <div class="pwa-text">
+        <div class="pwa-title">Install Credentik</div>
+        <div class="pwa-desc">Offline access &amp; faster load times</div>
+      </div>
+      <button class="pwa-btn" id="pwa-install-btn">Install</button>
+      <button class="pwa-dismiss" id="pwa-dismiss-btn">&times;</button>
+    </div>
+
     <!-- Main Content -->
     <main class="main-content">
       <div class="page-header">
@@ -1517,6 +1554,36 @@
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
     updateOnlineStatus();
+
+    // ── PWA Install Prompt ──
+    let _deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      _deferredInstallPrompt = e;
+      if (!localStorage.getItem('pwa-install-dismissed')) {
+        document.getElementById('pwa-install-banner')?.classList.add('visible');
+      }
+    });
+    document.getElementById('pwa-install-btn')?.addEventListener('click', async () => {
+      if (!_deferredInstallPrompt) return;
+      _deferredInstallPrompt.prompt();
+      const { outcome } = await _deferredInstallPrompt.userChoice;
+      if (outcome === 'accepted') {
+        document.getElementById('pwa-install-banner')?.classList.remove('visible');
+      }
+      _deferredInstallPrompt = null;
+    });
+    document.getElementById('pwa-dismiss-btn')?.addEventListener('click', () => {
+      document.getElementById('pwa-install-banner')?.classList.remove('visible');
+      localStorage.setItem('pwa-install-dismissed', '1');
+    });
+
+    // ── Bottom Nav Active State ──
+    window._updateBottomNav = function(page) {
+      document.querySelectorAll('.bottom-nav-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.page === page);
+      });
+    };
   </script>
 
 </body>

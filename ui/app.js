@@ -349,10 +349,11 @@ async function updateNavBadges() {
 async function navigateTo(page) {
   currentPage = page;
 
-  // Update nav active state
+  // Update nav active state (sidebar + bottom nav)
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.page === page);
   });
+  if (window._updateBottomNav) window._updateBottomNav(page);
 
   // Update notification badge
   if (window.app?.refreshNotifBadge) window.app.refreshNotifBadge();
