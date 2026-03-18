@@ -281,6 +281,12 @@
           </span> Billing & Invoicing
         </button>
 
+        <button class="nav-item" data-page="contracts" data-min-role="agency">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 1.5H3.5a1 1 0 00-1 1v11a1 1 0 001 1h9a1 1 0 001-1V5L10 1.5z"/><path d="M10 1.5V5h3.5"/><path d="M5.5 8h5M5.5 10.5h3"/></svg>
+          </span> Contracts
+        </button>
+
         <div class="nav-section">Strategy</div>
         <button class="nav-item" data-page="policies" data-min-role="agency">
           <span class="icon">
@@ -768,6 +774,17 @@
     </div>
   </div>
 
+  <!-- Public Contract View (shown via #contract/TOKEN) -->
+  <div id="contract-portal" style="display:none;">
+    <div class="auth-gate" style="display:flex;min-height:100vh;background:#f8fafc;">
+      <div style="max-width:800px;width:100%;margin:24px auto;padding:0 16px;">
+        <div id="contract-loading" style="text-align:center;padding:3rem;"><div class="spinner"></div><p>Loading contract...</p></div>
+        <div id="contract-invalid" style="display:none;text-align:center;padding:3rem;"><h2>Contract Not Found</h2><p>This contract link is invalid or has expired.</p></div>
+        <div id="contract-content" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
@@ -954,12 +971,130 @@
       }
     }
 
+    // ── Public Contract View ──
+    function checkContractHash() {
+      const match = location.hash.match(/^#contract\/(.+)$/);
+      if (!match) return false;
+      document.getElementById('auth-gate').style.display = 'none';
+      document.getElementById('app-shell').style.display = 'none';
+      document.getElementById('contract-portal').style.display = '';
+      loadPublicContract(match[1]);
+      return true;
+    }
+
+    async function loadPublicContract(token) {
+      try {
+        const res = await fetch(`${API_BASE}/contracts/view/${token}`);
+        const json = await res.json();
+        if (!res.ok || !json.success) { document.getElementById('contract-loading').style.display='none'; document.getElementById('contract-invalid').style.display=''; return; }
+        const c = json.data;
+        const agency = c.agency || {};
+        const items = c.items || [];
+        const subtotal = items.reduce((s,i) => s + parseFloat(i.total || 0), 0);
+        const fmtDate = d => d ? new Date(d).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '—';
+        const fmtMoney = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+        const orgHex = c.organization_id ? ' <span style="font-family:monospace;font-size:11px;color:#0891b2;">#'+toHexId(c.organization_id)+'</span>' : '';
+        const prvHex = c.provider_id ? ' <span style="font-family:monospace;font-size:11px;color:#0891b2;">#'+toHexId(c.provider_id)+'</span>' : '';
+
+        document.getElementById('contract-loading').style.display='none';
+        document.getElementById('contract-content').style.display='';
+        document.getElementById('contract-content').innerHTML = `
+          <div style="background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.08);overflow:hidden;">
+            <!-- Header -->
+            <div style="padding:32px 32px 24px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:flex-start;">
+              <div>
+                <h1 style="margin:0 0 4px;font-size:22px;color:#1e293b;">${agency.name || 'Agency'}</h1>
+                <p style="margin:0;font-size:13px;color:#64748b;">${[agency.address_street,agency.address_city,agency.address_state,agency.address_zip].filter(Boolean).join(', ')}</p>
+                <p style="margin:4px 0 0;font-size:13px;color:#64748b;">${agency.email || ''} ${agency.phone ? '· '+agency.phone : ''}</p>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;letter-spacing:1px;">Contract</div>
+                <div style="font-size:18px;font-weight:800;color:#1e293b;">${c.contract_number || ''}</div>
+              </div>
+            </div>
+
+            <!-- Contract Info -->
+            <div style="padding:24px 32px;border-bottom:1px solid #e2e8f0;">
+              <h2 style="margin:0 0 16px;font-size:18px;color:#1e293b;">${c.title || 'Service Agreement'}</h2>
+              ${c.description ? '<p style="color:#475569;margin:0 0 16px;">'+c.description+'</p>' : ''}
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;">
+                <div><span style="color:#64748b;">Client:</span> <strong>${c.client_name || '—'}${orgHex}${prvHex}</strong></div>
+                <div><span style="color:#64748b;">Email:</span> ${c.client_email || '—'}</div>
+                <div><span style="color:#64748b;">Effective Date:</span> <strong>${fmtDate(c.effective_date)}</strong></div>
+                <div><span style="color:#64748b;">Expiration:</span> ${c.expiration_date ? fmtDate(c.expiration_date) : 'No expiration'}</div>
+                <div><span style="color:#64748b;">Billing:</span> ${(c.billing_frequency||'one_time').replace('_',' ')}</div>
+                <div><span style="color:#64748b;">Payment Terms:</span> ${c.payment_terms || 'Due on receipt'}</div>
+              </div>
+            </div>
+
+            <!-- Services -->
+            <div style="padding:24px 32px;border-bottom:1px solid #e2e8f0;">
+              <h3 style="margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;">Services</h3>
+              <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead><tr style="border-bottom:2px solid #e2e8f0;">
+                  <th style="text-align:left;padding:8px 0;color:#64748b;font-weight:600;">Description</th>
+                  <th style="text-align:center;padding:8px;color:#64748b;font-weight:600;width:60px;">Qty</th>
+                  <th style="text-align:right;padding:8px;color:#64748b;font-weight:600;width:100px;">Rate</th>
+                  <th style="text-align:right;padding:8px 0;color:#64748b;font-weight:600;width:100px;">Total</th>
+                </tr></thead>
+                <tbody>
+                  ${items.map(i => '<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 0;">'+i.description+'</td><td style="text-align:center;padding:10px 8px;">'+parseFloat(i.quantity)+'</td><td style="text-align:right;padding:10px 8px;">'+fmtMoney(i.unit_price)+'</td><td style="text-align:right;padding:10px 0;font-weight:600;">'+fmtMoney(i.total)+'</td></tr>').join('')}
+                </tbody>
+              </table>
+              <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+                <div style="width:220px;">
+                  <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;"><span>Subtotal</span><span>${fmtMoney(c.subtotal || subtotal)}</span></div>
+                  ${parseFloat(c.tax_rate) > 0 ? '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;"><span>Tax ('+c.tax_rate+'%)</span><span>'+fmtMoney(c.tax_amount)+'</span></div>' : ''}
+                  ${parseFloat(c.discount_amount) > 0 ? '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;color:#16a34a;"><span>Discount</span><span>-'+fmtMoney(c.discount_amount)+'</span></div>' : ''}
+                  <div style="display:flex;justify-content:space-between;padding:8px 0 0;border-top:2px solid #1e293b;font-size:16px;font-weight:800;"><span>Total</span><span>${fmtMoney(c.total)}</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Terms -->
+            ${c.terms_and_conditions ? '<div style="padding:24px 32px;border-bottom:1px solid #e2e8f0;"><h3 style="margin:0 0 8px;font-size:14px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;">Terms & Conditions</h3><div style="font-size:13px;color:#475569;white-space:pre-wrap;">'+c.terms_and_conditions+'</div></div>' : ''}
+
+            <!-- Accept Section -->
+            <div style="padding:32px;" id="contract-accept-section">
+              ${c.accepted_at
+                ? '<div style="text-align:center;padding:20px;background:#f0fdf4;border-radius:8px;"><div style="font-size:18px;font-weight:700;color:#16a34a;margin-bottom:8px;">Contract Accepted</div><p style="margin:0;font-size:13px;color:#475569;">Signed by <strong>'+c.accepted_by_name+'</strong> on '+fmtDate(c.accepted_at)+'</p></div>'
+                : '<div style="background:#eff6ff;border-radius:8px;padding:24px;"><h3 style="margin:0 0 16px;color:#1e293b;">Accept This Contract</h3><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;"><div><label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:4px;">Full Name *</label><input type="text" id="accept-name" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;" placeholder="Your full name"></div><div><label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:4px;">Email *</label><input type="email" id="accept-email" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;" placeholder="your@email.com"></div></div><label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;margin-bottom:16px;cursor:pointer;"><input type="checkbox" id="accept-agree"> I have read and agree to the terms and conditions of this contract</label><button onclick="acceptContract(\\''+token+'\\')" style="padding:12px 32px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">Accept & Sign Contract</button><div id="accept-error" style="color:#dc2626;font-size:13px;margin-top:8px;"></div></div>'
+              }
+            </div>
+          </div>
+          <p style="text-align:center;font-size:11px;color:#94a3b8;margin-top:16px;">Powered by Credentik</p>
+        `;
+      } catch(e) { document.getElementById('contract-loading').style.display='none'; document.getElementById('contract-invalid').style.display=''; }
+    }
+
+    async function acceptContract(token) {
+      const name = document.getElementById('accept-name')?.value?.trim();
+      const email = document.getElementById('accept-email')?.value?.trim();
+      const agree = document.getElementById('accept-agree')?.checked;
+      const errEl = document.getElementById('accept-error');
+      if (!name || !email) { errEl.textContent = 'Please enter your name and email.'; return; }
+      if (!agree) { errEl.textContent = 'You must agree to the terms.'; return; }
+      errEl.textContent = '';
+      try {
+        const res = await fetch(`${API_BASE}/contracts/view/${token}/accept`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ name, email }),
+        });
+        const json = await res.json();
+        if (!res.ok) { errEl.textContent = json.message || 'Failed to accept contract.'; return; }
+        document.getElementById('contract-accept-section').innerHTML = '<div style="text-align:center;padding:20px;background:#f0fdf4;border-radius:8px;"><div style="font-size:18px;font-weight:700;color:#16a34a;margin-bottom:8px;">Contract Accepted!</div><p style="margin:0;font-size:13px;color:#475569;">Thank you, <strong>'+name+'</strong>. The agency has been notified.</p></div>';
+      } catch(e) { errEl.textContent = 'Network error. Please try again.'; }
+    }
+
     // Check onboard hash on page load
     if (checkOnboardHash()) {
       // We're in onboard mode — don't proceed with normal auth
+    } else if (checkContractHash()) {
+      // Contract view mode
     }
     window.addEventListener('hashchange', () => {
       if (location.hash.match(/^#onboard\//)) checkOnboardHash();
+      if (location.hash.match(/^#contract\//)) checkContractHash();
     });
   </script>
 

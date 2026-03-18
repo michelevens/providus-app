@@ -580,6 +580,18 @@ async function navigateTo(page) {
       }
       await renderBillingPage();
       break;
+    case 'contracts':
+      pageTitle.textContent = 'Contracts & Agreements';
+      pageSubtitle.textContent = 'Create and manage service agreements with organizations';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openContractModal()">+ New Contract</button>' + printBtn;
+      await renderContractsPage();
+      break;
+    case 'contract-detail':
+      pageTitle.textContent = 'Contract Detail';
+      pageSubtitle.textContent = '';
+      pageActions.innerHTML = printBtn;
+      await renderContractDetail(window._selectedContractId);
+      break;
     case 'invoice-detail':
       pageTitle.textContent = 'Invoice Detail';
       pageSubtitle.textContent = '';
@@ -6676,6 +6688,145 @@ function handleNppesProxy(payload) {
     } catch (e) { showToast('Error: ' + e.message); }
   },
 
+  // ── Contracts ──
+  openContractModal() {
+    _contractLineItems = [{ description: '', qty: 1, rate: 0 }];
+    document.getElementById('contract-modal-title').textContent = 'New Contract';
+    ['ctr-title','ctr-org','ctr-client-name','ctr-client-email','ctr-effective','ctr-expiration','ctr-payment-terms','ctr-terms'].forEach(f => {
+      const el = document.getElementById(f); if (el) el.value = '';
+    });
+    document.getElementById('ctr-edit-id').value = '';
+    document.getElementById('ctr-org-id').value = '';
+    document.getElementById('ctr-frequency').value = 'monthly';
+    const editor = document.getElementById('contract-line-items-editor');
+    if (editor) editor.innerHTML = _renderContractLineItems();
+    document.getElementById('contract-modal').classList.add('active');
+  },
+  async filterContractOrg(val) {
+    const dd = document.getElementById('ctr-org-dropdown');
+    if (!dd) return;
+    if (!this._ctrOrgCache) {
+      try { this._ctrOrgCache = await store.getAll('organizations'); } catch(e) { this._ctrOrgCache = []; }
+    }
+    const q = (val || '').toLowerCase();
+    const matches = q.length > 0
+      ? this._ctrOrgCache.filter(o => (o.name || '').toLowerCase().includes(q)).slice(0, 8)
+      : this._ctrOrgCache.slice(0, 8);
+    if (matches.length === 0) { dd.style.display = 'none'; return; }
+    dd.style.display = 'block';
+    dd.innerHTML = matches.map(o => `
+      <div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;"
+           onmousedown="window.app.selectContractOrg(${o.id},'${escAttr(o.name)}','${escAttr(o.email || o.contactEmail || '')}')"
+           onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='#fff'">
+        <span><strong>${escHtml(o.name)}</strong> <span style="font-family:monospace;font-size:11px;color:var(--brand-600);">#${toHexId(o.id)}</span></span>
+        <span style="font-size:11px;color:var(--gray-500);">${escHtml(o.email || o.contactEmail || '')}</span>
+      </div>
+    `).join('');
+    setTimeout(() => { const close = e => { if (!dd.contains(e.target) && e.target.id !== 'ctr-org') { dd.style.display='none'; document.removeEventListener('click',close); }}; document.addEventListener('click',close); }, 50);
+  },
+  selectContractOrg(id, name, email) {
+    document.getElementById('ctr-org').value = name;
+    document.getElementById('ctr-org-id').value = id;
+    document.getElementById('ctr-client-name').value = name;
+    if (email && !document.getElementById('ctr-client-email').value) document.getElementById('ctr-client-email').value = email;
+    document.getElementById('ctr-org-dropdown').style.display = 'none';
+  },
+  filterContractSvc(idx, val) {
+    const dd = document.getElementById('ctr-svc-dd-' + idx);
+    if (!dd || !_billingServices.length) { if (!_billingServices.length) store.getServices().then(s => { _billingServices = s || []; }).catch(() => {}); return; }
+    const q = (val || '').toLowerCase();
+    const matches = q.length > 0 ? _billingServices.filter(s => (s.name||s.serviceName||'').toLowerCase().includes(q)||(s.code||s.serviceCode||'').toLowerCase().includes(q)).slice(0,6) : _billingServices.slice(0,6);
+    if (!matches.length) { dd.style.display='none'; return; }
+    dd.style.display='block';
+    dd.innerHTML = matches.map(s => {
+      const name = escHtml(s.name||s.serviceName||''); const code = escHtml(s.code||s.serviceCode||'');
+      const rate = s.rate||s.defaultRate||s.defaultPrice||s.default_price||0;
+      return `<div style="padding:6px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;" onmousedown="window.app.selectContractSvc(${idx},${s.id})" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='#fff'"><span><strong>${name}</strong> ${code?'<code style="font-size:11px;color:var(--gray-500);">'+code+'</code>':''}</span><span style="font-weight:600;">${_fmtMoney(rate)}</span></div>`;
+    }).join('');
+    setTimeout(() => { const close = e => { if (!dd.contains(e.target)) { dd.style.display='none'; document.removeEventListener('click',close); }}; document.addEventListener('click',close); }, 50);
+  },
+  selectContractSvc(idx, serviceId) {
+    const svc = _billingServices.find(s => s.id === serviceId);
+    if (!svc || !_contractLineItems[idx]) return;
+    _contractLineItems[idx].description = svc.name || svc.serviceName || '';
+    _contractLineItems[idx].rate = svc.rate || svc.defaultRate || svc.defaultPrice || svc.default_price || 0;
+    _contractLineItems[idx].svcId = svc.id;
+    const editor = document.getElementById('contract-line-items-editor');
+    if (editor) editor.innerHTML = _renderContractLineItems();
+  },
+  addContractLine() {
+    _contractLineItems.push({ description: '', qty: 1, rate: 0 });
+    const editor = document.getElementById('contract-line-items-editor');
+    if (editor) editor.innerHTML = _renderContractLineItems();
+  },
+  removeContractLine(idx) {
+    _contractLineItems.splice(idx, 1);
+    if (!_contractLineItems.length) _contractLineItems.push({ description: '', qty: 1, rate: 0 });
+    const editor = document.getElementById('contract-line-items-editor');
+    if (editor) editor.innerHTML = _renderContractLineItems();
+  },
+  updateContractLine(idx, field, value) {
+    if (!_contractLineItems[idx]) return;
+    if (field === 'qty') _contractLineItems[idx].qty = parseInt(value) || 1;
+    else if (field === 'rate') _contractLineItems[idx].rate = parseFloat(value) || 0;
+    else _contractLineItems[idx][field] = value;
+    const editor = document.getElementById('contract-line-items-editor');
+    if (editor) editor.innerHTML = _renderContractLineItems();
+  },
+  async saveContract() {
+    const title = document.getElementById('ctr-title')?.value?.trim();
+    const effective = document.getElementById('ctr-effective')?.value;
+    if (!title) { showToast('Contract title is required'); return; }
+    if (!effective) { showToast('Effective date is required'); return; }
+    const validItems = _contractLineItems.filter(i => i.description.trim());
+    if (!validItems.length) { showToast('Add at least one service'); return; }
+
+    const data = {
+      title,
+      organization_id: document.getElementById('ctr-org-id')?.value || null,
+      client_name: document.getElementById('ctr-client-name')?.value?.trim() || '',
+      client_email: document.getElementById('ctr-client-email')?.value?.trim() || '',
+      effective_date: effective,
+      expiration_date: document.getElementById('ctr-expiration')?.value || null,
+      billing_frequency: document.getElementById('ctr-frequency')?.value || 'monthly',
+      payment_terms: document.getElementById('ctr-payment-terms')?.value?.trim() || '',
+      terms_and_conditions: document.getElementById('ctr-terms')?.value || '',
+      items: validItems.map(i => ({ description: i.description, quantity: i.qty, unit_price: i.rate, service_catalog_id: i.svcId || null })),
+    };
+
+    try {
+      const editId = document.getElementById('ctr-edit-id')?.value;
+      if (editId) { await store.updateContract(editId, data); showToast('Contract updated'); }
+      else { await store.createContract(data); showToast('Contract created'); }
+      document.getElementById('contract-modal').classList.remove('active');
+      await renderContractsPage();
+    } catch(e) { showToast('Error: ' + e.message); }
+  },
+  openContractDetail(id) {
+    window._selectedContractId = id;
+    this.navigateTo('contract-detail');
+  },
+  async sendContract(id) {
+    if (!await appConfirm('Send this contract to the client? They will receive an email with a link to view and accept.', { title: 'Send Contract', okLabel: 'Send' })) return;
+    try {
+      const result = await store.sendContract(id);
+      showToast('Contract sent!');
+      if (result.viewUrl || result.view_url) navigator.clipboard.writeText(result.viewUrl || result.view_url).catch(() => {});
+      await renderContractDetail(id);
+    } catch(e) { showToast('Error: ' + e.message); }
+  },
+  async activateContract(id) {
+    try { await store.updateContract(id, { status: 'active' }); showToast('Contract activated'); await renderContractDetail(id); } catch(e) { showToast('Error: ' + e.message); }
+  },
+  async terminateContract(id) {
+    if (!await appConfirm('Terminate this contract?', { title: 'Terminate Contract', okLabel: 'Terminate', okClass: 'btn-danger' })) return;
+    try { await store.terminateContract(id, 'Terminated by agency'); showToast('Contract terminated'); await renderContractDetail(id); } catch(e) { showToast('Error: ' + e.message); }
+  },
+  async genInvoice(id) {
+    if (!await appConfirm('Generate an invoice from this contract?', { title: 'Generate Invoice' })) return;
+    try { await store.generateInvoiceFromContract(id); showToast('Invoice generated from contract'); } catch(e) { showToast('Error: ' + e.message); }
+  },
+
   // ── Subscription ──
   async selectPlan(tier) {
     try {
@@ -11104,6 +11255,217 @@ async function renderInvoiceDetail(invoiceId) {
             </tbody>
           </table>
         ` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No payments recorded yet.</div>'}
+      </div>
+    </div>
+  `;
+}
+
+// ─── Contracts & Agreements Page ───
+
+let _contractLineItems = [{ description: '', qty: 1, rate: 0 }];
+
+function _renderContractLineItems() {
+  return `<div>
+    <div style="display:flex;gap:8px;font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;padding:0 0 6px;">
+      <div style="flex:3;">Service</div><div style="flex:1;text-align:center;">Qty</div><div style="flex:1;text-align:center;">Rate</div><div style="flex:1;text-align:right;">Total</div><div style="width:32px;"></div>
+    </div>
+    ${_contractLineItems.map((item, idx) => `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+        <div style="flex:3;position:relative;">
+          <input type="text" class="form-control" style="height:34px;font-size:13px;width:100%;" value="${escAttr(item.description)}" onchange="window.app.updateContractLine(${idx},'description',this.value)" oninput="window.app.filterContractSvc(${idx},this.value)" onfocus="window.app.filterContractSvc(${idx},this.value)" placeholder="Type to search services...">
+          <div id="ctr-svc-dd-${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10;background:#fff;border:1px solid var(--gray-200);border-radius:0 0 8px 8px;max-height:150px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+        </div>
+        <input type="number" class="form-control" style="flex:1;height:34px;font-size:13px;text-align:center;" value="${item.qty}" min="1" step="1" onchange="window.app.updateContractLine(${idx},'qty',this.value)">
+        <input type="number" class="form-control" style="flex:1;height:34px;font-size:13px;text-align:center;" value="${item.rate}" min="0" step="0.01" onchange="window.app.updateContractLine(${idx},'rate',this.value)">
+        <div style="flex:1;text-align:right;font-weight:600;font-size:13px;">${_fmtMoney(item.qty * item.rate)}</div>
+        <button class="btn btn-sm" style="width:32px;height:32px;padding:0;color:var(--red);" onclick="window.app.removeContractLine(${idx})">&times;</button>
+      </div>
+    `).join('')}
+    <button class="btn btn-sm" style="margin-top:4px;font-size:12px;" onclick="window.app.addContractLine()">+ Add Service</button>
+    <div style="margin-top:12px;border-top:1px solid var(--gray-200);padding-top:12px;text-align:right;">
+      <div style="font-size:18px;font-weight:800;">Total: ${_fmtMoney(_contractLineItems.reduce((s, i) => s + i.qty * i.rate, 0))}</div>
+    </div>
+  </div>`;
+}
+
+async function renderContractsPage() {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  let stats = { active: 0, draft: 0, sent: 0, expiring_soon: 0, total_value: 0 };
+  let contracts = [];
+  try { stats = await store.getContractStats(); } catch(e) {}
+  try {
+    const res = await store.getContracts();
+    contracts = Array.isArray(res) ? res : (res.data || []);
+  } catch(e) {}
+
+  const statusBadge = s => {
+    const map = { draft:'inactive', sent:'pending', viewed:'pending', accepted:'approved', active:'approved', expired:'denied', terminated:'denied' };
+    return `<span class="badge badge-${map[s]||'inactive'}">${s}</span>`;
+  };
+
+  body.innerHTML = `
+    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
+      <div class="stat-card"><div class="label">Active</div><div class="value" style="color:var(--green);">${stats.active||0}</div></div>
+      <div class="stat-card"><div class="label">Drafts</div><div class="value" style="color:var(--gray-500);">${stats.draft||0}</div></div>
+      <div class="stat-card"><div class="label">Sent</div><div class="value" style="color:var(--brand-600);">${stats.sent||0}</div></div>
+      <div class="stat-card"><div class="label">Expiring Soon</div><div class="value" style="color:var(--gold);">${stats.expiring_soon||stats.expiringSoon||0}</div></div>
+      <div class="stat-card"><div class="label">Total Value</div><div class="value" style="color:var(--green);">${_fmtMoney(stats.total_value||stats.totalValue)}</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>All Contracts</h3></div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Contract #</th><th>Title</th><th>Client</th><th>Status</th><th>Effective</th><th>Expires</th><th>Total</th><th>Actions</th></tr></thead>
+            <tbody>
+              ${contracts.map(c => {
+                const orgName = c.organization?.name || c.clientName || c.client_name || '—';
+                const orgId = c.organizationId || c.organization_id;
+                const prvId = c.providerId || c.provider_id;
+                const hexTag = orgId ? ' <span style="font-family:monospace;font-size:11px;color:var(--brand-600);">#'+toHexId(orgId)+'</span>' : (prvId ? ' <span style="font-family:monospace;font-size:11px;color:var(--brand-600);">#'+toHexId(prvId)+'</span>' : '');
+                return `<tr style="cursor:pointer;" onclick="window.app.openContractDetail(${c.id})">
+                  <td><strong>${escHtml(c.contractNumber || c.contract_number || '')}</strong></td>
+                  <td>${escHtml(c.title || '')}</td>
+                  <td>${escHtml(orgName)}${hexTag}</td>
+                  <td>${statusBadge(c.status)}</td>
+                  <td>${formatDateDisplay(c.effectiveDate || c.effective_date)}</td>
+                  <td>${c.expirationDate || c.expiration_date ? formatDateDisplay(c.expirationDate || c.expiration_date) : '—'}</td>
+                  <td><strong>${_fmtMoney(c.total)}</strong></td>
+                  <td><button class="btn btn-sm" onclick="event.stopPropagation();window.app.openContractDetail(${c.id})">View</button></td>
+                </tr>`;
+              }).join('')}
+              ${contracts.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No contracts yet. Click "+ New Contract" to create one.</td></tr>' : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contract Modal -->
+    <div class="modal-overlay" id="contract-modal">
+      <div class="modal" style="max-width:720px;">
+        <div class="modal-header">
+          <h3 id="contract-modal-title">New Contract</h3>
+          <button class="modal-close" onclick="document.getElementById('contract-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+          <input type="hidden" id="ctr-edit-id" value="">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Contract Title *</label><input type="text" id="ctr-title" class="form-control" placeholder="e.g. Credentialing Services Agreement"></div>
+            <div class="auth-field" style="margin:0;position:relative;">
+              <label>Organization</label>
+              <input type="text" id="ctr-org" class="form-control" autocomplete="off" oninput="window.app.filterContractOrg(this.value)" onfocus="window.app.filterContractOrg(this.value)" placeholder="Search organizations...">
+              <input type="hidden" id="ctr-org-id" value="">
+              <div id="ctr-org-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10;background:#fff;border:1px solid var(--gray-200);border-radius:0 0 8px 8px;max-height:150px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Client Name</label><input type="text" id="ctr-client-name" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Client Email</label><input type="email" id="ctr-client-email" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Effective Date *</label><input type="date" id="ctr-effective" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Expiration Date</label><input type="date" id="ctr-expiration" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Billing Frequency</label>
+              <select id="ctr-frequency" class="form-control">
+                <option value="one_time">One-Time</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="annually">Annually</option>
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Payment Terms</label><input type="text" id="ctr-payment-terms" class="form-control" placeholder="e.g. Net 30"></div>
+          </div>
+          <div class="auth-field" style="margin:0 0 16px;"><label>Terms & Conditions</label><textarea id="ctr-terms" class="form-control" rows="3" placeholder="Enter contract terms..."></textarea></div>
+          <label style="display:block;font-size:12px;font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Services & Line Items</label>
+          <div id="contract-line-items-editor">${_renderContractLineItems()}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="document.getElementById('contract-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveContract()">Save Contract</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function renderContractDetail(id) {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  let c;
+  try { c = await store.getContract(id); } catch(e) { body.innerHTML = '<p>Contract not found.</p>'; return; }
+
+  const items = c.items || [];
+  const orgName = c.organization?.name || c.clientName || c.client_name || '—';
+  const orgId = c.organizationId || c.organization_id;
+  const prvId = c.providerId || c.provider_id;
+  const hexTag = orgId ? '#'+toHexId(orgId) : (prvId ? '#'+toHexId(prvId) : '');
+  const viewUrl = location.origin + location.pathname + '#contract/' + c.token;
+  const statusBadge = s => {
+    const map = { draft:'inactive', sent:'pending', viewed:'pending', accepted:'approved', active:'approved', expired:'denied', terminated:'denied' };
+    return `<span class="badge badge-${map[s]||'inactive'}">${s}</span>`;
+  };
+
+  body.innerHTML = `
+    <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+      <button class="btn btn-sm" onclick="window.app.navigateTo('contracts')">&larr; Back to Contracts</button>
+      <div style="display:flex;gap:8px;">
+        ${c.status === 'draft' ? `<button class="btn btn-primary btn-sm" onclick="window.app.sendContract(${c.id})">Send Contract</button>` : ''}
+        ${['sent','viewed','accepted'].includes(c.status) ? `<button class="btn btn-sm" onclick="window.app.activateContract(${c.id})">Mark Active</button>` : ''}
+        ${['active','accepted'].includes(c.status) ? `<button class="btn btn-sm" onclick="window.app.genInvoice(${c.id})">Generate Invoice</button>` : ''}
+        ${!['terminated','expired'].includes(c.status) ? `<button class="btn btn-sm" style="color:var(--red);" onclick="window.app.terminateContract(${c.id})">Terminate</button>` : ''}
+        <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${viewUrl}');showToast('Link copied!')">Copy Link</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-body" style="padding:24px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+          <div>
+            <h2 style="margin:0 0 4px;">${escHtml(c.title)} ${statusBadge(c.status)}</h2>
+            <div style="font-size:14px;color:var(--gray-500);">${escHtml(c.contractNumber || c.contract_number)}</div>
+          </div>
+          <div style="text-align:right;font-size:24px;font-weight:800;">${_fmtMoney(c.total)}</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;font-size:13px;">
+          <div><span class="text-muted">Client:</span> <strong>${escHtml(orgName)}</strong> ${hexTag ? '<span style="font-family:monospace;font-size:11px;color:var(--brand-600);">'+hexTag+'</span>' : ''}</div>
+          <div><span class="text-muted">Email:</span> ${escHtml(c.clientEmail || c.client_email || '—')}</div>
+          <div><span class="text-muted">Billing:</span> ${(c.billingFrequency || c.billing_frequency || 'one_time').replace('_',' ')}</div>
+          <div><span class="text-muted">Effective:</span> <strong>${formatDateDisplay(c.effectiveDate || c.effective_date)}</strong></div>
+          <div><span class="text-muted">Expires:</span> ${c.expirationDate || c.expiration_date ? formatDateDisplay(c.expirationDate || c.expiration_date) : 'No expiration'}</div>
+          <div><span class="text-muted">Payment:</span> ${escHtml(c.paymentTerms || c.payment_terms || 'Due on receipt')}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-header"><h3>Services</h3></div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Service</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+            <tbody>
+              ${items.map(i => `<tr><td>${escHtml(i.description)}</td><td>${parseFloat(i.quantity)}</td><td>${_fmtMoney(i.unitPrice || i.unit_price)}</td><td><strong>${_fmtMoney(i.total)}</strong></td></tr>`).join('')}
+            </tbody>
+            <tfoot><tr><td colspan="3" style="text-align:right;font-weight:700;">Total</td><td><strong>${_fmtMoney(c.total)}</strong></td></tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    ${c.termsAndConditions || c.terms_and_conditions ? `<div class="card" style="margin-bottom:20px;"><div class="card-header"><h3>Terms & Conditions</h3></div><div class="card-body"><div style="white-space:pre-wrap;font-size:13px;">${escHtml(c.termsAndConditions || c.terms_and_conditions)}</div></div></div>` : ''}
+
+    <div class="card">
+      <div class="card-header"><h3>Activity</h3></div>
+      <div class="card-body" style="padding:20px;">
+        <div style="font-size:13px;display:flex;flex-direction:column;gap:8px;">
+          <div>Created: <strong>${formatDateDisplay(c.createdAt || c.created_at)}</strong></div>
+          ${c.sentAt || c.sent_at ? `<div>Sent: <strong>${formatDateDisplay(c.sentAt || c.sent_at)}</strong></div>` : ''}
+          ${c.viewedAt || c.viewed_at ? `<div>Viewed: <strong>${formatDateDisplay(c.viewedAt || c.viewed_at)}</strong></div>` : ''}
+          ${c.acceptedAt || c.accepted_at ? `<div>Accepted by <strong>${escHtml(c.acceptedByName || c.accepted_by_name || '')}</strong> (${escHtml(c.acceptedByEmail || c.accepted_by_email || '')}) on <strong>${formatDateDisplay(c.acceptedAt || c.accepted_at)}</strong></div>` : ''}
+          ${c.terminatedAt || c.terminated_at ? `<div style="color:var(--red);">Terminated: <strong>${formatDateDisplay(c.terminatedAt || c.terminated_at)}</strong> ${c.terminatedReason || c.terminated_reason ? '— '+escHtml(c.terminatedReason || c.terminated_reason) : ''}</div>` : ''}
+        </div>
       </div>
     </div>
   `;

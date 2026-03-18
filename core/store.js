@@ -1001,6 +1001,58 @@ class Store {
         await this._fetch(`${CONFIG.API_URL}/communication-logs/${id}`, { method: 'DELETE' });
     }
 
+    // ── Contracts & Agreements ──
+    async getContracts(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/contracts${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
+    async getContract(id) {
+        const result = await this._fetch(`${CONFIG.API_URL}/contracts/${id}`);
+        return result.data || result;
+    }
+    async createContract(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/contracts`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async updateContract(id, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/contracts/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async deleteContract(id) {
+        return this._fetch(`${CONFIG.API_URL}/contracts/${id}`, { method: 'DELETE' });
+    }
+    async sendContract(id) {
+        const result = await this._fetch(`${CONFIG.API_URL}/contracts/${id}/send`, { method: 'POST' });
+        return result.data || result;
+    }
+    async terminateContract(id, reason = '') {
+        const result = await this._fetch(`${CONFIG.API_URL}/contracts/${id}/terminate`, { method: 'POST', body: JSON.stringify({ reason }) });
+        return result.data || result;
+    }
+    async generateInvoiceFromContract(id) {
+        const result = await this._fetch(`${CONFIG.API_URL}/contracts/${id}/generate-invoice`, { method: 'POST' });
+        return result.data || result;
+    }
+    async getContractStats() {
+        const result = await this._fetch(`${CONFIG.API_URL}/contracts/stats`);
+        return result.data || result;
+    }
+    async getPublicContract(token) {
+        const response = await fetch(`${CONFIG.API_URL}/contracts/view/${token}`, { headers: { 'Accept': 'application/json' } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const json = await response.json();
+        return json.data || json;
+    }
+    async acceptPublicContract(token, data) {
+        const response = await fetch(`${CONFIG.API_URL}/contracts/view/${token}/accept`, {
+            method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.message || `HTTP ${response.status}`); }
+        return (await response.json());
+    }
+
     // ── Subscription & Billing (Stripe) ──
     async getSubscriptionStatus() {
         const result = await this._fetch(`${CONFIG.API_URL}/subscription/status`);
