@@ -434,6 +434,9 @@
         <div class="header-actions-group">
           <div class="page-header-actions" id="page-actions"></div>
           <div class="header-icon-bar">
+            <button class="header-icon-btn" onclick="window.app.openGlobalSearch()" title="Search (Ctrl+K)">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+            </button>
             <button class="header-icon-btn" onclick="window.app.quickAddApp()" title="Quick Add Application">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
             </button>
@@ -1541,6 +1544,11 @@
       if (token) {
         initApp();
       }
+    });
+
+    // Ctrl+K / Cmd+K → Global Search
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); if (window.app?.openGlobalSearch) window.app.openGlobalSearch(); }
     });
 
     if ('serviceWorker' in navigator) {

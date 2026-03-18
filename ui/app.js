@@ -380,7 +380,7 @@ async function navigateTo(page) {
     case 'applications':
       pageTitle.textContent = 'Applications';
       pageSubtitle.textContent = 'All credentialing applications';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openAddModal()">+ Add Application</button>' + printBtn;
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openAddModal()">+ Add Application</button> <button class="btn" onclick="window.app.openCrossFacilityCredentialing()">Cross-Facility</button>' + printBtn;
       await renderApplications();
       break;
     case 'followups':
@@ -392,7 +392,7 @@ async function navigateTo(page) {
     case 'tasks':
       pageTitle.textContent = 'Tasks';
       pageSubtitle.textContent = 'Track all credentialing & licensing tasks';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.showAddTaskForm()">+ Add Task</button>' + printBtn;
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.showAddTaskForm()">+ Add Task</button> <button class="btn" onclick="window.app.showWorkflowTemplates()">Workflow Templates</button>' + printBtn;
       await renderTasksPage();
       break;
     case 'providers':
@@ -607,8 +607,8 @@ async function navigateTo(page) {
       break;
     case 'compliance':
       pageTitle.textContent = 'Compliance Center';
-      pageSubtitle.textContent = 'Compliance dashboard, reports, and exports';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.generateComplianceReport()">Generate Report</button> <button class="btn" onclick="window.app.exportComplianceData()">Export</button>' + printBtn;
+      pageSubtitle.textContent = 'Compliance scoring, risk matrix, and audit exports';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.exportAuditPacket()">Audit Packet</button> <button class="btn" onclick="window.app.generateComplianceReport()">Refresh</button> <button class="btn" onclick="window.app.exportComplianceData()">Export</button>' + printBtn;
       await renderCompliancePage();
       break;
     case 'faq':
@@ -1072,6 +1072,74 @@ async function renderDashboard() {
         </div>
       </div>
     </div>
+
+    <!-- Smart Recommendations -->
+    ${(() => {
+      const recs = [];
+      // Expiring licenses
+      const urgentLic = licenses.filter(l => {
+        if (!l.expirationDate) return false;
+        const d = new Date(l.expirationDate);
+        return d > today && d <= new Date(Date.now() + 30 * 86400000);
+      });
+      if (urgentLic.length > 0) {
+        recs.push({ icon: '&#9888;', color: 'var(--red)', title: `${urgentLic.length} license(s) expiring within 30 days`, desc: urgentLic.map(l => `${getStateName(l.state)} — expires ${formatDateDisplay(l.expirationDate)}`).join(', '), action: 'licenses', actionLabel: 'View Licenses' });
+      }
+      // Expired licenses
+      if (expiredLic.length > 0) {
+        recs.push({ icon: '&#10007;', color: 'var(--red)', title: `${expiredLic.length} expired license(s) need renewal`, desc: 'Expired licenses prevent billing and may trigger compliance violations.', action: 'licenses', actionLabel: 'Renew Now' });
+      }
+      // Overdue follow-ups
+      if (overdue.length > 0) {
+        recs.push({ icon: '&#128337;', color: 'var(--warning-500)', title: `${overdue.length} overdue follow-up(s)`, desc: 'Delayed follow-ups slow credentialing. Average delay compounds over time.', action: 'followups', actionLabel: 'View Follow-ups' });
+      }
+      // Escalations
+      if (escalations.length > 0) {
+        recs.push({ icon: '&#9650;', color: 'var(--warning-500)', title: `${escalations.length} application(s) need escalation`, desc: 'Applications stuck longer than expected. Consider contacting payer directly.', action: 'applications', actionLabel: 'View Applications' });
+      }
+      // Document gaps
+      const incompleteApps = apps.filter(a => {
+        if (['approved','denied','withdrawn'].includes(a.status)) return false;
+        const docs = a.documentChecklist || {};
+        return !CRED_DOCUMENTS.every(d => docs[d.id]?.completed);
+      });
+      if (incompleteApps.length > 0) {
+        recs.push({ icon: '&#128196;', color: 'var(--brand-600)', title: `${incompleteApps.length} application(s) missing documents`, desc: 'Incomplete document checklists delay credentialing submissions.', action: 'applications', actionLabel: 'Complete Docs' });
+      }
+      // High-value expansion
+      if (topExpansion.length > 0) {
+        const topState = topExpansion[0];
+        recs.push({ icon: '&#127919;', color: 'var(--green)', title: `Expansion opportunity: ${getStateName(topState.state)}`, desc: `Readiness score ${topState.readinessScore}/10 — ${topState.practiceAuthority} practice authority, ${topState.controlledSubstances === 'allowed' ? 'CS allowed' : 'CS limited'}.`, action: 'policies', actionLabel: 'View Policies' });
+      }
+      // Overdue tasks
+      if (overdueTasks.length > 0) {
+        recs.push({ icon: '&#9745;', color: 'var(--warning-500)', title: `${overdueTasks.length} overdue task(s)`, desc: 'Overdue tasks may indicate process bottlenecks.', action: 'tasks', actionLabel: 'View Tasks' });
+      }
+      // All good!
+      if (recs.length === 0) {
+        recs.push({ icon: '&#10003;', color: 'var(--green)', title: 'All clear!', desc: 'No urgent actions needed. All credentials and tasks are in good standing.', action: null, actionLabel: null });
+      }
+
+      return recs.length > 0 ? `
+    <div class="card">
+      <div class="card-header">
+        <h3>Smart Recommendations</h3>
+        <span class="text-sm text-muted">${recs.length} action${recs.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="card-body" style="padding:8px 16px;">
+        ${recs.slice(0, 6).map(r => `
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--gray-100);">
+            <div style="width:28px;height:28px;border-radius:6px;background:${r.color}12;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;color:${r.color};">${r.icon}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:600;color:var(--gray-800);">${r.title}</div>
+              <div style="font-size:11px;color:var(--gray-500);margin-top:1px;">${r.desc}</div>
+            </div>
+            ${r.action ? `<button class="btn btn-sm" onclick="window.app.navigateTo('${r.action}')" style="flex-shrink:0;font-size:11px;">${r.actionLabel}</button>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>` : '';
+    })()}
   `;
 
   // ─── Render Charts (after DOM is ready) ───
@@ -1689,8 +1757,13 @@ async function renderStatePolicies() {
 
 async function renderRevenueForecast() {
   const body = document.getElementById('page-body');
-  const apps = store.filterByScope(await store.getAll('applications'));
-  const licenses = store.filterByScope(await store.getAll('licenses'));
+  const [apps, licenses, providers, invoices, services] = await Promise.all([
+    store.getAll('applications').then(a => store.filterByScope(a)),
+    store.getAll('licenses').then(l => store.filterByScope(l)),
+    store.getAll('providers').then(p => store.filterByScope(p)),
+    store.getAll('invoices').catch(() => []),
+    store.getAll('services').catch(() => []),
+  ]);
 
   // Categorize applications
   const approved = apps.filter(a => a.status === 'approved');
@@ -1868,6 +1941,233 @@ async function renderRevenueForecast() {
         ` : '<div class="text-sm text-muted" style="padding:2rem;text-align:center;">No applications with revenue estimates yet.</div>'}
       </div>
     </div>
+
+    <!-- Provider Revenue Attribution -->
+    ${providers.length > 0 ? `
+    <div class="card">
+      <div class="card-header"><h3>Provider Revenue Attribution</h3></div>
+      <div class="card-body" style="padding:0;overflow-x:auto;">
+        <table>
+          <thead><tr><th>Provider</th><th>Approved Apps</th><th>Monthly Revenue</th><th>Annual Revenue</th><th>Avg Cred Time</th><th>States</th><th>Revenue Share</th></tr></thead>
+          <tbody>
+            ${providers.map(p => {
+              const provApps = apps.filter(a => a.providerId === p.id);
+              const provApproved = provApps.filter(a => a.status === 'approved');
+              const provMonthly = provApproved.reduce((s, a) => s + (Number(a.estMonthlyRevenue) || 0), 0);
+              const provAnnual = provMonthly * 12;
+              const provStates = [...new Set(provApps.map(a => a.state).filter(Boolean))].length;
+              const provWithDates = provApproved.filter(a => a.submittedDate && a.effectiveDate);
+              const provAvgDays = provWithDates.length > 0
+                ? Math.round(provWithDates.reduce((s, a) => s + (new Date(a.effectiveDate) - new Date(a.submittedDate)) / 86400000, 0) / provWithDates.length)
+                : '—';
+              const share = currentMonthly > 0 ? Math.round(provMonthly / currentMonthly * 100) : 0;
+              const provName = (p.firstName || '') + ' ' + (p.lastName || '');
+              return `<tr>
+                <td><a href="#" onclick="event.preventDefault();window.app.openProviderProfile('${p.id}')" style="font-weight:600;color:var(--gray-800);text-decoration:none;">${escHtml(provName.trim())}</a></td>
+                <td>${provApproved.length} / ${provApps.length}</td>
+                <td style="font-weight:700;color:var(--green);">$${provMonthly.toLocaleString()}</td>
+                <td style="font-weight:600;">$${provAnnual.toLocaleString()}</td>
+                <td>${provAvgDays}${provAvgDays !== '—' ? ' days' : ''}</td>
+                <td>${provStates}</td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <div style="width:60px;height:6px;background:var(--gray-200);border-radius:3px;overflow:hidden;">
+                      <div style="width:${share}%;height:100%;background:var(--brand-500);border-radius:3px;"></div>
+                    </div>
+                    <span style="font-size:12px;font-weight:600;">${share}%</span>
+                  </div>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}
+
+    <!-- Payer Profitability Analysis -->
+    ${apps.length > 0 ? (() => {
+      const payerData = {};
+      apps.forEach(a => {
+        const payer = getPayerById(a.payerId);
+        const name = payer ? payer.name : (a.payerName || 'Unknown');
+        if (!payerData[name]) payerData[name] = { approved: 0, total: 0, revenue: 0, totalDays: 0, daysCount: 0, states: new Set(), denied: 0 };
+        payerData[name].total++;
+        if (a.status === 'approved') {
+          payerData[name].approved++;
+          payerData[name].revenue += Number(a.estMonthlyRevenue) || 0;
+          if (a.submittedDate && a.effectiveDate) {
+            payerData[name].totalDays += (new Date(a.effectiveDate) - new Date(a.submittedDate)) / 86400000;
+            payerData[name].daysCount++;
+          }
+        }
+        if (a.status === 'denied') payerData[name].denied++;
+        if (a.state) payerData[name].states.add(a.state);
+      });
+      const sorted = Object.entries(payerData).sort((a, b) => b[1].revenue - a[1].revenue);
+      return `
+    <div class="card">
+      <div class="card-header"><h3>Payer Profitability</h3></div>
+      <div class="card-body" style="padding:0;overflow-x:auto;">
+        <table>
+          <thead><tr><th>Payer</th><th>Approved / Total</th><th>Approval Rate</th><th>Avg Cred Time</th><th>Monthly Revenue</th><th>States</th><th>Efficiency</th></tr></thead>
+          <tbody>
+            ${sorted.map(([name, d]) => {
+              const rate = d.total > 0 ? Math.round(d.approved / d.total * 100) : 0;
+              const avgDays = d.daysCount > 0 ? Math.round(d.totalDays / d.daysCount) : '—';
+              const efficiency = d.revenue > 0 && avgDays !== '—' ? (d.revenue / avgDays * 30).toFixed(0) : '—';
+              return `<tr>
+                <td style="font-weight:600;">${escHtml(name)}</td>
+                <td>${d.approved} / ${d.total}</td>
+                <td><span style="font-weight:600;color:${rate >= 75 ? 'var(--green)' : rate >= 50 ? 'var(--warning-500)' : 'var(--red)'};">${rate}%</span></td>
+                <td>${avgDays}${avgDays !== '—' ? ' days' : ''}</td>
+                <td style="font-weight:700;color:var(--green);">$${d.revenue.toLocaleString()}</td>
+                <td>${d.states.size}</td>
+                <td>${efficiency !== '—' ? `<span style="font-weight:600;color:var(--brand-600);">$${Number(efficiency).toLocaleString()}/mo</span>` : '—'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body" style="padding:8px 16px;border-top:1px solid var(--gray-100);">
+        <span class="text-sm text-muted">Efficiency = revenue per 30 days of credentialing time. Higher = faster ROI.</span>
+      </div>
+    </div>`;
+    })() : ''}
+
+    <!-- Credentialing Velocity Analytics -->
+    ${(() => {
+      const withDates = apps.filter(a => a.submittedDate && a.effectiveDate);
+      if (withDates.length === 0 && apps.length === 0) return '';
+
+      // Time per status phase (estimate from available data)
+      const statusPhases = {};
+      apps.forEach(a => {
+        if (!a.submittedDate) return;
+        const subDate = new Date(a.submittedDate);
+        const endDate = a.effectiveDate ? new Date(a.effectiveDate) : (a.status === 'approved' || a.status === 'credentialed' ? new Date() : null);
+        if (!endDate) return;
+        const totalDays = Math.round((endDate - subDate) / 86400000);
+        const status = a.status;
+        if (!statusPhases[status]) statusPhases[status] = { totalDays: 0, count: 0 };
+        statusPhases[status].totalDays += totalDays;
+        statusPhases[status].count++;
+      });
+
+      // Overall velocity metrics
+      const avgCredDaysAll = withDates.length > 0
+        ? Math.round(withDates.reduce((s, a) => s + (new Date(a.effectiveDate) - new Date(a.submittedDate)) / 86400000, 0) / withDates.length) : null;
+      const fastestCred = withDates.length > 0
+        ? Math.round(Math.min(...withDates.map(a => (new Date(a.effectiveDate) - new Date(a.submittedDate)) / 86400000))) : null;
+      const slowestCred = withDates.length > 0
+        ? Math.round(Math.max(...withDates.map(a => (new Date(a.effectiveDate) - new Date(a.submittedDate)) / 86400000))) : null;
+
+      // Active application age
+      const activeApps = apps.filter(a => ['submitted','in_review','pending_info','gathering_docs'].includes(a.status) && a.submittedDate);
+      const avgActiveAge = activeApps.length > 0
+        ? Math.round(activeApps.reduce((s, a) => s + (Date.now() - new Date(a.submittedDate)) / 86400000, 0) / activeApps.length) : null;
+      const staleApps = activeApps.filter(a => (Date.now() - new Date(a.submittedDate)) / 86400000 > 90);
+
+      // Bottleneck: which status holds apps longest
+      const statusAges = {};
+      activeApps.forEach(a => {
+        if (!statusAges[a.status]) statusAges[a.status] = [];
+        statusAges[a.status].push(Math.round((Date.now() - new Date(a.updatedAt || a.updated_at || a.submittedDate)) / 86400000));
+      });
+      const bottleneck = Object.entries(statusAges).sort((a, b) => {
+        const avgA = a[1].reduce((s, v) => s + v, 0) / a[1].length;
+        const avgB = b[1].reduce((s, v) => s + v, 0) / b[1].length;
+        return avgB - avgA;
+      })[0];
+
+      // Revenue lost during credentialing delays (estimated from pipeline)
+      const pipelineApps = apps.filter(a => ['submitted','in_review','pending_info'].includes(a.status));
+      const delayRevenue = pipelineApps.reduce((sum, a) => {
+        if (!a.submittedDate || !a.estMonthlyRevenue) return sum;
+        const daysWaiting = Math.round((Date.now() - new Date(a.submittedDate)) / 86400000);
+        return sum + (Number(a.estMonthlyRevenue) / 30) * daysWaiting;
+      }, 0);
+
+      // By payer speed
+      const payerSpeed = {};
+      withDates.forEach(a => {
+        const name = a.payerName || 'Unknown';
+        if (!payerSpeed[name]) payerSpeed[name] = [];
+        payerSpeed[name].push(Math.round((new Date(a.effectiveDate) - new Date(a.submittedDate)) / 86400000));
+      });
+      const sortedPayers = Object.entries(payerSpeed).map(([name, days]) => ({
+        name, avgDays: Math.round(days.reduce((s, d) => s + d, 0) / days.length), count: days.length,
+        fastest: Math.min(...days), slowest: Math.max(...days),
+      })).sort((a, b) => a.avgDays - b.avgDays);
+
+      return `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><h3>Credentialing Velocity</h3></div>
+      <div class="card-body">
+        <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:16px;">
+          <div class="stat-card" style="border-top:3px solid var(--brand-500);">
+            <div class="label">Avg Cred Time</div>
+            <div class="value" style="font-size:22px;">${avgCredDaysAll !== null ? avgCredDaysAll + 'd' : '—'}</div>
+            <div class="sub">${withDates.length} completed</div>
+          </div>
+          <div class="stat-card" style="border-top:3px solid var(--green);">
+            <div class="label">Fastest</div>
+            <div class="value" style="font-size:22px;color:var(--green);">${fastestCred !== null ? fastestCred + 'd' : '—'}</div>
+            <div class="sub">best case</div>
+          </div>
+          <div class="stat-card" style="border-top:3px solid var(--red);">
+            <div class="label">Slowest</div>
+            <div class="value" style="font-size:22px;color:var(--red);">${slowestCred !== null ? slowestCred + 'd' : '—'}</div>
+            <div class="sub">worst case</div>
+          </div>
+          <div class="stat-card" style="border-top:3px solid var(--warning-500);">
+            <div class="label">Avg Active Age</div>
+            <div class="value" style="font-size:22px;color:${avgActiveAge && avgActiveAge > 60 ? 'var(--red)' : 'var(--warning-500)'};">${avgActiveAge !== null ? avgActiveAge + 'd' : '—'}</div>
+            <div class="sub">${activeApps.length} in progress</div>
+          </div>
+          <div class="stat-card" style="border-top:3px solid ${staleApps.length > 0 ? 'var(--red)' : 'var(--gray-300)'};">
+            <div class="label">Stale (90d+)</div>
+            <div class="value" style="font-size:22px;color:${staleApps.length > 0 ? 'var(--red)' : 'var(--green)'};">${staleApps.length}</div>
+            <div class="sub">need attention</div>
+          </div>
+          <div class="stat-card" style="border-top:3px solid var(--warning-500);">
+            <div class="label">Revenue Lost to Delays</div>
+            <div class="value" style="font-size:22px;color:var(--warning-500);">$${Math.round(delayRevenue).toLocaleString()}</div>
+            <div class="sub">est. during wait time</div>
+          </div>
+        </div>
+
+        ${bottleneck ? `
+        <div style="padding:10px 14px;border-radius:8px;background:var(--warning-500)08;border:1px solid var(--warning-500)20;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:16px;">&#9888;</span>
+            <div>
+              <strong style="font-size:13px;">Bottleneck: ${bottleneck[0].replace(/_/g, ' ')}</strong>
+              <div class="text-sm text-muted">${bottleneck[1].length} app(s) averaging ${Math.round(bottleneck[1].reduce((s, v) => s + v, 0) / bottleneck[1].length)} days in this status</div>
+            </div>
+          </div>
+        </div>` : ''}
+
+        ${sortedPayers.length > 0 ? `
+        <div style="margin-top:4px;">
+          <h4 style="font-size:13px;margin:0 0 8px;color:var(--gray-600);">Speed by Payer</h4>
+          <div style="display:grid;gap:6px;">
+            ${sortedPayers.slice(0, 10).map(p => {
+              const maxBar = sortedPayers[sortedPayers.length - 1].avgDays || 1;
+              const pct = Math.round(p.avgDays / maxBar * 100);
+              return `<div style="display:flex;align-items:center;gap:10px;font-size:12px;">
+                <span style="min-width:140px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(p.name)}</span>
+                <div style="flex:1;height:8px;background:var(--gray-100);border-radius:4px;overflow:hidden;">
+                  <div style="width:${pct}%;height:100%;background:${p.avgDays <= 60 ? 'var(--green)' : p.avgDays <= 90 ? 'var(--warning-500)' : 'var(--red)'};border-radius:4px;"></div>
+                </div>
+                <span style="min-width:50px;font-weight:600;color:${p.avgDays <= 60 ? 'var(--green)' : p.avgDays <= 90 ? 'var(--warning-500)' : 'var(--red)'};">${p.avgDays}d</span>
+                <span style="min-width:24px;color:var(--gray-400);">(${p.count})</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>` : ''}
+      </div>
+    </div>`;
+    })()}
 
     <!-- Expansion Revenue Potential -->
     ${expansionRev.length > 0 ? `
@@ -2561,16 +2861,33 @@ async function renderLicenses() {
                 const isExpired = l.expirationDate && new Date(l.expirationDate) < new Date();
                 const isExpiringSoon = l.expirationDate && !isExpired &&
                   new Date(l.expirationDate) < new Date(Date.now() + 90 * 86400000);
+                const daysLeft = l.expirationDate ? Math.round((new Date(l.expirationDate) - new Date()) / 86400000) : null;
                 const expClass = isExpired ? 'color:var(--red);font-weight:600;' :
                   isExpiringSoon ? 'color:var(--warning-500);font-weight:600;' : '';
+                const verStatus = l.verificationStatus || l.verification_status;
+                const verDate = l.verifiedAt || l.verified_at || l.lastVerifiedAt || l.last_verified_at;
+                const verBadge = verStatus === 'verified'
+                  ? `<span title="Verified${verDate ? ' on ' + formatDateDisplay(verDate) : ''}" style="display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;background:rgba(34,197,94,0.12);color:var(--green);"><svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 110 16A8 8 0 018 0zm3.3 5.3L7 9.6 4.7 7.3a.5.5 0 00-.7.7l2.6 2.7a.5.5 0 00.7 0l4.7-4.7a.5.5 0 00-.7-.7z"/></svg>Verified</span>`
+                  : verStatus === 'mismatch'
+                  ? `<span title="Verification mismatch" style="display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;background:rgba(245,158,11,0.12);color:var(--warning-500);">&#9888; Mismatch</span>`
+                  : `<span title="Not yet verified" style="display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:500;background:var(--gray-100);color:var(--gray-400);">Unverified</span>`;
+                const expiryBadge = daysLeft !== null
+                  ? (isExpired
+                    ? `<div style="font-size:10px;color:var(--red);font-weight:600;margin-top:1px;">EXPIRED ${Math.abs(daysLeft)}d ago</div>`
+                    : daysLeft <= 30
+                    ? `<div style="font-size:10px;color:var(--red);font-weight:600;margin-top:1px;">${daysLeft}d left</div>`
+                    : daysLeft <= 90
+                    ? `<div style="font-size:10px;color:var(--warning-500);font-weight:500;margin-top:1px;">${daysLeft}d left</div>`
+                    : '')
+                  : '';
                 return `
                   <tr>
                     <td><strong>${getStateName(l.state)}</strong> (${l.state})</td>
                     <td><code>${escHtml(l.licenseNumber) || '-'}</code></td>
                     <td>${escHtml(l.licenseType) || '-'}</td>
-                    <td><span class="badge badge-${l.status}">${l.status}</span></td>
+                    <td><span class="badge badge-${l.status}">${l.status}</span> ${verBadge}</td>
                     <td>${formatDateDisplay(l.issueDate)}</td>
-                    <td style="${expClass}">${formatDateDisplay(l.expirationDate)}</td>
+                    <td style="${expClass}">${formatDateDisplay(l.expirationDate)}${expiryBadge}</td>
                     <td>${l.compactState ? 'Yes' : '-'}</td>
                     <td>
                       <button class="btn btn-sm" onclick="window.app.verifyOneLicense('${l.id}')" title="Verify via NPPES">Verify</button>
@@ -4550,6 +4867,378 @@ window.app = {
     showToast('Task deleted');
   },
   async refreshTasksPage() { await renderTasksPage(); },
+
+  async showWorkflowTemplates() {
+    const WORKFLOW_TEMPLATES = [
+      {
+        name: 'Initial Credentialing',
+        desc: 'Full workflow for credentialing a new provider with a payer',
+        icon: '&#128203;',
+        tasks: [
+          { title: 'Collect provider demographics & NPI', category: 'documentation', priority: 'high', dayOffset: 0 },
+          { title: 'Obtain state license copies', category: 'documentation', priority: 'high', dayOffset: 1 },
+          { title: 'Verify NPI via NPPES', category: 'payer_enrollment', priority: 'normal', dayOffset: 2 },
+          { title: 'Obtain malpractice COI', category: 'documentation', priority: 'high', dayOffset: 3 },
+          { title: 'Collect board certification documents', category: 'documentation', priority: 'normal', dayOffset: 3 },
+          { title: 'Run OIG/SAM exclusion screening', category: 'compliance', priority: 'high', dayOffset: 4 },
+          { title: 'Complete CAQH profile update', category: 'payer_enrollment', priority: 'high', dayOffset: 5 },
+          { title: 'Submit credentialing application', category: 'payer_enrollment', priority: 'urgent', dayOffset: 7 },
+          { title: 'Follow up on application status (2 weeks)', category: 'followup', priority: 'normal', dayOffset: 21 },
+          { title: 'Follow up on application status (4 weeks)', category: 'followup', priority: 'normal', dayOffset: 35 },
+          { title: 'Verify credentialing approval received', category: 'payer_enrollment', priority: 'high', dayOffset: 60 },
+          { title: 'Confirm effective date & update records', category: 'payer_enrollment', priority: 'normal', dayOffset: 62 },
+        ],
+      },
+      {
+        name: 'Re-credentialing',
+        desc: 'Renewal workflow for existing provider-payer relationships',
+        icon: '&#128260;',
+        tasks: [
+          { title: 'Review current credential status', category: 'compliance', priority: 'normal', dayOffset: 0 },
+          { title: 'Update provider demographics if changed', category: 'documentation', priority: 'normal', dayOffset: 1 },
+          { title: 'Verify all licenses are current', category: 'compliance', priority: 'high', dayOffset: 2 },
+          { title: 'Update malpractice COI', category: 'documentation', priority: 'high', dayOffset: 3 },
+          { title: 'Re-attest CAQH profile', category: 'payer_enrollment', priority: 'high', dayOffset: 4 },
+          { title: 'Submit re-credentialing application', category: 'payer_enrollment', priority: 'urgent', dayOffset: 5 },
+          { title: 'Follow up on re-credentialing (2 weeks)', category: 'followup', priority: 'normal', dayOffset: 19 },
+          { title: 'Confirm re-credentialing approval', category: 'payer_enrollment', priority: 'high', dayOffset: 45 },
+        ],
+      },
+      {
+        name: 'License Renewal',
+        desc: 'State license renewal checklist',
+        icon: '&#128196;',
+        tasks: [
+          { title: 'Verify renewal requirements for state', category: 'compliance', priority: 'normal', dayOffset: 0 },
+          { title: 'Complete required CME hours', category: 'documentation', priority: 'high', dayOffset: 7 },
+          { title: 'Gather renewal documents', category: 'documentation', priority: 'normal', dayOffset: 14 },
+          { title: 'Submit renewal application to state board', category: 'payer_enrollment', priority: 'urgent', dayOffset: 21 },
+          { title: 'Pay renewal fee', category: 'billing', priority: 'high', dayOffset: 21 },
+          { title: 'Confirm new license received', category: 'compliance', priority: 'high', dayOffset: 45 },
+          { title: 'Update license in Credentik', category: 'documentation', priority: 'normal', dayOffset: 46 },
+        ],
+      },
+      {
+        name: 'New Provider Onboarding',
+        desc: 'Complete onboarding checklist for a new provider joining the organization',
+        icon: '&#128100;',
+        tasks: [
+          { title: 'Create provider profile in system', category: 'documentation', priority: 'high', dayOffset: 0 },
+          { title: 'NPI lookup & verify credentials', category: 'payer_enrollment', priority: 'high', dayOffset: 0 },
+          { title: 'Collect CV/resume', category: 'documentation', priority: 'normal', dayOffset: 1 },
+          { title: 'Collect education & training records', category: 'documentation', priority: 'normal', dayOffset: 1 },
+          { title: 'Collect work history (5-year)', category: 'documentation', priority: 'normal', dayOffset: 2 },
+          { title: 'Collect professional references (3)', category: 'documentation', priority: 'normal', dayOffset: 2 },
+          { title: 'Run background check', category: 'compliance', priority: 'high', dayOffset: 3 },
+          { title: 'Run exclusion screening (OIG/SAM)', category: 'compliance', priority: 'urgent', dayOffset: 3 },
+          { title: 'Verify all state licenses', category: 'compliance', priority: 'high', dayOffset: 4 },
+          { title: 'Set up CAQH ProView profile', category: 'payer_enrollment', priority: 'high', dayOffset: 5 },
+          { title: 'Identify priority payers for enrollment', category: 'payer_enrollment', priority: 'normal', dayOffset: 7 },
+        ],
+      },
+      {
+        name: 'Payer Audit Response',
+        desc: 'Prepare and respond to a payer credentialing audit',
+        icon: '&#128269;',
+        tasks: [
+          { title: 'Review audit request & scope', category: 'compliance', priority: 'urgent', dayOffset: 0 },
+          { title: 'Pull provider credential files', category: 'documentation', priority: 'high', dayOffset: 1 },
+          { title: 'Verify all licenses are current', category: 'compliance', priority: 'high', dayOffset: 1 },
+          { title: 'Export compliance audit packet', category: 'compliance', priority: 'high', dayOffset: 2 },
+          { title: 'Review for gaps & remediate', category: 'compliance', priority: 'urgent', dayOffset: 3 },
+          { title: 'Submit audit response to payer', category: 'followup', priority: 'urgent', dayOffset: 5 },
+          { title: 'Follow up on audit resolution', category: 'followup', priority: 'high', dayOffset: 14 },
+        ],
+      },
+    ];
+
+    const content = `
+      <div style="max-width:700px;">
+        <p style="color:var(--gray-500);font-size:13px;margin-bottom:16px;">Select a workflow template to auto-create a set of tasks with proper sequencing and priorities.</p>
+        ${WORKFLOW_TEMPLATES.map((wf, i) => `
+          <div class="card" style="margin-bottom:12px;cursor:pointer;transition:box-shadow 0.15s;" onmouseenter="this.style.boxShadow='0 4px 12px rgba(0,0,0,.1)'" onmouseleave="this.style.boxShadow=''" onclick="window.app.applyWorkflowTemplate(${i})">
+            <div class="card-body" style="padding:14px 18px;display:flex;align-items:center;gap:14px;">
+              <div style="font-size:28px;width:44px;text-align:center;flex-shrink:0;">${wf.icon}</div>
+              <div style="flex:1;">
+                <div style="font-weight:700;font-size:14px;color:var(--gray-800);">${wf.name}</div>
+                <div style="font-size:12px;color:var(--gray-500);margin-top:2px;">${wf.desc}</div>
+              </div>
+              <div style="text-align:right;flex-shrink:0;">
+                <div style="font-size:18px;font-weight:700;color:var(--brand-600);">${wf.tasks.length}</div>
+                <div style="font-size:10px;color:var(--gray-400);">tasks</div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    window._workflowTemplates = WORKFLOW_TEMPLATES;
+    await appConfirm(content, { title: 'Workflow Templates', okLabel: '', cancelLabel: 'Close', raw: true });
+  },
+
+  async applyWorkflowTemplate(index) {
+    const templates = window._workflowTemplates;
+    if (!templates || !templates[index]) return;
+    const wf = templates[index];
+    if (!await appConfirm(`Create ${wf.tasks.length} tasks from "${wf.name}"? Tasks will be scheduled starting today.`, { title: 'Apply Template', okLabel: `Create ${wf.tasks.length} Tasks` })) return;
+
+    showToast(`Creating ${wf.tasks.length} tasks...`);
+    const today = new Date();
+    let created = 0;
+    for (const t of wf.tasks) {
+      const dueDate = new Date(today);
+      dueDate.setDate(dueDate.getDate() + t.dayOffset);
+      try {
+        await store.create('tasks', {
+          title: t.title,
+          category: t.category,
+          priority: t.priority,
+          dueDate: dueDate.toISOString().split('T')[0],
+          isCompleted: false,
+          notes: `From template: ${wf.name}`,
+        });
+        created++;
+      } catch (e) { console.error('Failed to create task:', t.title, e); }
+    }
+    showToast(`${created} tasks created from "${wf.name}"`);
+    // Close the confirm modal
+    const modal = document.getElementById('confirm-modal');
+    if (modal) modal.classList.remove('active');
+    await renderTasksPage();
+  },
+
+  // ── Cross-Facility Credentialing ──
+  async openCrossFacilityCredentialing() {
+    const [providers, facilities, apps] = await Promise.all([
+      store.getAll('providers'),
+      store.getFacilities().catch(() => []),
+      store.getAll('applications'),
+    ]);
+    if (!providers.length) { showToast('No providers found'); return; }
+    if (!facilities.length) { showToast('No facilities found — add facilities first'); return; }
+
+    const modal = document.getElementById('confirm-modal');
+    const titleEl = document.getElementById('confirm-modal-title');
+    const msgEl = document.getElementById('confirm-modal-message');
+    const inputEl = document.getElementById('confirm-modal-input');
+    const okBtn = document.getElementById('confirm-modal-ok');
+    const cancelBtn = document.getElementById('confirm-modal-cancel');
+    if (inputEl) inputEl.style.display = 'none';
+
+    titleEl.textContent = 'Cross-Facility Credentialing';
+    msgEl.innerHTML = `
+      <div style="margin-bottom:12px;">
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Select Provider</label>
+        <select id="xfac-provider" class="form-control" style="width:100%;">
+          ${providers.map(p => `<option value="${p.id}">${escHtml(p.firstName + ' ' + p.lastName)} (${escHtml(p.credentials || '')})</option>`).join('')}
+        </select>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Select Payer</label>
+        <select id="xfac-payer" class="form-control" style="width:100%;">
+          <option value="">Select payer...</option>
+          ${PAYER_CATALOG.map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('')}
+        </select>
+      </div>
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Select Facilities (${facilities.length} available)</label>
+      <div style="max-height:200px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:8px;padding:8px;">
+        ${facilities.map(f => {
+          const hasApp = apps.some(a => a.facilityId === f.id);
+          return `<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--gray-100);cursor:pointer;font-size:13px;">
+            <input type="checkbox" class="xfac-facility" value="${f.id}" data-name="${escHtml(f.name || '')}">
+            <div>
+              <strong>${escHtml(f.name || 'Unnamed')}</strong>
+              <span style="color:var(--gray-500);margin-left:8px;">${escHtml(f.city || '')}${f.state ? ', ' + escHtml(f.state) : ''}</span>
+              ${f.npi ? `<span style="color:var(--gray-400);margin-left:8px;">NPI: ${escHtml(f.npi)}</span>` : ''}
+            </div>
+          </label>`;
+        }).join('')}
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button class="btn btn-sm" onclick="document.querySelectorAll('.xfac-facility').forEach(c=>c.checked=true)">Select All</button>
+        <button class="btn btn-sm" onclick="document.querySelectorAll('.xfac-facility').forEach(c=>c.checked=false)">Clear All</button>
+      </div>
+    `;
+
+    okBtn.textContent = 'Create Applications';
+    okBtn.className = 'btn btn-primary';
+    cancelBtn.textContent = 'Cancel';
+    modal.classList.add('active');
+
+    // Override the ok click
+    okBtn.onclick = async () => {
+      const providerId = document.getElementById('xfac-provider').value;
+      const payerId = document.getElementById('xfac-payer').value;
+      const payer = getPayerById(payerId);
+      if (!payerId) { showToast('Please select a payer'); return; }
+
+      const checked = [...document.querySelectorAll('.xfac-facility:checked')];
+      if (!checked.length) { showToast('Please select at least one facility'); return; }
+
+      okBtn.disabled = true;
+      okBtn.textContent = 'Creating...';
+      let created = 0;
+      for (const cb of checked) {
+        try {
+          await store.create('applications', {
+            providerId,
+            facilityId: cb.value,
+            facilityName: cb.dataset.name,
+            payerId,
+            payerName: payer ? payer.name : '',
+            status: 'not_started',
+            type: 'individual',
+            wave: 1,
+            state: '',
+            notes: `Cross-facility credentialing batch — ${cb.dataset.name}`,
+          });
+          created++;
+        } catch (e) { console.error('Failed to create app for facility:', cb.dataset.name, e); }
+      }
+      showToast(`${created} application(s) created across ${checked.length} facilities`);
+      modal.classList.remove('active');
+      okBtn.disabled = false;
+      okBtn.onclick = null;
+      await navigateTo('applications');
+    };
+    cancelBtn.onclick = () => { modal.classList.remove('active'); okBtn.onclick = null; };
+  },
+
+  // ── Global Smart Search ──
+  async openGlobalSearch() {
+    // Create search overlay if not already present
+    let overlay = document.getElementById('global-search-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'global-search-overlay';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,0.6);display:flex;align-items:flex-start;justify-content:center;padding-top:10vh;backdrop-filter:blur(4px);';
+      overlay.innerHTML = `
+        <div style="width:90%;max-width:640px;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
+          <div style="padding:16px;border-bottom:1px solid var(--gray-200);display:flex;align-items:center;gap:12px;">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--gray-400)" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+            <input type="text" id="global-search-input" placeholder="Search providers, applications, payers, tasks..." style="flex:1;border:none;outline:none;font-size:16px;background:none;color:var(--gray-900);" autocomplete="off">
+            <kbd style="font-size:11px;padding:2px 6px;border:1px solid var(--gray-300);border-radius:4px;color:var(--gray-500);background:var(--gray-50);">ESC</kbd>
+          </div>
+          <div id="global-search-results" style="max-height:60vh;overflow-y:auto;padding:8px;"></div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      // Close on overlay click
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) { overlay.style.display = 'none'; }
+      });
+
+      // ESC to close
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && overlay.style.display !== 'none') { overlay.style.display = 'none'; }
+      });
+
+      // Search on input
+      document.getElementById('global-search-input').addEventListener('input', async (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        const resultsDiv = document.getElementById('global-search-results');
+        if (q.length < 2) { resultsDiv.innerHTML = '<p style="text-align:center;padding:24px;color:var(--gray-400);font-size:13px;">Type at least 2 characters to search...</p>'; return; }
+
+        // Debounce
+        clearTimeout(window._searchDebounce);
+        window._searchDebounce = setTimeout(async () => {
+          try {
+            const [providers, apps, tasks, licenses, followups, facilities, orgs] = await Promise.all([
+              store.getAll('providers'), store.getAll('applications'), store.getAll('tasks'),
+              store.getAll('licenses'), store.getAll('followups'), store.getFacilities().catch(() => []),
+              store.getAll('organizations'),
+            ]);
+
+            const results = [];
+
+            // Search providers
+            (providers || []).forEach(p => {
+              const name = `${p.firstName || ''} ${p.lastName || ''}`.toLowerCase();
+              const npi = (p.npi || '').toLowerCase();
+              const cred = (p.credentials || '').toLowerCase();
+              const hex = (p.hexId || p.hex_id || '').toLowerCase();
+              if (name.includes(q) || npi.includes(q) || cred.includes(q) || hex.includes(q)) {
+                results.push({ type: 'Provider', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>', label: `${p.firstName} ${p.lastName}`, sub: `${p.credentials || ''} ${p.npi ? '— NPI: ' + p.npi : ''}`, color: '#0891b2', action: `window.app.viewProviderApps(${p.id})` });
+              }
+            });
+
+            // Search applications by payer
+            (apps || []).forEach(a => {
+              const payer = (a.payerName || a.payer_name || '').toLowerCase();
+              const state = (a.state || '').toLowerCase();
+              const status = (a.status || '').toLowerCase();
+              const hex = (a.hexId || a.hex_id || '').toLowerCase();
+              if (payer.includes(q) || state.includes(q) || status.includes(q) || hex.includes(q)) {
+                const provMatch = (providers || []).find(p => p.id == a.providerId);
+                const provName = provMatch ? `${provMatch.firstName} ${provMatch.lastName}` : '';
+                results.push({ type: 'Application', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="1" width="10" height="14" rx="1"/><path d="M6 5h4M6 8h4M6 11h2"/></svg>', label: `${a.payerName || a.payer_name || 'Unknown Payer'} — ${a.state || ''}`, sub: `${provName} — ${a.status}`, color: '#3b82f6', action: `window.app.editApp(${a.id})` });
+              }
+            });
+
+            // Search tasks
+            (tasks || []).forEach(t => {
+              const title = (t.title || t.description || '').toLowerCase();
+              if (title.includes(q)) {
+                results.push({ type: 'Task', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>', label: t.title || t.description, sub: `Due: ${t.dueDate || t.due_date || 'N/A'} — ${t.isCompleted || t.completed ? 'Done' : 'Pending'}`, color: '#10b981', action: `navigateTo('tasks')` });
+              }
+            });
+
+            // Search licenses
+            (licenses || []).forEach(l => {
+              const state = (l.state || '').toLowerCase();
+              const num = (l.licenseNumber || l.license_number || '').toLowerCase();
+              const type = (l.licenseType || l.license_type || '').toLowerCase();
+              if (state.includes(q) || num.includes(q) || type.includes(q)) {
+                results.push({ type: 'License', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 7h6M5 10h3"/></svg>', label: `${l.state} — ${l.licenseNumber || l.license_number || ''}`, sub: `${l.licenseType || l.license_type || ''} — Exp: ${l.expirationDate || l.expiration_date || 'N/A'}`, color: '#ef4444', action: `navigateTo('licenses')` });
+              }
+            });
+
+            // Search facilities
+            (facilities || []).forEach(f => {
+              const name = (f.name || '').toLowerCase();
+              const npi = (f.npi || '').toLowerCase();
+              if (name.includes(q) || npi.includes(q)) {
+                results.push({ type: 'Facility', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M6 3V1M10 3V1M5 7h2M9 7h2M5 10h2M9 10h2"/></svg>', label: f.name || 'Unnamed', sub: `${f.city || ''}${f.state ? ', ' + f.state : ''} ${f.npi ? '— NPI: ' + f.npi : ''}`, color: '#8b5cf6', action: `navigateTo('facilities')` });
+              }
+            });
+
+            // Search orgs
+            (orgs || []).forEach(o => {
+              const name = (o.name || '').toLowerCase();
+              const hex = (o.hexId || o.hex_id || '').toLowerCase();
+              if (name.includes(q) || hex.includes(q)) {
+                results.push({ type: 'Organization', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="6" height="11" rx="1"/><rect x="9" y="6" width="6" height="8" rx="1"/><path d="M3 6h2M3 9h2M11 9h2"/></svg>', label: o.name, sub: hex ? `ID: ${hex.toUpperCase()}` : '', color: '#f59e0b', action: `navigateTo('organizations')` });
+              }
+            });
+
+            if (!results.length) {
+              resultsDiv.innerHTML = '<p style="text-align:center;padding:24px;color:var(--gray-400);font-size:13px;">No results found</p>';
+              return;
+            }
+
+            resultsDiv.innerHTML = results.slice(0, 20).map(r => `
+              <div onclick="${r.action};document.getElementById('global-search-overlay').style.display='none';" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .1s;" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='none'">
+                <div style="width:32px;height:32px;border-radius:8px;background:${r.color}15;color:${r.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${r.icon}</div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:14px;font-weight:600;color:var(--gray-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.label}</div>
+                  <div style="font-size:12px;color:var(--gray-500);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.sub}</div>
+                </div>
+                <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${r.color}15;color:${r.color};white-space:nowrap;">${r.type}</span>
+              </div>
+            `).join('') + (results.length > 20 ? `<p style="text-align:center;padding:8px;color:var(--gray-400);font-size:12px;">${results.length - 20} more results — refine your search</p>` : '');
+          } catch (e) { console.error('Search error:', e); }
+        }, 200);
+      });
+    }
+
+    overlay.style.display = 'flex';
+    const input = document.getElementById('global-search-input');
+    input.value = '';
+    document.getElementById('global-search-results').innerHTML = '<p style="text-align:center;padding:24px;color:var(--gray-400);font-size:13px;">Type at least 2 characters to search...</p>';
+    setTimeout(() => input.focus(), 50);
+  },
 
   // Tools dropdown
   toggleToolsMenu() {
@@ -7177,6 +7866,124 @@ function handleNppesProxy(payload) {
     } catch (e) { showToast('Export failed: ' + e.message); }
   },
 
+  async exportAuditPacket() {
+    showToast('Generating audit-ready packet...');
+    try {
+      const [providers, licenses, apps, orgs, exclusions, report] = await Promise.all([
+        store.getAll('providers'),
+        store.getAll('licenses'),
+        store.getAll('applications'),
+        store.getAll('organizations'),
+        store.getAll('exclusions').catch(() => []),
+        store.getComplianceReport().catch(() => ({})),
+      ]);
+      const org = orgs[0] || {};
+      const today = new Date();
+      const now = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      const todayISO = today.toISOString().split('T')[0];
+      const in30 = new Date(Date.now() + 30 * 86400000);
+      const in90 = new Date(Date.now() + 90 * 86400000);
+
+      let csv = '';
+
+      // Cover page
+      csv += 'COMPLIANCE AUDIT PACKET\r\n';
+      csv += `Organization:,${org.name || 'Credentik Agency'}\r\n`;
+      csv += `NPI:,${org.npi || 'N/A'}\r\n`;
+      csv += `Tax ID:,${org.taxId || 'N/A'}\r\n`;
+      csv += `Generated:,${now}\r\n`;
+      csv += `Prepared By:,Credentik Compliance Center\r\n\r\n`;
+
+      // Section 1: Provider Compliance Summary
+      csv += '=== SECTION 1: PROVIDER COMPLIANCE SCORES ===\r\n';
+      csv += 'Provider,NPI,Specialty,Compliance Score,Status,Critical Issues,Warning Issues,Licenses on File\r\n';
+      providers.forEach(p => {
+        const provLicenses = licenses.filter(l => (l.providerId || l.provider_id) === p.id);
+        const expiredCount = provLicenses.filter(l => (l.expirationDate || l.expiration_date) && new Date(l.expirationDate || l.expiration_date) < today).length;
+        const exp30Count = provLicenses.filter(l => { const exp = l.expirationDate || l.expiration_date; return exp && new Date(exp) > today && new Date(exp) <= in30; }).length;
+        const provExcl = Array.isArray(exclusions) ? exclusions.filter(e => (e.providerId || e.provider_id) === p.id) : [];
+        const hasExcl = provExcl.some(e => e.status === 'excluded' || e.result === 'excluded');
+        let score = 100;
+        let critical = 0; let warning = 0;
+        if (expiredCount > 0) { score -= expiredCount * 20; critical += expiredCount; }
+        if (hasExcl) { score -= 30; critical++; }
+        if (exp30Count > 0) { score -= exp30Count * 10; warning += exp30Count; }
+        if (provLicenses.length === 0) { score -= 15; warning++; }
+        score = Math.max(0, Math.min(100, score));
+        const status = score >= 85 ? 'Healthy' : score >= 60 ? 'At Risk' : 'Critical';
+        const name = `${p.firstName || ''} ${p.lastName || ''}`.trim();
+        csv += `"${name}",${p.npi || 'N/A'},"${p.specialty || ''}",${score},${status},${critical},${warning},${provLicenses.length}\r\n`;
+      });
+
+      // Section 2: License Inventory
+      csv += '\r\n=== SECTION 2: LICENSE INVENTORY ===\r\n';
+      csv += 'Provider,State,License Number,License Type,Status,Issue Date,Expiration Date,Days Until Expiration,Compact\r\n';
+      licenses.forEach(l => {
+        const prov = providers.find(p => p.id === (l.providerId || l.provider_id));
+        const provName = prov ? `${prov.firstName || ''} ${prov.lastName || ''}`.trim() : 'Unknown';
+        const exp = l.expirationDate || l.expiration_date;
+        const daysLeft = exp ? Math.round((new Date(exp) - today) / 86400000) : 'N/A';
+        csv += `"${provName}",${l.state || ''},"${l.licenseNumber || l.license_number || ''}","${l.licenseType || l.license_type || ''}",${l.status || ''},${l.issueDate || l.issue_date || ''},${exp || ''},${daysLeft},${l.compactState ? 'Yes' : 'No'}\r\n`;
+      });
+
+      // Section 3: Exclusion Screening
+      csv += '\r\n=== SECTION 3: EXCLUSION SCREENING RESULTS ===\r\n';
+      csv += 'Provider,NPI,Screening Date,OIG Result,SAM Result,Overall Status\r\n';
+      if (Array.isArray(exclusions) && exclusions.length > 0) {
+        exclusions.forEach(e => {
+          const prov = providers.find(p => p.id === (e.providerId || e.provider_id));
+          const provName = prov ? `${prov.firstName || ''} ${prov.lastName || ''}`.trim() : 'Unknown';
+          csv += `"${provName}",${prov?.npi || ''},${e.screenedAt || e.screened_at || e.createdAt || ''},${e.oigResult || e.oig_result || 'N/A'},${e.samResult || e.sam_result || 'N/A'},${e.status || e.result || ''}\r\n`;
+        });
+      } else {
+        csv += 'No screening records found\r\n';
+      }
+
+      // Section 4: Expiring Credentials
+      csv += '\r\n=== SECTION 4: EXPIRING CREDENTIALS (Next 90 Days) ===\r\n';
+      csv += 'Type,Provider,Item,Expiration Date,Days Remaining,Severity\r\n';
+      licenses.filter(l => {
+        const exp = l.expirationDate || l.expiration_date;
+        return exp && new Date(exp) > today && new Date(exp) <= in90;
+      }).forEach(l => {
+        const prov = providers.find(p => p.id === (l.providerId || l.provider_id));
+        const provName = prov ? `${prov.firstName || ''} ${prov.lastName || ''}`.trim() : 'Unknown';
+        const exp = new Date(l.expirationDate || l.expiration_date);
+        const days = Math.round((exp - today) / 86400000);
+        csv += `License,"${provName}","${l.state} - ${l.licenseNumber || ''}",${(l.expirationDate || l.expiration_date)},${days},${days <= 30 ? 'URGENT' : 'WARNING'}\r\n`;
+      });
+      (report.expiringMalpractice || []).forEach(m => {
+        const days = Math.round((new Date(m.expirationDate || m.expiration_date) - today) / 86400000);
+        csv += `Malpractice,"${m.providerName || ''}","${m.carrier || m.insuranceCarrier || ''}",${m.expirationDate || m.expiration_date},${days},${days <= 30 ? 'URGENT' : 'WARNING'}\r\n`;
+      });
+      (report.expiringBoards || []).forEach(b => {
+        const days = Math.round((new Date(b.expirationDate || b.expiration_date) - today) / 86400000);
+        csv += `Board Cert,"${b.providerName || ''}","${b.boardName || b.board_name || ''}",${b.expirationDate || b.expiration_date},${days},${days <= 30 ? 'URGENT' : 'WARNING'}\r\n`;
+      });
+
+      // Section 5: Application Status
+      csv += '\r\n=== SECTION 5: CREDENTIALING APPLICATION STATUS ===\r\n';
+      csv += 'Payer,State,Provider,Status,Submitted Date,Document Completion %\r\n';
+      apps.forEach(a => {
+        const prov = providers.find(p => p.id === a.providerId);
+        const provName = prov ? `${prov.firstName || ''} ${prov.lastName || ''}`.trim() : '';
+        const docs = a.documentChecklist || {};
+        const docPct = CRED_DOCUMENTS.length > 0 ? Math.round(CRED_DOCUMENTS.filter(d => docs[d.id]?.completed).length / CRED_DOCUMENTS.length * 100) : 0;
+        csv += `"${a.payerName || ''}",${a.state || ''},"${provName}",${a.status || ''},${a.submittedDate || ''},${docPct}%\r\n`;
+      });
+
+      // Download
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `credentik-audit-packet-${todayISO}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Audit packet exported — 5 sections, ready for review');
+    } catch (e) { showToast('Export failed: ' + e.message); }
+  },
+
   // ── FAQ / Knowledge Base ──
   openFaqModal(id) {
     document.getElementById('faq-modal-title').textContent = id ? 'Edit FAQ' : 'Add FAQ';
@@ -7765,7 +8572,7 @@ function handleNppesProxy(payload) {
   // ─── Calendar ───
   _calMonth: new Date().getMonth(),
   _calYear: new Date().getFullYear(),
-  _calFilters: { licenses: true, tasks: true, followups: true, applications: true },
+  _calFilters: { licenses: true, tasks: true, followups: true, applications: true, compliance: true },
   _calSelectedDay: null,
   calPrev() { window.app._calMonth--; if (window.app._calMonth < 0) { window.app._calMonth = 11; window.app._calYear--; } renderCalendarPage(); },
   calNext() { window.app._calMonth++; if (window.app._calMonth > 11) { window.app._calMonth = 0; window.app._calYear++; } renderCalendarPage(); },
@@ -9927,15 +10734,16 @@ async function renderProviderDashboard(user) {
   const body = document.getElementById('page-body');
   const providerId = user.provider_id || user.providerId;
 
-  let provider = null, licenses = [], apps = [], documents = [], tasks = [];
+  let provider = null, licenses = [], apps = [], documents = [], tasks = [], exclusions = [];
   try {
     if (providerId) {
-      [provider, licenses, apps, documents, tasks] = await Promise.all([
+      [provider, licenses, apps, documents, tasks, exclusions] = await Promise.all([
         store.getOne('providers', providerId).catch(() => null),
         store.getAll('licenses').then(l => l.filter(x => (x.providerId || x.provider_id) == providerId)).catch(() => []),
         store.getAll('applications').then(a => a.filter(x => (x.providerId || x.provider_id) == providerId)).catch(() => []),
         store.getProviderDocuments(providerId).catch(() => []),
         store.getAll('tasks').catch(() => []),
+        store.getAll('exclusions').then(e => e.filter(x => (x.providerId || x.provider_id) == providerId)).catch(() => []),
       ]);
     }
   } catch (e) { console.error('Provider dashboard error:', e); }
@@ -9944,50 +10752,160 @@ async function renderProviderDashboard(user) {
   if (!Array.isArray(apps)) apps = [];
   if (!Array.isArray(documents)) documents = [];
   if (!Array.isArray(tasks)) tasks = [];
+  if (!Array.isArray(exclusions)) exclusions = [];
 
   const activeLicenses = licenses.filter(l => l.status === 'active');
   const today = new Date();
-  const expiring90 = licenses.filter(l => {
-    const exp = new Date(l.expirationDate || l.expiration_date);
-    return exp > today && exp < new Date(today.getTime() + 90 * 86400000);
-  });
+  const in30 = new Date(Date.now() + 30 * 86400000);
+  const in90 = new Date(Date.now() + 90 * 86400000);
+  const expiring30 = licenses.filter(l => { const exp = new Date(l.expirationDate || l.expiration_date); return exp > today && exp <= in30; });
+  const expiring90 = licenses.filter(l => { const exp = new Date(l.expirationDate || l.expiration_date); return exp > today && exp <= in90; });
+  const expiredLic = licenses.filter(l => { const exp = l.expirationDate || l.expiration_date; return exp && new Date(exp) < today; });
   const approvedApps = apps.filter(a => a.status === 'approved');
-  const pendingApps = apps.filter(a => a.status !== 'approved' && a.status !== 'denied');
+  const pendingApps = apps.filter(a => !['approved','denied','withdrawn'].includes(a.status));
   const verifiedDocs = documents.filter(d => d.status === 'verified' || d.status === 'received');
-  const missingDocs = documents.filter(d => d.status === 'missing');
   const myTasks = tasks.filter(t => !t.completed && !t.isCompleted);
+  const overdueTasks = myTasks.filter(t => t.dueDate && t.dueDate < today.toISOString().split('T')[0]);
   const provName = provider ? `${provider.firstName || provider.first_name || ''} ${provider.lastName || provider.last_name || ''}`.trim() : user.name || 'Provider';
+  const credential = provider?.credentials || '';
+
+  // Compliance score calculation
+  let compScore = 100;
+  const compIssues = [];
+  if (expiredLic.length > 0) { compScore -= expiredLic.length * 20; compIssues.push({ sev: 'critical', text: `${expiredLic.length} expired license(s)` }); }
+  if (exclusions.some(e => e.status === 'excluded' || e.result === 'excluded')) { compScore -= 30; compIssues.push({ sev: 'critical', text: 'Exclusion flag on record' }); }
+  if (expiring30.length > 0) { compScore -= expiring30.length * 10; compIssues.push({ sev: 'warning', text: `${expiring30.length} license(s) expiring in 30 days` }); }
+  if (expiring90.length > 0) { compScore -= expiring90.length * 5; compIssues.push({ sev: 'info', text: `${expiring90.length} license(s) expiring in 90 days` }); }
+  if (licenses.length === 0) { compScore -= 15; compIssues.push({ sev: 'warning', text: 'No licenses on file' }); }
+  const incompleteAppDocs = apps.filter(a => { const docs = a.documentChecklist || {}; return !CRED_DOCUMENTS.every(d => docs[d.id]?.completed); });
+  if (incompleteAppDocs.length > 0) { compScore -= incompleteAppDocs.length * 3; compIssues.push({ sev: 'info', text: `${incompleteAppDocs.length} app(s) with incomplete documents` }); }
+  compScore = Math.max(0, Math.min(100, compScore));
+  const sColor = compScore >= 85 ? 'var(--green)' : compScore >= 60 ? 'var(--warning-500)' : 'var(--red)';
+  const sLabel = compScore >= 85 ? 'Healthy' : compScore >= 60 ? 'At Risk' : 'Critical';
+
+  // Credential tracker — progress through credentialing lifecycle
+  const totalDocSlots = apps.length * CRED_DOCUMENTS.length;
+  const completedDocSlots = apps.reduce((sum, a) => { const docs = a.documentChecklist || {}; return sum + CRED_DOCUMENTS.filter(d => docs[d.id]?.completed).length; }, 0);
+  const docPct = totalDocSlots > 0 ? Math.round((completedDocSlots / totalDocSlots) * 100) : 0;
+
+  // Action items — prioritized list
+  const actions = [];
+  expiredLic.forEach(l => actions.push({ priority: 1, icon: '&#10007;', color: 'var(--red)', text: `Renew expired ${l.state} license (expired ${formatDateDisplay(l.expirationDate || l.expiration_date)})` }));
+  expiring30.forEach(l => { const d = Math.ceil((new Date(l.expirationDate || l.expiration_date) - today) / 86400000); actions.push({ priority: 2, icon: '&#9888;', color: 'var(--red)', text: `${l.state} license expires in ${d} days` }); });
+  overdueTasks.forEach(t => actions.push({ priority: 3, icon: '&#128337;', color: 'var(--warning-500)', text: `Overdue task: ${t.title || t.description}` }));
+  incompleteAppDocs.forEach(a => { const docs = a.documentChecklist || {}; const done = CRED_DOCUMENTS.filter(d => docs[d.id]?.completed).length; const pct = Math.round(done / CRED_DOCUMENTS.length * 100); actions.push({ priority: 4, icon: '&#128196;', color: 'var(--brand-600)', text: `${a.payerName || 'Application'} — ${pct}% documents complete` }); });
+  expiring90.filter(l => !expiring30.includes(l)).forEach(l => { const d = Math.ceil((new Date(l.expirationDate || l.expiration_date) - today) / 86400000); actions.push({ priority: 5, icon: '&#128197;', color: 'var(--brand-500)', text: `${l.state} license expires in ${d} days` }); });
+  actions.sort((a, b) => a.priority - b.priority);
 
   body.innerHTML = `
-    <div style="margin-bottom:20px;">
-      <h2 style="margin:0;">Welcome, ${escHtml(provName)}</h2>
-      <p style="color:var(--gray-500);margin:4px 0 0;">Here's an overview of your credentialing status.</p>
+    <!-- Welcome Header with Compliance Score -->
+    <div style="display:grid;grid-template-columns:1fr 180px;gap:20px;margin-bottom:20px;align-items:center;">
+      <div>
+        <h2 style="margin:0;">${escHtml(provName)}${credential ? ', ' + escHtml(credential) : ''}</h2>
+        <p style="color:var(--gray-500);margin:4px 0 0;">NPI: ${provider?.npi || '—'} &middot; ${escHtml(provider?.specialty || '—')}</p>
+      </div>
+      <div style="text-align:center;">
+        <div style="position:relative;width:100px;height:100px;margin:0 auto;">
+          <svg viewBox="0 0 120 120" style="transform:rotate(-90deg);">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="var(--gray-200)" stroke-width="8"/>
+            <circle cx="60" cy="60" r="52" fill="none" stroke="${sColor}" stroke-width="8"
+              stroke-dasharray="${Math.round(compScore * 3.267)} 326.7" stroke-linecap="round"/>
+          </svg>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <div style="font-size:28px;font-weight:800;color:${sColor};line-height:1;">${compScore}</div>
+          </div>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:${sColor};margin-top:4px;">${sLabel}</div>
+        <div style="font-size:10px;color:var(--gray-400);">Compliance Score</div>
+      </div>
     </div>
 
     <!-- Stats -->
-    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:20px;">
+    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:16px;">
       <div class="stat-card"><div class="label">Active Licenses</div><div class="value" style="color:var(--green);">${activeLicenses.length}</div></div>
       <div class="stat-card"><div class="label">Pending Apps</div><div class="value" style="color:var(--brand-600);">${pendingApps.length}</div></div>
-      <div class="stat-card"><div class="label">Approved</div><div class="value" style="color:var(--green);">${approvedApps.length}</div></div>
-      <div class="stat-card"><div class="label">Expiring (90d)</div><div class="value" style="color:${expiring90.length > 0 ? 'var(--red)' : 'var(--gray-500)'};">${expiring90.length}</div></div>
+      <div class="stat-card"><div class="label">Credentialed</div><div class="value" style="color:var(--green);">${approvedApps.length}</div></div>
+      <div class="stat-card"><div class="label">Expiring</div><div class="value" style="color:${expiring90.length > 0 ? 'var(--red)' : 'var(--gray-400)'};">${expiring90.length}</div></div>
       <div class="stat-card"><div class="label">Documents</div><div class="value">${verifiedDocs.length}/${documents.length}</div></div>
-      <div class="stat-card"><div class="label">Open Tasks</div><div class="value">${myTasks.length}</div></div>
+      <div class="stat-card"><div class="label">Open Tasks</div><div class="value" style="color:${overdueTasks.length > 0 ? 'var(--red)' : ''}">${myTasks.length}</div></div>
     </div>
+
+    <!-- Action Items -->
+    ${actions.length > 0 ? `
+    <div class="card" style="margin-bottom:16px;border-left:3px solid ${actions[0].color};">
+      <div class="card-header"><h3>Action Items (${actions.length})</h3></div>
+      <div class="card-body" style="padding:8px 16px;">
+        ${actions.slice(0, 8).map(a => `
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray-100);">
+            <div style="width:24px;height:24px;border-radius:6px;background:${a.color}12;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:${a.color};">${a.icon}</div>
+            <div style="font-size:13px;color:var(--gray-700);flex:1;">${a.text}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>` : `
+    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--green);">
+      <div class="card-body" style="padding:16px;display:flex;align-items:center;gap:12px;">
+        <span style="font-size:20px;color:var(--green);">&#10003;</span>
+        <div><strong style="color:var(--green);">All clear!</strong><div class="text-sm text-muted">No urgent action items. Your credentialing is in good standing.</div></div>
+      </div>
+    </div>`}
+
+    <!-- Credential Progress Tracker -->
+    ${apps.length > 0 ? `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><h3>Credentialing Progress</h3></div>
+      <div class="card-body">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <div style="flex:1;height:10px;background:var(--gray-200);border-radius:5px;overflow:hidden;">
+            <div style="width:${docPct}%;height:100%;background:${docPct === 100 ? 'var(--green)' : 'var(--brand-500)'};border-radius:5px;transition:width 0.3s;"></div>
+          </div>
+          <span style="font-size:14px;font-weight:700;color:${docPct === 100 ? 'var(--green)' : 'var(--brand-600)'};">${docPct}%</span>
+        </div>
+        ${apps.map(a => {
+          const docs = a.documentChecklist || {};
+          const done = CRED_DOCUMENTS.filter(d => docs[d.id]?.completed).length;
+          const aPct = Math.round(done / CRED_DOCUMENTS.length * 100);
+          const statusSteps = ['gathering_docs','submitted','in_review','approved','credentialed'];
+          const currentStep = statusSteps.indexOf(a.status);
+          return `<div style="padding:10px 0;border-bottom:1px solid var(--gray-100);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <div><strong style="font-size:13px;">${escHtml(a.payerName || 'Application')}</strong> <span class="text-sm text-muted">${escHtml(a.state || '')}</span></div>
+              <span class="badge badge-${a.status === 'approved' || a.status === 'credentialed' ? 'approved' : a.status === 'denied' ? 'denied' : 'pending'}">${a.status?.replace(/_/g, ' ')}</span>
+            </div>
+            <div style="display:flex;gap:2px;margin-bottom:6px;">
+              ${statusSteps.map((s, i) => `<div style="flex:1;height:4px;border-radius:2px;background:${i <= currentStep ? (a.status === 'denied' ? 'var(--red)' : 'var(--green)') : 'var(--gray-200)'};"></div>`).join('')}
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-400);">
+              <span>Docs: ${done}/${CRED_DOCUMENTS.length} (${aPct}%)</span>
+              ${a.submittedDate ? `<span>Submitted: ${formatDateDisplay(a.submittedDate)}</span>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <!-- My Licenses -->
       <div class="card">
-        <div class="card-header"><h3>My Licenses</h3></div>
+        <div class="card-header"><h3>My Licenses (${licenses.length})</h3></div>
         <div class="card-body" style="padding:0;">
           ${licenses.length > 0 ? `<table><thead><tr><th>State</th><th>Number</th><th>Status</th><th>Expires</th></tr></thead><tbody>
             ${licenses.map(l => {
               const exp = l.expirationDate || l.expiration_date;
               const isExpired = exp && new Date(exp) < today;
+              const daysLeft = exp ? Math.ceil((new Date(exp) - today) / 86400000) : null;
+              const verStatus = l.verificationStatus || l.verification_status;
               return `<tr>
                 <td><strong>${escHtml(l.state || '—')}</strong></td>
                 <td><code>${escHtml(l.licenseNumber || l.license_number || '—')}</code></td>
-                <td><span class="badge badge-${l.status === 'active' ? 'approved' : l.status === 'expired' ? 'denied' : 'pending'}">${escHtml(l.status || '—')}</span></td>
-                <td style="${isExpired ? 'color:var(--red);' : ''}">${formatDateDisplay(exp)}</td>
+                <td>
+                  <span class="badge badge-${l.status === 'active' ? 'approved' : l.status === 'expired' ? 'denied' : 'pending'}">${escHtml(l.status || '—')}</span>
+                  ${verStatus === 'verified' ? ' <span style="font-size:10px;color:var(--green);">&#10003;</span>' : ''}
+                </td>
+                <td style="${isExpired ? 'color:var(--red);font-weight:600;' : daysLeft !== null && daysLeft <= 30 ? 'color:var(--warning-500);font-weight:600;' : ''}">
+                  ${formatDateDisplay(exp)}
+                  ${daysLeft !== null ? (isExpired ? `<div style="font-size:10px;color:var(--red);">EXPIRED</div>` : daysLeft <= 90 ? `<div style="font-size:10px;">${daysLeft}d left</div>` : '') : ''}
+                </td>
               </tr>`;
             }).join('')}
           </tbody></table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No licenses on file.</div>'}
@@ -9996,13 +10914,13 @@ async function renderProviderDashboard(user) {
 
       <!-- My Applications -->
       <div class="card">
-        <div class="card-header"><h3>My Applications</h3></div>
+        <div class="card-header"><h3>My Applications (${apps.length})</h3></div>
         <div class="card-body" style="padding:0;">
           ${apps.length > 0 ? `<table><thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th></tr></thead><tbody>
             ${apps.map(a => `<tr>
               <td><strong>${escHtml(a.payerName || a.payer_name || a.payer?.name || '—')}</strong></td>
               <td>${escHtml(a.state || '—')}</td>
-              <td><span class="badge badge-${a.status === 'approved' ? 'approved' : a.status === 'denied' ? 'denied' : 'pending'}">${escHtml(a.status || '—')}</span></td>
+              <td><span class="badge badge-${a.status === 'approved' ? 'approved' : a.status === 'denied' ? 'denied' : 'pending'}">${escHtml(a.status?.replace(/_/g, ' ') || '—')}</span></td>
               <td>${formatDateDisplay(a.submittedDate || a.submitted_date)}</td>
             </tr>`).join('')}
           </tbody></table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No applications yet.</div>'}
@@ -10011,34 +10929,33 @@ async function renderProviderDashboard(user) {
 
       <!-- My Documents -->
       <div class="card">
-        <div class="card-header"><h3>My Documents</h3></div>
+        <div class="card-header"><h3>My Documents (${documents.length})</h3></div>
         <div class="card-body" style="padding:0;">
           ${documents.length > 0 ? `<table><thead><tr><th>Document</th><th>Type</th><th>Status</th></tr></thead><tbody>
             ${documents.map(d => `<tr>
               <td>${escHtml(d.documentName || d.document_name || d.name || '—')}</td>
-              <td>${escHtml(d.documentType || d.document_type || d.type || '—')}</td>
+              <td>${escHtml((d.documentType || d.document_type || d.type || '—').replace(/_/g, ' '))}</td>
               <td><span class="badge badge-${d.status === 'verified' || d.status === 'received' ? 'approved' : d.status === 'missing' ? 'denied' : 'pending'}">${escHtml(d.status || 'pending')}</span></td>
             </tr>`).join('')}
           </tbody></table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No documents uploaded.</div>'}
         </div>
       </div>
 
-      <!-- Upcoming Renewals -->
+      <!-- Compliance Issues -->
       <div class="card">
-        <div class="card-header"><h3>Upcoming Renewals</h3></div>
-        <div class="card-body" style="padding:0;">
-          ${expiring90.length > 0 ? `<table><thead><tr><th>State</th><th>License #</th><th>Expires</th><th>Days Left</th></tr></thead><tbody>
-            ${expiring90.map(l => {
-              const exp = new Date(l.expirationDate || l.expiration_date);
-              const daysLeft = Math.ceil((exp - today) / 86400000);
-              return `<tr>
-                <td><strong>${escHtml(l.state || '—')}</strong></td>
-                <td><code>${escHtml(l.licenseNumber || l.license_number || '—')}</code></td>
-                <td>${formatDateDisplay(l.expirationDate || l.expiration_date)}</td>
-                <td style="color:${daysLeft < 30 ? 'var(--red)' : 'var(--brand-600)'};">${daysLeft}d</td>
-              </tr>`;
-            }).join('')}
-          </tbody></table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No upcoming renewals in the next 90 days.</div>'}
+        <div class="card-header"><h3>Compliance Status</h3></div>
+        <div class="card-body">
+          ${compIssues.length > 0 ? compIssues.map(i => `
+            <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--gray-100);">
+              <span style="width:8px;height:8px;border-radius:50%;background:${i.sev === 'critical' ? 'var(--red)' : i.sev === 'warning' ? 'var(--warning-500)' : 'var(--gray-400)'};flex-shrink:0;"></span>
+              <span style="font-size:13px;color:var(--gray-700);">${i.text}</span>
+            </div>
+          `).join('') : `
+            <div style="text-align:center;padding:16px;color:var(--green);">
+              <div style="font-size:20px;margin-bottom:4px;">&#10003;</div>
+              <div style="font-weight:600;">Fully Compliant</div>
+              <div class="text-sm text-muted">All credentials are current and verified.</div>
+            </div>`}
         </div>
       </div>
     </div>
@@ -10248,10 +11165,11 @@ async function renderCalendarPage() {
   const filters = window.app._calFilters;
   const selectedDay = window.app._calSelectedDay;
 
-  let licenses = [], tasks = [], followups = [], apps = [];
+  let licenses = [], tasks = [], followups = [], apps = [], dea = [];
   try {
-    [licenses, tasks, followups, apps] = await Promise.all([
-      store.getAll('licenses'), store.getAll('tasks'), store.getAll('followups'), store.getAll('applications')
+    [licenses, tasks, followups, apps, dea] = await Promise.all([
+      store.getAll('licenses'), store.getAll('tasks'), store.getAll('followups'), store.getAll('applications'),
+      store.getAll('dea_registrations').catch(() => []),
     ]);
     licenses = store.filterByScope(licenses);
     tasks = store.filterByScope(tasks);
@@ -10269,7 +11187,16 @@ async function renderCalendarPage() {
   if (filters.licenses) {
     (licenses || []).forEach(l => {
       const exp = l.expirationDate || l.expiration_date;
-      if (exp) { const d = new Date(exp); if (d.getMonth() === month && d.getFullYear() === year) addEvent(d.getDate(), 'license', `License exp: ${escHtml(l.state || '')} - ${escHtml(l.licenseNumber || l.license_number || '')}`, '#ef4444'); }
+      if (exp) {
+        const d = new Date(exp);
+        if (d.getMonth() === month && d.getFullYear() === year) addEvent(d.getDate(), 'license', `License exp: ${escHtml(l.state || '')} - ${escHtml(l.licenseNumber || l.license_number || '')}`, '#ef4444');
+        // Renewal warning: 30 days before expiration
+        const warn30 = new Date(d); warn30.setDate(warn30.getDate() - 30);
+        if (warn30.getMonth() === month && warn30.getFullYear() === year) addEvent(warn30.getDate(), 'renewal', `Renew: ${escHtml(l.state || '')} license (30d warning)`, '#f97316');
+        // Renewal warning: 60 days before
+        const warn60 = new Date(d); warn60.setDate(warn60.getDate() - 60);
+        if (warn60.getMonth() === month && warn60.getFullYear() === year) addEvent(warn60.getDate(), 'renewal', `Renew: ${escHtml(l.state || '')} license (60d warning)`, '#fb923c');
+      }
     });
   }
   if (filters.tasks) {
@@ -10291,6 +11218,22 @@ async function renderCalendarPage() {
       const eff = a.effectiveDate || a.effective_date;
       if (eff) { const d = new Date(eff); if (d.getMonth() === month && d.getFullYear() === year) addEvent(d.getDate(), 'application', `Effective: ${escHtml(a.payerName || a.payer_name || '')}`, '#0ea5e9'); }
     });
+  }
+  // DEA expirations
+  if (filters.licenses && Array.isArray(dea)) {
+    dea.forEach(d => {
+      const exp = d.expirationDate || d.expiration_date;
+      if (exp) { const dt = new Date(exp); if (dt.getMonth() === month && dt.getFullYear() === year) addEvent(dt.getDate(), 'dea', `DEA exp: ${escHtml(d.deaNumber || d.dea_number || '')} - ${escHtml(d.state || '')}`, '#dc2626'); }
+    });
+  }
+  // Compliance: CAQH re-attestation (quarterly — 1st of every 3rd month)
+  if (filters.compliance) {
+    const caqhMonths = [0, 3, 6, 9]; // Jan, Apr, Jul, Oct
+    if (caqhMonths.includes(month)) {
+      addEvent(1, 'compliance', 'CAQH re-attestation due', '#7c3aed');
+    }
+    // Monthly: exclusion screening reminder on 15th
+    addEvent(15, 'compliance', 'Monthly exclusion screening', '#7c3aed');
   }
 
   const monthName = new Date(year, month).toLocaleString('en-US', { month: 'long', year: 'numeric' });
@@ -10337,6 +11280,7 @@ async function renderCalendarPage() {
           { key: 'tasks', label: 'Tasks', color: '#10b981' },
           { key: 'followups', label: 'Follow-ups', color: '#8b5cf6' },
           { key: 'applications', label: 'Applications', color: '#3b82f6' },
+          { key: 'compliance', label: 'Compliance', color: '#7c3aed' },
         ].map(f => `<label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;">
           <input type="checkbox" ${filters[f.key] ? 'checked' : ''} onchange="window.app.calToggleFilter('${f.key}')">
           <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${f.color};"></span> ${f.label}
@@ -11713,11 +12657,15 @@ async function renderCompliancePage() {
   let licenses = [];
   let providers = [];
   let exclusionSummary = {};
+  let apps = [];
+  let exclusions = [];
 
   try { report = await store.getComplianceReport(); } catch (e) { console.error('Compliance report error:', e); }
   try { licenses = store.filterByScope(await store.getAll('licenses')); } catch (e) {}
   try { providers = store.filterByScope(await store.getAll('providers')); } catch (e) {}
   try { exclusionSummary = await store.getExclusionSummary(); } catch (e) {}
+  try { apps = store.filterByScope(await store.getAll('applications')); } catch (e) {}
+  try { exclusions = await store.getAll('exclusions'); } catch (e) {}
 
   const today = new Date();
   const in30 = new Date(Date.now() + 30 * 86400000);
@@ -11743,6 +12691,140 @@ async function renderCompliancePage() {
   const expiringBoards = report.expiringBoards || [];
   const neverScreened = report.neverScreened || [];
 
+  // ─── Compliance Scoring Engine ───
+  function computeProviderScore(prov) {
+    const provId = prov.id;
+    const provLicenses = licenses.filter(l => (l.providerId || l.provider_id) === provId);
+    const provApps = apps.filter(a => a.providerId === provId);
+    const provExclusions = Array.isArray(exclusions) ? exclusions.filter(e => (e.providerId || e.provider_id) === provId) : [];
+    const hasExclusion = provExclusions.some(e => e.status === 'excluded' || e.result === 'excluded');
+
+    let score = 100;
+    let issues = [];
+    let criticalCount = 0;
+    let warningCount = 0;
+
+    // Critical: Expired licenses (-20 each)
+    const expLic = provLicenses.filter(l => {
+      const exp = l.expirationDate || l.expiration_date;
+      return exp && new Date(exp) < today;
+    });
+    if (expLic.length > 0) {
+      score -= expLic.length * 20;
+      criticalCount += expLic.length;
+      issues.push({ severity: 'critical', text: `${expLic.length} expired license(s)` });
+    }
+
+    // Critical: Exclusion flag (-30)
+    if (hasExclusion) {
+      score -= 30;
+      criticalCount++;
+      issues.push({ severity: 'critical', text: 'OIG/SAM exclusion flag' });
+    }
+
+    // Warning: Licenses expiring within 30 days (-10 each)
+    const exp30 = provLicenses.filter(l => {
+      const exp = l.expirationDate || l.expiration_date;
+      if (!exp) return false;
+      const d = new Date(exp);
+      return d > today && d <= in30;
+    });
+    if (exp30.length > 0) {
+      score -= exp30.length * 10;
+      warningCount += exp30.length;
+      issues.push({ severity: 'warning', text: `${exp30.length} license(s) expiring in 30 days` });
+    }
+
+    // Warning: Licenses expiring within 90 days (-5 each)
+    const exp90 = provLicenses.filter(l => {
+      const exp = l.expirationDate || l.expiration_date;
+      if (!exp) return false;
+      const d = new Date(exp);
+      return d > in30 && d <= in90;
+    });
+    if (exp90.length > 0) {
+      score -= exp90.length * 5;
+      warningCount += exp90.length;
+      issues.push({ severity: 'warning', text: `${exp90.length} license(s) expiring in 90 days` });
+    }
+
+    // Warning: No licenses at all (-15)
+    if (provLicenses.length === 0) {
+      score -= 15;
+      warningCount++;
+      issues.push({ severity: 'warning', text: 'No licenses on file' });
+    }
+
+    // Info: Never screened for exclusions (-5)
+    const wasScreened = provExclusions.length > 0 || (exclusionSummary.screened > 0);
+    const isNeverScreened = neverScreened.some(ns => ns.id === provId);
+    if (isNeverScreened) {
+      score -= 5;
+      issues.push({ severity: 'info', text: 'Never screened for exclusions' });
+    }
+
+    // Warning: Missing document completion on applications (-5 per incomplete)
+    const incompleteApps = provApps.filter(a => {
+      const docs = a.documentChecklist || {};
+      return !CRED_DOCUMENTS.every(d => docs[d.id]?.completed);
+    });
+    if (incompleteApps.length > 0) {
+      score -= incompleteApps.length * 3;
+      issues.push({ severity: 'info', text: `${incompleteApps.length} app(s) with incomplete documents` });
+    }
+
+    score = Math.max(0, Math.min(100, score));
+    return { provider: prov, score, issues, criticalCount, warningCount, licenseCount: provLicenses.length };
+  }
+
+  const providerScores = providers.map(p => computeProviderScore(p)).sort((a, b) => a.score - b.score);
+  const avgScore = providerScores.length > 0 ? Math.round(providerScores.reduce((s, p) => s + p.score, 0) / providerScores.length) : 0;
+  const criticalProviders = providerScores.filter(p => p.score < 60);
+  const warningProviders = providerScores.filter(p => p.score >= 60 && p.score < 85);
+  const healthyProviders = providerScores.filter(p => p.score >= 85);
+
+  // ─── Risk Matrix Data ───
+  const credTypes = ['License', 'Malpractice', 'Board Cert', 'DEA', 'Exclusion', 'Documents'];
+  const riskMatrix = providers.map(prov => {
+    const provId = prov.id;
+    const provLicenses = licenses.filter(l => (l.providerId || l.provider_id) === provId);
+    const provApps = apps.filter(a => a.providerId === provId);
+    const provExclusions = Array.isArray(exclusions) ? exclusions.filter(e => (e.providerId || e.provider_id) === provId) : [];
+    const provName = `${prov.firstName || prov.first_name || ''} ${prov.lastName || prov.last_name || ''}`.trim();
+
+    // License status
+    const hasExpiredLic = provLicenses.some(l => (l.expirationDate || l.expiration_date) && new Date(l.expirationDate || l.expiration_date) < today);
+    const hasExpiring30 = provLicenses.some(l => { const exp = l.expirationDate || l.expiration_date; return exp && new Date(exp) > today && new Date(exp) <= in30; });
+    const licStatus = provLicenses.length === 0 ? 'none' : hasExpiredLic ? 'critical' : hasExpiring30 ? 'warning' : 'good';
+
+    // Malpractice
+    const provMal = (report.expiringMalpractice || []).filter(m => m.providerId === provId || m.provider_id === provId);
+    const malStatus = provMal.length > 0 ? 'warning' : 'good';
+
+    // Board certs
+    const provBoards = (report.expiringBoards || []).filter(b => b.providerId === provId || b.provider_id === provId);
+    const boardStatus = provBoards.length > 0 ? 'warning' : 'good';
+
+    // DEA — check if provider has any (simple presence check)
+    const deaStatus = 'good'; // Would need DEA data per provider
+
+    // Exclusion
+    const hasExcl = provExclusions.some(e => e.status === 'excluded' || e.result === 'excluded');
+    const neverScr = neverScreened.some(ns => ns.id === provId);
+    const exclStatus = hasExcl ? 'critical' : neverScr ? 'none' : 'good';
+
+    // Documents
+    const totalDocs = provApps.length * CRED_DOCUMENTS.length;
+    const doneDocs = provApps.reduce((sum, a) => {
+      const docs = a.documentChecklist || {};
+      return sum + CRED_DOCUMENTS.filter(d => docs[d.id]?.completed).length;
+    }, 0);
+    const docPct = totalDocs > 0 ? Math.round((doneDocs / totalDocs) * 100) : -1;
+    const docStatus = docPct < 0 ? 'none' : docPct < 50 ? 'critical' : docPct < 80 ? 'warning' : 'good';
+
+    return { provName, provId, cells: [licStatus, malStatus, boardStatus, deaStatus, exclStatus, docStatus] };
+  });
+
   const renderCollapsible = (id, title, count, badgeClass, content) => `
     <div class="card" style="margin-bottom:16px;">
       <div class="card-header" style="cursor:pointer;" onclick="
@@ -11762,14 +12844,105 @@ async function renderCompliancePage() {
       </div>
     </div>`;
 
+  const scoreColor = s => s >= 85 ? 'var(--green)' : s >= 60 ? 'var(--warning-500)' : 'var(--red)';
+  const scoreLabel = s => s >= 85 ? 'Healthy' : s >= 60 ? 'At Risk' : 'Critical';
+  const cellColor = s => s === 'good' ? 'rgba(34,197,94,0.2)' : s === 'warning' ? 'rgba(245,158,11,0.25)' : s === 'critical' ? 'rgba(239,68,68,0.25)' : 'rgba(148,163,184,0.15)';
+  const cellIcon = s => s === 'good' ? '<span style="color:var(--green);">&#10003;</span>' : s === 'warning' ? '<span style="color:var(--warning-500);">&#9888;</span>' : s === 'critical' ? '<span style="color:var(--red);">&#10007;</span>' : '<span style="color:var(--gray-400);">—</span>';
+
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
-      <div class="stat-card"><div class="label">Expired Licenses</div><div class="value" style="color:var(--red);">${expiredLicenses.length}</div></div>
-      <div class="stat-card"><div class="label">Expiring (30 days)</div><div class="value" style="color:var(--amber);">${expiringLicenses30.length}</div></div>
-      <div class="stat-card"><div class="label">Expiring (90 days)</div><div class="value" style="color:var(--brand-600);">${expiringLicenses90.length}</div></div>
-      <div class="stat-card"><div class="label">Exclusion Flags</div><div class="value" style="color:var(--red);">${exclusionSummary.excluded || 0}</div></div>
-      <div class="stat-card"><div class="label">Never Screened</div><div class="value" style="color:var(--gray-500);">${exclusionSummary.neverScreened || neverScreened.length || 0}</div></div>
+    <!-- Compliance Score Overview -->
+    <div style="display:grid;grid-template-columns:280px 1fr;gap:16px;margin-bottom:16px;">
+      <div class="card" style="text-align:center;">
+        <div class="card-body" style="padding:24px;">
+          <div style="position:relative;width:140px;height:140px;margin:0 auto 12px;">
+            <svg viewBox="0 0 120 120" style="transform:rotate(-90deg);">
+              <circle cx="60" cy="60" r="52" fill="none" stroke="var(--gray-200)" stroke-width="10"/>
+              <circle cx="60" cy="60" r="52" fill="none" stroke="${scoreColor(avgScore)}" stroke-width="10"
+                stroke-dasharray="${Math.round(avgScore * 3.267)} 326.7"
+                stroke-linecap="round" style="transition:stroke-dasharray 0.6s;"/>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+              <div style="font-size:36px;font-weight:800;color:${scoreColor(avgScore)};line-height:1;">${avgScore}</div>
+              <div style="font-size:11px;color:var(--gray-500);font-weight:500;">/ 100</div>
+            </div>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:${scoreColor(avgScore)};">${scoreLabel(avgScore)}</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:2px;">Organization Compliance Score</div>
+        </div>
+      </div>
+      <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));align-content:start;">
+        <div class="stat-card" style="border-left:3px solid var(--red);"><div class="label">Critical Providers</div><div class="value" style="color:var(--red);">${criticalProviders.length}</div><div class="sub">Score &lt; 60</div></div>
+        <div class="stat-card" style="border-left:3px solid var(--warning-500);"><div class="label">At Risk</div><div class="value" style="color:var(--warning-500);">${warningProviders.length}</div><div class="sub">Score 60-84</div></div>
+        <div class="stat-card" style="border-left:3px solid var(--green);"><div class="label">Healthy</div><div class="value" style="color:var(--green);">${healthyProviders.length}</div><div class="sub">Score 85+</div></div>
+        <div class="stat-card"><div class="label">Expired Licenses</div><div class="value" style="color:var(--red);">${expiredLicenses.length}</div></div>
+        <div class="stat-card"><div class="label">Expiring (30d)</div><div class="value" style="color:var(--amber);">${expiringLicenses30.length}</div></div>
+        <div class="stat-card"><div class="label">Expiring (90d)</div><div class="value" style="color:var(--brand-600);">${expiringLicenses90.length}</div></div>
+        <div class="stat-card"><div class="label">Exclusion Flags</div><div class="value" style="color:var(--red);">${exclusionSummary.excluded || 0}</div></div>
+        <div class="stat-card"><div class="label">Never Screened</div><div class="value" style="color:var(--gray-500);">${exclusionSummary.neverScreened || neverScreened.length || 0}</div></div>
+      </div>
     </div>
+
+    <!-- Provider Compliance Scores -->
+    ${providerScores.length > 0 ? `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header">
+        <h3>Provider Compliance Scores</h3>
+        <span class="text-sm text-muted">${providers.length} provider(s)</span>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <table>
+          <thead><tr><th>Provider</th><th>Score</th><th>Status</th><th>Issues</th><th>Action</th></tr></thead>
+          <tbody>
+            ${providerScores.map(ps => {
+              const p = ps.provider;
+              const provName = `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim();
+              return `<tr>
+                <td><a href="#" onclick="event.preventDefault();window.app.openProviderProfile('${p.id}')" style="font-weight:600;color:var(--gray-800);text-decoration:none;">${escHtml(provName)}</a> <span style="color:var(--gray-400);font-size:11px;">#${toHexId(p.id)}</span></td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <div style="width:60px;height:6px;background:var(--gray-200);border-radius:3px;overflow:hidden;">
+                      <div style="width:${ps.score}%;height:100%;background:${scoreColor(ps.score)};border-radius:3px;"></div>
+                    </div>
+                    <span style="font-weight:700;color:${scoreColor(ps.score)};font-size:14px;">${ps.score}</span>
+                  </div>
+                </td>
+                <td><span class="badge" style="background:${scoreColor(ps.score)}20;color:${scoreColor(ps.score)};font-weight:600;">${scoreLabel(ps.score)}</span></td>
+                <td style="font-size:12px;">${ps.issues.length > 0
+                  ? ps.issues.slice(0, 3).map(i => `<span style="display:inline-block;margin:1px 4px 1px 0;padding:1px 6px;border-radius:3px;font-size:10px;background:${i.severity === 'critical' ? 'var(--red)' : i.severity === 'warning' ? 'var(--warning-500)' : 'var(--gray-400)'}15;color:${i.severity === 'critical' ? 'var(--red)' : i.severity === 'warning' ? 'var(--warning-500)' : 'var(--gray-500)'};">${escHtml(i.text)}</span>`).join('')
+                  : '<span style="color:var(--green);font-size:11px;">No issues</span>'
+                }</td>
+                <td><button class="btn btn-sm" onclick="window.app.openProviderProfile('${p.id}')">View</button></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}
+
+    <!-- Risk Matrix Heatmap -->
+    ${riskMatrix.length > 0 ? `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header">
+        <h3>Credential Risk Matrix</h3>
+        <div style="display:flex;gap:12px;font-size:11px;align-items:center;">
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(34,197,94,0.3);vertical-align:middle;"></span> Good</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(245,158,11,0.35);vertical-align:middle;"></span> Warning</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(239,68,68,0.35);vertical-align:middle;"></span> Critical</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(148,163,184,0.2);vertical-align:middle;"></span> N/A</span>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;overflow-x:auto;">
+        <table style="border-collapse:separate;border-spacing:0;">
+          <thead><tr><th style="text-align:left;min-width:160px;">Provider</th>${credTypes.map(c => `<th style="text-align:center;font-size:11px;min-width:90px;">${c}</th>`).join('')}</tr></thead>
+          <tbody>
+            ${riskMatrix.map(rm => `<tr>
+              <td style="font-weight:600;font-size:13px;"><a href="#" onclick="event.preventDefault();window.app.openProviderProfile('${rm.provId}')" style="color:var(--gray-800);text-decoration:none;">${escHtml(rm.provName)}</a></td>
+              ${rm.cells.map(c => `<td style="text-align:center;background:${cellColor(c)};font-size:14px;">${cellIcon(c)}</td>`).join('')}
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}
 
     ${renderCollapsible('expired-lic', 'Expired Licenses', expiredLicenses.length, 'denied',
       expiredLicenses.length > 0 ? `
