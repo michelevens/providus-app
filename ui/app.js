@@ -573,6 +573,11 @@ async function navigateTo(page) {
       pageTitle.textContent = 'Billing & Invoicing';
       pageSubtitle.textContent = 'Manage invoices, services, and payments';
       pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openInvoiceModal()">+ Create Invoice</button> <button class="btn btn-sm" onclick="window.app.openEstimateModal()">+ Estimate</button>' + printBtn;
+      // Check for Stripe checkout return params
+      { const hp = new URLSearchParams(window.location.hash.split('?')[1] || '');
+        if (hp.get('session_id')) { _billingTab = 'subscription'; showToast('Subscription activated! Welcome aboard.'); window.location.hash = '#billing'; }
+        if (hp.get('canceled')) { _billingTab = 'subscription'; showToast('Checkout canceled'); window.location.hash = '#billing'; }
+      }
       await renderBillingPage();
       break;
     case 'invoice-detail':
@@ -6336,7 +6341,7 @@ function handleNppesProxy(payload) {
     _billingTab = tabId;
     btn.closest('.tabs').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
-    ['billing-invoices', 'billing-estimates', 'billing-services'].forEach(id => {
+    ['billing-invoices', 'billing-estimates', 'billing-services', 'billing-subscription'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.toggle('hidden', id !== 'billing-' + tabId);
     });
@@ -6600,6 +6605,45 @@ function handleNppesProxy(payload) {
       const form = document.getElementById('inline-service-form');
       if (form) form.style.display = 'none';
       await renderBillingPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+
+  // ── Subscription ──
+  async selectPlan(tier) {
+    try {
+      showToast('Redirecting to checkout...');
+      const result = await store.createCheckout(tier);
+      if (result.url) {
+        window.open(result.url, '_blank');
+      } else {
+        showToast('Could not create checkout session');
+      }
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async cancelSub() {
+    if (!await appConfirm('Cancel your subscription? You will retain access until the end of the current billing period.', { title: 'Cancel Subscription', okLabel: 'Cancel Subscription', okClass: 'btn-danger' })) return;
+    try {
+      await store.cancelSubscription();
+      showToast('Subscription will cancel at period end');
+      await renderBillingPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async resumeSub() {
+    try {
+      await store.resumeSubscription();
+      showToast('Subscription resumed');
+      await renderBillingPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async openPortal() {
+    try {
+      showToast('Opening billing portal...');
+      const result = await store.createPortalSession();
+      if (result.url) {
+        window.open(result.url, '_blank');
+      } else {
+        showToast('Could not open billing portal');
+      }
     } catch (e) { showToast('Error: ' + e.message); }
   },
 
@@ -10394,6 +10438,95 @@ function _fmtMoney(n) {
   return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function _renderSubscriptionTab(sub, plans) {
+  if (!Array.isArray(plans)) plans = [];
+  const currentTier = sub?.planTier || sub?.plan_tier || 'starter';
+  const status = sub?.subscriptionStatus || sub?.subscription_status || 'trialing';
+  const isSubscribed = sub?.isSubscribed || sub?.is_subscribed || false;
+  const isOnTrial = sub?.isOnTrial || sub?.is_on_trial || false;
+  const trialEnds = sub?.trialEndsAt || sub?.trial_ends_at || null;
+  const subEnds = sub?.subscriptionEndsAt || sub?.subscription_ends_at || null;
+  const usage = sub?.usage || {};
+  const limits = sub?.limits || {};
+
+  const statusColors = { active: 'var(--green)', trialing: 'var(--brand-600)', past_due: 'var(--orange,#f97316)', canceling: 'var(--gold)', canceled: 'var(--red)', unpaid: 'var(--red)' };
+  const statusLabels = { active: 'Active', trialing: 'Trial', past_due: 'Past Due', canceling: 'Canceling', canceled: 'Canceled', unpaid: 'Unpaid' };
+
+  const usageBar = (label, used, limit) => {
+    const pct = limit === -1 ? 5 : Math.min((used / limit) * 100, 100);
+    const limitLabel = limit === -1 ? 'Unlimited' : limit;
+    const color = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--gold)' : 'var(--green)';
+    return `<div style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+        <span>${label}</span><span><strong>${used}</strong> / ${limitLabel}</span>
+      </div>
+      <div style="background:var(--gray-200);border-radius:4px;height:8px;overflow:hidden;">
+        <div style="background:${color};height:100%;width:${pct}%;border-radius:4px;transition:width 0.3s;"></div>
+      </div>
+    </div>`;
+  };
+
+  return `
+    <!-- Current Plan Status -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div class="card">
+        <div class="card-header"><h3>Current Plan</h3></div>
+        <div class="card-body" style="padding:20px;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <span style="font-size:24px;font-weight:700;text-transform:capitalize;">${currentTier}</span>
+            <span class="badge" style="background:${statusColors[status] || 'var(--gray-500)'};color:#fff;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600;">${statusLabels[status] || status}</span>
+          </div>
+          ${isOnTrial && trialEnds ? `<p style="font-size:13px;color:var(--gray-600);margin-bottom:8px;">Trial ends: <strong>${new Date(trialEnds).toLocaleDateString()}</strong></p>` : ''}
+          ${status === 'canceling' && subEnds ? `<p style="font-size:13px;color:var(--gold);margin-bottom:8px;">Access until: <strong>${new Date(subEnds).toLocaleDateString()}</strong></p>` : ''}
+          <div style="display:flex;gap:8px;margin-top:16px;">
+            ${isSubscribed && status !== 'canceling' ? `<button class="btn btn-sm" style="color:var(--red);" onclick="window.app.cancelSub()">Cancel Subscription</button>` : ''}
+            ${status === 'canceling' ? `<button class="btn btn-primary btn-sm" onclick="window.app.resumeSub()">Resume Subscription</button>` : ''}
+            ${isSubscribed ? `<button class="btn btn-sm" onclick="window.app.openPortal()">Manage Billing</button>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Usage</h3></div>
+        <div class="card-body" style="padding:20px;">
+          ${usageBar('Providers', usage.providers || 0, limits.providers || 5)}
+          ${usageBar('Team Members', usage.users || 0, limits.users || 3)}
+          ${usageBar('Applications', usage.applications || 0, limits.applications || 50)}
+        </div>
+      </div>
+    </div>
+
+    <!-- Plan Cards -->
+    <div class="card">
+      <div class="card-header"><h3>Available Plans</h3></div>
+      <div class="card-body" style="padding:20px;">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">
+          ${plans.map(plan => {
+            const isCurrent = plan.tier === currentTier;
+            const isPopular = plan.popular;
+            return `<div style="border:2px solid ${isCurrent ? 'var(--brand-600)' : isPopular ? 'var(--brand-400)' : 'var(--gray-200)'};border-radius:12px;padding:24px;position:relative;${isPopular ? 'box-shadow:0 4px 12px rgba(0,0,0,0.1);' : ''}">
+              ${isPopular ? '<div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--brand-600);color:#fff;padding:2px 12px;border-radius:10px;font-size:11px;font-weight:600;">Most Popular</div>' : ''}
+              <h4 style="margin:0 0 4px 0;font-size:18px;">${escHtml(plan.name)}</h4>
+              <div style="margin-bottom:16px;">
+                <span style="font-size:32px;font-weight:800;">$${plan.price}</span>
+                <span style="font-size:13px;color:var(--gray-500);">/${plan.interval}</span>
+              </div>
+              <ul style="list-style:none;padding:0;margin:0 0 20px 0;">
+                ${(plan.features || []).map(f => `<li style="padding:4px 0;font-size:13px;color:var(--gray-700);display:flex;align-items:center;gap:6px;"><span style="color:var(--green);font-weight:bold;">&#10003;</span> ${escHtml(f)}</li>`).join('')}
+              </ul>
+              ${isCurrent
+                ? `<button class="btn btn-sm" disabled style="width:100%;opacity:0.6;">Current Plan</button>`
+                : `<button class="btn btn-primary btn-sm" style="width:100%;" onclick="window.app.selectPlan('${plan.tier}')">
+                    ${isSubscribed ? 'Switch Plan' : 'Get Started'}
+                  </button>`
+              }
+            </div>`;
+          }).join('')}
+          ${plans.length === 0 ? '<p style="grid-column:1/-1;text-align:center;color:var(--gray-500);">Plan information unavailable. Please check your connection.</p>' : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
 function _invoiceStatusBadge(status) {
   const map = { draft: 'inactive', sent: 'pending', partial: 'pending', paid: 'approved', overdue: 'denied', cancelled: 'inactive', void: 'inactive' };
   return `<span class="badge badge-${map[status] || 'inactive'}">${escHtml(status || 'draft')}</span>`;
@@ -10446,11 +10579,15 @@ async function renderBillingPage() {
   let invoices = [];
   let services = [];
   let estimates = [];
+  let subStatus = null;
+  let subPlans = [];
 
   try { stats = await store.getBillingStats(); } catch (e) { console.error('Billing stats error:', e); }
   try { invoices = store.filterByScope(await store.getInvoices()); } catch (e) { console.error('Invoices error:', e); }
   try { services = await store.getServices(); } catch (e) { console.error('Services error:', e); }
   try { estimates = store.filterByScope(await store.getEstimates()); } catch (e) { /* estimates endpoint may not exist yet */ }
+  try { subStatus = await store.getSubscriptionStatus(); } catch (e) { console.error('Subscription status error:', e); }
+  try { subPlans = await store.getSubscriptionPlans(); } catch (e) { console.error('Subscription plans error:', e); }
   if (!Array.isArray(invoices)) invoices = [];
   if (!Array.isArray(services)) services = [];
   if (!Array.isArray(estimates)) estimates = [];
@@ -10531,6 +10668,7 @@ async function renderBillingPage() {
       <button class="tab ${_billingTab === 'invoices' ? 'active' : ''}" onclick="window.app.billingTab(this,'invoices')">Invoices (${invoices.length})</button>
       <button class="tab ${_billingTab === 'estimates' ? 'active' : ''}" onclick="window.app.billingTab(this,'estimates')">Estimates (${estimates.length})</button>
       <button class="tab ${_billingTab === 'services' ? 'active' : ''}" onclick="window.app.billingTab(this,'services')">Services (${services.length})</button>
+      <button class="tab ${_billingTab === 'subscription' ? 'active' : ''}" onclick="window.app.billingTab(this,'subscription')">Subscription</button>
     </div>
 
     <!-- Invoices Tab -->
@@ -10669,6 +10807,11 @@ async function renderBillingPage() {
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Subscription Tab -->
+    <div id="billing-subscription" class="${_billingTab !== 'subscription' ? 'hidden' : ''}">
+      ${_renderSubscriptionTab(subStatus, subPlans)}
     </div>
 
     <!-- Invoice/Estimate Modal (shared) -->

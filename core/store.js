@@ -999,6 +999,32 @@ class Store {
     async deleteCommunicationLog(id) {
         await this._fetch(`${CONFIG.API_URL}/communication-logs/${id}`, { method: 'DELETE' });
     }
+
+    // ── Subscription & Billing (Stripe) ──
+    async getSubscriptionStatus() {
+        const result = await this._fetch(`${CONFIG.API_URL}/subscription/status`);
+        return result.data || result;
+    }
+    async getSubscriptionPlans() {
+        const result = await this._fetch(`${CONFIG.API_URL}/subscription/plans`);
+        return result.data || result;
+    }
+    async createCheckout(planTier) {
+        const result = await this._fetch(`${CONFIG.API_URL}/subscription/checkout`, { method: 'POST', body: JSON.stringify({ plan_tier: planTier }) });
+        return result.data || result;
+    }
+    async createPortalSession() {
+        const result = await this._fetch(`${CONFIG.API_URL}/subscription/portal`, { method: 'POST' });
+        return result.data || result;
+    }
+    async cancelSubscription() {
+        const result = await this._fetch(`${CONFIG.API_URL}/subscription/cancel`, { method: 'POST' });
+        return result.data || result;
+    }
+    async resumeSubscription() {
+        const result = await this._fetch(`${CONFIG.API_URL}/subscription/resume`, { method: 'POST' });
+        return result.data || result;
+    }
 }
 
 const store = new Store();
