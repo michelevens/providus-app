@@ -10846,7 +10846,7 @@ async function renderBillingPage() {
           <input type="hidden" id="svc-edit-id" value="">
           <div style="display:grid;grid-template-columns:2fr 1fr 1fr 2fr auto;gap:10px;align-items:end;">
             <div class="auth-field" style="margin:0;"><label style="font-size:11px;">Service Name *</label><input type="text" id="svc-name" class="form-control" style="height:34px;font-size:13px;" placeholder="e.g. Initial Evaluation"></div>
-            <div class="auth-field" style="margin:0;"><label style="font-size:11px;">Code (CPT)</label><input type="text" id="svc-code" class="form-control" style="height:34px;font-size:13px;" placeholder="e.g. 90834"></div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:11px;">Service Code</label><input type="text" id="svc-code" class="form-control" style="height:34px;font-size:13px;" placeholder="e.g. CRED-INIT"></div>
             <div class="auth-field" style="margin:0;"><label style="font-size:11px;">Default Rate</label><input type="number" id="svc-rate" class="form-control" style="height:34px;font-size:13px;" step="0.01" min="0" placeholder="0.00"></div>
             <div class="auth-field" style="margin:0;"><label style="font-size:11px;">Description</label><input type="text" id="svc-desc" class="form-control" style="height:34px;font-size:13px;" placeholder="Optional description"></div>
             <div style="display:flex;gap:6px;">
