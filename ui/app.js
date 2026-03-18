@@ -14,6 +14,28 @@ import emailGenerator from '../core/email-generator.js';
 import caqhApi from '../core/caqh-api.js';
 import taxonomyApi from '../core/taxonomy-api.js';
 
+// ─── Google Places Autocomplete ───
+
+function initPlacesAutocomplete(inputId, { streetId, cityId, stateId, zipId } = {}) {
+  if (!window.google?.maps?.places) return;
+  const input = document.getElementById(inputId);
+  if (!input || input._placesInit) return;
+  input._placesInit = true;
+  const autocomplete = new google.maps.places.Autocomplete(input, {
+    types: ['address'], componentRestrictions: { country: 'us' }
+  });
+  autocomplete.addListener('place_changed', () => {
+    const place = autocomplete.getPlace();
+    if (!place.address_components) return;
+    const get = (type) => (place.address_components.find(c => c.types.includes(type)) || {}).short_name || '';
+    const street = `${get('street_number')} ${get('route')}`.trim();
+    if (streetId) { const el = document.getElementById(streetId); if (el) el.value = street; }
+    if (cityId) { const el = document.getElementById(cityId); if (el) el.value = get('locality') || get('sublocality'); }
+    if (stateId) { const el = document.getElementById(stateId); if (el) el.value = get('administrative_area_level_1'); }
+    if (zipId) { const el = document.getElementById(zipId); if (el) el.value = get('postal_code'); }
+  });
+}
+
 // ─── Global Error & Offline Handlers ───
 
 window.addEventListener('unhandledrejection', (event) => {
@@ -137,6 +159,25 @@ export async function initApp() {
 
   // Initialize scope selector
   initScopeSelector();
+
+  // Role-based sidebar visibility
+  const userRole = auth.getUser()?.role || 'provider';
+  const roleLevel = { superadmin: 5, owner: 4, agency: 3, admin: 3, staff: 2, organization: 2, provider: 1 };
+  const userLevel = roleLevel[userRole] || 1;
+  document.querySelectorAll('.nav-item[data-min-role]').forEach(el => {
+    const minLevel = roleLevel[el.dataset.minRole] || 1;
+    if (userLevel < minLevel) el.style.display = 'none';
+  });
+  // Hide nav sections that have all children hidden
+  document.querySelectorAll('.nav-section').forEach(section => {
+    let next = section.nextElementSibling;
+    let allHidden = true;
+    while (next && !next.classList.contains('nav-section')) {
+      if (next.classList.contains('nav-item') && next.style.display !== 'none') allHidden = false;
+      next = next.nextElementSibling;
+    }
+    if (allHidden) section.style.display = 'none';
+  });
 
   bindNavigation();
   await checkRecurringTasks();
@@ -570,6 +611,24 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderProviderPrintout(window._selectedProviderId);
       break;
+    case 'communications':
+      pageTitle.textContent = 'Communications';
+      pageSubtitle.textContent = 'Track all calls, emails, and correspondence';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openCommLogModal()">+ Log Communication</button>' + printBtn;
+      await renderCommunicationsPage();
+      break;
+    case 'kanban':
+      pageTitle.textContent = 'Kanban Board';
+      pageSubtitle.textContent = 'Drag-and-drop application workflow';
+      pageActions.innerHTML = printBtn;
+      await renderKanbanBoard();
+      break;
+    case 'calendar':
+      pageTitle.textContent = 'Calendar';
+      pageSubtitle.textContent = 'All deadlines, expirations, and events';
+      pageActions.innerHTML = printBtn;
+      await renderCalendarPage();
+      break;
     case 'admin':
       pageTitle.textContent = 'Super Admin';
       pageSubtitle.textContent = 'Manage all agencies and system settings';
@@ -584,6 +643,13 @@ async function navigateTo(page) {
 // ─── Dashboard ───
 
 async function renderDashboard() {
+  // Provider self-service: if role=provider, show simplified dashboard
+  const currentUser = auth.getUser();
+  if (currentUser?.role === 'provider') {
+    await renderProviderDashboard(currentUser);
+    return;
+  }
+
   // Parallel fetch — all independent data at once
   const [stats, _overdue, _upcoming, _escalations, _licenses, _providers, orgs, _apps, _tasks] = await Promise.all([
     store.getApplicationStats(),
@@ -7303,6 +7369,76 @@ function handleNppesProxy(payload) {
     if (resultDiv) { setTimeout(() => { resultDiv.style.display = 'none'; }, 1500); }
     showToast('Organization data auto-filled from NPI Registry');
   },
+
+  // ─── Communication Log ───
+  openCommLogModal(appId, providerId) {
+    ['comm-channel','comm-direction','comm-subject','comm-body','comm-contact-name','comm-contact-info','comm-outcome','comm-duration','comm-date'].forEach(f => {
+      const el = document.getElementById(f); if (el) el.value = '';
+    });
+    const appEl = document.getElementById('comm-app-id');
+    if (appEl) appEl.value = appId || '';
+    const provEl = document.getElementById('comm-provider-id');
+    if (provEl) provEl.value = providerId || '';
+    const dateEl = document.getElementById('comm-date');
+    if (dateEl) dateEl.value = new Date().toISOString().split('T')[0];
+    document.getElementById('comm-log-modal')?.classList.add('active');
+  },
+  async saveCommLog() {
+    const channel = document.getElementById('comm-channel')?.value;
+    const direction = document.getElementById('comm-direction')?.value;
+    if (!channel || !direction) { showToast('Channel and direction are required'); return; }
+    try {
+      await store.createCommunicationLog({
+        application_id: document.getElementById('comm-app-id')?.value || null,
+        provider_id: document.getElementById('comm-provider-id')?.value || null,
+        channel, direction,
+        subject: document.getElementById('comm-subject')?.value?.trim() || '',
+        body: document.getElementById('comm-body')?.value?.trim() || '',
+        contact_name: document.getElementById('comm-contact-name')?.value?.trim() || '',
+        contact_info: document.getElementById('comm-contact-info')?.value?.trim() || '',
+        outcome: document.getElementById('comm-outcome')?.value || '',
+        duration_seconds: parseInt(document.getElementById('comm-duration')?.value) || null,
+        logged_at: document.getElementById('comm-date')?.value || new Date().toISOString().split('T')[0],
+      });
+      showToast('Communication logged');
+      document.getElementById('comm-log-modal')?.classList.remove('active');
+      navigateTo('communications');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async deleteCommLog(id) {
+    if (!await appConfirm('Delete this communication log?', { title: 'Delete Log', okLabel: 'Delete', okClass: 'btn-danger' })) return;
+    try {
+      await store.deleteCommunicationLog(id);
+      showToast('Log deleted');
+      navigateTo('communications');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  filterComms() { renderCommunicationsPage(); },
+
+  // ─── Kanban ───
+  async kanbanDrop(appId, newStatus) {
+    try {
+      await store._fetch(`${store._url('applications').replace('/applications','')}/applications/${appId}/transition`, {
+        method: 'POST', body: JSON.stringify({ new_status: newStatus })
+      });
+      showToast(`Moved to ${newStatus.replace(/_/g, ' ')}`);
+      await renderKanbanBoard();
+    } catch (e) {
+      showToast('Cannot transition: ' + (e.message || 'Invalid status change'));
+      await renderKanbanBoard();
+    }
+  },
+
+  // ─── Calendar ───
+  _calMonth: new Date().getMonth(),
+  _calYear: new Date().getFullYear(),
+  _calFilters: { licenses: true, tasks: true, followups: true, applications: true },
+  _calSelectedDay: null,
+  calPrev() { window.app._calMonth--; if (window.app._calMonth < 0) { window.app._calMonth = 11; window.app._calYear--; } renderCalendarPage(); },
+  calNext() { window.app._calMonth++; if (window.app._calMonth > 11) { window.app._calMonth = 0; window.app._calYear++; } renderCalendarPage(); },
+  calToday() { window.app._calMonth = new Date().getMonth(); window.app._calYear = new Date().getFullYear(); window.app._calSelectedDay = null; renderCalendarPage(); },
+  calToggleFilter(type) { window.app._calFilters[type] = !window.app._calFilters[type]; renderCalendarPage(); },
+  calSelectDay(day) { window.app._calSelectedDay = day; renderCalendarPage(); },
 };
 
 // ─── Application Modal ───
@@ -9452,6 +9588,450 @@ async function renderUsersStub() {
   `;
 }
 
+// ─── Provider Self-Service Dashboard ───
+
+async function renderProviderDashboard(user) {
+  const body = document.getElementById('page-body');
+  const providerId = user.provider_id || user.providerId;
+
+  let provider = null, licenses = [], apps = [], documents = [], tasks = [];
+  try {
+    if (providerId) {
+      [provider, licenses, apps, documents, tasks] = await Promise.all([
+        store.getOne('providers', providerId).catch(() => null),
+        store.getAll('licenses').then(l => l.filter(x => (x.providerId || x.provider_id) == providerId)).catch(() => []),
+        store.getAll('applications').then(a => a.filter(x => (x.providerId || x.provider_id) == providerId)).catch(() => []),
+        store.getProviderDocuments(providerId).catch(() => []),
+        store.getAll('tasks').catch(() => []),
+      ]);
+    }
+  } catch (e) { console.error('Provider dashboard error:', e); }
+
+  if (!Array.isArray(licenses)) licenses = [];
+  if (!Array.isArray(apps)) apps = [];
+  if (!Array.isArray(documents)) documents = [];
+  if (!Array.isArray(tasks)) tasks = [];
+
+  const activeLicenses = licenses.filter(l => l.status === 'active');
+  const today = new Date();
+  const expiring90 = licenses.filter(l => {
+    const exp = new Date(l.expirationDate || l.expiration_date);
+    return exp > today && exp < new Date(today.getTime() + 90 * 86400000);
+  });
+  const approvedApps = apps.filter(a => a.status === 'approved');
+  const pendingApps = apps.filter(a => a.status !== 'approved' && a.status !== 'denied');
+  const verifiedDocs = documents.filter(d => d.status === 'verified' || d.status === 'received');
+  const missingDocs = documents.filter(d => d.status === 'missing');
+  const myTasks = tasks.filter(t => !t.completed && !t.isCompleted);
+  const provName = provider ? `${provider.firstName || provider.first_name || ''} ${provider.lastName || provider.last_name || ''}`.trim() : user.name || 'Provider';
+
+  body.innerHTML = `
+    <div style="margin-bottom:20px;">
+      <h2 style="margin:0;">Welcome, ${escHtml(provName)}</h2>
+      <p style="color:var(--gray-500);margin:4px 0 0;">Here's an overview of your credentialing status.</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:20px;">
+      <div class="stat-card"><div class="label">Active Licenses</div><div class="value" style="color:var(--green);">${activeLicenses.length}</div></div>
+      <div class="stat-card"><div class="label">Pending Apps</div><div class="value" style="color:var(--brand-600);">${pendingApps.length}</div></div>
+      <div class="stat-card"><div class="label">Approved</div><div class="value" style="color:var(--green);">${approvedApps.length}</div></div>
+      <div class="stat-card"><div class="label">Expiring (90d)</div><div class="value" style="color:${expiring90.length > 0 ? 'var(--red)' : 'var(--gray-500)'};">${expiring90.length}</div></div>
+      <div class="stat-card"><div class="label">Documents</div><div class="value">${verifiedDocs.length}/${documents.length}</div></div>
+      <div class="stat-card"><div class="label">Open Tasks</div><div class="value">${myTasks.length}</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <!-- My Licenses -->
+      <div class="card">
+        <div class="card-header"><h3>My Licenses</h3></div>
+        <div class="card-body" style="padding:0;">
+          ${licenses.length > 0 ? `<table><thead><tr><th>State</th><th>Number</th><th>Status</th><th>Expires</th></tr></thead><tbody>
+            ${licenses.map(l => {
+              const exp = l.expirationDate || l.expiration_date;
+              const isExpired = exp && new Date(exp) < today;
+              return `<tr>
+                <td><strong>${escHtml(l.state || '—')}</strong></td>
+                <td><code>${escHtml(l.licenseNumber || l.license_number || '—')}</code></td>
+                <td><span class="badge badge-${l.status === 'active' ? 'approved' : l.status === 'expired' ? 'denied' : 'pending'}">${escHtml(l.status || '—')}</span></td>
+                <td style="${isExpired ? 'color:var(--red);' : ''}">${formatDateDisplay(exp)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody></table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No licenses on file.</div>'}
+        </div>
+      </div>
+
+      <!-- My Applications -->
+      <div class="card">
+        <div class="card-header"><h3>My Applications</h3></div>
+        <div class="card-body" style="padding:0;">
+          ${apps.length > 0 ? `<table><thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th></tr></thead><tbody>
+            ${apps.map(a => `<tr>
+              <td><strong>${escHtml(a.payerName || a.payer_name || a.payer?.name || '—')}</strong></td>
+              <td>${escHtml(a.state || '—')}</td>
+              <td><span class="badge badge-${a.status === 'approved' ? 'approved' : a.status === 'denied' ? 'denied' : 'pending'}">${escHtml(a.status || '—')}</span></td>
+              <td>${formatDateDisplay(a.submittedDate || a.submitted_date)}</td>
+            </tr>`).join('')}
+          </tbody></table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No applications yet.</div>'}
+        </div>
+      </div>
+
+      <!-- My Documents -->
+      <div class="card">
+        <div class="card-header"><h3>My Documents</h3></div>
+        <div class="card-body" style="padding:0;">
+          ${documents.length > 0 ? `<table><thead><tr><th>Document</th><th>Type</th><th>Status</th></tr></thead><tbody>
+            ${documents.map(d => `<tr>
+              <td>${escHtml(d.documentName || d.document_name || d.name || '—')}</td>
+              <td>${escHtml(d.documentType || d.document_type || d.type || '—')}</td>
+              <td><span class="badge badge-${d.status === 'verified' || d.status === 'received' ? 'approved' : d.status === 'missing' ? 'denied' : 'pending'}">${escHtml(d.status || 'pending')}</span></td>
+            </tr>`).join('')}
+          </tbody></table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No documents uploaded.</div>'}
+        </div>
+      </div>
+
+      <!-- Upcoming Renewals -->
+      <div class="card">
+        <div class="card-header"><h3>Upcoming Renewals</h3></div>
+        <div class="card-body" style="padding:0;">
+          ${expiring90.length > 0 ? `<table><thead><tr><th>State</th><th>License #</th><th>Expires</th><th>Days Left</th></tr></thead><tbody>
+            ${expiring90.map(l => {
+              const exp = new Date(l.expirationDate || l.expiration_date);
+              const daysLeft = Math.ceil((exp - today) / 86400000);
+              return `<tr>
+                <td><strong>${escHtml(l.state || '—')}</strong></td>
+                <td><code>${escHtml(l.licenseNumber || l.license_number || '—')}</code></td>
+                <td>${formatDateDisplay(l.expirationDate || l.expiration_date)}</td>
+                <td style="color:${daysLeft < 30 ? 'var(--red)' : 'var(--brand-600)'};">${daysLeft}d</td>
+              </tr>`;
+            }).join('')}
+          </tbody></table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No upcoming renewals in the next 90 days.</div>'}
+        </div>
+      </div>
+    </div>
+
+    ${providerId ? `<div style="margin-top:16px;text-align:center;">
+      <button class="btn btn-primary" onclick="window.app.openProviderProfile('${providerId}')">View Full Profile</button>
+      <button class="btn" onclick="window.app.openProviderPrintout('${providerId}')" style="margin-left:8px;">Credential Sheet</button>
+    </div>` : ''}
+  `;
+}
+
+// ─── Communications Page ───
+
+async function renderCommunicationsPage() {
+  const body = document.getElementById('page-body');
+  let logs = [];
+  let providers = [];
+  try { logs = await store.getCommunicationLogs(); } catch (e) { console.error('Comm logs error:', e); }
+  try { providers = await store.getAll('providers'); } catch (e) {}
+  if (!Array.isArray(logs)) logs = [];
+
+  const channelFilter = document.getElementById('comm-filter-channel')?.value || '';
+  const dirFilter = document.getElementById('comm-filter-dir')?.value || '';
+
+  const channelIcons = { email: '&#x2709;', phone: '&#x260E;', fax: '&#x1F4E0;', portal: '&#x1F310;', mail: '&#x1F4EC;' };
+  const outcomeColors = { connected: 'approved', sent: 'approved', received: 'approved', voicemail: 'pending', no_answer: 'denied', bounced: 'denied' };
+
+  let filtered = logs;
+  if (channelFilter) filtered = filtered.filter(l => l.channel === channelFilter);
+  if (dirFilter) filtered = filtered.filter(l => l.direction === dirFilter);
+  filtered.sort((a, b) => new Date(b.logged_at || b.created_at) - new Date(a.logged_at || a.created_at));
+
+  const providerMap = {};
+  providers.forEach(p => { providerMap[p.id] = `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim(); });
+
+  body.innerHTML = `
+    <!-- Filters -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-body" style="padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <select id="comm-filter-channel" class="form-control" style="width:auto;height:34px;font-size:13px;" onchange="window.app.filterComms()">
+          <option value="">All Channels</option>
+          <option value="email" ${channelFilter==='email'?'selected':''}>Email</option>
+          <option value="phone" ${channelFilter==='phone'?'selected':''}>Phone</option>
+          <option value="fax" ${channelFilter==='fax'?'selected':''}>Fax</option>
+          <option value="portal" ${channelFilter==='portal'?'selected':''}>Portal</option>
+          <option value="mail" ${channelFilter==='mail'?'selected':''}>Mail</option>
+        </select>
+        <select id="comm-filter-dir" class="form-control" style="width:auto;height:34px;font-size:13px;" onchange="window.app.filterComms()">
+          <option value="">All Directions</option>
+          <option value="outbound" ${dirFilter==='outbound'?'selected':''}>Outbound</option>
+          <option value="inbound" ${dirFilter==='inbound'?'selected':''}>Inbound</option>
+        </select>
+        <span style="color:var(--gray-500);font-size:13px;">${filtered.length} log${filtered.length !== 1 ? 's' : ''}</span>
+      </div>
+    </div>
+
+    <!-- Logs Table -->
+    <div class="card">
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Channel</th><th>Dir</th><th>Contact</th><th>Subject</th><th>Provider</th><th>Outcome</th><th>Actions</th></tr></thead>
+            <tbody>
+              ${filtered.length > 0 ? filtered.map(l => `<tr>
+                <td style="white-space:nowrap;">${formatDateDisplay(l.logged_at || l.created_at)}</td>
+                <td style="text-align:center;font-size:18px;" title="${escHtml(l.channel || '')}">${channelIcons[l.channel] || '—'}</td>
+                <td><span class="badge badge-${l.direction === 'outbound' ? 'pending' : 'approved'}" style="font-size:10px;">${escHtml(l.direction || '—')}</span></td>
+                <td><strong>${escHtml(l.contact_name || l.contactName || '—')}</strong><br><span class="text-sm text-muted">${escHtml(l.contact_info || l.contactInfo || '')}</span></td>
+                <td>${escHtml(l.subject || '—')}</td>
+                <td>${l.provider_id ? escHtml(providerMap[l.provider_id] || '—') : '—'}</td>
+                <td>${l.outcome ? `<span class="badge badge-${outcomeColors[l.outcome] || 'pending'}">${escHtml(l.outcome)}</span>` : '—'}</td>
+                <td><button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteCommLog(${l.id})">Del</button></td>
+              </tr>`).join('') : '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No communication logs yet. Click "+ Log Communication" to get started.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Comm Log Modal -->
+    <div class="modal-overlay" id="comm-log-modal">
+      <div class="modal" style="max-width:560px;">
+        <div class="modal-header">
+          <h3>Log Communication</h3>
+          <button class="modal-close" onclick="document.getElementById('comm-log-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="comm-app-id" value="">
+          <input type="hidden" id="comm-provider-id" value="">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Channel *</label>
+              <select id="comm-channel" class="form-control">
+                <option value="">Select...</option>
+                <option value="phone">Phone</option>
+                <option value="email">Email</option>
+                <option value="fax">Fax</option>
+                <option value="portal">Portal</option>
+                <option value="mail">Mail</option>
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Direction *</label>
+              <select id="comm-direction" class="form-control">
+                <option value="">Select...</option>
+                <option value="outbound">Outbound</option>
+                <option value="inbound">Inbound</option>
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Contact Name</label><input type="text" id="comm-contact-name" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Contact Info</label><input type="text" id="comm-contact-info" class="form-control" placeholder="Phone or email"></div>
+            <div class="auth-field" style="margin:0;"><label>Outcome</label>
+              <select id="comm-outcome" class="form-control">
+                <option value="">Select...</option>
+                <option value="connected">Connected</option>
+                <option value="voicemail">Voicemail</option>
+                <option value="no_answer">No Answer</option>
+                <option value="sent">Sent</option>
+                <option value="received">Received</option>
+                <option value="bounced">Bounced</option>
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Date</label><input type="date" id="comm-date" class="form-control"></div>
+          </div>
+          <div class="auth-field" style="margin:12px 0 0;"><label>Subject</label><input type="text" id="comm-subject" class="form-control"></div>
+          <div class="auth-field" style="margin:12px 0 0;"><label>Notes / Body</label><textarea id="comm-body" class="form-control" rows="3" style="resize:vertical;"></textarea></div>
+          <div class="auth-field" style="margin:12px 0 0;"><label>Duration (seconds, for calls)</label><input type="number" id="comm-duration" class="form-control" min="0"></div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('comm-log-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveCommLog()">Save</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Kanban Board ───
+
+async function renderKanbanBoard() {
+  const body = document.getElementById('page-body');
+  let apps = [];
+  let providers = [];
+  try {
+    apps = store.filterByScope(await store.getAll('applications'));
+    providers = await store.getAll('providers');
+  } catch (e) { console.error('Kanban error:', e); }
+  if (!Array.isArray(apps)) apps = [];
+
+  const providerMap = {};
+  providers.forEach(p => { providerMap[p.id || p.provider_id] = `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim(); });
+
+  const statuses = [
+    { key: 'not_started', label: 'Not Started', color: '#6b7280' },
+    { key: 'submitted', label: 'Submitted', color: '#3b82f6' },
+    { key: 'in_review', label: 'In Review', color: '#f59e0b' },
+    { key: 'pending_info', label: 'Pending Info', color: '#ef4444' },
+    { key: 'approved', label: 'Approved', color: '#10b981' },
+    { key: 'denied', label: 'Denied', color: '#dc2626' },
+  ];
+
+  const columns = statuses.map(s => {
+    const colApps = apps.filter(a => (a.status || 'not_started') === s.key);
+    return { ...s, apps: colApps };
+  });
+
+  body.innerHTML = `
+    <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:16px;min-height:500px;">
+      ${columns.map(col => `
+        <div style="min-width:240px;max-width:280px;flex:1;background:var(--gray-50);border-radius:10px;padding:10px;display:flex;flex-direction:column;"
+             ondragover="event.preventDefault();this.style.outline='2px solid var(--brand-600)'"
+             ondragleave="this.style.outline='none'"
+             ondrop="this.style.outline='none';window.app.kanbanDrop(event.dataTransfer.getData('text/plain'),'${col.key}')">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:4px 6px;">
+            <span style="font-weight:700;font-size:13px;color:${col.color};">${col.label}</span>
+            <span style="background:${col.color};color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:600;">${col.apps.length}</span>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:600px;">
+            ${col.apps.length > 0 ? col.apps.map(a => {
+              const provName = providerMap[a.providerId || a.provider_id] || 'Unknown';
+              const payerName = a.payerName || a.payer_name || a.payer?.name || '—';
+              const daysInStatus = a.updatedAt || a.updated_at ? Math.floor((Date.now() - new Date(a.updatedAt || a.updated_at)) / 86400000) : 0;
+              return `<div draggable="true" ondragstart="event.dataTransfer.setData('text/plain','${a.id}')"
+                style="background:#fff;border-radius:8px;padding:10px 12px;cursor:grab;box-shadow:0 1px 3px rgba(0,0,0,.08);border-left:3px solid ${col.color};transition:box-shadow .15s;"
+                onmouseenter="this.style.boxShadow='0 4px 12px rgba(0,0,0,.12)'" onmouseleave="this.style.boxShadow='0 1px 3px rgba(0,0,0,.08)'"
+                onclick="window.app.viewApplication('${a.id}')">
+                <div style="font-weight:600;font-size:13px;margin-bottom:4px;">${escHtml(provName)}</div>
+                <div style="font-size:12px;color:var(--gray-500);margin-bottom:4px;">${escHtml(payerName)}</div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-400);">
+                  <span>${escHtml(a.state || '—')}</span>
+                  ${a.wave ? `<span>W${a.wave}</span>` : ''}
+                  <span>${daysInStatus}d</span>
+                </div>
+              </div>`;
+            }).join('') : '<div style="text-align:center;padding:20px;color:var(--gray-400);font-size:12px;">No applications</div>'}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ─── Calendar Page ───
+
+async function renderCalendarPage() {
+  const body = document.getElementById('page-body');
+  const month = window.app._calMonth;
+  const year = window.app._calYear;
+  const filters = window.app._calFilters;
+  const selectedDay = window.app._calSelectedDay;
+
+  let licenses = [], tasks = [], followups = [], apps = [];
+  try {
+    [licenses, tasks, followups, apps] = await Promise.all([
+      store.getAll('licenses'), store.getAll('tasks'), store.getAll('followups'), store.getAll('applications')
+    ]);
+    licenses = store.filterByScope(licenses);
+    tasks = store.filterByScope(tasks);
+    followups = store.filterByScope(followups);
+    apps = store.filterByScope(apps);
+  } catch (e) { console.error('Calendar error:', e); }
+
+  // Build events map: day -> [events]
+  const events = {};
+  const addEvent = (day, type, label, color) => {
+    if (!events[day]) events[day] = [];
+    events[day].push({ type, label, color });
+  };
+
+  if (filters.licenses) {
+    (licenses || []).forEach(l => {
+      const exp = l.expirationDate || l.expiration_date;
+      if (exp) { const d = new Date(exp); if (d.getMonth() === month && d.getFullYear() === year) addEvent(d.getDate(), 'license', `License exp: ${escHtml(l.state || '')} - ${escHtml(l.licenseNumber || l.license_number || '')}`, '#ef4444'); }
+    });
+  }
+  if (filters.tasks) {
+    (tasks || []).forEach(t => {
+      const due = t.dueDate || t.due_date;
+      if (due) { const d = new Date(due); if (d.getMonth() === month && d.getFullYear() === year) addEvent(d.getDate(), 'task', `Task: ${escHtml(t.title || t.description || '')}`, '#10b981'); }
+    });
+  }
+  if (filters.followups) {
+    (followups || []).forEach(f => {
+      const due = f.dueDate || f.due_date;
+      if (due) { const d = new Date(due); if (d.getMonth() === month && d.getFullYear() === year) addEvent(d.getDate(), 'followup', `Followup: ${escHtml(f.type || '')}`, '#8b5cf6'); }
+    });
+  }
+  if (filters.applications) {
+    (apps || []).forEach(a => {
+      const sub = a.submittedDate || a.submitted_date;
+      if (sub) { const d = new Date(sub); if (d.getMonth() === month && d.getFullYear() === year) addEvent(d.getDate(), 'application', `Submitted: ${escHtml(a.payerName || a.payer_name || '')}`, '#3b82f6'); }
+      const eff = a.effectiveDate || a.effective_date;
+      if (eff) { const d = new Date(eff); if (d.getMonth() === month && d.getFullYear() === year) addEvent(d.getDate(), 'application', `Effective: ${escHtml(a.payerName || a.payer_name || '')}`, '#0ea5e9'); }
+    });
+  }
+
+  const monthName = new Date(year, month).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date();
+  const isCurrentMonth = today.getMonth() === month && today.getFullYear() === year;
+
+  let cells = '';
+  for (let i = 0; i < firstDay; i++) cells += '<div style="padding:8px;"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayEvents = events[d] || [];
+    const isToday = isCurrentMonth && today.getDate() === d;
+    const isSelected = selectedDay === d;
+    cells += `<div onclick="window.app.calSelectDay(${d})" style="padding:6px;min-height:70px;border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;background:${isSelected ? 'var(--brand-50)' : isToday ? '#fffbeb' : '#fff'};${isSelected ? 'outline:2px solid var(--brand-600);' : ''}">
+      <div style="font-size:12px;font-weight:${isToday ? '700' : '500'};color:${isToday ? 'var(--brand-600)' : 'var(--gray-700)'};margin-bottom:2px;">${d}</div>
+      ${dayEvents.slice(0, 3).map(e => `<div style="font-size:9px;padding:1px 4px;margin-bottom:1px;border-radius:3px;background:${e.color}20;color:${e.color};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.label.split(':')[0]}</div>`).join('')}
+      ${dayEvents.length > 3 ? `<div style="font-size:9px;color:var(--gray-400);">+${dayEvents.length - 3} more</div>` : ''}
+    </div>`;
+  }
+
+  // Selected day detail
+  let dayDetail = '';
+  if (selectedDay && events[selectedDay]) {
+    dayDetail = `<div class="card" style="margin-top:16px;">
+      <div class="card-header"><h3>${monthName.split(' ')[0]} ${selectedDay}, ${year}</h3></div>
+      <div class="card-body" style="padding:0;">
+        <table><thead><tr><th>Type</th><th>Detail</th></tr></thead><tbody>
+          ${events[selectedDay].map(e => `<tr>
+            <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${e.color};margin-right:6px;"></span>${escHtml(e.type)}</td>
+            <td>${e.label}</td>
+          </tr>`).join('')}
+        </tbody></table>
+      </div>
+    </div>`;
+  }
+
+  body.innerHTML = `
+    <!-- Filter Toggles -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-body" style="padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        ${[
+          { key: 'licenses', label: 'Licenses', color: '#ef4444' },
+          { key: 'tasks', label: 'Tasks', color: '#10b981' },
+          { key: 'followups', label: 'Follow-ups', color: '#8b5cf6' },
+          { key: 'applications', label: 'Applications', color: '#3b82f6' },
+        ].map(f => `<label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" ${filters[f.key] ? 'checked' : ''} onchange="window.app.calToggleFilter('${f.key}')">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${f.color};"></span> ${f.label}
+        </label>`).join('')}
+      </div>
+    </div>
+
+    <!-- Calendar Header -->
+    <div class="card">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-sm" onclick="window.app.calPrev()">&larr;</button>
+          <h3 style="margin:0;min-width:200px;text-align:center;">${monthName}</h3>
+          <button class="btn btn-sm" onclick="window.app.calNext()">&rarr;</button>
+        </div>
+        <button class="btn btn-sm" onclick="window.app.calToday()">Today</button>
+      </div>
+      <div class="card-body" style="padding:8px;">
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">
+          ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => `<div style="text-align:center;font-size:11px;font-weight:700;color:var(--gray-500);padding:4px;">${d}</div>`).join('')}
+          ${cells}
+        </div>
+      </div>
+    </div>
+    ${dayDetail}
+  `;
+}
+
 // ─── Super Admin Panel ───
 
 async function renderAdminPanel() {
@@ -11040,39 +11620,40 @@ async function renderProviderProfilePage(providerId) {
         </div>
       </div>
 
-      <!-- Education Modal -->
-      <div class="modal" id="education-modal">
-        <div class="modal-content" style="max-width:520px;">
-          <div class="modal-header">
-            <h3>Add Education</h3>
-            <button class="modal-close" onclick="document.getElementById('education-modal').classList.remove('active')">&times;</button>
-          </div>
-          <div class="modal-body">
-            <div class="auth-field" style="margin:0 0 12px;"><label>Institution *</label><input type="text" id="edu-institution" class="form-control" placeholder="e.g. Johns Hopkins University"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="auth-field" style="margin:0;"><label>Degree</label>
-                <select id="edu-degree" class="form-control">
-                  <option value="">Select...</option>
-                  <option value="MD">MD</option>
-                  <option value="DO">DO</option>
-                  <option value="PhD">PhD</option>
-                  <option value="MSN">MSN</option>
-                  <option value="DNP">DNP</option>
-                  <option value="PA">PA</option>
-                  <option value="Residency">Residency</option>
-                  <option value="Fellowship">Fellowship</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              <div class="auth-field" style="margin:0;"><label>Field / Specialty</label><input type="text" id="edu-field" class="form-control"></div>
-              <div class="auth-field" style="margin:0;"><label>Start Date</label><input type="date" id="edu-start" class="form-control"></div>
-              <div class="auth-field" style="margin:0;"><label>End Date</label><input type="date" id="edu-end" class="form-control"></div>
+    </div>
+
+    <!-- Education Modal -->
+    <div class="modal-overlay" id="education-modal">
+      <div class="modal" style="max-width:520px;">
+        <div class="modal-header">
+          <h3>Add Education</h3>
+          <button class="modal-close" onclick="document.getElementById('education-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="auth-field" style="margin:0 0 12px;"><label>Institution *</label><input type="text" id="edu-institution" class="form-control" placeholder="e.g. Johns Hopkins University"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Degree</label>
+              <select id="edu-degree" class="form-control">
+                <option value="">Select...</option>
+                <option value="MD">MD</option>
+                <option value="DO">DO</option>
+                <option value="PhD">PhD</option>
+                <option value="MSN">MSN</option>
+                <option value="DNP">DNP</option>
+                <option value="PA">PA</option>
+                <option value="Residency">Residency</option>
+                <option value="Fellowship">Fellowship</option>
+                <option value="Other">Other</option>
+              </select>
             </div>
+            <div class="auth-field" style="margin:0;"><label>Field / Specialty</label><input type="text" id="edu-field" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Start Date</label><input type="date" id="edu-start" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>End Date</label><input type="date" id="edu-end" class="form-control"></div>
           </div>
-          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
-            <button class="btn" onclick="document.getElementById('education-modal').classList.remove('active')">Cancel</button>
-            <button class="btn btn-primary" onclick="window.app.saveEducation(${providerId})">Save</button>
-          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('education-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveEducation(${providerId})">Save</button>
         </div>
       </div>
     </div>
@@ -11104,26 +11685,27 @@ async function renderProviderProfilePage(providerId) {
         </div>
       </div>
 
-      <!-- Board Modal -->
-      <div class="modal" id="board-modal">
-        <div class="modal-content" style="max-width:520px;">
-          <div class="modal-header">
-            <h3>Add Board Certification</h3>
-            <button class="modal-close" onclick="document.getElementById('board-modal').classList.remove('active')">&times;</button>
+    </div>
+
+    <!-- Board Modal -->
+    <div class="modal-overlay" id="board-modal">
+      <div class="modal" style="max-width:520px;">
+        <div class="modal-header">
+          <h3>Add Board Certification</h3>
+          <button class="modal-close" onclick="document.getElementById('board-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="auth-field" style="margin:0 0 12px;"><label>Board Name *</label><input type="text" id="board-name" class="form-control" placeholder="e.g. American Board of Psychiatry"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Specialty</label><input type="text" id="board-specialty" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Certificate #</label><input type="text" id="board-cert-num" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Issue Date</label><input type="date" id="board-issue" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Expiration Date</label><input type="date" id="board-exp" class="form-control"></div>
           </div>
-          <div class="modal-body">
-            <div class="auth-field" style="margin:0 0 12px;"><label>Board Name *</label><input type="text" id="board-name" class="form-control" placeholder="e.g. American Board of Psychiatry"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="auth-field" style="margin:0;"><label>Specialty</label><input type="text" id="board-specialty" class="form-control"></div>
-              <div class="auth-field" style="margin:0;"><label>Certificate #</label><input type="text" id="board-cert-num" class="form-control"></div>
-              <div class="auth-field" style="margin:0;"><label>Issue Date</label><input type="date" id="board-issue" class="form-control"></div>
-              <div class="auth-field" style="margin:0;"><label>Expiration Date</label><input type="date" id="board-exp" class="form-control"></div>
-            </div>
-          </div>
-          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
-            <button class="btn" onclick="document.getElementById('board-modal').classList.remove('active')">Cancel</button>
-            <button class="btn btn-primary" onclick="window.app.saveBoard(${providerId})">Save</button>
-          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('board-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveBoard(${providerId})">Save</button>
         </div>
       </div>
     </div>
@@ -11155,26 +11737,27 @@ async function renderProviderProfilePage(providerId) {
         </div>
       </div>
 
-      <!-- Malpractice Modal -->
-      <div class="modal" id="malpractice-modal">
-        <div class="modal-content" style="max-width:520px;">
-          <div class="modal-header">
-            <h3>Add Malpractice Insurance</h3>
-            <button class="modal-close" onclick="document.getElementById('malpractice-modal').classList.remove('active')">&times;</button>
+    </div>
+
+    <!-- Malpractice Modal -->
+    <div class="modal-overlay" id="malpractice-modal">
+      <div class="modal" style="max-width:520px;">
+        <div class="modal-header">
+          <h3>Add Malpractice Insurance</h3>
+          <button class="modal-close" onclick="document.getElementById('malpractice-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="auth-field" style="margin:0 0 12px;"><label>Insurance Carrier *</label><input type="text" id="mal-carrier" class="form-control"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Policy Number</label><input type="text" id="mal-policy" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Coverage Amount</label><input type="text" id="mal-coverage" class="form-control" placeholder="e.g. $1M/$3M"></div>
+            <div class="auth-field" style="margin:0;"><label>Effective Date</label><input type="date" id="mal-effective" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Expiration Date</label><input type="date" id="mal-expiration" class="form-control"></div>
           </div>
-          <div class="modal-body">
-            <div class="auth-field" style="margin:0 0 12px;"><label>Insurance Carrier *</label><input type="text" id="mal-carrier" class="form-control"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="auth-field" style="margin:0;"><label>Policy Number</label><input type="text" id="mal-policy" class="form-control"></div>
-              <div class="auth-field" style="margin:0;"><label>Coverage Amount</label><input type="text" id="mal-coverage" class="form-control" placeholder="e.g. $1M/$3M"></div>
-              <div class="auth-field" style="margin:0;"><label>Effective Date</label><input type="date" id="mal-effective" class="form-control"></div>
-              <div class="auth-field" style="margin:0;"><label>Expiration Date</label><input type="date" id="mal-expiration" class="form-control"></div>
-            </div>
-          </div>
-          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
-            <button class="btn" onclick="document.getElementById('malpractice-modal').classList.remove('active')">Cancel</button>
-            <button class="btn btn-primary" onclick="window.app.saveMalpractice(${providerId})">Save</button>
-          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('malpractice-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveMalpractice(${providerId})">Save</button>
         </div>
       </div>
     </div>
@@ -11202,27 +11785,28 @@ async function renderProviderProfilePage(providerId) {
         </div>
       </div>
 
-      <!-- Work History Modal -->
-      <div class="modal" id="work-history-modal">
-        <div class="modal-content" style="max-width:520px;">
-          <div class="modal-header">
-            <h3>Add Work History</h3>
-            <button class="modal-close" onclick="document.getElementById('work-history-modal').classList.remove('active')">&times;</button>
+    </div>
+
+    <!-- Work History Modal -->
+    <div class="modal-overlay" id="work-history-modal">
+      <div class="modal" style="max-width:520px;">
+        <div class="modal-header">
+          <h3>Add Work History</h3>
+          <button class="modal-close" onclick="document.getElementById('work-history-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="auth-field" style="margin:0 0 12px;"><label>Employer / Organization *</label><input type="text" id="wh-employer" class="form-control" placeholder="e.g. Johns Hopkins Hospital"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Position / Title</label><input type="text" id="wh-position" class="form-control" placeholder="e.g. Attending Psychiatrist"></div>
+            <div class="auth-field" style="margin:0;"><label>Department</label><input type="text" id="wh-department" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Start Date</label><input type="date" id="wh-start" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>End Date</label><input type="date" id="wh-end" class="form-control"><div style="font-size:11px;color:var(--gray-400);margin-top:2px;">Leave blank if current</div></div>
           </div>
-          <div class="modal-body">
-            <div class="auth-field" style="margin:0 0 12px;"><label>Employer / Organization *</label><input type="text" id="wh-employer" class="form-control" placeholder="e.g. Johns Hopkins Hospital"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="auth-field" style="margin:0;"><label>Position / Title</label><input type="text" id="wh-position" class="form-control" placeholder="e.g. Attending Psychiatrist"></div>
-              <div class="auth-field" style="margin:0;"><label>Department</label><input type="text" id="wh-department" class="form-control"></div>
-              <div class="auth-field" style="margin:0;"><label>Start Date</label><input type="date" id="wh-start" class="form-control"></div>
-              <div class="auth-field" style="margin:0;"><label>End Date</label><input type="date" id="wh-end" class="form-control"><div style="font-size:11px;color:var(--gray-400);margin-top:2px;">Leave blank if current</div></div>
-            </div>
-            <div class="auth-field" style="margin:12px 0 0;"><label>Reason for Leaving</label><input type="text" id="wh-reason" class="form-control"></div>
-          </div>
-          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
-            <button class="btn" onclick="document.getElementById('work-history-modal').classList.remove('active')">Cancel</button>
-            <button class="btn btn-primary" onclick="window.app.saveWorkHistory(${providerId})">Save</button>
-          </div>
+          <div class="auth-field" style="margin:12px 0 0;"><label>Reason for Leaving</label><input type="text" id="wh-reason" class="form-control"></div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('work-history-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveWorkHistory(${providerId})">Save</button>
         </div>
       </div>
     </div>
@@ -11249,35 +11833,36 @@ async function renderProviderProfilePage(providerId) {
         </div>
       </div>
 
-      <!-- CME Modal -->
-      <div class="modal" id="cme-modal">
-        <div class="modal-content" style="max-width:520px;">
-          <div class="modal-header">
-            <h3>Add CME Record</h3>
-            <button class="modal-close" onclick="document.getElementById('cme-modal').classList.remove('active')">&times;</button>
-          </div>
-          <div class="modal-body">
-            <div class="auth-field" style="margin:0 0 12px;"><label>Course / Activity Title *</label><input type="text" id="cme-title" class="form-control" placeholder="e.g. Psychopharmacology Update 2026"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="auth-field" style="margin:0;"><label>Accrediting Body / Provider</label><input type="text" id="cme-provider" class="form-control" placeholder="e.g. APA, ACCME"></div>
-              <div class="auth-field" style="margin:0;"><label>Credits / Hours</label><input type="number" id="cme-credits" class="form-control" step="0.5" min="0" placeholder="e.g. 20"></div>
-              <div class="auth-field" style="margin:0;"><label>Category</label>
-                <select id="cme-category" class="form-control">
-                  <option value="">Select...</option>
-                  <option value="Category 1">Category 1 (AMA PRA)</option>
-                  <option value="Category 2">Category 2</option>
-                  <option value="CME">CME</option>
-                  <option value="CE">CE (Continuing Education)</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              <div class="auth-field" style="margin:0;"><label>Date Completed</label><input type="date" id="cme-date" class="form-control"></div>
+    </div>
+
+    <!-- CME Modal -->
+    <div class="modal-overlay" id="cme-modal">
+      <div class="modal" style="max-width:520px;">
+        <div class="modal-header">
+          <h3>Add CME Record</h3>
+          <button class="modal-close" onclick="document.getElementById('cme-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="auth-field" style="margin:0 0 12px;"><label>Course / Activity Title *</label><input type="text" id="cme-title" class="form-control" placeholder="e.g. Psychopharmacology Update 2026"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Accrediting Body / Provider</label><input type="text" id="cme-provider" class="form-control" placeholder="e.g. APA, ACCME"></div>
+            <div class="auth-field" style="margin:0;"><label>Credits / Hours</label><input type="number" id="cme-credits" class="form-control" step="0.5" min="0" placeholder="e.g. 20"></div>
+            <div class="auth-field" style="margin:0;"><label>Category</label>
+              <select id="cme-category" class="form-control">
+                <option value="">Select...</option>
+                <option value="Category 1">Category 1 (AMA PRA)</option>
+                <option value="Category 2">Category 2</option>
+                <option value="CME">CME</option>
+                <option value="CE">CE (Continuing Education)</option>
+                <option value="Other">Other</option>
+              </select>
             </div>
+            <div class="auth-field" style="margin:0;"><label>Date Completed</label><input type="date" id="cme-date" class="form-control"></div>
           </div>
-          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
-            <button class="btn" onclick="document.getElementById('cme-modal').classList.remove('active')">Cancel</button>
-            <button class="btn btn-primary" onclick="window.app.saveCme(${providerId})">Save</button>
-          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('cme-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveCme(${providerId})">Save</button>
         </div>
       </div>
     </div>
@@ -11306,38 +11891,39 @@ async function renderProviderProfilePage(providerId) {
         </div>
       </div>
 
-      <!-- Reference Modal -->
-      <div class="modal" id="reference-modal">
-        <div class="modal-content" style="max-width:520px;">
-          <div class="modal-header">
-            <h3>Add Professional Reference</h3>
-            <button class="modal-close" onclick="document.getElementById('reference-modal').classList.remove('active')">&times;</button>
+    </div>
+
+    <!-- Reference Modal -->
+    <div class="modal-overlay" id="reference-modal">
+      <div class="modal" style="max-width:520px;">
+        <div class="modal-header">
+          <h3>Add Professional Reference</h3>
+          <button class="modal-close" onclick="document.getElementById('reference-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>First Name *</label><input type="text" id="ref-first" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Last Name *</label><input type="text" id="ref-last" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Title / Position</label><input type="text" id="ref-title" class="form-control" placeholder="e.g. Medical Director"></div>
+            <div class="auth-field" style="margin:0;"><label>Organization</label><input type="text" id="ref-org" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Phone</label><input type="tel" id="ref-phone" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Email</label><input type="email" id="ref-email" class="form-control"></div>
           </div>
-          <div class="modal-body">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="auth-field" style="margin:0;"><label>First Name *</label><input type="text" id="ref-first" class="form-control"></div>
-              <div class="auth-field" style="margin:0;"><label>Last Name *</label><input type="text" id="ref-last" class="form-control"></div>
-              <div class="auth-field" style="margin:0;"><label>Title / Position</label><input type="text" id="ref-title" class="form-control" placeholder="e.g. Medical Director"></div>
-              <div class="auth-field" style="margin:0;"><label>Organization</label><input type="text" id="ref-org" class="form-control"></div>
-              <div class="auth-field" style="margin:0;"><label>Phone</label><input type="tel" id="ref-phone" class="form-control"></div>
-              <div class="auth-field" style="margin:0;"><label>Email</label><input type="email" id="ref-email" class="form-control"></div>
-            </div>
-            <div class="auth-field" style="margin:12px 0 0;"><label>Relationship</label>
-              <select id="ref-relationship" class="form-control">
-                <option value="">Select...</option>
-                <option value="Supervisor">Supervisor</option>
-                <option value="Colleague">Colleague</option>
-                <option value="Department Head">Department Head</option>
-                <option value="Program Director">Program Director</option>
-                <option value="Attending Physician">Attending Physician</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
+          <div class="auth-field" style="margin:12px 0 0;"><label>Relationship</label>
+            <select id="ref-relationship" class="form-control">
+              <option value="">Select...</option>
+              <option value="Supervisor">Supervisor</option>
+              <option value="Colleague">Colleague</option>
+              <option value="Department Head">Department Head</option>
+              <option value="Program Director">Program Director</option>
+              <option value="Attending Physician">Attending Physician</option>
+              <option value="Other">Other</option>
+            </select>
           </div>
-          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
-            <button class="btn" onclick="document.getElementById('reference-modal').classList.remove('active')">Cancel</button>
-            <button class="btn btn-primary" onclick="window.app.saveReference(${providerId})">Save</button>
-          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('reference-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveReference(${providerId})">Save</button>
         </div>
       </div>
     </div>

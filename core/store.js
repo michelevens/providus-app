@@ -981,6 +981,24 @@ class Store {
         const result = await this._fetch(`${CONFIG.API_URL}/ai/predict-timeline/${applicationId}`);
         return result.data || result;
     }
+
+    // ── Communication Logs ──
+    async getCommunicationLogs(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/communication-logs${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
+    async createCommunicationLog(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/communication-logs`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async updateCommunicationLog(id, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/communication-logs/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async deleteCommunicationLog(id) {
+        await this._fetch(`${CONFIG.API_URL}/communication-logs/${id}`, { method: 'DELETE' });
+    }
 }
 
 const store = new Store();

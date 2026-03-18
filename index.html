@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0f172a">
   <meta name="description" content="Credentik — Credentialing & Licensing Operations Platform">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.credentik.com https://cdn.jsdelivr.net https://npiregistry.cms.hhs.gov;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://maps.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.credentik.com https://cdn.jsdelivr.net https://npiregistry.cms.hhs.gov https://maps.googleapis.com;">
   <title>Credentik — Credentialing Platform</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/favicon.svg">
@@ -20,6 +20,16 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="ui/styles.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script>
+    // Google Places API — set your key here to enable address autocomplete
+    window.GOOGLE_PLACES_KEY = '';
+    if (window.GOOGLE_PLACES_KEY) {
+      const s = document.createElement('script');
+      s.src = 'https://maps.googleapis.com/maps/api/js?key=' + window.GOOGLE_PLACES_KEY + '&libraries=places&loading=async';
+      s.async = true; s.defer = true;
+      document.head.appendChild(s);
+    }
+  </script>
 </head>
 <body>
 
@@ -208,6 +218,21 @@
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>
           </span> Tasks
           <span class="badge" id="task-badge" style="display:none;">0</span>
+        </button>
+        <button class="nav-item" data-page="communications" data-min-role="organization">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h12a1 1 0 011 1v7a1 1 0 01-1 1H5l-3 3v-11a1 1 0 011-1z"/></svg>
+          </span> Communications
+        </button>
+        <button class="nav-item" data-page="kanban" data-min-role="organization">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2" width="4" height="12" rx="1"/><rect x="6" y="2" width="4" height="8" rx="1"/><rect x="10.5" y="2" width="4" height="10" rx="1"/></svg>
+          </span> Kanban Board
+        </button>
+        <button class="nav-item" data-page="calendar" data-min-role="organization">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5"/><path d="M1.5 6.5h13"/><path d="M5 1v3"/><path d="M11 1v3"/></svg>
+          </span> Calendar
         </button>
 
         <div class="nav-section">Data</div>
