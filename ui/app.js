@@ -6692,15 +6692,24 @@ function handleNppesProxy(payload) {
   openContractModal() {
     _contractLineItems = [{ description: '', qty: 1, rate: 0 }];
     document.getElementById('contract-modal-title').textContent = 'New Contract';
-    ['ctr-title','ctr-org','ctr-client-name','ctr-client-email','ctr-effective','ctr-expiration','ctr-payment-terms','ctr-terms'].forEach(f => {
+    ['ctr-title','ctr-description','ctr-org','ctr-client-name','ctr-client-email','ctr-client-address','ctr-effective','ctr-expiration','ctr-payment-terms','ctr-terms','ctr-notes','ctr-renewal-terms'].forEach(f => {
       const el = document.getElementById(f); if (el) el.value = '';
     });
     document.getElementById('ctr-edit-id').value = '';
     document.getElementById('ctr-org-id').value = '';
     document.getElementById('ctr-frequency').value = 'monthly';
+    document.getElementById('ctr-tax-rate').value = '0';
+    document.getElementById('ctr-discount').value = '0';
+    const autoRenew = document.getElementById('ctr-auto-renew');
+    if (autoRenew) autoRenew.checked = false;
+    document.getElementById('ctr-renewal-terms-wrap').style.display = 'none';
     const editor = document.getElementById('contract-line-items-editor');
     if (editor) editor.innerHTML = _renderContractLineItems();
     document.getElementById('contract-modal').classList.add('active');
+    // Toggle renewal terms visibility
+    autoRenew?.addEventListener('change', function() {
+      document.getElementById('ctr-renewal-terms-wrap').style.display = this.checked ? 'block' : 'none';
+    });
   },
   async filterContractOrg(val) {
     const dd = document.getElementById('ctr-org-dropdown');
@@ -6783,14 +6792,21 @@ function handleNppesProxy(payload) {
 
     const data = {
       title,
+      description: document.getElementById('ctr-description')?.value?.trim() || '',
       organization_id: document.getElementById('ctr-org-id')?.value || null,
       client_name: document.getElementById('ctr-client-name')?.value?.trim() || '',
       client_email: document.getElementById('ctr-client-email')?.value?.trim() || '',
+      client_address: document.getElementById('ctr-client-address')?.value?.trim() || '',
       effective_date: effective,
       expiration_date: document.getElementById('ctr-expiration')?.value || null,
+      auto_renew: document.getElementById('ctr-auto-renew')?.checked || false,
+      renewal_terms: document.getElementById('ctr-renewal-terms')?.value?.trim() || '',
       billing_frequency: document.getElementById('ctr-frequency')?.value || 'monthly',
       payment_terms: document.getElementById('ctr-payment-terms')?.value?.trim() || '',
+      tax_rate: parseFloat(document.getElementById('ctr-tax-rate')?.value) || 0,
+      discount_amount: parseFloat(document.getElementById('ctr-discount')?.value) || 0,
       terms_and_conditions: document.getElementById('ctr-terms')?.value || '',
+      notes: document.getElementById('ctr-notes')?.value?.trim() || '',
       items: validItems.map(i => ({ description: i.description, quantity: i.qty, unit_price: i.rate, service_catalog_id: i.svcId || null })),
     };
 
@@ -11346,7 +11362,7 @@ async function renderContractsPage() {
 
     <!-- Contract Modal -->
     <div class="modal-overlay" id="contract-modal">
-      <div class="modal" style="max-width:720px;">
+      <div class="modal" style="max-width:760px;">
         <div class="modal-header">
           <h3 id="contract-modal-title">New Contract</h3>
           <button class="modal-close" onclick="document.getElementById('contract-modal').classList.remove('active')">&times;</button>
@@ -11355,6 +11371,7 @@ async function renderContractsPage() {
           <input type="hidden" id="ctr-edit-id" value="">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
             <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Contract Title *</label><input type="text" id="ctr-title" class="form-control" placeholder="e.g. Credentialing Services Agreement"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Description</label><textarea id="ctr-description" class="form-control" rows="2" placeholder="Brief summary of services being provided..."></textarea></div>
             <div class="auth-field" style="margin:0;position:relative;">
               <label>Organization</label>
               <input type="text" id="ctr-org" class="form-control" autocomplete="off" oninput="window.app.filterContractOrg(this.value)" onfocus="window.app.filterContractOrg(this.value)" placeholder="Search organizations...">
@@ -11363,6 +11380,7 @@ async function renderContractsPage() {
             </div>
             <div class="auth-field" style="margin:0;"><label>Client Name</label><input type="text" id="ctr-client-name" class="form-control"></div>
             <div class="auth-field" style="margin:0;"><label>Client Email</label><input type="email" id="ctr-client-email" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Client Address</label><input type="text" id="ctr-client-address" class="form-control" placeholder="Street, City, State ZIP"></div>
             <div class="auth-field" style="margin:0;"><label>Effective Date *</label><input type="date" id="ctr-effective" class="form-control"></div>
             <div class="auth-field" style="margin:0;"><label>Expiration Date</label><input type="date" id="ctr-expiration" class="form-control"></div>
             <div class="auth-field" style="margin:0;"><label>Billing Frequency</label>
@@ -11373,9 +11391,20 @@ async function renderContractsPage() {
                 <option value="annually">Annually</option>
               </select>
             </div>
-            <div class="auth-field" style="margin:0;"><label>Payment Terms</label><input type="text" id="ctr-payment-terms" class="form-control" placeholder="e.g. Net 30"></div>
+            <div class="auth-field" style="margin:0;"><label>Payment Terms</label><input type="text" id="ctr-payment-terms" class="form-control" placeholder="e.g. Due in advance, Net 30"></div>
+            <div class="auth-field" style="margin:0;"><label>Tax Rate (%)</label><input type="number" id="ctr-tax-rate" class="form-control" min="0" max="100" step="0.01" value="0" placeholder="0"></div>
+            <div class="auth-field" style="margin:0;"><label>Discount ($)</label><input type="number" id="ctr-discount" class="form-control" min="0" step="0.01" value="0" placeholder="0.00"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="ctr-auto-renew"> Auto-renew upon expiration
+              </label>
+              <div id="ctr-renewal-terms-wrap" style="display:none;margin-top:8px;">
+                <input type="text" id="ctr-renewal-terms" class="form-control" placeholder="e.g. Automatically renews for subsequent 12-month periods">
+              </div>
+            </div>
           </div>
-          <div class="auth-field" style="margin:0 0 16px;"><label>Terms & Conditions</label><textarea id="ctr-terms" class="form-control" rows="3" placeholder="Enter contract terms..."></textarea></div>
+          <div class="auth-field" style="margin:0 0 16px;"><label>Terms & Conditions</label><textarea id="ctr-terms" class="form-control" rows="4" placeholder="Service terms, refund policy, client duties, responsibilities, disclaimers..."></textarea></div>
+          <div class="auth-field" style="margin:0 0 16px;"><label>Notes (internal, not shown to client)</label><textarea id="ctr-notes" class="form-control" rows="2" placeholder="Internal notes about this contract..."></textarea></div>
           <label style="display:block;font-size:12px;font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Services & Line Items</label>
           <div id="contract-line-items-editor">${_renderContractLineItems()}</div>
         </div>
@@ -11406,6 +11435,17 @@ async function renderContractDetail(id) {
     return `<span class="badge badge-${map[s]||'inactive'}">${s}</span>`;
   };
 
+  const freq = (c.billingFrequency || c.billing_frequency || 'one_time').replace(/_/g, ' ');
+  const autoRenew = c.autoRenew || c.auto_renew;
+  const renewalTerms = c.renewalTerms || c.renewal_terms || '';
+  const description = c.description || '';
+  const clientAddr = c.clientAddress || c.client_address || '';
+  const notes = c.notes || '';
+  const taxRate = parseFloat(c.taxRate || c.tax_rate || 0);
+  const discountAmt = parseFloat(c.discountAmount || c.discount_amount || 0);
+  const subtotalVal = items.reduce((s, i) => s + parseFloat(i.total || 0), 0);
+  const taxAmt = parseFloat(c.taxAmount || c.tax_amount || (subtotalVal * taxRate / 100));
+
   body.innerHTML = `
     <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
       <button class="btn btn-sm" onclick="window.app.navigateTo('contracts')">&larr; Back to Contracts</button>
@@ -11423,48 +11463,64 @@ async function renderContractDetail(id) {
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
           <div>
             <h2 style="margin:0 0 4px;">${escHtml(c.title)} ${statusBadge(c.status)}</h2>
-            <div style="font-size:14px;color:var(--gray-500);">${escHtml(c.contractNumber || c.contract_number)}</div>
+            <div style="font-size:14px;color:var(--gray-500);">${escHtml(c.contractNumber || c.contract_number)}${autoRenew ? ' <span style="font-size:11px;background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:4px;font-weight:600;">Auto-Renew</span>' : ''}</div>
           </div>
-          <div style="text-align:right;font-size:24px;font-weight:800;">${_fmtMoney(c.total)}</div>
+          <div style="text-align:right;">
+            <div style="font-size:24px;font-weight:800;">${_fmtMoney(c.total)}</div>
+            ${freq !== 'one time' ? '<div style="font-size:12px;color:var(--gray-500);text-transform:capitalize;">Recurring '+freq+'</div>' : '<div style="font-size:12px;color:var(--gray-500);">One-time</div>'}
+          </div>
         </div>
+
+        ${description ? '<p style="color:var(--gray-600);margin:0 0 16px;font-size:14px;">'+escHtml(description)+'</p>' : ''}
 
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;font-size:13px;">
           <div><span class="text-muted">Client:</span> <strong>${escHtml(orgName)}</strong> ${hexTag ? '<span style="font-family:monospace;font-size:11px;color:var(--brand-600);">'+hexTag+'</span>' : ''}</div>
           <div><span class="text-muted">Email:</span> ${escHtml(c.clientEmail || c.client_email || '—')}</div>
-          <div><span class="text-muted">Billing:</span> ${(c.billingFrequency || c.billing_frequency || 'one_time').replace('_',' ')}</div>
+          <div><span class="text-muted">Address:</span> ${clientAddr ? escHtml(clientAddr) : '—'}</div>
           <div><span class="text-muted">Effective:</span> <strong>${formatDateDisplay(c.effectiveDate || c.effective_date)}</strong></div>
           <div><span class="text-muted">Expires:</span> ${c.expirationDate || c.expiration_date ? formatDateDisplay(c.expirationDate || c.expiration_date) : 'No expiration'}</div>
           <div><span class="text-muted">Payment:</span> ${escHtml(c.paymentTerms || c.payment_terms || 'Due on receipt')}</div>
+          ${autoRenew && renewalTerms ? '<div style="grid-column:1/-1;"><span class="text-muted">Renewal:</span> '+escHtml(renewalTerms)+'</div>' : ''}
         </div>
       </div>
     </div>
 
     <div class="card" style="margin-bottom:20px;">
-      <div class="card-header"><h3>Services</h3></div>
+      <div class="card-header"><h3>Services & Pricing</h3></div>
       <div class="card-body" style="padding:0;">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Service</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+            <thead><tr><th>Description</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Rate</th><th style="text-align:right;">Total</th></tr></thead>
             <tbody>
-              ${items.map(i => `<tr><td>${escHtml(i.description)}</td><td>${parseFloat(i.quantity)}</td><td>${_fmtMoney(i.unitPrice || i.unit_price)}</td><td><strong>${_fmtMoney(i.total)}</strong></td></tr>`).join('')}
+              ${items.map(i => `<tr><td>${escHtml(i.description)}${i.frequency ? ' <span style="font-size:11px;color:var(--gray-500);">('+i.frequency+')</span>' : ''}</td><td style="text-align:center;">${parseFloat(i.quantity)}</td><td style="text-align:right;">${_fmtMoney(i.unitPrice || i.unit_price)}</td><td style="text-align:right;font-weight:600;">${_fmtMoney(i.total)}</td></tr>`).join('')}
             </tbody>
-            <tfoot><tr><td colspan="3" style="text-align:right;font-weight:700;">Total</td><td><strong>${_fmtMoney(c.total)}</strong></td></tr></tfoot>
           </table>
+        </div>
+        <div style="display:flex;justify-content:flex-end;padding:16px 20px;">
+          <div style="width:240px;">
+            <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;"><span>Subtotal</span><span>${_fmtMoney(c.subtotal || subtotalVal)}</span></div>
+            ${taxRate > 0 ? '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;"><span>Tax ('+taxRate+'%)</span><span>'+_fmtMoney(taxAmt)+'</span></div>' : ''}
+            ${discountAmt > 0 ? '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;color:var(--green);"><span>Discount</span><span>-'+_fmtMoney(discountAmt)+'</span></div>' : ''}
+            <div style="display:flex;justify-content:space-between;padding:8px 0 0;border-top:2px solid var(--gray-800);font-size:16px;font-weight:800;"><span>Total</span><span>${_fmtMoney(c.total)}</span></div>
+            ${freq !== 'one time' ? '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:var(--brand-600);"><span>Recurring '+freq+'</span><span>'+_fmtMoney(c.total)+'</span></div>' : ''}
+          </div>
         </div>
       </div>
     </div>
 
-    ${c.termsAndConditions || c.terms_and_conditions ? `<div class="card" style="margin-bottom:20px;"><div class="card-header"><h3>Terms & Conditions</h3></div><div class="card-body"><div style="white-space:pre-wrap;font-size:13px;">${escHtml(c.termsAndConditions || c.terms_and_conditions)}</div></div></div>` : ''}
+    ${c.termsAndConditions || c.terms_and_conditions ? `<div class="card" style="margin-bottom:20px;"><div class="card-header"><h3>Terms & Conditions</h3></div><div class="card-body"><div style="white-space:pre-wrap;font-size:13px;line-height:1.6;">${escHtml(c.termsAndConditions || c.terms_and_conditions)}</div></div></div>` : ''}
+
+    ${notes ? `<div class="card" style="margin-bottom:20px;"><div class="card-header"><h3>Internal Notes</h3></div><div class="card-body"><div style="white-space:pre-wrap;font-size:13px;color:var(--gray-600);">${escHtml(notes)}</div></div></div>` : ''}
 
     <div class="card">
-      <div class="card-header"><h3>Activity</h3></div>
+      <div class="card-header"><h3>Activity Timeline</h3></div>
       <div class="card-body" style="padding:20px;">
-        <div style="font-size:13px;display:flex;flex-direction:column;gap:8px;">
-          <div>Created: <strong>${formatDateDisplay(c.createdAt || c.created_at)}</strong></div>
-          ${c.sentAt || c.sent_at ? `<div>Sent: <strong>${formatDateDisplay(c.sentAt || c.sent_at)}</strong></div>` : ''}
-          ${c.viewedAt || c.viewed_at ? `<div>Viewed: <strong>${formatDateDisplay(c.viewedAt || c.viewed_at)}</strong></div>` : ''}
-          ${c.acceptedAt || c.accepted_at ? `<div>Accepted by <strong>${escHtml(c.acceptedByName || c.accepted_by_name || '')}</strong> (${escHtml(c.acceptedByEmail || c.accepted_by_email || '')}) on <strong>${formatDateDisplay(c.acceptedAt || c.accepted_at)}</strong></div>` : ''}
-          ${c.terminatedAt || c.terminated_at ? `<div style="color:var(--red);">Terminated: <strong>${formatDateDisplay(c.terminatedAt || c.terminated_at)}</strong> ${c.terminatedReason || c.terminated_reason ? '— '+escHtml(c.terminatedReason || c.terminated_reason) : ''}</div>` : ''}
+        <div style="font-size:13px;display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:center;gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--gray-400);flex-shrink:0;"></span> Created: <strong>${formatDateDisplay(c.createdAt || c.created_at)}</strong>${c.creator ? ' by '+escHtml((c.creator.first_name||'')+' '+(c.creator.last_name||'')) : ''}</div>
+          ${c.sentAt || c.sent_at ? `<div style="display:flex;align-items:center;gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:#2563eb;flex-shrink:0;"></span> Sent to client: <strong>${formatDateDisplay(c.sentAt || c.sent_at)}</strong></div>` : ''}
+          ${c.viewedAt || c.viewed_at ? `<div style="display:flex;align-items:center;gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;flex-shrink:0;"></span> Viewed by client: <strong>${formatDateDisplay(c.viewedAt || c.viewed_at)}</strong></div>` : ''}
+          ${c.acceptedAt || c.accepted_at ? `<div style="display:flex;align-items:center;gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;flex-shrink:0;"></span> Accepted by <strong>${escHtml(c.acceptedByName || c.accepted_by_name || '')}</strong> (${escHtml(c.acceptedByEmail || c.accepted_by_email || '')}) on <strong>${formatDateDisplay(c.acceptedAt || c.accepted_at)}</strong>${c.acceptedIp || c.accepted_ip ? ' <span style="font-size:11px;color:var(--gray-400);">IP: '+(c.acceptedIp || c.accepted_ip)+'</span>' : ''}</div>` : ''}
+          ${c.terminatedAt || c.terminated_at ? `<div style="display:flex;align-items:center;gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0;"></span> <span style="color:var(--red);">Terminated: <strong>${formatDateDisplay(c.terminatedAt || c.terminated_at)}</strong> ${c.terminatedReason || c.terminated_reason ? '— '+escHtml(c.terminatedReason || c.terminated_reason) : ''}</span></div>` : ''}
         </div>
       </div>
     </div>
