@@ -6402,6 +6402,74 @@ function handleNppesProxy(payload) {
     const editor = document.getElementById('line-items-editor');
     if (editor) editor.innerHTML = _renderLineItemsEditor();
   },
+  async filterOrgDropdown(val) {
+    const dd = document.getElementById('inv-client-dropdown');
+    if (!dd) return;
+    if (!this._orgCache) {
+      try { this._orgCache = await store.getAll('organizations'); } catch(e) { this._orgCache = []; }
+    }
+    const q = (val || '').toLowerCase();
+    const matches = q.length > 0
+      ? this._orgCache.filter(o => (o.name || '').toLowerCase().includes(q)).slice(0, 8)
+      : this._orgCache.slice(0, 8);
+    if (matches.length === 0) { dd.style.display = 'none'; return; }
+    dd.style.display = 'block';
+    dd.innerHTML = matches.map(o => `
+      <div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;"
+           onmousedown="window.app.selectOrg(${o.id},'${escAttr(o.name)}','${escAttr(o.email || o.contactEmail || '')}')"
+           onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='#fff'">
+        <span><strong>${escHtml(o.name)}</strong></span>
+        <span style="font-size:11px;color:var(--gray-500);">${escHtml(o.email || o.contactEmail || '')}</span>
+      </div>
+    `).join('');
+    // Close dropdown when clicking outside
+    setTimeout(() => {
+      const close = (e) => { if (!dd.contains(e.target) && e.target.id !== 'inv-client') { dd.style.display = 'none'; document.removeEventListener('click', close); } };
+      document.addEventListener('click', close);
+    }, 50);
+  },
+  selectOrg(id, name, email) {
+    const clientEl = document.getElementById('inv-client');
+    const emailEl = document.getElementById('inv-client-email');
+    if (clientEl) clientEl.value = name;
+    if (emailEl && email && !emailEl.value) emailEl.value = email;
+    document.getElementById('inv-client-dropdown').style.display = 'none';
+  },
+
+  filterSvcDropdown(idx, val) {
+    const dd = document.getElementById('svc-dd-' + idx);
+    if (!dd || !_billingServices.length) return;
+    const q = (val || '').toLowerCase();
+    const matches = q.length > 0
+      ? _billingServices.filter(s => (s.name || s.serviceName || '').toLowerCase().includes(q) || (s.code || s.serviceCode || '').toLowerCase().includes(q)).slice(0, 6)
+      : _billingServices.slice(0, 6);
+    if (matches.length === 0) { dd.style.display = 'none'; return; }
+    dd.style.display = 'block';
+    dd.innerHTML = matches.map(s => {
+      const name = escHtml(s.name || s.serviceName || '');
+      const code = escHtml(s.code || s.serviceCode || '');
+      const rate = s.rate || s.defaultRate || s.defaultPrice || s.default_price || 0;
+      return `<div style="padding:6px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;"
+        onmousedown="window.app.selectSvcForLine(${idx},${s.id})"
+        onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='#fff'">
+        <span><strong>${name}</strong> ${code ? '<code style="font-size:11px;color:var(--gray-500);">'+code+'</code>' : ''}</span>
+        <span style="font-weight:600;">${_fmtMoney(rate)}</span>
+      </div>`;
+    }).join('');
+    setTimeout(() => {
+      const close = (e) => { if (!dd.contains(e.target)) { dd.style.display = 'none'; document.removeEventListener('click', close); } };
+      document.addEventListener('click', close);
+    }, 50);
+  },
+  selectSvcForLine(idx, serviceId) {
+    const svc = _billingServices.find(s => s.id === serviceId);
+    if (!svc || !_invoiceLineItems[idx]) return;
+    _invoiceLineItems[idx].description = svc.name || svc.serviceName || '';
+    _invoiceLineItems[idx].rate = svc.rate || svc.defaultRate || svc.defaultPrice || svc.default_price || 0;
+    const editor = document.getElementById('line-items-editor');
+    if (editor) editor.innerHTML = _renderLineItemsEditor();
+  },
+
   addServiceLineItem(serviceId) {
     const svc = _billingServices.find(s => s.id === serviceId);
     if (!svc) return;
@@ -10553,7 +10621,10 @@ function _renderLineItemsEditor() {
       </div>
       ${_invoiceLineItems.map((item, idx) => `
         <div class="line-item-row" style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
-          <input type="text" class="form-control" style="flex:3;height:34px;font-size:13px;" value="${escAttr(item.description)}" onchange="window.app.updateLineItem(${idx},'description',this.value)" placeholder="Service description">
+          <div style="flex:3;position:relative;">
+            <input type="text" class="form-control" style="height:34px;font-size:13px;width:100%;" value="${escAttr(item.description)}" onchange="window.app.updateLineItem(${idx},'description',this.value)" oninput="window.app.filterSvcDropdown(${idx},this.value)" onfocus="window.app.filterSvcDropdown(${idx},this.value)" placeholder="Type to search services...">
+            <div id="svc-dd-${idx}" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10;background:#fff;border:1px solid var(--gray-200);border-radius:0 0 8px 8px;max-height:150px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+          </div>
           <input type="number" class="form-control" style="flex:1;height:34px;font-size:13px;text-align:center;" value="${item.qty}" min="1" step="1" onchange="window.app.updateLineItem(${idx},'qty',this.value)">
           <input type="number" class="form-control" style="flex:1;height:34px;font-size:13px;text-align:center;" value="${item.rate}" min="0" step="0.01" onchange="window.app.updateLineItem(${idx},'rate',this.value)">
           <div style="flex:1;text-align:right;font-weight:600;font-size:13px;">${_fmtMoney(item.qty * item.rate)}</div>
@@ -10825,7 +10896,11 @@ async function renderBillingPage() {
           <input type="hidden" id="inv-edit-id" value="">
           <input type="hidden" id="inv-mode" value="invoice">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
-            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Client / Organization Name *</label><input type="text" id="inv-client" class="form-control"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;position:relative;">
+              <label>Client / Organization Name *</label>
+              <input type="text" id="inv-client" class="form-control" autocomplete="off" oninput="window.app.filterOrgDropdown(this.value)" onfocus="window.app.filterOrgDropdown(this.value)">
+              <div id="inv-client-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10;background:#fff;border:1px solid var(--gray-200);border-radius:0 0 8px 8px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+            </div>
             <div class="auth-field" style="margin:0;"><label>Client Email</label><input type="email" id="inv-client-email" class="form-control" placeholder="client@example.com"></div>
             <div class="auth-field" style="margin:0;"><label id="inv-date-label">Due Date *</label><input type="date" id="inv-due" class="form-control"></div>
             <div class="auth-field" style="margin:0;"><label>Invoice #</label><input type="text" id="inv-number" class="form-control" placeholder="Auto-generated"></div>
