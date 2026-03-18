@@ -731,23 +731,24 @@ class Store {
 
     // ── Estimates ──
     async getEstimates(params = {}) {
-        const query = new URLSearchParams(params).toString();
-        const result = await this._fetch(`${CONFIG.API_URL}/estimates${query ? '?' + query : ''}`);
+        const p = { ...params, type: 'estimate' };
+        const query = new URLSearchParams(p).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/invoices?${query}`);
         return result.data || result;
     }
     async createEstimate(data) {
-        const result = await this._fetch(`${CONFIG.API_URL}/estimates`, { method: 'POST', body: JSON.stringify(data) });
+        const result = await this._fetch(`${CONFIG.API_URL}/invoices`, { method: 'POST', body: JSON.stringify({ ...data, type: 'estimate' }) });
         return result.data || result;
     }
     async updateEstimate(id, data) {
-        const result = await this._fetch(`${CONFIG.API_URL}/estimates/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        const result = await this._fetch(`${CONFIG.API_URL}/invoices/${id}`, { method: 'PUT', body: JSON.stringify(data) });
         return result.data || result;
     }
     async deleteEstimate(id) {
-        return this._fetch(`${CONFIG.API_URL}/estimates/${id}`, { method: 'DELETE' });
+        return this._fetch(`${CONFIG.API_URL}/invoices/${id}`, { method: 'DELETE' });
     }
     async convertEstimateToInvoice(id) {
-        const result = await this._fetch(`${CONFIG.API_URL}/estimates/${id}/convert`, { method: 'POST' });
+        const result = await this._fetch(`${CONFIG.API_URL}/invoices/${id}`, { method: 'PUT', body: JSON.stringify({ type: 'invoice' }) });
         return result.data || result;
     }
 

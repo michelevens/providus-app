@@ -8097,7 +8097,7 @@ async function getAlerts() {
 }
 
 async function updateNotificationBell() {
-  const alerts = getAlerts();
+  const alerts = await getAlerts();
   const count = alerts.filter(a => a.type === 'red').length;
   const countEl = document.getElementById('notification-count');
   if (countEl) {
