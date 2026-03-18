@@ -6834,6 +6834,36 @@ function handleNppesProxy(payload) {
   async activateContract(id) {
     try { await store.updateContract(id, { status: 'active' }); showToast('Contract activated'); await renderContractDetail(id); } catch(e) { showToast('Error: ' + e.message); }
   },
+  async markContractSigned(id) {
+    // Off-portal signing — agency records that client signed outside the portal
+    const html = `
+      <div style="text-align:left;">
+        <p style="margin:0 0 16px;font-size:13px;color:var(--gray-600);">Record that this contract was signed off-portal (in person, via email, phone, etc.)</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="auth-field" style="margin:0;"><label>Signer Name *</label><input type="text" id="sign-name" class="form-control" placeholder="Full legal name"></div>
+          <div class="auth-field" style="margin:0;"><label>Signer Email *</label><input type="email" id="sign-email" class="form-control" placeholder="email@example.com"></div>
+          <div class="auth-field" style="margin:0;"><label>Title</label><input type="text" id="sign-title" class="form-control" placeholder="e.g. CEO, Director"></div>
+          <div class="auth-field" style="margin:0;"><label>Date Signed</label><input type="date" id="sign-date" class="form-control" value="${new Date().toISOString().split('T')[0]}"></div>
+        </div>
+      </div>
+    `;
+    if (!await appConfirm(html, { title: 'Record Off-Portal Signature', okLabel: 'Mark as Signed', isHtml: true })) return;
+    const name = document.getElementById('sign-name')?.value?.trim();
+    const email = document.getElementById('sign-email')?.value?.trim();
+    const title = document.getElementById('sign-title')?.value?.trim() || '';
+    if (!name || !email) { showToast('Name and email are required'); return; }
+    try {
+      await store.updateContract(id, {
+        status: 'accepted',
+        accepted_at: document.getElementById('sign-date')?.value || new Date().toISOString(),
+        accepted_by_name: name,
+        accepted_by_email: email,
+        accepted_by_title: title,
+      });
+      showToast('Contract marked as signed');
+      await renderContractDetail(id);
+    } catch(e) { showToast('Error: ' + e.message); }
+  },
   async terminateContract(id) {
     if (!await appConfirm('Terminate this contract?', { title: 'Terminate Contract', okLabel: 'Terminate', okClass: 'btn-danger' })) return;
     try { await store.terminateContract(id, 'Terminated by agency'); showToast('Contract terminated'); await renderContractDetail(id); } catch(e) { showToast('Error: ' + e.message); }
@@ -11451,6 +11481,7 @@ async function renderContractDetail(id) {
       <button class="btn btn-sm" onclick="window.app.navigateTo('contracts')">&larr; Back to Contracts</button>
       <div style="display:flex;gap:8px;">
         ${c.status === 'draft' ? `<button class="btn btn-primary btn-sm" onclick="window.app.sendContract(${c.id})">Send Contract</button>` : ''}
+        ${['draft','sent','viewed'].includes(c.status) ? `<button class="btn btn-sm" style="background:var(--brand-50);color:var(--brand-700);border:1px solid var(--brand-200);" onclick="window.app.markContractSigned(${c.id})">Mark as Signed</button>` : ''}
         ${['sent','viewed','accepted'].includes(c.status) ? `<button class="btn btn-sm" onclick="window.app.activateContract(${c.id})">Mark Active</button>` : ''}
         ${['active','accepted'].includes(c.status) ? `<button class="btn btn-sm" onclick="window.app.genInvoice(${c.id})">Generate Invoice</button>` : ''}
         ${!['terminated','expired'].includes(c.status) ? `<button class="btn btn-sm" style="color:var(--red);" onclick="window.app.terminateContract(${c.id})">Terminate</button>` : ''}
