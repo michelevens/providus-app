@@ -6689,10 +6689,10 @@ function handleNppesProxy(payload) {
   },
 
   // ── Contracts ──
-  openContractModal() {
+  openContractModal(editData) {
     _contractLineItems = [{ description: '', qty: 1, rate: 0 }];
-    document.getElementById('contract-modal-title').textContent = 'New Contract';
-    ['ctr-title','ctr-description','ctr-org','ctr-client-name','ctr-client-email','ctr-client-address','ctr-effective','ctr-expiration','ctr-payment-terms','ctr-terms','ctr-notes','ctr-renewal-terms'].forEach(f => {
+    document.getElementById('contract-modal-title').textContent = editData ? 'Edit Contract' : 'New Contract';
+    ['ctr-title','ctr-description','ctr-org','ctr-client-name','ctr-client-email','ctr-client-address','ctr-effective','ctr-expiration','ctr-payment-terms','ctr-notes','ctr-renewal-terms'].forEach(f => {
       const el = document.getElementById(f); if (el) el.value = '';
     });
     document.getElementById('ctr-edit-id').value = '';
@@ -6703,6 +6703,13 @@ function handleNppesProxy(payload) {
     const autoRenew = document.getElementById('ctr-auto-renew');
     if (autoRenew) autoRenew.checked = false;
     document.getElementById('ctr-renewal-terms-wrap').style.display = 'none';
+
+    // Pre-populate terms with professional template for new contracts
+    const termsEl = document.getElementById('ctr-terms');
+    if (termsEl) {
+      termsEl.value = editData ? (editData.terms || '') : _defaultContractTerms();
+    }
+
     const editor = document.getElementById('contract-line-items-editor');
     if (editor) editor.innerHTML = _renderContractLineItems();
     document.getElementById('contract-modal').classList.add('active');
@@ -11310,6 +11317,43 @@ async function renderInvoiceDetail(invoiceId) {
 
 let _contractLineItems = [{ description: '', qty: 1, rate: 0 }];
 
+function _defaultContractTerms() {
+  const agencyName = window._currentUser?.agency?.name || 'Agency';
+  return `SERVICE AGREEMENT TERMS
+
+1. AGREEMENT TERM
+This Service Agreement Term is twelve (12) months and shall commence on the Effective Date. Upon expiration, if Client has opted into Automatic Renewal, the subscription services will automatically renew for a subsequent twelve (12) month period. If Client has opted out of automatic renewal, the services end upon expiration and a new Agreement would be required to continue services.
+
+2. ADD-ON ORDERS
+Client may place orders for additional services at any time during the term. Payment for add-on orders is processed using the payment method on file at the time of order.
+
+3. REIMBURSABLE EXPENSES
+The cost of services purchased does not include any expenses incurred by ${agencyName} that are directly related to providing these services. Reimbursable Expenses include, but are not limited to, costs incurred for postage, primary source verification, hospital or health plan credentialing fees, or licensing agency fees. Reimbursable expenses include the actual cost plus 10%.
+
+4. PAYMENT TERMS
+Payment for services is due in advance. Client is required to keep a payment method on file with ${agencyName} to settle all charges. ${agencyName} will submit an invoice for all outstanding account charges. Payment is due upon receipt unless otherwise specified.
+
+5. REFUND POLICY
+There are no refunds or returns for services for any reason. Fees are based on professional service time and once staff applies time and effort to a service order, payment is expected for services rendered. If there is a dispute or issue about service, Client may contact ${agencyName} to discuss the issue.
+
+6. CLIENT DUTIES
+Client is responsible for supplying ${agencyName} with complete and accurate practitioner and entity information, responding to requests for signature pages or additional documentation throughout the credentialing process. Client is solely responsible for ensuring the formation of legal business entities are within all local, state, and federal requirements; accuracy of all data supplied; and attests that all information supplied for completion of the purchased services are in accordance with all local, state, and federal law and/or government healthcare program guidelines.
+
+7. ${agencyName.toUpperCase()} RESPONSIBILITIES
+${agencyName} is responsible for preparing and submitting credentialing applications and requests to participate with payer networks that Client identifies, and to follow up on applications/requests until each is Complete. Responsibility for enrollment is considered "Complete" when the insurance network approves the application and provides an effective date of participation, or closes the application with a denial of participation; or after four (4) attempts to obtain required documents from Client with no response.
+
+8. OUTCOMES & DISCLAIMERS
+${agencyName} makes no guarantee or warranty with respect to the network approval of practitioners, granting of privileges by a healthcare facility, approval of any type of enrollment or credentialing application, effective date set by payors, issuance of a participation contract, approval of any license application, turnaround time of health plan credentialing and/or contracting, reimbursement by a third party payer network for practitioner services, or profitability of Client.
+
+9. CONFIDENTIALITY
+Both parties agree to maintain the confidentiality of all information exchanged in connection with this Agreement. Client authorizes ${agencyName} to utilize confidential information about healthcare practitioners associated with Client for any reason necessary related to the services ordered.
+
+10. TERMINATION
+Either party may terminate this Agreement with thirty (30) days written notice. Upon termination, Client remains responsible for payment of all services rendered and expenses incurred through the termination date.
+
+By accepting this Agreement, Client acknowledges that they have read, understand, and agree to the terms and conditions stated herein.`;
+}
+
 function _renderContractLineItems() {
   return `<div>
     <div style="display:flex;gap:8px;font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;padding:0 0 6px;">
@@ -11433,7 +11477,7 @@ async function renderContractsPage() {
               </div>
             </div>
           </div>
-          <div class="auth-field" style="margin:0 0 16px;"><label>Terms & Conditions</label><textarea id="ctr-terms" class="form-control" rows="4" placeholder="Service terms, refund policy, client duties, responsibilities, disclaimers..."></textarea></div>
+          <div class="auth-field" style="margin:0 0 16px;"><label>Terms & Conditions <span style="font-weight:400;color:var(--gray-400);font-size:11px;">(pre-filled with template — customize as needed)</span></label><textarea id="ctr-terms" class="form-control" rows="12" style="font-size:12px;line-height:1.5;" placeholder="Service terms, refund policy, client duties, responsibilities, disclaimers..."></textarea></div>
           <div class="auth-field" style="margin:0 0 16px;"><label>Notes (internal, not shown to client)</label><textarea id="ctr-notes" class="form-control" rows="2" placeholder="Internal notes about this contract..."></textarea></div>
           <label style="display:block;font-size:12px;font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Services & Line Items</label>
           <div id="contract-line-items-editor">${_renderContractLineItems()}</div>
