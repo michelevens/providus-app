@@ -61,6 +61,35 @@
         <div class="error" id="auth-error"></div>
         <p class="auth-switch"><a href="#" onclick="toggleAuthView('forgot');return false;">Forgot password?</a></p>
         <p class="auth-switch">Don't have an account? <a href="#" onclick="toggleAuthView('register');return false;">Create an account</a></p>
+
+        <!-- Demo Accounts -->
+        <div class="demo-accounts">
+          <div class="demo-label">Quick Demo Login</div>
+          <div class="demo-grid">
+            <button class="demo-btn demo-owner" onclick="demoLogin('owner@demo.credentik.com','Demo2026!')">
+              <span class="demo-role">Owner</span>
+              <span class="demo-desc">Full access + user mgmt</span>
+            </button>
+            <button class="demo-btn demo-agency" onclick="demoLogin('agency@demo.credentik.com','Demo2026!')">
+              <span class="demo-role">Agency</span>
+              <span class="demo-desc">All features</span>
+            </button>
+            <button class="demo-btn demo-org" onclick="demoLogin('org@demo.credentik.com','Demo2026!')">
+              <span class="demo-role">Organization</span>
+              <span class="demo-desc">Apps, tasks, comms</span>
+            </button>
+            <button class="demo-btn demo-provider" onclick="demoLogin('provider@demo.credentik.com','Demo2026!')">
+              <span class="demo-role">Provider</span>
+              <span class="demo-desc">Read-only self-service</span>
+            </button>
+          </div>
+          <div class="demo-extra">
+            <button class="demo-btn demo-super" onclick="demoLogin('superadmin@credentik.com','Credentik2026!')">
+              <span class="demo-role">Super Admin</span>
+              <span class="demo-desc">System-wide admin panel</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Registration Form -->
@@ -1261,6 +1290,16 @@
       const el = document.getElementById(elementId);
       el.textContent = message;
       el.style.display = 'block';
+    }
+
+    async function demoLogin(email, password) {
+      document.getElementById('login-email').value = email;
+      document.getElementById('login-password').value = password;
+      // Brief visual feedback
+      const btns = document.querySelectorAll('.demo-btn');
+      btns.forEach(b => b.style.opacity = '0.5');
+      await handleLogin();
+      btns.forEach(b => b.style.opacity = '1');
     }
 
     async function handleLogin() {
