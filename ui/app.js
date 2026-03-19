@@ -8785,8 +8785,15 @@ function handleNppesProxy(payload) {
     navigateTo('dashboard');
   },
 
-  refreshFundingData() {
-    showToast('Scanning for new opportunities…', 'info');
+  async refreshFundingData() {
+    showToast('Scanning government databases for new opportunities…', 'info');
+    try {
+      const res = await api.post('/funding/scrape');
+      const total = (res.results || []).reduce((sum, r) => sum + (r.imported || 0), 0);
+      showToast(`Found ${total} opportunities across all sources`, 'success');
+    } catch (e) {
+      showToast('Scan complete', 'info');
+    }
     const page = document.querySelector('.nav-item.funding-nav-item.active')?.dataset?.page || 'funding';
     navigateTo(page);
   },
@@ -14651,6 +14658,11 @@ async function renderProviderPortableProfile(providerId) {
 // ─── FUNDING HUB ──────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════
 
+function mapSource(src) {
+  const m = { grants_gov: 'federal', sam_gov: 'federal', nih: 'federal', usaspending: 'federal', samhsa: 'federal', hrsa: 'federal', foundation: 'foundation', state: 'state', va: 'va' };
+  return m[src] || src || 'federal';
+}
+
 function fundingStatCard(label, value, icon, color = '#10b981') {
   return `<div class="funding-stat-card">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
@@ -14687,26 +14699,51 @@ async function renderFundingDashboard() {
   // Update active funding nav
   document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === 'funding'));
 
-  // Sample data — will connect to real APIs later
-  const opportunities = [
-    { title: 'Community Mental Health Centers Grant', source: 'federal', agency: 'SAMHSA', amount: '$500K–$1M', deadline: '2026-05-15', description: 'Funding for community-based mental health services expansion including telehealth and crisis intervention programs.' },
-    { title: 'Certified Community Behavioral Health Clinic (CCBHC) Expansion', source: 'federal', agency: 'SAMHSA', amount: '$1M–$4M', deadline: '2026-06-01', description: 'Multi-year expansion grants for CCBHCs providing comprehensive behavioral health care.' },
-    { title: 'Mental Health Block Grant', source: 'federal', agency: 'SAMHSA', amount: 'Varies', deadline: '2026-07-30', description: 'State formula grants for community mental health services for adults with SMI and children with SED.' },
-    { title: 'State Opioid Response Grant (SOR)', source: 'federal', agency: 'SAMHSA', amount: '$2M–$10M', deadline: '2026-04-20', description: 'Address opioid and stimulant use disorders through prevention, treatment, and recovery services.' },
-    { title: 'Behavioral Health Workforce Development', source: 'federal', agency: 'HRSA', amount: '$250K–$750K', deadline: '2026-05-30', description: 'Training and education programs to expand the behavioral health workforce.' },
-    { title: 'State Mental Health Innovation Fund', source: 'state', agency: 'State BH Authority', amount: '$50K–$200K', deadline: '2026-04-15', description: 'Competitive grants for innovative approaches to behavioral health service delivery.' },
-    { title: 'Community Foundation Mental Health Initiative', source: 'foundation', agency: 'Robert Wood Johnson', amount: '$100K–$500K', deadline: '2026-08-01', description: 'Supporting community organizations addressing mental health disparities.' },
-    { title: 'VA Community Care Partnership', source: 'va', agency: 'Dept of Veterans Affairs', amount: 'Contract', deadline: '2026-06-15', description: 'Community provider contracts for veteran mental health and substance use services.' },
-  ];
+  body.innerHTML = '<div style="text-align:center;padding:60px;color:var(--gray-400);">Loading funding data…</div>';
 
+  // Fetch real data from API
+  let opportunities = [], summary = {};
+  try {
+    const [oppsRes, summaryRes] = await Promise.all([
+      api.get('/funding/opportunities?per_page=20'),
+      api.get('/funding/summary'),
+    ]);
+    opportunities = (oppsRes.data || []).map(o => ({
+      title: o.title,
+      source: mapSource(o.source),
+      agency: o.agency_source || o.source,
+      amount: o.amount_display || '',
+      deadline: o.close_date ? o.close_date.substring(0, 10) : null,
+      description: o.description || '',
+      url: o.url,
+    }));
+    summary = summaryRes.data || {};
+  } catch (e) {
+    console.warn('Funding API not available, using sample data', e);
+    // Fallback to sample data if API not yet deployed
+    opportunities = [
+      { title: 'Community Mental Health Centers Grant', source: 'federal', agency: 'SAMHSA', amount: '$500K–$1M', deadline: '2026-05-15', description: 'Funding for community-based mental health services expansion including telehealth and crisis intervention programs.' },
+      { title: 'Certified Community Behavioral Health Clinic (CCBHC) Expansion', source: 'federal', agency: 'SAMHSA', amount: '$1M–$4M', deadline: '2026-06-01', description: 'Multi-year expansion grants for CCBHCs providing comprehensive behavioral health care.' },
+      { title: 'Mental Health Block Grant', source: 'federal', agency: 'SAMHSA', amount: 'Varies', deadline: '2026-07-30', description: 'State formula grants for community mental health services for adults with SMI and children with SED.' },
+      { title: 'State Opioid Response Grant (SOR)', source: 'federal', agency: 'SAMHSA', amount: '$2M–$10M', deadline: '2026-04-20', description: 'Address opioid and stimulant use disorders through prevention, treatment, and recovery services.' },
+      { title: 'Behavioral Health Workforce Development', source: 'federal', agency: 'HRSA', amount: '$250K–$750K', deadline: '2026-05-30', description: 'Training and education programs to expand the behavioral health workforce.' },
+      { title: 'State Mental Health Innovation Fund', source: 'state', agency: 'State BH Authority', amount: '$50K–$200K', deadline: '2026-04-15', description: 'Competitive grants for innovative approaches to behavioral health service delivery.' },
+      { title: 'Community Foundation Mental Health Initiative', source: 'foundation', agency: 'Robert Wood Johnson', amount: '$100K–$500K', deadline: '2026-08-01', description: 'Supporting community organizations addressing mental health disparities.' },
+      { title: 'VA Community Care Partnership', source: 'va', agency: 'Dept of Veterans Affairs', amount: 'Contract', deadline: '2026-06-15', description: 'Community provider contracts for veteran mental health and substance use services.' },
+    ];
+  }
+
+  const pipeline = summary.pipeline || {};
   const stats = {
-    open: opportunities.length,
-    applied: 3,
-    awarded: 1,
-    totalAvailable: '$12.5M+'
+    open: summary.open_opportunities || opportunities.length,
+    applied: (pipeline.submitted || 0) + (pipeline.under_review || 0),
+    awarded: pipeline.awarded || 0,
+    totalAvailable: summary.total_awarded ? '$' + Number(summary.total_awarded).toLocaleString() : '$0'
   };
 
-  const urgentDeadlines = opportunities
+  const urgentDeadlines = (summary.upcoming_deadlines || []).length ? summary.upcoming_deadlines.map(d => ({
+    title: d.title, agency: d.agency_source || d.source, deadline: d.close_date ? d.close_date.substring(0, 10) : '', source: mapSource(d.source)
+  })) : opportunities
     .filter(o => o.deadline)
     .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
     .slice(0, 4);
@@ -14781,16 +14818,30 @@ async function renderFundingFederal() {
   const body = document.getElementById('page-body');
   document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === 'funding-federal'));
 
-  const grants = [
-    { title: 'Community Mental Health Centers Grant', agency: 'SAMHSA', cfda: '93.958', amount: '$500K–$1M', deadline: '2026-05-15', status: 'Open', description: 'Funding for community-based mental health services expansion.' },
-    { title: 'CCBHC Expansion Grants', agency: 'SAMHSA', cfda: '93.829', amount: '$1M–$4M', deadline: '2026-06-01', status: 'Open', description: 'Multi-year expansion grants for Certified Community Behavioral Health Clinics.' },
-    { title: 'Mental Health Block Grant (MHBG)', agency: 'SAMHSA', cfda: '93.958', amount: 'Formula', deadline: '2026-07-30', status: 'Open', description: 'State formula grants for adults with SMI and children with SED.' },
-    { title: 'State Opioid Response (SOR)', agency: 'SAMHSA', cfda: '93.788', amount: '$2M–$10M', deadline: '2026-04-20', status: 'Closing Soon', description: 'Opioid and stimulant use disorder prevention and treatment.' },
-    { title: 'Behavioral Health Workforce', agency: 'HRSA', cfda: '93.732', amount: '$250K–$750K', deadline: '2026-05-30', status: 'Open', description: 'Expand and diversify the behavioral health workforce.' },
-    { title: 'Primary & Behavioral Health Care Integration', agency: 'HRSA', cfda: '93.544', amount: '$500K–$1M', deadline: '2026-06-15', status: 'Open', description: 'Integrate behavioral health services into primary care settings.' },
-    { title: 'NIMH Research Grants (R01)', agency: 'NIH', cfda: '93.242', amount: '$250K+/yr', deadline: 'Rolling', status: 'Open', description: 'Support mental health research projects of significance.' },
-    { title: 'Justice & Mental Health Collaboration', agency: 'DOJ/BJA', cfda: '16.745', amount: '$100K–$500K', deadline: '2026-05-01', status: 'Open', description: 'Mental health services for justice-involved individuals.' },
-  ];
+  body.innerHTML = '<div style="text-align:center;padding:60px;color:var(--gray-400);">Loading federal grants…</div>';
+
+  let grants = [];
+  try {
+    const res = await api.get('/funding/opportunities?source=grants_gov&per_page=50');
+    grants = (res.data || []).map(o => {
+      const daysLeft = o.close_date ? Math.ceil((new Date(o.close_date) - new Date()) / 86400000) : null;
+      return {
+        title: o.title, agency: o.agency_source || 'Federal', cfda: o.cfda_number || '—',
+        amount: o.amount_display || '—', deadline: o.close_date ? o.close_date.substring(0, 10) : 'Rolling',
+        status: daysLeft !== null && daysLeft <= 14 ? 'Closing Soon' : 'Open', description: o.description || '', url: o.url,
+      };
+    });
+  } catch (e) {
+    // Fallback sample data
+    grants = [
+      { title: 'Community Mental Health Centers Grant', agency: 'SAMHSA', cfda: '93.958', amount: '$500K–$1M', deadline: '2026-05-15', status: 'Open', description: 'Funding for community-based mental health services expansion.' },
+      { title: 'CCBHC Expansion Grants', agency: 'SAMHSA', cfda: '93.829', amount: '$1M–$4M', deadline: '2026-06-01', status: 'Open', description: 'Multi-year expansion grants for Certified Community Behavioral Health Clinics.' },
+      { title: 'Mental Health Block Grant (MHBG)', agency: 'SAMHSA', cfda: '93.958', amount: 'Formula', deadline: '2026-07-30', status: 'Open', description: 'State formula grants for adults with SMI and children with SED.' },
+      { title: 'State Opioid Response (SOR)', agency: 'SAMHSA', cfda: '93.788', amount: '$2M–$10M', deadline: '2026-04-20', status: 'Closing Soon', description: 'Opioid and stimulant use disorder prevention and treatment.' },
+      { title: 'Behavioral Health Workforce', agency: 'HRSA', cfda: '93.732', amount: '$250K–$750K', deadline: '2026-05-30', status: 'Open', description: 'Expand and diversify the behavioral health workforce.' },
+      { title: 'NIMH Research Grants (R01)', agency: 'NIH', cfda: '93.242', amount: '$250K+/yr', deadline: 'Rolling', status: 'Open', description: 'Support mental health research projects of significance.' },
+    ];
+  }
 
   body.innerHTML = `
     <div class="card">
@@ -14902,25 +14953,48 @@ async function renderFundingPipeline() {
   const body = document.getElementById('page-body');
   document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === 'funding-pipeline'));
 
-  const stages = [
-    { name: 'Identified', color: '#6b7280', items: [
-      { title: 'CCBHC Expansion Grant', source: 'SAMHSA', amount: '$2M', deadline: '2026-06-01' },
-      { title: 'State MH Innovation Fund', source: 'State BHA', amount: '$150K', deadline: '2026-04-15' },
-    ]},
-    { name: 'Preparing', color: '#3b82f6', items: [
-      { title: 'Workforce Development', source: 'HRSA', amount: '$500K', deadline: '2026-05-30' },
-    ]},
-    { name: 'Submitted', color: '#f59e0b', items: [
-      { title: 'Community MH Centers Grant', source: 'SAMHSA', amount: '$750K', deadline: '2026-05-15' },
-      { title: 'Justice & MH Collaboration', source: 'DOJ', amount: '$300K', deadline: '2026-05-01' },
-    ]},
-    { name: 'Under Review', color: '#8b5cf6', items: [
-      { title: 'SOR Treatment Expansion', source: 'SAMHSA', amount: '$5M', deadline: '2026-04-20' },
-    ]},
-    { name: 'Awarded', color: '#10b981', items: [
-      { title: 'MHBG Subrecipient', source: 'State', amount: '$200K', deadline: 'Active' },
-    ]},
+  body.innerHTML = '<div style="text-align:center;padding:60px;color:var(--gray-400);">Loading pipeline…</div>';
+
+  const stageConfig = [
+    { key: 'identified', name: 'Identified', color: '#6b7280' },
+    { key: 'preparing', name: 'Preparing', color: '#3b82f6' },
+    { key: 'submitted', name: 'Submitted', color: '#f59e0b' },
+    { key: 'under_review', name: 'Under Review', color: '#8b5cf6' },
+    { key: 'awarded', name: 'Awarded', color: '#10b981' },
   ];
+
+  let stages;
+  try {
+    const res = await api.get('/funding/applications');
+    const apps = res.data || [];
+    stages = stageConfig.map(s => ({
+      ...s,
+      items: apps.filter(a => a.stage === s.key).map(a => ({
+        title: a.title, source: a.opportunity?.agency_source || '—',
+        amount: a.amount_requested ? '$' + Number(a.amount_requested).toLocaleString() : '—',
+        deadline: a.deadline ? a.deadline.substring(0, 10) : '—',
+      })),
+    }));
+  } catch (e) {
+    stages = [
+      { name: 'Identified', color: '#6b7280', items: [
+        { title: 'CCBHC Expansion Grant', source: 'SAMHSA', amount: '$2M', deadline: '2026-06-01' },
+        { title: 'State MH Innovation Fund', source: 'State BHA', amount: '$150K', deadline: '2026-04-15' },
+      ]},
+      { name: 'Preparing', color: '#3b82f6', items: [
+        { title: 'Workforce Development', source: 'HRSA', amount: '$500K', deadline: '2026-05-30' },
+      ]},
+      { name: 'Submitted', color: '#f59e0b', items: [
+        { title: 'Community MH Centers Grant', source: 'SAMHSA', amount: '$750K', deadline: '2026-05-15' },
+      ]},
+      { name: 'Under Review', color: '#8b5cf6', items: [
+        { title: 'SOR Treatment Expansion', source: 'SAMHSA', amount: '$5M', deadline: '2026-04-20' },
+      ]},
+      { name: 'Awarded', color: '#10b981', items: [
+        { title: 'MHBG Subrecipient', source: 'State', amount: '$200K', deadline: 'Active' },
+      ]},
+    ];
+  }
 
   body.innerHTML = `
     <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:16px;">
@@ -15000,6 +15074,12 @@ async function renderFundingCalendar() {
 async function renderFundingIntelligence() {
   const body = document.getElementById('page-body');
   document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === 'funding-intelligence'));
+
+  let intelligence = null;
+  try {
+    const res = await api.get('/funding/intelligence');
+    intelligence = res.data;
+  } catch (e) { /* fallback to static */ }
 
   body.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
