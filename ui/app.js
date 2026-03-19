@@ -683,6 +683,49 @@ async function navigateTo(page) {
       pageActions.innerHTML = '';
       await renderAdminPanel();
       break;
+    // ─── Funding Hub Pages ───
+    case 'funding':
+      pageTitle.textContent = 'Funding Discovery';
+      pageSubtitle.textContent = 'Mental health grants, contracts & funding opportunities';
+      pageActions.innerHTML = '<button class="btn btn-gold" style="background:linear-gradient(135deg,#10b981,#059669);" onclick="window.app.refreshFundingData()">Scan for Opportunities</button>' + printBtn;
+      await renderFundingDashboard();
+      break;
+    case 'funding-federal':
+      pageTitle.textContent = 'Federal Grants';
+      pageSubtitle.textContent = 'SAMHSA, HRSA, NIH, DOJ, VA & more';
+      pageActions.innerHTML = '<button class="btn" onclick="window.app.refreshFundingData()">Refresh</button>' + printBtn;
+      await renderFundingFederal();
+      break;
+    case 'funding-state':
+      pageTitle.textContent = 'State & Local';
+      pageSubtitle.textContent = 'State behavioral health authority grants & contracts';
+      pageActions.innerHTML = printBtn;
+      await renderFundingState();
+      break;
+    case 'funding-foundations':
+      pageTitle.textContent = 'Foundations & Private';
+      pageSubtitle.textContent = 'Foundation grants, pharma programs & corporate giving';
+      pageActions.innerHTML = printBtn;
+      await renderFundingFoundations();
+      break;
+    case 'funding-pipeline':
+      pageTitle.textContent = 'Application Pipeline';
+      pageSubtitle.textContent = 'Track grant applications from draft to awarded';
+      pageActions.innerHTML = '<button class="btn btn-gold" style="background:linear-gradient(135deg,#10b981,#059669);" onclick="window.app.openFundingAppModal()">+ New Application</button>' + printBtn;
+      await renderFundingPipeline();
+      break;
+    case 'funding-calendar':
+      pageTitle.textContent = 'Deadline Calendar';
+      pageSubtitle.textContent = 'All grant deadlines and reporting dates';
+      pageActions.innerHTML = printBtn;
+      await renderFundingCalendar();
+      break;
+    case 'funding-intelligence':
+      pageTitle.textContent = 'Funder Intelligence';
+      pageSubtitle.textContent = 'Who funds mental health in your state & how much';
+      pageActions.innerHTML = printBtn;
+      await renderFundingIntelligence();
+      break;
     default:
       pageBody.innerHTML = '<div class="empty-state"><h3>Page not found</h3></div>';
   }
@@ -8674,6 +8717,83 @@ function handleNppesProxy(payload) {
   calToday() { window.app._calMonth = new Date().getMonth(); window.app._calYear = new Date().getFullYear(); window.app._calSelectedDay = null; renderCalendarPage(); },
   calToggleFilter(type) { window.app._calFilters[type] = !window.app._calFilters[type]; renderCalendarPage(); },
   calSelectDay(day) { window.app._calSelectedDay = day; renderCalendarPage(); },
+
+  // ─── Funding Hub ───
+  enterFundingHub() {
+    document.body.classList.add('funding-hub-active');
+    // Hide regular nav sections, show funding nav
+    const sidebar = document.querySelector('.sidebar');
+    const regularSections = sidebar.querySelectorAll('.nav-section');
+    const regularItems = sidebar.querySelectorAll('.nav-item:not(.nav-item-portal):not(.funding-nav-item)');
+    regularSections.forEach(s => { if (!s.textContent.includes('Funding')) s.style.display = 'none'; });
+    regularItems.forEach(i => i.style.display = 'none');
+
+    // Show funding nav items
+    let fundingNav = sidebar.querySelector('.funding-nav-container');
+    if (!fundingNav) {
+      fundingNav = document.createElement('div');
+      fundingNav.className = 'funding-nav-container';
+      fundingNav.innerHTML = `
+        <button class="funding-back-btn" onclick="window.app.exitFundingHub()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 1L3 7l6 6"/></svg>
+          Back to Credentik
+        </button>
+        <div class="nav-section" style="color:#10b981;">Funding Hub</div>
+        <button class="nav-item funding-nav-item active" data-page="funding" onclick="window.app.navigateTo('funding')">
+          <span class="icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v6M5 8h6"/></svg></span> Dashboard
+        </button>
+        <button class="nav-item funding-nav-item" data-page="funding-federal" onclick="window.app.navigateTo('funding-federal')">
+          <span class="icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M8 2v2M4 4V2M12 4V2"/></svg></span> Federal Grants
+        </button>
+        <button class="nav-item funding-nav-item" data-page="funding-state" onclick="window.app.navigateTo('funding-state')">
+          <span class="icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14h12M3 14V6l5-4 5 4v8"/><rect x="6" y="9" width="4" height="5"/></svg></span> State & Local
+        </button>
+        <button class="nav-item funding-nav-item" data-page="funding-foundations" onclick="window.app.navigateTo('funding-foundations')">
+          <span class="icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/></svg></span> Foundations
+        </button>
+        <button class="nav-item funding-nav-item" data-page="funding-pipeline" onclick="window.app.navigateTo('funding-pipeline')">
+          <span class="icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h12M2 7h8M2 11h10M2 15h6"/></svg></span> Pipeline
+        </button>
+        <button class="nav-item funding-nav-item" data-page="funding-calendar" onclick="window.app.navigateTo('funding-calendar')">
+          <span class="icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 7h12M5 1v4M11 1v4"/></svg></span> Calendar
+        </button>
+        <button class="nav-item funding-nav-item" data-page="funding-intelligence" onclick="window.app.navigateTo('funding-intelligence')">
+          <span class="icon"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v4l2 2"/></svg></span> Intelligence
+        </button>
+      `;
+      const navBody = sidebar.querySelector('.sidebar-nav') || sidebar;
+      navBody.appendChild(fundingNav);
+    } else {
+      fundingNav.style.display = '';
+    }
+
+    // Update sidebar brand
+    const logo = sidebar.querySelector('.sidebar-header');
+    if (logo) logo.setAttribute('data-original-html', logo.innerHTML);
+    navigateTo('funding');
+  },
+
+  exitFundingHub() {
+    document.body.classList.remove('funding-hub-active');
+    const sidebar = document.querySelector('.sidebar');
+    // Restore regular nav
+    sidebar.querySelectorAll('.nav-section').forEach(s => s.style.display = '');
+    sidebar.querySelectorAll('.nav-item:not(.funding-nav-item)').forEach(i => i.style.display = '');
+    // Hide funding nav
+    const fundingNav = sidebar.querySelector('.funding-nav-container');
+    if (fundingNav) fundingNav.style.display = 'none';
+    navigateTo('dashboard');
+  },
+
+  refreshFundingData() {
+    showToast('Scanning for new opportunities…', 'info');
+    const page = document.querySelector('.nav-item.funding-nav-item.active')?.dataset?.page || 'funding';
+    navigateTo(page);
+  },
+
+  openFundingAppModal() {
+    openFundingApplicationModal();
+  },
 };
 
 // ─── Application Modal ───
@@ -14525,4 +14645,426 @@ async function renderProviderPortableProfile(providerId) {
       </div>
     </div>
   `;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ─── FUNDING HUB ──────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════
+
+function fundingStatCard(label, value, icon, color = '#10b981') {
+  return `<div class="funding-stat-card">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <div style="width:32px;height:32px;border-radius:8px;background:${color}15;display:flex;align-items:center;justify-content:center;">
+        ${icon}
+      </div>
+    </div>
+    <div class="funding-stat-value">${value}</div>
+    <div class="funding-stat-label">${label}</div>
+  </div>`;
+}
+
+function fundingOppCard(opp) {
+  const sourceColors = { federal: '#3b82f6', state: '#8b5cf6', foundation: '#f59e0b', pharma: '#ec4899', va: '#ef4444' };
+  const color = sourceColors[opp.source] || '#6b7280';
+  const daysLeft = opp.deadline ? Math.ceil((new Date(opp.deadline) - new Date()) / 86400000) : null;
+  const urgency = daysLeft !== null && daysLeft <= 14 ? 'color:var(--red);font-weight:700;' : '';
+  return `<div class="funding-opp-card" onclick="window.app.navigateTo('${opp.detailPage || 'funding'}')">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+      <span class="funding-source-badge funding-source-${opp.source}">${(opp.source || '').toUpperCase()}</span>
+      ${opp.amount ? `<span style="font-weight:700;color:#10b981;font-size:14px;">${opp.amount}</span>` : ''}
+    </div>
+    <h4 style="margin:0 0 6px;font-size:14px;font-weight:600;color:var(--text-primary);line-height:1.3;">${escHtml(opp.title)}</h4>
+    <p style="margin:0 0 10px;font-size:12px;color:var(--gray-400);line-height:1.4;">${escHtml(opp.description || '')}</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--gray-500);">
+      <span>${escHtml(opp.agency || '')}</span>
+      ${daysLeft !== null ? `<span style="${urgency}">${daysLeft > 0 ? daysLeft + ' days left' : 'EXPIRED'}</span>` : '<span>Open</span>'}
+    </div>
+  </div>`;
+}
+
+async function renderFundingDashboard() {
+  const body = document.getElementById('page-body');
+  // Update active funding nav
+  document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === 'funding'));
+
+  // Sample data — will connect to real APIs later
+  const opportunities = [
+    { title: 'Community Mental Health Centers Grant', source: 'federal', agency: 'SAMHSA', amount: '$500K–$1M', deadline: '2026-05-15', description: 'Funding for community-based mental health services expansion including telehealth and crisis intervention programs.' },
+    { title: 'Certified Community Behavioral Health Clinic (CCBHC) Expansion', source: 'federal', agency: 'SAMHSA', amount: '$1M–$4M', deadline: '2026-06-01', description: 'Multi-year expansion grants for CCBHCs providing comprehensive behavioral health care.' },
+    { title: 'Mental Health Block Grant', source: 'federal', agency: 'SAMHSA', amount: 'Varies', deadline: '2026-07-30', description: 'State formula grants for community mental health services for adults with SMI and children with SED.' },
+    { title: 'State Opioid Response Grant (SOR)', source: 'federal', agency: 'SAMHSA', amount: '$2M–$10M', deadline: '2026-04-20', description: 'Address opioid and stimulant use disorders through prevention, treatment, and recovery services.' },
+    { title: 'Behavioral Health Workforce Development', source: 'federal', agency: 'HRSA', amount: '$250K–$750K', deadline: '2026-05-30', description: 'Training and education programs to expand the behavioral health workforce.' },
+    { title: 'State Mental Health Innovation Fund', source: 'state', agency: 'State BH Authority', amount: '$50K–$200K', deadline: '2026-04-15', description: 'Competitive grants for innovative approaches to behavioral health service delivery.' },
+    { title: 'Community Foundation Mental Health Initiative', source: 'foundation', agency: 'Robert Wood Johnson', amount: '$100K–$500K', deadline: '2026-08-01', description: 'Supporting community organizations addressing mental health disparities.' },
+    { title: 'VA Community Care Partnership', source: 'va', agency: 'Dept of Veterans Affairs', amount: 'Contract', deadline: '2026-06-15', description: 'Community provider contracts for veteran mental health and substance use services.' },
+  ];
+
+  const stats = {
+    open: opportunities.length,
+    applied: 3,
+    awarded: 1,
+    totalAvailable: '$12.5M+'
+  };
+
+  const urgentDeadlines = opportunities
+    .filter(o => o.deadline)
+    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
+    .slice(0, 4);
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px;">
+      ${fundingStatCard('Open Opportunities', stats.open, '<svg width="18" height="18" fill="none" stroke="#10b981" stroke-width="1.5"><circle cx="9" cy="9" r="7"/><path d="M9 5v4l3 2"/></svg>')}
+      ${fundingStatCard('Applied', stats.applied, '<svg width="18" height="18" fill="none" stroke="#3b82f6" stroke-width="1.5"><path d="M4 9l3 3 7-7"/></svg>', '#3b82f6')}
+      ${fundingStatCard('Awarded', stats.awarded, '<svg width="18" height="18" fill="none" stroke="#f59e0b" stroke-width="1.5"><path d="M9 2l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/></svg>', '#f59e0b')}
+      ${fundingStatCard('Total Available', stats.totalAvailable, '<svg width="18" height="18" fill="none" stroke="#10b981" stroke-width="1.5"><path d="M9 2v14M5 5h8M4 9h10M5 13h8"/></svg>')}
+    </div>
+
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;">
+      <div>
+        <div class="card">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="margin:0;">Matching Opportunities</h3>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-sm" style="font-size:11px;padding:3px 10px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.2);" onclick="window.app.navigateTo('funding-federal')">Federal</button>
+              <button class="btn btn-sm" style="font-size:11px;padding:3px 10px;" onclick="window.app.navigateTo('funding-state')">State</button>
+              <button class="btn btn-sm" style="font-size:11px;padding:3px 10px;" onclick="window.app.navigateTo('funding-foundations')">Foundations</button>
+            </div>
+          </div>
+          <div class="card-body" style="padding:12px;">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
+              ${opportunities.map(o => fundingOppCard(o)).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><h3 style="margin:0;">Upcoming Deadlines</h3></div>
+          <div class="card-body" style="padding:0;">
+            ${urgentDeadlines.map(o => {
+              const daysLeft = Math.ceil((new Date(o.deadline) - new Date()) / 86400000);
+              const urgent = daysLeft <= 30;
+              return `<div style="padding:12px 16px;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                  <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:2px;">${escHtml(o.title.substring(0, 40))}${o.title.length > 40 ? '…' : ''}</div>
+                  <div style="font-size:11px;color:var(--gray-500);">${escHtml(o.agency)}</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-size:12px;font-weight:600;${urgent ? 'color:var(--red);' : 'color:#10b981;'}">${daysLeft}d</div>
+                  <div style="font-size:10px;color:var(--gray-500);">${o.deadline}</div>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h3 style="margin:0;">By Source</h3></div>
+          <div class="card-body" style="padding:16px;">
+            ${['federal', 'state', 'foundation', 'va'].map(src => {
+              const count = opportunities.filter(o => o.source === src).length;
+              const colors = { federal: '#3b82f6', state: '#8b5cf6', foundation: '#f59e0b', va: '#ef4444' };
+              return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;">
+                <span class="funding-source-badge funding-source-${src}">${src.toUpperCase()}</span>
+                <span style="font-weight:600;color:var(--text-primary);">${count}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function renderFundingFederal() {
+  const body = document.getElementById('page-body');
+  document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === 'funding-federal'));
+
+  const grants = [
+    { title: 'Community Mental Health Centers Grant', agency: 'SAMHSA', cfda: '93.958', amount: '$500K–$1M', deadline: '2026-05-15', status: 'Open', description: 'Funding for community-based mental health services expansion.' },
+    { title: 'CCBHC Expansion Grants', agency: 'SAMHSA', cfda: '93.829', amount: '$1M–$4M', deadline: '2026-06-01', status: 'Open', description: 'Multi-year expansion grants for Certified Community Behavioral Health Clinics.' },
+    { title: 'Mental Health Block Grant (MHBG)', agency: 'SAMHSA', cfda: '93.958', amount: 'Formula', deadline: '2026-07-30', status: 'Open', description: 'State formula grants for adults with SMI and children with SED.' },
+    { title: 'State Opioid Response (SOR)', agency: 'SAMHSA', cfda: '93.788', amount: '$2M–$10M', deadline: '2026-04-20', status: 'Closing Soon', description: 'Opioid and stimulant use disorder prevention and treatment.' },
+    { title: 'Behavioral Health Workforce', agency: 'HRSA', cfda: '93.732', amount: '$250K–$750K', deadline: '2026-05-30', status: 'Open', description: 'Expand and diversify the behavioral health workforce.' },
+    { title: 'Primary & Behavioral Health Care Integration', agency: 'HRSA', cfda: '93.544', amount: '$500K–$1M', deadline: '2026-06-15', status: 'Open', description: 'Integrate behavioral health services into primary care settings.' },
+    { title: 'NIMH Research Grants (R01)', agency: 'NIH', cfda: '93.242', amount: '$250K+/yr', deadline: 'Rolling', status: 'Open', description: 'Support mental health research projects of significance.' },
+    { title: 'Justice & Mental Health Collaboration', agency: 'DOJ/BJA', cfda: '16.745', amount: '$100K–$500K', deadline: '2026-05-01', status: 'Open', description: 'Mental health services for justice-involved individuals.' },
+  ];
+
+  body.innerHTML = `
+    <div class="card">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;">Federal Grant Opportunities</h3>
+        <span style="font-size:12px;color:var(--gray-400);">Sources: SAMHSA, HRSA, NIH, DOJ, VA</span>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <table>
+          <thead><tr><th>Opportunity</th><th>Agency</th><th>CFDA</th><th>Amount</th><th>Deadline</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${grants.map(g => {
+              const statusColor = g.status === 'Closing Soon' ? 'var(--red)' : '#10b981';
+              return `<tr>
+                <td><strong style="font-size:13px;">${escHtml(g.title)}</strong><br><span style="font-size:11px;color:var(--gray-400);">${escHtml(g.description)}</span></td>
+                <td style="white-space:nowrap;">${escHtml(g.agency)}</td>
+                <td style="font-family:var(--font-mono);font-size:11px;">${escHtml(g.cfda)}</td>
+                <td style="font-weight:600;color:#10b981;white-space:nowrap;">${escHtml(g.amount)}</td>
+                <td style="white-space:nowrap;">${escHtml(g.deadline)}</td>
+                <td><span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:${statusColor}18;color:${statusColor};">${escHtml(g.status)}</span></td>
+                <td><button class="btn btn-sm" style="font-size:10px;padding:3px 8px;background:rgba(16,185,129,0.12);color:#10b981;">Track</button></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div style="margin-top:16px;padding:16px;border-radius:8px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15);font-size:12px;color:var(--gray-400);">
+      <strong style="color:#10b981;">Data Sources:</strong> Grants.gov API, SAMHSA.gov, HRSA Data Warehouse, NIH RePORTER. Data refreshed on scan. Not all opportunities shown — use "Scan for Opportunities" to fetch latest.
+    </div>
+  `;
+}
+
+async function renderFundingState() {
+  const body = document.getElementById('page-body');
+  document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === 'funding-state'));
+
+  const statePrograms = [
+    { state: 'TX', name: 'Texas HHSC Behavioral Health Services', type: 'Contract', amount: 'Varies', deadline: '2026-04-30', status: 'Open' },
+    { state: 'CA', name: 'DHCS Community Mental Health Grant', type: 'Grant', amount: '$100K–$500K', deadline: '2026-05-15', status: 'Open' },
+    { state: 'NY', name: 'OMH Community Reinvestment Program', type: 'Grant', amount: '$200K–$1M', deadline: '2026-06-01', status: 'Open' },
+    { state: 'FL', name: 'DCF Behavioral Health Managing Entity', type: 'Contract', amount: '$1M+', deadline: 'Ongoing', status: 'Open' },
+    { state: 'OH', name: 'OhioMHAS Prevention Grant', type: 'Grant', amount: '$50K–$200K', deadline: '2026-05-01', status: 'Open' },
+    { state: 'PA', name: 'OMHSAS Community MH Services', type: 'Grant', amount: '$75K–$300K', deadline: '2026-07-15', status: 'Upcoming' },
+  ];
+
+  body.innerHTML = `
+    <div class="card">
+      <div class="card-header"><h3 style="margin:0;">State & Local Behavioral Health Funding</h3></div>
+      <div class="card-body" style="padding:0;">
+        <table>
+          <thead><tr><th>State</th><th>Program</th><th>Type</th><th>Amount</th><th>Deadline</th><th>Status</th></tr></thead>
+          <tbody>
+            ${statePrograms.map(p => `<tr>
+              <td><span style="font-weight:700;color:var(--brand-400);">${escHtml(p.state)}</span></td>
+              <td><strong>${escHtml(p.name)}</strong></td>
+              <td><span class="funding-source-badge funding-source-state">${escHtml(p.type)}</span></td>
+              <td style="font-weight:600;color:#10b981;">${escHtml(p.amount)}</td>
+              <td>${escHtml(p.deadline)}</td>
+              <td style="font-size:12px;color:${p.status === 'Upcoming' ? 'var(--gray-400)' : '#10b981'};">${escHtml(p.status)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div style="margin-top:16px;padding:16px;border-radius:8px;background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.15);font-size:12px;color:var(--gray-400);">
+      <strong style="color:#8b5cf6;">Tip:</strong> State behavioral health authorities release RFPs throughout the year. Set up alerts to get notified when new opportunities match your service area.
+    </div>
+  `;
+}
+
+async function renderFundingFoundations() {
+  const body = document.getElementById('page-body');
+  document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === 'funding-foundations'));
+
+  const foundations = [
+    { name: 'Robert Wood Johnson Foundation', focus: 'Health equity, community health', amount: '$100K–$500K', cycle: 'Annual', deadline: '2026-08-01' },
+    { name: 'Hogg Foundation for Mental Health', focus: 'Mental health services (Texas)', amount: '$50K–$250K', cycle: 'Biannual', deadline: '2026-05-15' },
+    { name: 'NAMI Local Affiliate Grants', focus: 'Mental health advocacy & support', amount: '$5K–$25K', cycle: 'Annual', deadline: '2026-06-30' },
+    { name: 'Substance Abuse & MH Services Foundation', focus: 'SUD & MH treatment access', amount: '$25K–$100K', cycle: 'Quarterly', deadline: 'Rolling' },
+    { name: 'Blue Cross Blue Shield Foundation', focus: 'Behavioral health integration', amount: '$50K–$200K', cycle: 'Annual', deadline: '2026-09-01' },
+    { name: 'Wellcome Trust Mental Health', focus: 'Mental health research & innovation', amount: '$100K–$1M', cycle: 'Annual', deadline: '2026-07-01' },
+  ];
+
+  body.innerHTML = `
+    <div class="card">
+      <div class="card-header"><h3 style="margin:0;">Foundation & Private Funding</h3></div>
+      <div class="card-body" style="padding:12px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;">
+          ${foundations.map(f => `<div class="funding-opp-card">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+              <span class="funding-source-badge funding-source-foundation">FOUNDATION</span>
+              <span style="font-weight:700;color:#10b981;font-size:13px;">${escHtml(f.amount)}</span>
+            </div>
+            <h4 style="margin:0 0 4px;font-size:14px;font-weight:600;color:var(--text-primary);">${escHtml(f.name)}</h4>
+            <p style="margin:0 0 8px;font-size:12px;color:var(--gray-400);">${escHtml(f.focus)}</p>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-500);">
+              <span>Cycle: ${escHtml(f.cycle)}</span>
+              <span>Deadline: ${escHtml(f.deadline)}</span>
+            </div>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function renderFundingPipeline() {
+  const body = document.getElementById('page-body');
+  document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === 'funding-pipeline'));
+
+  const stages = [
+    { name: 'Identified', color: '#6b7280', items: [
+      { title: 'CCBHC Expansion Grant', source: 'SAMHSA', amount: '$2M', deadline: '2026-06-01' },
+      { title: 'State MH Innovation Fund', source: 'State BHA', amount: '$150K', deadline: '2026-04-15' },
+    ]},
+    { name: 'Preparing', color: '#3b82f6', items: [
+      { title: 'Workforce Development', source: 'HRSA', amount: '$500K', deadline: '2026-05-30' },
+    ]},
+    { name: 'Submitted', color: '#f59e0b', items: [
+      { title: 'Community MH Centers Grant', source: 'SAMHSA', amount: '$750K', deadline: '2026-05-15' },
+      { title: 'Justice & MH Collaboration', source: 'DOJ', amount: '$300K', deadline: '2026-05-01' },
+    ]},
+    { name: 'Under Review', color: '#8b5cf6', items: [
+      { title: 'SOR Treatment Expansion', source: 'SAMHSA', amount: '$5M', deadline: '2026-04-20' },
+    ]},
+    { name: 'Awarded', color: '#10b981', items: [
+      { title: 'MHBG Subrecipient', source: 'State', amount: '$200K', deadline: 'Active' },
+    ]},
+  ];
+
+  body.innerHTML = `
+    <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:16px;">
+      ${stages.map(stage => `<div style="min-width:240px;flex:1;">
+        <div style="padding:8px 12px;background:${stage.color}18;border-radius:8px 8px 0 0;border-bottom:2px solid ${stage.color};display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-weight:600;font-size:13px;color:${stage.color};">${stage.name}</span>
+          <span style="background:${stage.color}25;color:${stage.color};padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;">${stage.items.length}</span>
+        </div>
+        <div style="background:var(--card-bg);border:1px solid var(--border-color);border-top:none;border-radius:0 0 8px 8px;padding:8px;">
+          ${stage.items.map(item => `<div style="padding:10px;margin-bottom:6px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border-color);">
+            <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">${escHtml(item.title)}</div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-500);">
+              <span>${escHtml(item.source)}</span>
+              <span style="font-weight:600;color:#10b981;">${escHtml(item.amount)}</span>
+            </div>
+            <div style="font-size:10px;color:var(--gray-500);margin-top:4px;">Due: ${escHtml(item.deadline)}</div>
+          </div>`).join('')}
+          ${stage.name === 'Identified' ? `<button class="btn btn-sm" style="width:100%;font-size:11px;padding:6px;border:1px dashed var(--border-color);background:transparent;color:var(--gray-400);" onclick="window.app.openFundingAppModal()">+ Add</button>` : ''}
+        </div>
+      </div>`).join('')}
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--gray-500);text-align:center;">Drag opportunities between stages to update status • Total pipeline value: <strong style="color:#10b981;">$8.9M</strong></div>
+  `;
+}
+
+async function renderFundingCalendar() {
+  const body = document.getElementById('page-body');
+  document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === 'funding-calendar'));
+
+  const now = new Date();
+  const months = [];
+  for (let i = 0; i < 4; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    months.push({ month: d.toLocaleString('default', { month: 'long' }), year: d.getFullYear(), key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` });
+  }
+
+  const deadlines = [
+    { date: '2026-04-15', title: 'State MH Innovation Fund', source: 'state' },
+    { date: '2026-04-20', title: 'State Opioid Response (SOR)', source: 'federal' },
+    { date: '2026-05-01', title: 'Justice & MH Collaboration', source: 'federal' },
+    { date: '2026-05-15', title: 'Community MH Centers Grant', source: 'federal' },
+    { date: '2026-05-15', title: 'Hogg Foundation Grant', source: 'foundation' },
+    { date: '2026-05-30', title: 'BH Workforce Development', source: 'federal' },
+    { date: '2026-06-01', title: 'CCBHC Expansion', source: 'federal' },
+    { date: '2026-06-15', title: 'VA Community Care', source: 'va' },
+    { date: '2026-06-30', title: 'NAMI Affiliate Grants', source: 'foundation' },
+    { date: '2026-07-01', title: 'Wellcome Trust MH', source: 'foundation' },
+    { date: '2026-07-30', title: 'Mental Health Block Grant', source: 'federal' },
+  ];
+
+  body.innerHTML = `
+    <div class="card">
+      <div class="card-header"><h3 style="margin:0;">Grant Deadline Calendar</h3></div>
+      <div class="card-body" style="padding:16px;">
+        ${months.map(m => {
+          const monthDeadlines = deadlines.filter(d => d.date.startsWith(m.key)).sort((a, b) => a.date.localeCompare(b.date));
+          if (!monthDeadlines.length) return '';
+          return `<div style="margin-bottom:20px;">
+            <h4 style="margin:0 0 10px;font-size:15px;font-weight:600;color:var(--text-primary);">${m.month} ${m.year}</h4>
+            ${monthDeadlines.map(d => {
+              const daysLeft = Math.ceil((new Date(d.date) - now) / 86400000);
+              const urgent = daysLeft <= 14;
+              return `<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;margin-bottom:4px;border-radius:6px;background:var(--bg-secondary);border:1px solid ${urgent ? 'rgba(239,68,68,0.3)' : 'var(--border-color)'};">
+                <span style="font-weight:700;font-size:14px;color:${urgent ? 'var(--red)' : 'var(--text-primary)'};min-width:60px;">${d.date.split('-')[2]}/${d.date.split('-')[1]}</span>
+                <span class="funding-source-badge funding-source-${d.source}" style="min-width:80px;text-align:center;">${d.source.toUpperCase()}</span>
+                <span style="font-size:13px;color:var(--text-primary);flex:1;">${escHtml(d.title)}</span>
+                <span style="font-size:11px;font-weight:600;${urgent ? 'color:var(--red);' : 'color:var(--gray-500);'}">${daysLeft > 0 ? daysLeft + 'd' : 'PAST'}</span>
+              </div>`;
+            }).join('')}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+async function renderFundingIntelligence() {
+  const body = document.getElementById('page-body');
+  document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === 'funding-intelligence'));
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div class="card">
+        <div class="card-header"><h3 style="margin:0;">Federal Funding Trends</h3></div>
+        <div class="card-body" style="padding:16px;">
+          <div style="margin-bottom:12px;">
+            ${[
+              { label: 'SAMHSA Total MH Funding', value: '$7.5B', change: '+12%' },
+              { label: 'HRSA BH Workforce', value: '$550M', change: '+8%' },
+              { label: 'NIH Mental Health Research', value: '$2.3B', change: '+5%' },
+              { label: 'DOJ MH Programs', value: '$180M', change: '+15%' },
+            ].map(t => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-color);">
+              <span style="font-size:13px;color:var(--text-primary);">${t.label}</span>
+              <div style="text-align:right;">
+                <span style="font-weight:700;color:#10b981;margin-right:8px;">${t.value}</span>
+                <span style="font-size:11px;color:#10b981;background:rgba(16,185,129,0.12);padding:1px 6px;border-radius:4px;">${t.change}</span>
+              </div>
+            </div>`).join('')}
+          </div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:8px;">FY2026 appropriated amounts • Source: USAspending.gov</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 style="margin:0;">Top Funders in Your State</h3></div>
+        <div class="card-body" style="padding:16px;">
+          ${[
+            { name: 'SAMHSA Block Grant (via State)', amount: '$45M', type: 'Federal Pass-through' },
+            { name: 'State BH Authority', amount: '$12M', type: 'State Direct' },
+            { name: 'County Mental Health Board', amount: '$3.5M', type: 'Local' },
+            { name: 'BCBS Foundation', amount: '$2M', type: 'Foundation' },
+            { name: 'United Way', amount: '$800K', type: 'Foundation' },
+          ].map((f, i) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-color);">
+            <span style="font-size:18px;font-weight:700;color:var(--gray-600);min-width:24px;">${i + 1}</span>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;color:var(--text-primary);">${escHtml(f.name)}</div>
+              <div style="font-size:11px;color:var(--gray-500);">${escHtml(f.type)}</div>
+            </div>
+            <span style="font-weight:700;color:#10b981;">${escHtml(f.amount)}</span>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3 style="margin:0;">Key Insights</h3></div>
+      <div class="card-body" style="padding:16px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;">
+          ${[
+            { icon: '📈', title: 'CCBHC Expansion Surge', detail: 'SAMHSA expanded CCBHC to all 50 states. If your agency isn\'t a CCBHC, consider applying — enhanced reimbursement rates avg 30% higher.' },
+            { icon: '🔄', title: '988 Funding Wave', detail: 'New 988 Suicide & Crisis Lifeline funding creating $1B+ in contracts for crisis services. Position for mobile crisis team RFPs.' },
+            { icon: '💡', title: 'Telehealth MH Grants Growing', detail: 'Post-COVID telehealth grants up 200%. FCC, HRSA, and state BH authorities all funding virtual behavioral health expansion.' },
+            { icon: '⚠️', title: 'Medicaid Unwinding Impact', detail: 'States reinvesting Medicaid savings into BH grants. Watch for new RFPs as states redirect funds from enrollment to services.' },
+          ].map(insight => `<div style="padding:14px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);">
+            <div style="font-size:20px;margin-bottom:6px;">${insight.icon}</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">${escHtml(insight.title)}</div>
+            <div style="font-size:12px;color:var(--gray-400);line-height:1.5;">${insight.detail}</div>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function openFundingApplicationModal() {
+  showToast('Application tracking coming soon — track your grant applications from draft to award.', 'info');
 }

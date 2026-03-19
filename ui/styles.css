@@ -366,6 +366,157 @@ h1, h2, h3, h4, h5, h6 {
 .demo-provider .demo-role { color: #8b5cf6; }
 .demo-super .demo-role { color: #ef4444; }
 
+/* ─── Funding Hub Portal Theme ─── */
+.nav-item-portal {
+  background: linear-gradient(135deg, rgba(16,185,129,0.08), rgba(5,150,105,0.04)) !important;
+  border-top: 1px solid rgba(16,185,129,0.15);
+  border-bottom: 1px solid rgba(16,185,129,0.15);
+  margin: 4px 0 !important;
+}
+.nav-item-portal:hover {
+  background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.08)) !important;
+  color: #10b981 !important;
+}
+.nav-item-portal .icon { color: #10b981; opacity: 1 !important; }
+
+/* Funding Hub Mode — applied to body when in portal */
+body.funding-hub-active .sidebar {
+  border-right-color: rgba(16,185,129,0.15);
+}
+body.funding-hub-active .sidebar-header {
+  border-bottom-color: rgba(16,185,129,0.2);
+}
+body.funding-hub-active .sidebar-header .version {
+  color: #10b981;
+}
+body.funding-hub-active .nav-item.active {
+  background: rgba(16,185,129,0.12);
+  color: #34d399;
+}
+body.funding-hub-active .nav-item.active::before {
+  background: #10b981;
+}
+body.funding-hub-active .nav-item:hover {
+  color: #34d399;
+}
+body.funding-hub-active .page-header {
+  border-bottom-color: rgba(16,185,129,0.15);
+}
+
+.funding-nav-container {
+  padding: 8px 0;
+}
+.funding-nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  border: none;
+  background: transparent;
+  color: var(--gray-400);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+.funding-nav-item:hover {
+  background: rgba(16,185,129,0.08);
+  color: #6ee7b7;
+}
+.funding-nav-item.active {
+  background: rgba(16,185,129,0.12);
+  color: #34d399;
+  font-weight: 600;
+}
+.funding-nav-item .icon {
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+}
+.funding-nav-item.active .icon { opacity: 1; }
+
+.funding-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  color: var(--gray-400);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: rgba(255,255,255,0.03);
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.2s;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.funding-back-btn:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--gray-200);
+}
+.funding-back-btn svg { opacity: 0.5; }
+
+.funding-stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  transition: all 0.2s;
+}
+.funding-stat-card:hover {
+  border-color: rgba(16,185,129,0.3);
+  box-shadow: 0 0 20px rgba(16,185,129,0.08);
+}
+.funding-stat-value {
+  font-size: 28px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #10b981, #059669);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.funding-stat-label {
+  font-size: 11px;
+  color: var(--gray-500);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.funding-opp-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.funding-opp-card:hover {
+  border-color: rgba(16,185,129,0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+.funding-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.funding-source-federal { background: rgba(59,130,246,0.12); color: #60a5fa; }
+.funding-source-state { background: rgba(168,85,247,0.12); color: #c084fc; }
+.funding-source-foundation { background: rgba(245,158,11,0.12); color: #fbbf24; }
+.funding-source-pharma { background: rgba(236,72,153,0.12); color: #f472b6; }
+.funding-source-va { background: rgba(239,68,68,0.12); color: #f87171; }
+
 /* ─── Login / Register Form ─── */
 .auth-form-group {
   margin-bottom: 16px;
