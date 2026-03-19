@@ -8794,7 +8794,7 @@ function handleNppesProxy(payload) {
   async refreshFundingData() {
     showToast('Scanning government databases for new opportunities…', 'info');
     try {
-      const res = await api.post('/funding/scrape');
+      const res = await store._fetch(CONFIG.API_URL + '/funding/scrape', { method: 'POST' });
       const total = (res.results || []).reduce((sum, r) => sum + (r.imported || 0), 0);
       showToast(`Found ${total} opportunities across all sources`, 'success');
     } catch (e) {
@@ -8815,7 +8815,7 @@ function handleNppesProxy(payload) {
 
   async trackFundingOpp(id, title) {
     try {
-      await api.post('/funding/applications', { funding_opportunity_id: id, title: title, stage: 'identified' });
+      await store._fetch(CONFIG.API_URL + '/funding/applications', { method: 'POST', body: JSON.stringify({ funding_opportunity_id: id, title: title, stage: 'identified' }) });
       showToast('Added to pipeline — stage: Identified', 'success');
     } catch (e) {
       showToast('Could not add to pipeline', 'error');
@@ -14726,16 +14726,16 @@ async function renderFundingDashboard() {
   let opportunities = [], summary = {};
   try {
     const [oppsRes, summaryRes] = await Promise.all([
-      api.get('/funding/opportunities?per_page=20'),
-      api.get('/funding/summary'),
+      store._fetch(CONFIG.API_URL + '/funding/opportunities?per_page=20'),
+      store._fetch(CONFIG.API_URL + '/funding/summary'),
     ]);
     opportunities = (oppsRes.data || []).map(o => ({
       id: o.id,
       title: o.title,
       source: mapSource(o.source),
-      agency: o.agency_source || o.source,
-      amount: o.amount_display || '',
-      deadline: o.close_date ? o.close_date.substring(0, 10) : null,
+      agency: o.agencySource || o.source,
+      amount: o.amountDisplay || '',
+      deadline: o.closeDate ? o.closeDate.substring(0, 10) : null,
       description: o.description || '',
       url: o.url,
     }));
@@ -14757,14 +14757,14 @@ async function renderFundingDashboard() {
 
   const pipeline = summary.pipeline || {};
   const stats = {
-    open: summary.open_opportunities || opportunities.length,
+    open: summary.openOpportunities || opportunities.length,
     applied: (pipeline.submitted || 0) + (pipeline.under_review || 0),
     awarded: pipeline.awarded || 0,
-    totalAvailable: summary.total_awarded ? '$' + Number(summary.total_awarded).toLocaleString() : '$0'
+    totalAvailable: summary.totalAwarded ? '$' + Number(summary.totalAwarded).toLocaleString() : '$0'
   };
 
-  const urgentDeadlines = (summary.upcoming_deadlines || []).length ? summary.upcoming_deadlines.map(d => ({
-    title: d.title, agency: d.agency_source || d.source, deadline: d.close_date ? d.close_date.substring(0, 10) : '', source: mapSource(d.source)
+  const urgentDeadlines = (summary.upcomingDeadlines || []).length ? summary.upcomingDeadlines.map(d => ({
+    title: d.title, agency: d.agencySource || d.source, deadline: d.closeDate ? d.closeDate.substring(0, 10) : '', source: mapSource(d.source)
   })) : opportunities
     .filter(o => o.deadline)
     .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
@@ -14844,12 +14844,12 @@ async function renderFundingFederal() {
 
   let grants = [];
   try {
-    const res = await api.get('/funding/opportunities?source=grants_gov&per_page=50');
+    const res = await store._fetch(CONFIG.API_URL + '/funding/opportunities?source=grants_gov&per_page=50');
     grants = (res.data || []).map(o => {
-      const daysLeft = o.close_date ? Math.ceil((new Date(o.close_date) - new Date()) / 86400000) : null;
+      const daysLeft = o.closeDate ? Math.ceil((new Date(o.closeDate) - new Date()) / 86400000) : null;
       return {
-        title: o.title, agency: o.agency_source || 'Federal', cfda: o.cfda_number || '—',
-        amount: o.amount_display || '—', deadline: o.close_date ? o.close_date.substring(0, 10) : 'Rolling',
+        title: o.title, agency: o.agencySource || 'Federal', cfda: o.cfdaNumber || '—',
+        amount: o.amountDisplay || '—', deadline: o.closeDate ? o.closeDate.substring(0, 10) : 'Rolling',
         status: daysLeft !== null && daysLeft <= 14 ? 'Closing Soon' : 'Open', description: o.description || '', url: o.url,
       };
     });
@@ -14987,13 +14987,13 @@ async function renderFundingPipeline() {
 
   let stages;
   try {
-    const res = await api.get('/funding/applications');
+    const res = await store._fetch(CONFIG.API_URL + '/funding/applications');
     const apps = res.data || [];
     stages = stageConfig.map(s => ({
       ...s,
       items: apps.filter(a => a.stage === s.key).map(a => ({
-        title: a.title, source: a.opportunity?.agency_source || '—',
-        amount: a.amount_requested ? '$' + Number(a.amount_requested).toLocaleString() : '—',
+        title: a.title, source: a.opportunity?.agencySource || '—',
+        amount: a.amountRequested ? '$' + Number(a.amountRequested).toLocaleString() : '—',
         deadline: a.deadline ? a.deadline.substring(0, 10) : '—',
       })),
     }));
@@ -15099,7 +15099,7 @@ async function renderFundingIntelligence() {
 
   let intelligence = null;
   try {
-    const res = await api.get('/funding/intelligence');
+    const res = await store._fetch(CONFIG.API_URL + '/funding/intelligence');
     intelligence = res.data;
   } catch (e) { /* fallback to static */ }
 
@@ -15183,7 +15183,7 @@ async function renderFundingDetail(id) {
     const res = await api.get(`/funding/opportunities/${id}`);
     opp = res.data;
     related = res.related || [];
-    pastAwards = res.past_awards || [];
+    pastAwards = res.pastAwards || [];
   } catch (e) {
     body.innerHTML = '<div class="empty-state"><h3>Opportunity not found</h3><p>This opportunity may have been removed or the API is not available.</p><button class="btn" onclick="window.app.navigateTo(\'funding\')">← Back to Dashboard</button></div>';
     return;
@@ -15192,12 +15192,12 @@ async function renderFundingDetail(id) {
   const pageTitle = document.getElementById('page-title');
   const pageSubtitle = document.getElementById('page-subtitle');
   if (pageTitle) pageTitle.textContent = opp.title;
-  if (pageSubtitle) pageSubtitle.textContent = opp.agency_source || opp.source || '';
+  if (pageSubtitle) pageSubtitle.textContent = opp.agencySource || opp.source || '';
 
   const sourceLabel = mapSource(opp.source);
   const sourceColors = { federal: '#3b82f6', state: '#8b5cf6', foundation: '#f59e0b', va: '#ef4444' };
   const sColor = sourceColors[sourceLabel] || '#6b7280';
-  const daysLeft = opp.close_date ? Math.ceil((new Date(opp.close_date) - new Date()) / 86400000) : null;
+  const daysLeft = opp.closeDate ? Math.ceil((new Date(opp.closeDate) - new Date()) / 86400000) : null;
   const urgentStyle = daysLeft !== null && daysLeft <= 14 ? 'color:var(--red);' : 'color:#10b981;';
   const catLabels = { mental_health: 'Mental Health', substance_use: 'Substance Use', workforce: 'Workforce', crisis: 'Crisis Services', veterans: 'Veterans', youth: 'Youth', telehealth: 'Telehealth' };
 
@@ -15214,7 +15214,7 @@ async function renderFundingDetail(id) {
                 <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:${opp.status === 'open' ? 'rgba(16,185,129,0.12)' : 'rgba(107,114,128,0.12)'};color:${opp.status === 'open' ? '#10b981' : '#6b7280'};">${(opp.status || 'open').toUpperCase()}</span>
                 ${opp.category ? `<span style="padding:2px 8px;border-radius:4px;font-size:10px;background:rgba(139,92,246,0.1);color:#8b5cf6;">${catLabels[opp.category] || opp.category}</span>` : ''}
               </div>
-              ${opp.amount_display ? `<span style="font-size:20px;font-weight:700;color:#10b981;">${escHtml(opp.amount_display)}</span>` : ''}
+              ${opp.amountDisplay ? `<span style="font-size:20px;font-weight:700;color:#10b981;">${escHtml(opp.amountDisplay)}</span>` : ''}
             </div>
 
             <div style="display:flex;gap:12px;margin-top:16px;">
@@ -15245,11 +15245,11 @@ async function renderFundingDetail(id) {
           <div class="card-body" style="padding:0;">
             <table>
               <tbody>
-                <tr><td style="font-weight:600;width:200px;color:var(--gray-400);">Source</td><td>${escHtml(opp.agency_source || opp.source || '—')}</td></tr>
-                <tr><td style="font-weight:600;color:var(--gray-400);">CFDA Number</td><td style="font-family:var(--font-mono);">${escHtml(opp.cfda_number || '—')}</td></tr>
-                <tr><td style="font-weight:600;color:var(--gray-400);">Funding Type</td><td>${escHtml((opp.funding_type || '—').replace(/_/g, ' '))}</td></tr>
-                <tr><td style="font-weight:600;color:var(--gray-400);">Award Floor</td><td>${opp.amount_min ? '$' + Number(opp.amount_min).toLocaleString() : '—'}</td></tr>
-                <tr><td style="font-weight:600;color:var(--gray-400);">Award Ceiling</td><td>${opp.amount_max ? '$' + Number(opp.amount_max).toLocaleString() : '—'}</td></tr>
+                <tr><td style="font-weight:600;width:200px;color:var(--gray-400);">Source</td><td>${escHtml(opp.agencySource || opp.source || '—')}</td></tr>
+                <tr><td style="font-weight:600;color:var(--gray-400);">CFDA Number</td><td style="font-family:var(--font-mono);">${escHtml(opp.cfdaNumber || '—')}</td></tr>
+                <tr><td style="font-weight:600;color:var(--gray-400);">Funding Type</td><td>${escHtml((opp.fundingType || '—').replace(/_/g, ' '))}</td></tr>
+                <tr><td style="font-weight:600;color:var(--gray-400);">Award Floor</td><td>${opp.amountMin ? '$' + Number(opp.amountMin).toLocaleString() : '—'}</td></tr>
+                <tr><td style="font-weight:600;color:var(--gray-400);">Award Ceiling</td><td>${opp.amountMax ? '$' + Number(opp.amountMax).toLocaleString() : '—'}</td></tr>
                 <tr><td style="font-weight:600;color:var(--gray-400);">Category</td><td>${catLabels[opp.category] || opp.category || '—'}</td></tr>
                 <tr><td style="font-weight:600;color:var(--gray-400);">Eligibility</td><td>${escHtml(opp.eligibility || 'See grant announcement for full eligibility requirements')}</td></tr>
               </tbody>
@@ -15264,16 +15264,16 @@ async function renderFundingDetail(id) {
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;">
               <div style="text-align:center;padding:16px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);">
                 <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Open Date</div>
-                <div style="font-size:16px;font-weight:600;color:var(--text-primary);">${opp.open_date ? formatDateDisplay(opp.open_date) : '—'}</div>
+                <div style="font-size:16px;font-weight:600;color:var(--text-primary);">${opp.openDate ? formatDateDisplay(opp.openDate) : '—'}</div>
               </div>
               <div style="text-align:center;padding:16px;border-radius:8px;background:${daysLeft !== null && daysLeft <= 14 ? 'rgba(239,68,68,0.08)' : 'var(--bg-secondary)'};border:1px solid ${daysLeft !== null && daysLeft <= 14 ? 'rgba(239,68,68,0.2)' : 'var(--border-color)'};">
                 <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Close Date</div>
-                <div style="font-size:16px;font-weight:600;${urgentStyle}">${opp.close_date ? formatDateDisplay(opp.close_date) : 'Rolling'}</div>
+                <div style="font-size:16px;font-weight:600;${urgentStyle}">${opp.closeDate ? formatDateDisplay(opp.closeDate) : 'Rolling'}</div>
                 ${daysLeft !== null ? `<div style="font-size:12px;margin-top:4px;${urgentStyle}">${daysLeft > 0 ? daysLeft + ' days remaining' : 'DEADLINE PASSED'}</div>` : ''}
               </div>
               <div style="text-align:center;padding:16px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);">
                 <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Last Scraped</div>
-                <div style="font-size:16px;font-weight:600;color:var(--text-primary);">${opp.scraped_at ? formatDateDisplay(opp.scraped_at) : '—'}</div>
+                <div style="font-size:16px;font-weight:600;color:var(--text-primary);">${opp.scrapedAt ? formatDateDisplay(opp.scrapedAt) : '—'}</div>
               </div>
             </div>
           </div>
@@ -15300,8 +15300,8 @@ async function renderFundingDetail(id) {
               <tbody>
                 ${pastAwards.map(a => `<tr>
                   <td>${escHtml(a.title || '—')}</td>
-                  <td>${escHtml(a.agency_source || '—')}</td>
-                  <td style="font-weight:600;color:#10b981;">${escHtml(a.amount_display || (a.amount_max ? '$' + Number(a.amount_max).toLocaleString() : '—'))}</td>
+                  <td>${escHtml(a.agencySource || '—')}</td>
+                  <td style="font-weight:600;color:#10b981;">${escHtml(a.amountDisplay || (a.amountMax ? '$' + Number(a.amountMax).toLocaleString() : '—'))}</td>
                   <td style="font-size:12px;">${a.open_date ? formatDateDisplay(a.open_date) : '—'}</td>
                 </tr>`).join('')}
               </tbody>
@@ -15353,8 +15353,8 @@ async function renderFundingDetail(id) {
             ${related.map(r => `<div style="padding:10px 16px;border-bottom:1px solid var(--border-color);cursor:pointer;" onclick="window.app.viewFundingDetail(${r.id})">
               <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:2px;">${escHtml((r.title || '').substring(0, 50))}${(r.title || '').length > 50 ? '…' : ''}</div>
               <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-500);">
-                <span>${escHtml(r.agency_source || r.source || '')}</span>
-                <span style="color:#10b981;font-weight:600;">${escHtml(r.amount_display || '')}</span>
+                <span>${escHtml(r.agencySource || r.source || '')}</span>
+                <span style="color:#10b981;font-weight:600;">${escHtml(r.amountDisplay || '')}</span>
               </div>
             </div>`).join('')}
           </div>
