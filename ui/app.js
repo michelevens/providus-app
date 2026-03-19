@@ -726,6 +726,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderFundingIntelligence();
       break;
+    case 'funding-detail':
+      pageTitle.textContent = 'Opportunity Details';
+      pageSubtitle.textContent = '';
+      pageActions.innerHTML = '<button class="btn" onclick="window.app.navigateTo(\'funding\')">← Back to Dashboard</button>' + printBtn;
+      await renderFundingDetail(window._fundingDetailId);
+      break;
     default:
       pageBody.innerHTML = '<div class="empty-state"><h3>Page not found</h3></div>';
   }
@@ -8801,6 +8807,20 @@ function handleNppesProxy(payload) {
   openFundingAppModal() {
     openFundingApplicationModal();
   },
+
+  viewFundingDetail(id) {
+    window._fundingDetailId = id;
+    navigateTo('funding-detail');
+  },
+
+  async trackFundingOpp(id, title) {
+    try {
+      await api.post('/funding/applications', { funding_opportunity_id: id, title: title, stage: 'identified' });
+      showToast('Added to pipeline — stage: Identified', 'success');
+    } catch (e) {
+      showToast('Could not add to pipeline', 'error');
+    }
+  },
 };
 
 // ─── Application Modal ───
@@ -14680,7 +14700,7 @@ function fundingOppCard(opp) {
   const color = sourceColors[opp.source] || '#6b7280';
   const daysLeft = opp.deadline ? Math.ceil((new Date(opp.deadline) - new Date()) / 86400000) : null;
   const urgency = daysLeft !== null && daysLeft <= 14 ? 'color:var(--red);font-weight:700;' : '';
-  return `<div class="funding-opp-card" onclick="window.app.navigateTo('${opp.detailPage || 'funding'}')">
+  return `<div class="funding-opp-card" onclick="window.app.viewFundingDetail(${opp.id || 0})" style="cursor:pointer;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
       <span class="funding-source-badge funding-source-${opp.source}">${(opp.source || '').toUpperCase()}</span>
       ${opp.amount ? `<span style="font-weight:700;color:#10b981;font-size:14px;">${opp.amount}</span>` : ''}
@@ -14709,6 +14729,7 @@ async function renderFundingDashboard() {
       api.get('/funding/summary'),
     ]);
     opportunities = (oppsRes.data || []).map(o => ({
+      id: o.id,
       title: o.title,
       source: mapSource(o.source),
       agency: o.agency_source || o.source,
@@ -15140,6 +15161,203 @@ async function renderFundingIntelligence() {
             <div style="font-size:12px;color:var(--gray-400);line-height:1.5;">${insight.detail}</div>
           </div>`).join('')}
         </div>
+      </div>
+    </div>
+  `;
+}
+
+async function renderFundingDetail(id) {
+  const body = document.getElementById('page-body');
+  document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.remove('active'));
+
+  if (!id) {
+    body.innerHTML = '<div class="empty-state"><h3>No opportunity selected</h3><p>Go back to the dashboard and click an opportunity.</p></div>';
+    return;
+  }
+
+  body.innerHTML = '<div style="text-align:center;padding:60px;color:var(--gray-400);">Loading opportunity details…</div>';
+
+  let opp, related = [], pastAwards = [];
+  try {
+    const res = await api.get(`/funding/opportunities/${id}`);
+    opp = res.data;
+    related = res.related || [];
+    pastAwards = res.past_awards || [];
+  } catch (e) {
+    body.innerHTML = '<div class="empty-state"><h3>Opportunity not found</h3><p>This opportunity may have been removed or the API is not available.</p><button class="btn" onclick="window.app.navigateTo(\'funding\')">← Back to Dashboard</button></div>';
+    return;
+  }
+
+  const pageTitle = document.getElementById('page-title');
+  const pageSubtitle = document.getElementById('page-subtitle');
+  if (pageTitle) pageTitle.textContent = opp.title;
+  if (pageSubtitle) pageSubtitle.textContent = opp.agency_source || opp.source || '';
+
+  const sourceLabel = mapSource(opp.source);
+  const sourceColors = { federal: '#3b82f6', state: '#8b5cf6', foundation: '#f59e0b', va: '#ef4444' };
+  const sColor = sourceColors[sourceLabel] || '#6b7280';
+  const daysLeft = opp.close_date ? Math.ceil((new Date(opp.close_date) - new Date()) / 86400000) : null;
+  const urgentStyle = daysLeft !== null && daysLeft <= 14 ? 'color:var(--red);' : 'color:#10b981;';
+  const catLabels = { mental_health: 'Mental Health', substance_use: 'Substance Use', workforce: 'Workforce', crisis: 'Crisis Services', veterans: 'Veterans', youth: 'Youth', telehealth: 'Telehealth' };
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;">
+      <!-- Main Content -->
+      <div>
+        <!-- Header Card -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-body" style="padding:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+              <div style="display:flex;gap:8px;align-items:center;">
+                <span class="funding-source-badge funding-source-${sourceLabel}">${sourceLabel.toUpperCase()}</span>
+                <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:${opp.status === 'open' ? 'rgba(16,185,129,0.12)' : 'rgba(107,114,128,0.12)'};color:${opp.status === 'open' ? '#10b981' : '#6b7280'};">${(opp.status || 'open').toUpperCase()}</span>
+                ${opp.category ? `<span style="padding:2px 8px;border-radius:4px;font-size:10px;background:rgba(139,92,246,0.1);color:#8b5cf6;">${catLabels[opp.category] || opp.category}</span>` : ''}
+              </div>
+              ${opp.amount_display ? `<span style="font-size:20px;font-weight:700;color:#10b981;">${escHtml(opp.amount_display)}</span>` : ''}
+            </div>
+
+            <div style="display:flex;gap:12px;margin-top:16px;">
+              <button class="btn" style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;padding:8px 20px;" onclick="window.app.trackFundingOpp(${opp.id}, '${escHtml(opp.title).replace(/'/g, "\\'")}')">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-2px;"><path d="M12 5l-7 7-3-3"/></svg>Track in Pipeline
+              </button>
+              ${opp.url ? `<a href="${escHtml(opp.url)}" target="_blank" class="btn" style="padding:8px 20px;text-decoration:none;">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-2px;"><path d="M7 2H2v12h12V9M14 1l-7 7M9 1h5v5"/></svg>View on ${opp.source === 'grants_gov' ? 'Grants.gov' : opp.source === 'sam_gov' ? 'SAM.gov' : opp.source === 'nih' ? 'NIH' : 'Source'}
+              </a>` : ''}
+              <button class="btn" style="padding:8px 20px;" onclick="window.print()">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-2px;"><path d="M4 4V1h8v3M4 11H2V7h12v4h-2M4 9h8v5H4z"/></svg>Print
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><h3 style="margin:0;">Description</h3></div>
+          <div class="card-body" style="padding:20px;">
+            <p style="margin:0;font-size:14px;line-height:1.7;color:var(--text-primary);">${escHtml(opp.description || 'No description available.')}</p>
+          </div>
+        </div>
+
+        <!-- Grant Details -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><h3 style="margin:0;">Grant Details</h3></div>
+          <div class="card-body" style="padding:0;">
+            <table>
+              <tbody>
+                <tr><td style="font-weight:600;width:200px;color:var(--gray-400);">Source</td><td>${escHtml(opp.agency_source || opp.source || '—')}</td></tr>
+                <tr><td style="font-weight:600;color:var(--gray-400);">CFDA Number</td><td style="font-family:var(--font-mono);">${escHtml(opp.cfda_number || '—')}</td></tr>
+                <tr><td style="font-weight:600;color:var(--gray-400);">Funding Type</td><td>${escHtml((opp.funding_type || '—').replace(/_/g, ' '))}</td></tr>
+                <tr><td style="font-weight:600;color:var(--gray-400);">Award Floor</td><td>${opp.amount_min ? '$' + Number(opp.amount_min).toLocaleString() : '—'}</td></tr>
+                <tr><td style="font-weight:600;color:var(--gray-400);">Award Ceiling</td><td>${opp.amount_max ? '$' + Number(opp.amount_max).toLocaleString() : '—'}</td></tr>
+                <tr><td style="font-weight:600;color:var(--gray-400);">Category</td><td>${catLabels[opp.category] || opp.category || '—'}</td></tr>
+                <tr><td style="font-weight:600;color:var(--gray-400);">Eligibility</td><td>${escHtml(opp.eligibility || 'See grant announcement for full eligibility requirements')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Key Dates -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><h3 style="margin:0;">Key Dates</h3></div>
+          <div class="card-body" style="padding:20px;">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;">
+              <div style="text-align:center;padding:16px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);">
+                <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Open Date</div>
+                <div style="font-size:16px;font-weight:600;color:var(--text-primary);">${opp.open_date ? formatDateDisplay(opp.open_date) : '—'}</div>
+              </div>
+              <div style="text-align:center;padding:16px;border-radius:8px;background:${daysLeft !== null && daysLeft <= 14 ? 'rgba(239,68,68,0.08)' : 'var(--bg-secondary)'};border:1px solid ${daysLeft !== null && daysLeft <= 14 ? 'rgba(239,68,68,0.2)' : 'var(--border-color)'};">
+                <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Close Date</div>
+                <div style="font-size:16px;font-weight:600;${urgentStyle}">${opp.close_date ? formatDateDisplay(opp.close_date) : 'Rolling'}</div>
+                ${daysLeft !== null ? `<div style="font-size:12px;margin-top:4px;${urgentStyle}">${daysLeft > 0 ? daysLeft + ' days remaining' : 'DEADLINE PASSED'}</div>` : ''}
+              </div>
+              <div style="text-align:center;padding:16px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);">
+                <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Last Scraped</div>
+                <div style="font-size:16px;font-weight:600;color:var(--text-primary);">${opp.scraped_at ? formatDateDisplay(opp.scraped_at) : '—'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Keywords -->
+        ${(opp.keywords && opp.keywords.length) ? `
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><h3 style="margin:0;">Matched Keywords</h3></div>
+          <div class="card-body" style="padding:16px;">
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              ${opp.keywords.map(k => `<span style="padding:3px 10px;border-radius:12px;font-size:11px;background:rgba(16,185,129,0.1);color:#10b981;border:1px solid rgba(16,185,129,0.2);">${escHtml(k)}</span>`).join('')}
+            </div>
+          </div>
+        </div>` : ''}
+
+        <!-- Past Awards -->
+        ${pastAwards.length ? `
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><h3 style="margin:0;">Past Awards (USASpending)</h3></div>
+          <div class="card-body" style="padding:0;">
+            <table>
+              <thead><tr><th>Recipient</th><th>Agency</th><th>Amount</th><th>Date</th></tr></thead>
+              <tbody>
+                ${pastAwards.map(a => `<tr>
+                  <td>${escHtml(a.title || '—')}</td>
+                  <td>${escHtml(a.agency_source || '—')}</td>
+                  <td style="font-weight:600;color:#10b981;">${escHtml(a.amount_display || (a.amount_max ? '$' + Number(a.amount_max).toLocaleString() : '—'))}</td>
+                  <td style="font-size:12px;">${a.open_date ? formatDateDisplay(a.open_date) : '—'}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>` : ''}
+      </div>
+
+      <!-- Sidebar -->
+      <div>
+        <!-- Quick Actions -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><h3 style="margin:0;">Quick Actions</h3></div>
+          <div class="card-body" style="padding:16px;">
+            <button class="btn" style="width:100%;margin-bottom:8px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;padding:10px;" onclick="window.app.trackFundingOpp(${opp.id}, '${escHtml(opp.title).replace(/'/g, "\\'")}')">
+              Add to Pipeline
+            </button>
+            ${opp.url ? `<a href="${escHtml(opp.url)}" target="_blank" class="btn" style="width:100%;margin-bottom:8px;display:block;text-align:center;text-decoration:none;padding:10px;">
+              Open Original Listing
+            </a>` : ''}
+            <button class="btn" style="width:100%;padding:10px;" onclick="window.app.navigateTo('funding-pipeline')">
+              View Pipeline
+            </button>
+          </div>
+        </div>
+
+        <!-- Agency Match Score -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><h3 style="margin:0;">Agency Match</h3></div>
+          <div class="card-body" style="padding:16px;text-align:center;">
+            <div style="width:80px;height:80px;border-radius:50%;border:4px solid #10b981;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
+              <span style="font-size:24px;font-weight:700;color:#10b981;">—</span>
+            </div>
+            <div style="font-size:12px;color:var(--gray-400);margin-bottom:12px;">Match scoring available after agency profile setup</div>
+            <div style="text-align:left;font-size:12px;">
+              <div style="display:flex;align-items:center;gap:6px;padding:4px 0;"><span style="color:var(--gray-500);">☐</span> Service area matches</div>
+              <div style="display:flex;align-items:center;gap:6px;padding:4px 0;"><span style="color:var(--gray-500);">☐</span> Organization type eligible</div>
+              <div style="display:flex;align-items:center;gap:6px;padding:4px 0;"><span style="color:var(--gray-500);">☐</span> Revenue within range</div>
+              <div style="display:flex;align-items:center;gap:6px;padding:4px 0;"><span style="color:var(--gray-500);">☐</span> Required certifications</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Related Opportunities -->
+        ${related.length ? `
+        <div class="card">
+          <div class="card-header"><h3 style="margin:0;">Related Opportunities</h3></div>
+          <div class="card-body" style="padding:0;">
+            ${related.map(r => `<div style="padding:10px 16px;border-bottom:1px solid var(--border-color);cursor:pointer;" onclick="window.app.viewFundingDetail(${r.id})">
+              <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:2px;">${escHtml((r.title || '').substring(0, 50))}${(r.title || '').length > 50 ? '…' : ''}</div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-500);">
+                <span>${escHtml(r.agency_source || r.source || '')}</span>
+                <span style="color:#10b981;font-weight:600;">${escHtml(r.amount_display || '')}</span>
+              </div>
+            </div>`).join('')}
+          </div>
+        </div>` : ''}
       </div>
     </div>
   `;
