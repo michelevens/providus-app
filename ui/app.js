@@ -15180,7 +15180,7 @@ async function renderFundingDetail(id) {
 
   let opp, related = [], pastAwards = [];
   try {
-    const res = await api.get(`/funding/opportunities/${id}`);
+    const res = await store._fetch(CONFIG.API_URL + `/funding/opportunities/${id}`);
     opp = res.data;
     related = res.related || [];
     pastAwards = res.pastAwards || [];
