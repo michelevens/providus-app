@@ -14844,7 +14844,7 @@ async function renderFundingFederal() {
 
   let grants = [];
   try {
-    const res = await store._fetch(CONFIG.API_URL + '/funding/opportunities?source=grants_gov&per_page=50');
+    const res = await store._fetch(CONFIG.API_URL + '/funding/opportunities?per_page=50');
     grants = (res.data || []).map(o => {
       const daysLeft = o.closeDate ? Math.ceil((new Date(o.closeDate) - new Date()) / 86400000) : null;
       return {
