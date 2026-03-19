@@ -14700,7 +14700,8 @@ function fundingOppCard(opp) {
   const color = sourceColors[opp.source] || '#6b7280';
   const daysLeft = opp.deadline ? Math.ceil((new Date(opp.deadline) - new Date()) / 86400000) : null;
   const urgency = daysLeft !== null && daysLeft <= 14 ? 'color:var(--red);font-weight:700;' : '';
-  return `<div class="funding-opp-card" onclick="window.app.viewFundingDetail(${opp.id || 0})" style="cursor:pointer;">
+  const clickAction = opp.id ? `window.app.viewFundingDetail(${opp.id})` : (opp.url ? `window.open('${opp.url}','_blank')` : '');
+  return `<div class="funding-opp-card" onclick="${clickAction}" style="cursor:pointer;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
       <span class="funding-source-badge funding-source-${opp.source}">${(opp.source || '').toUpperCase()}</span>
       ${opp.amount ? `<span style="font-weight:700;color:#10b981;font-size:14px;">${opp.amount}</span>` : ''}
