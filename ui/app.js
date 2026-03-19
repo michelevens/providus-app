@@ -184,6 +184,18 @@ export async function initApp() {
   await navigateTo('dashboard');
   await updateNotificationBell();
 
+  // First-run setup wizard for new accounts
+  if (userLevel >= 3) {
+    try {
+      const providers = await store.getAll('providers');
+      if (!providers || providers.length === 0) {
+        if (!localStorage.getItem('credentik_setup_dismissed')) {
+          showSetupWizard();
+        }
+      }
+    } catch {}
+  }
+
   // Listen for data changes
   store.on('created', async () => {
     if (currentPage === 'dashboard') await renderDashboard();
@@ -610,6 +622,24 @@ async function navigateTo(page) {
       pageSubtitle.textContent = 'Compliance scoring, risk matrix, and audit exports';
       pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.exportAuditPacket()">Audit Packet</button> <button class="btn" onclick="window.app.generateComplianceReport()">Refresh</button> <button class="btn" onclick="window.app.exportComplianceData()">Export</button>' + printBtn;
       await renderCompliancePage();
+      break;
+    case 'psv':
+      pageTitle.textContent = 'Primary Source Verification';
+      pageSubtitle.textContent = 'Verify provider credentials against authoritative sources';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.runFullPSV()">Verify All Providers</button> <button class="btn" onclick="window.app.exportPSVReport()">Export Report</button>' + printBtn;
+      await renderPSVPage();
+      break;
+    case 'monitoring':
+      pageTitle.textContent = 'Continuous Monitoring';
+      pageSubtitle.textContent = 'Real-time credential status and automated alerts';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.runMonitoringScan()">Run Scan Now</button> <button class="btn" onclick="window.app.exportMonitoringReport()">Export</button>' + printBtn;
+      await renderMonitoringPage();
+      break;
+    case 'provider-profile-share':
+      pageTitle.textContent = 'Provider Credential Profile';
+      pageSubtitle.textContent = 'Shareable provider credential summary';
+      pageActions.innerHTML = printBtn;
+      await renderProviderPortableProfile(window._selectedProviderId);
       break;
     case 'faq':
       pageTitle.textContent = 'Knowledge Base';
@@ -5006,6 +5036,71 @@ window.app = {
     const modal = document.getElementById('confirm-modal');
     if (modal) modal.classList.remove('active');
     await renderTasksPage();
+  },
+
+  // ── PSV Controls ──
+  async runFullPSV() {
+    if (!await appConfirm('Run Primary Source Verification for all providers? This will check licenses, NPI, DEA, board certifications, and exclusions against authoritative sources.', { title: 'Full PSV Scan', okLabel: 'Verify All' })) return;
+    showToast('Running PSV scan across all providers...');
+    try {
+      // Screen all providers for exclusions as part of PSV
+      await store.screenAllProviders();
+      showToast('PSV scan complete — results updated');
+      await renderPSVPage();
+    } catch (e) { showToast('PSV scan error: ' + e.message); }
+  },
+  async runProviderPSV(providerId) {
+    showToast('Verifying provider credentials...');
+    try {
+      await store.screenProvider(providerId);
+      showToast('Provider verification complete');
+      await renderPSVPage();
+    } catch (e) { showToast('Verification error: ' + e.message); }
+  },
+  exportPSVReport() {
+    const rows = document.querySelectorAll('#psv-table-body tr');
+    if (!rows.length) { showToast('No data to export'); return; }
+    let csv = 'Provider,NPI,License Status,DEA Status,Exclusion Status,Board Cert,Last Verified,Overall\n';
+    rows.forEach(r => {
+      const cells = r.querySelectorAll('td');
+      if (cells.length >= 8) csv += Array.from(cells).map(c => `"${c.textContent.trim().replace(/"/g, '""')}"`).join(',') + '\n';
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `credentik-psv-report-${new Date().toISOString().split('T')[0]}.csv`; a.click();
+    showToast('PSV report exported');
+  },
+  shareProviderProfile(providerId) {
+    window._selectedProviderId = providerId;
+    navigateTo('provider-profile-share');
+  },
+  copyProviderProfileLink(providerId) {
+    const url = `${window.location.origin}${window.location.pathname}#provider-profile-share&id=${providerId}`;
+    navigator.clipboard.writeText(url).then(() => showToast('Profile link copied!')).catch(() => showToast('Failed to copy link'));
+  },
+
+  // ── Monitoring Controls ──
+  async runMonitoringScan() {
+    if (!await appConfirm('Run a full monitoring scan? This checks all credentials for changes, expirations, and compliance issues.', { title: 'Monitoring Scan', okLabel: 'Scan Now' })) return;
+    showToast('Running monitoring scan...');
+    try {
+      await store.screenAllProviders();
+      showToast('Monitoring scan complete');
+      await renderMonitoringPage();
+    } catch (e) { showToast('Scan error: ' + e.message); }
+  },
+  exportMonitoringReport() {
+    const rows = document.querySelectorAll('#monitoring-alerts-body tr');
+    if (!rows.length) { showToast('No alerts to export'); return; }
+    let csv = 'Severity,Provider,Alert,Details,Date,Action Required\n';
+    rows.forEach(r => {
+      const cells = r.querySelectorAll('td');
+      if (cells.length >= 5) csv += Array.from(cells).map(c => `"${c.textContent.trim().replace(/"/g, '""')}"`).join(',') + '\n';
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `credentik-monitoring-${new Date().toISOString().split('T')[0]}.csv`; a.click();
+    showToast('Monitoring report exported');
   },
 
   // ── Cross-Facility Credentialing ──
@@ -13921,6 +14016,512 @@ async function renderProviderProfilePage(providerId) {
             <button class="btn btn-primary" id="doc-upload-save-btn" onclick="window.app.saveDocUpload(${providerId})">Upload</button>
           </div>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SETUP WIZARD (First-Run Onboarding)
+// ═══════════════════════════════════════════════════════════════════
+
+function showSetupWizard() {
+  let overlay = document.getElementById('setup-wizard-overlay');
+  if (overlay) overlay.remove();
+
+  overlay = document.createElement('div');
+  overlay.id = 'setup-wizard-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,0.7);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+
+  const steps = [
+    { title: 'Welcome to Credentik', icon: '&#128075;', desc: 'Let\'s get your credentialing workspace set up in under 5 minutes. We\'ll walk you through the key steps to start managing provider credentials.', action: null },
+    { title: 'Add Your First Provider', icon: '&#128100;', desc: 'Start by adding a healthcare provider. You\'ll need their name, NPI number, credentials, and specialty. You can import more providers later via CSV.', action: 'navigateTo(\'providers\')' },
+    { title: 'Add State Licenses', icon: '&#127963;', desc: 'Add the provider\'s state licenses with expiration dates. Credentik will automatically track renewals, send alerts, and verify license status.', action: 'navigateTo(\'licenses\')' },
+    { title: 'Set Up Payer Applications', icon: '&#128196;', desc: 'Create credentialing applications for each payer the provider needs to be enrolled with. Track status from submission through approval.', action: 'navigateTo(\'applications\')' },
+    { title: 'Run Exclusion Screening', icon: '&#128737;', desc: 'Screen all providers against OIG/SAM exclusion databases to ensure compliance. This is required for most payer contracts.', action: 'navigateTo(\'exclusions\')' },
+    { title: 'You\'re All Set!', icon: '&#127881;', desc: 'Your workspace is ready. Explore the Compliance Center for scoring, PSV for verification, and Continuous Monitoring for real-time alerts. You can always access the setup guide from Settings.', action: null },
+  ];
+
+  let currentStep = 0;
+
+  function renderStep() {
+    const step = steps[currentStep];
+    const isFirst = currentStep === 0;
+    const isLast = currentStep === steps.length - 1;
+    const progress = ((currentStep) / (steps.length - 1)) * 100;
+
+    overlay.innerHTML = `
+      <div style="width:90%;max-width:520px;background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
+        <!-- Progress bar -->
+        <div style="height:4px;background:var(--gray-100);"><div style="height:100%;width:${progress}%;background:var(--brand-600);transition:width 0.3s ease;border-radius:2px;"></div></div>
+
+        <div style="padding:32px;">
+          <!-- Step indicator -->
+          <div style="display:flex;justify-content:center;gap:6px;margin-bottom:24px;">
+            ${steps.map((_, i) => `<div style="width:${i === currentStep ? '24px' : '8px'};height:8px;border-radius:4px;background:${i <= currentStep ? 'var(--brand-600)' : 'var(--gray-200)'};transition:all 0.3s;"></div>`).join('')}
+          </div>
+
+          <!-- Content -->
+          <div style="text-align:center;">
+            <div style="font-size:48px;margin-bottom:16px;">${step.icon}</div>
+            <h2 style="margin:0 0 12px;font-size:22px;color:var(--gray-900);">${step.title}</h2>
+            <p style="margin:0 0 24px;font-size:14px;color:var(--gray-600);line-height:1.6;">${step.desc}</p>
+          </div>
+
+          <!-- Checklist (on welcome step) -->
+          ${isFirst ? `<div style="text-align:left;background:var(--gray-50);border-radius:8px;padding:16px;margin-bottom:20px;">
+            <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--gray-500);margin-bottom:8px;">Setup Checklist</div>
+            ${['Add providers & NPI numbers', 'Enter state licenses & DEA registrations', 'Create payer enrollment applications', 'Run OIG/SAM exclusion screening', 'Set up follow-up tasks & reminders'].map(item => `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;color:var(--gray-700);">
+              <div style="width:18px;height:18px;border-radius:4px;border:2px solid var(--gray-300);flex-shrink:0;"></div> ${item}
+            </div>`).join('')}
+          </div>` : ''}
+
+          <!-- Actions -->
+          <div style="display:flex;justify-content:${isFirst ? 'center' : 'space-between'};gap:12px;${isFirst ? '' : ''}">
+            ${!isFirst ? `<button onclick="document.getElementById('setup-wizard-overlay')._prev()" class="btn" style="min-width:100px;">&#8592; Back</button>` : ''}
+            <div style="display:flex;gap:8px;">
+              ${!isLast ? `<button onclick="document.getElementById('setup-wizard-overlay')._dismiss()" class="btn" style="font-size:12px;color:var(--gray-400);">Skip Setup</button>` : ''}
+              ${isLast ?
+                `<button onclick="document.getElementById('setup-wizard-overlay')._dismiss()" class="btn btn-primary" style="min-width:160px;">Start Using Credentik</button>` :
+                step.action ?
+                  `<button onclick="${step.action};document.getElementById('setup-wizard-overlay')._dismiss()" class="btn" style="min-width:100px;">Go There</button>
+                   <button onclick="document.getElementById('setup-wizard-overlay')._next()" class="btn btn-primary" style="min-width:100px;">Next &#8594;</button>` :
+                  `<button onclick="document.getElementById('setup-wizard-overlay')._next()" class="btn btn-primary" style="min-width:160px;">${isFirst ? 'Get Started &#8594;' : 'Next &#8594;'}</button>`
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  overlay._next = () => { if (currentStep < steps.length - 1) { currentStep++; renderStep(); } };
+  overlay._prev = () => { if (currentStep > 0) { currentStep--; renderStep(); } };
+  overlay._dismiss = () => { localStorage.setItem('credentik_setup_dismissed', '1'); overlay.remove(); };
+
+  renderStep();
+  document.body.appendChild(overlay);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PRIMARY SOURCE VERIFICATION (PSV) DASHBOARD
+// ═══════════════════════════════════════════════════════════════════
+
+async function renderPSVPage() {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  let providers = [], licenses = [], exclusions = [], dea = [];
+  try {
+    [providers, licenses, exclusions, dea] = await Promise.all([
+      store.getAll('providers'),
+      store.getAll('licenses'),
+      store.getAll('exclusions').catch(() => []),
+      store.getAll('dea_registrations').catch(() => []),
+    ]);
+    providers = store.filterByScope(providers);
+    licenses = store.filterByScope(licenses);
+  } catch (e) { console.error('PSV load error:', e); }
+
+  const now = new Date();
+
+  // Build PSV status per provider
+  const psvData = (providers || []).map(p => {
+    const provLicenses = (licenses || []).filter(l => (l.providerId || l.provider_id) == p.id);
+    const provExcl = (exclusions || []).filter(ex => (ex.providerId || ex.provider_id) == p.id);
+    const provDea = (dea || []).filter(d => (d.providerId || d.provider_id) == p.id);
+
+    const hasExpired = provLicenses.some(l => { const exp = l.expirationDate || l.expiration_date; return exp && new Date(exp) < now; });
+    const allVerified = provLicenses.length > 0 && provLicenses.every(l => (l.verificationStatus || l.verification_status) === 'verified');
+    const hasVerified = provLicenses.some(l => (l.verificationStatus || l.verification_status) === 'verified');
+    const licStatus = provLicenses.length === 0 ? 'none' : hasExpired ? 'expired' : allVerified ? 'verified' : hasVerified ? 'partial' : 'unverified';
+
+    const npiStatus = p.npi ? 'verified' : 'missing';
+    const hasDeaExpired = provDea.some(d => { const exp = d.expirationDate || d.expiration_date; return exp && new Date(exp) < now; });
+    const deaStatus = provDea.length === 0 ? 'none' : hasDeaExpired ? 'expired' : 'active';
+    const hasExclusion = provExcl.some(ex => ['excluded','flagged'].includes((ex.status || '').toLowerCase()));
+    const exclStatus = hasExclusion ? 'flagged' : provExcl.length > 0 ? 'clear' : 'not_screened';
+    const certStatus = (p.boardCertification || p.board_certification) ? 'verified' : 'unverified';
+
+    const allDates = [
+      ...provLicenses.map(l => l.verifiedAt || l.verified_at || l.lastVerifiedAt || l.last_verified_at),
+      ...provExcl.map(ex => ex.screenedAt || ex.screened_at || ex.createdAt || ex.created_at),
+    ].filter(Boolean).sort().reverse();
+    const lastVerified = allDates[0] || null;
+
+    const scores = { verified: 1, active: 1, clear: 1, partial: 0.5, none: 0, missing: 0, unverified: 0, expired: 0, flagged: 0, not_screened: 0 };
+    const overall = ((scores[licStatus]||0) + (scores[npiStatus]||0) + (scores[deaStatus]||0) + (scores[exclStatus]||0) + (scores[certStatus]||0)) / 5;
+    const overallLabel = overall >= 0.8 ? 'Verified' : overall >= 0.5 ? 'Partial' : 'Action Needed';
+    const overallColor = overall >= 0.8 ? 'var(--green)' : overall >= 0.5 ? 'var(--gold)' : 'var(--red)';
+
+    return { ...p, provLicenses, provDea, provExcl, licStatus, npiStatus, deaStatus, exclStatus, certStatus, lastVerified, overall, overallLabel, overallColor };
+  });
+
+  const totalProviders = psvData.length;
+  const fullyVerified = psvData.filter(p => p.overall >= 0.8).length;
+  const needsAction = psvData.filter(p => p.overall < 0.5).length;
+  const partiallyVerified = totalProviders - fullyVerified - needsAction;
+  const lastScanDate = psvData.map(p => p.lastVerified).filter(Boolean).sort().reverse()[0];
+
+  const statusBadge = (status) => {
+    const map = {
+      verified: { bg: 'rgba(34,197,94,0.12)', color: 'var(--green)', icon: '&#10003;', text: 'Verified' },
+      active: { bg: 'rgba(34,197,94,0.12)', color: 'var(--green)', icon: '&#10003;', text: 'Active' },
+      clear: { bg: 'rgba(34,197,94,0.12)', color: 'var(--green)', icon: '&#10003;', text: 'Clear' },
+      partial: { bg: 'rgba(245,158,11,0.12)', color: 'var(--gold)', icon: '&#9679;', text: 'Partial' },
+      expired: { bg: 'rgba(239,68,68,0.12)', color: 'var(--red)', icon: '&#10007;', text: 'Expired' },
+      flagged: { bg: 'rgba(239,68,68,0.12)', color: 'var(--red)', icon: '&#9888;', text: 'Flagged' },
+      missing: { bg: 'rgba(156,163,175,0.12)', color: 'var(--gray-500)', icon: '&#8212;', text: 'Missing' },
+      none: { bg: 'rgba(156,163,175,0.12)', color: 'var(--gray-500)', icon: '&#8212;', text: 'None' },
+      unverified: { bg: 'rgba(156,163,175,0.12)', color: 'var(--gray-500)', icon: '&#9675;', text: 'Unverified' },
+      not_screened: { bg: 'rgba(245,158,11,0.12)', color: 'var(--gold)', icon: '&#9675;', text: 'Not Screened' },
+    };
+    const s = map[status] || map.unverified;
+    return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:${s.bg};color:${s.color};">${s.icon} ${s.text}</span>`;
+  };
+
+  body.innerHTML = `
+    <!-- PSV Stats -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
+      <div class="card"><div class="card-body" style="text-align:center;padding:16px;">
+        <div style="font-size:28px;font-weight:800;color:var(--brand-600);">${totalProviders}</div>
+        <div style="font-size:12px;color:var(--gray-500);">Total Providers</div>
+      </div></div>
+      <div class="card"><div class="card-body" style="text-align:center;padding:16px;">
+        <div style="font-size:28px;font-weight:800;color:var(--green);">${fullyVerified}</div>
+        <div style="font-size:12px;color:var(--gray-500);">Fully Verified</div>
+      </div></div>
+      <div class="card"><div class="card-body" style="text-align:center;padding:16px;">
+        <div style="font-size:28px;font-weight:800;color:var(--gold);">${partiallyVerified}</div>
+        <div style="font-size:12px;color:var(--gray-500);">Partially Verified</div>
+      </div></div>
+      <div class="card"><div class="card-body" style="text-align:center;padding:16px;">
+        <div style="font-size:28px;font-weight:800;color:var(--red);">${needsAction}</div>
+        <div style="font-size:12px;color:var(--gray-500);">Action Needed</div>
+      </div></div>
+      <div class="card"><div class="card-body" style="text-align:center;padding:16px;">
+        <div style="font-size:14px;font-weight:700;color:var(--gray-700);">${lastScanDate ? formatDateDisplay(lastScanDate) : 'Never'}</div>
+        <div style="font-size:12px;color:var(--gray-500);">Last PSV Scan</div>
+      </div></div>
+    </div>
+
+    <!-- Verification Sources -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-header"><h3>Verification Sources</h3></div>
+      <div class="card-body" style="padding:12px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+          ${[
+            { name: 'State Licensing Boards', icon: '&#127963;', desc: 'License validity, expiration, disciplinary actions', status: 'Active' },
+            { name: 'NPPES / NPI Registry', icon: '&#128196;', desc: 'NPI number verification, taxonomy, practice info', status: 'Active' },
+            { name: 'DEA Registration', icon: '&#128138;', desc: 'Controlled substance registration status', status: 'Active' },
+            { name: 'OIG / SAM Exclusions', icon: '&#128737;', desc: 'Federal exclusion and debarment screening', status: 'Active' },
+            { name: 'NPDB (Planned)', icon: '&#128218;', desc: 'National Practitioner Data Bank queries', status: 'Planned' },
+            { name: 'Board Certifications', icon: '&#127891;', desc: 'ABMS / specialty board certification status', status: 'Planned' },
+            { name: 'Education Verification', icon: '&#127979;', desc: 'Medical school and residency verification', status: 'Planned' },
+            { name: 'Malpractice History', icon: '&#9878;', desc: 'Claims history and coverage verification', status: 'Planned' },
+          ].map(s => `<div style="display:flex;gap:10px;padding:10px;border:1px solid var(--gray-200);border-radius:8px;">
+            <div style="font-size:20px;">${s.icon}</div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:600;">${s.name}</div>
+              <div style="font-size:11px;color:var(--gray-500);">${s.desc}</div>
+            </div>
+            <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;height:fit-content;background:${s.status === 'Active' ? 'rgba(34,197,94,0.12)' : 'rgba(156,163,175,0.12)'};color:${s.status === 'Active' ? 'var(--green)' : 'var(--gray-500)'};">${s.status}</span>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <!-- Provider Verification Table -->
+    <div class="card">
+      <div class="card-header">
+        <h3>Provider Verification Status</h3>
+        <input type="text" class="form-control" placeholder="Search providers..." style="width:220px;height:34px;font-size:13px;" oninput="document.querySelectorAll('#psv-table-body tr').forEach(r=>{r.style.display=r.dataset.name.includes(this.value.toLowerCase())?'':'none'})">
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Provider</th><th>NPI</th><th>Licenses</th><th>DEA</th><th>Exclusions</th><th>Board Cert</th><th>Last Verified</th><th>Overall</th><th>Actions</th></tr></thead>
+            <tbody id="psv-table-body">
+              ${psvData.map(p => `<tr data-name="${escHtml((p.firstName + ' ' + p.lastName).toLowerCase())}">
+                <td><strong>${escHtml(p.firstName || '')} ${escHtml(p.lastName || '')}</strong><br><span style="font-size:11px;color:var(--gray-500);">${escHtml(p.credentials || '')}</span></td>
+                <td><code style="font-size:12px;">${escHtml(p.npi || '—')}</code></td>
+                <td>${statusBadge(p.licStatus)} <span style="font-size:10px;color:var(--gray-400);">(${p.provLicenses.length})</span></td>
+                <td>${statusBadge(p.deaStatus)} <span style="font-size:10px;color:var(--gray-400);">(${p.provDea.length})</span></td>
+                <td>${statusBadge(p.exclStatus)}</td>
+                <td>${statusBadge(p.certStatus)}</td>
+                <td style="font-size:11px;">${p.lastVerified ? formatDateDisplay(p.lastVerified) : '<span style="color:var(--gray-400);">Never</span>'}</td>
+                <td><span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;background:${p.overallColor}18;color:${p.overallColor};">${p.overallLabel}</span></td>
+                <td style="white-space:nowrap;">
+                  <button class="btn btn-sm" onclick="window.app.runProviderPSV(${p.id})" title="Verify">&#8635; Verify</button>
+                  <button class="btn btn-sm" onclick="window.app.shareProviderProfile(${p.id})" title="Share Profile">&#128279;</button>
+                </td>
+              </tr>`).join('')}
+              ${!psvData.length ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No providers found.</td></tr>' : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CONTINUOUS MONITORING CENTER
+// ═══════════════════════════════════════════════════════════════════
+
+async function renderMonitoringPage() {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  let providers = [], licenses = [], exclusions = [], dea = [], tasks = [], apps = [];
+  try {
+    [providers, licenses, exclusions, dea, tasks, apps] = await Promise.all([
+      store.getAll('providers'), store.getAll('licenses'),
+      store.getAll('exclusions').catch(() => []), store.getAll('dea_registrations').catch(() => []),
+      store.getAll('tasks'), store.getAll('applications'),
+    ]);
+    providers = store.filterByScope(providers); licenses = store.filterByScope(licenses);
+    tasks = store.filterByScope(tasks); apps = store.filterByScope(apps);
+  } catch (e) { console.error('Monitoring load error:', e); }
+
+  const now = new Date();
+  const alerts = [];
+  const getProvName = (id) => { const p = (providers || []).find(pr => pr.id == id); return p ? `${p.firstName} ${p.lastName}` : `Provider #${id}`; };
+
+  // License alerts
+  (licenses || []).forEach(l => {
+    const exp = l.expirationDate || l.expiration_date; if (!exp) return;
+    const days = Math.round((new Date(exp) - now) / 86400000);
+    const provName = getProvName(l.providerId || l.provider_id);
+    const licDesc = `${l.state || ''} ${l.licenseType || l.license_type || 'License'} #${l.licenseNumber || l.license_number || ''}`;
+    if (days < 0) alerts.push({ severity: 'critical', provider: provName, alert: 'License Expired', detail: `${licDesc} expired ${Math.abs(days)} days ago`, date: exp, category: 'license' });
+    else if (days <= 30) alerts.push({ severity: 'urgent', provider: provName, alert: 'License Expiring Soon', detail: `${licDesc} expires in ${days} days`, date: exp, category: 'license' });
+    else if (days <= 90) alerts.push({ severity: 'warning', provider: provName, alert: 'License Renewal Window', detail: `${licDesc} expires in ${days} days — begin renewal`, date: exp, category: 'license' });
+
+    const verDate = l.verifiedAt || l.verified_at || l.lastVerifiedAt || l.last_verified_at;
+    if (verDate && Math.round((now - new Date(verDate)) / 86400000) > 180) {
+      alerts.push({ severity: 'warning', provider: provName, alert: 'Stale Verification', detail: `${licDesc} last verified ${Math.round((now - new Date(verDate)) / 86400000)} days ago`, date: verDate, category: 'verification' });
+    }
+  });
+
+  // DEA alerts
+  (dea || []).forEach(d => {
+    const exp = d.expirationDate || d.expiration_date; if (!exp) return;
+    const days = Math.round((new Date(exp) - now) / 86400000);
+    const provName = getProvName(d.providerId || d.provider_id);
+    if (days < 0) alerts.push({ severity: 'critical', provider: provName, alert: 'DEA Expired', detail: `DEA #${d.deaNumber || d.dea_number || ''} expired ${Math.abs(days)} days ago`, date: exp, category: 'dea' });
+    else if (days <= 60) alerts.push({ severity: 'urgent', provider: provName, alert: 'DEA Expiring', detail: `DEA #${d.deaNumber || d.dea_number || ''} expires in ${days} days`, date: exp, category: 'dea' });
+  });
+
+  // Exclusion alerts
+  (exclusions || []).forEach(ex => {
+    if (['excluded','flagged'].includes((ex.status || '').toLowerCase())) {
+      alerts.push({ severity: 'critical', provider: getProvName(ex.providerId || ex.provider_id), alert: 'Exclusion Flag', detail: `Provider flagged in ${ex.source || 'OIG/SAM'} screening`, date: ex.screenedAt || ex.screened_at || '', category: 'exclusion' });
+    }
+  });
+
+  // Unscreened providers
+  (providers || []).forEach(p => {
+    if (!(exclusions || []).some(ex => (ex.providerId || ex.provider_id) == p.id)) {
+      alerts.push({ severity: 'info', provider: `${p.firstName} ${p.lastName}`, alert: 'Never Screened', detail: 'No OIG/SAM exclusion screening on record', date: '', category: 'exclusion' });
+    }
+  });
+
+  // Overdue tasks
+  (tasks || []).filter(t => !t.isCompleted && !t.completed).forEach(t => {
+    const due = t.dueDate || t.due_date; if (!due) return;
+    const days = Math.round((new Date(due) - now) / 86400000);
+    if (days < 0) alerts.push({ severity: 'warning', provider: '—', alert: 'Overdue Task', detail: `"${t.title || t.description}" is ${Math.abs(days)} days overdue`, date: due, category: 'task' });
+  });
+
+  // Stale applications
+  (apps || []).filter(a => !['approved','denied','withdrawn'].includes(a.status)).forEach(a => {
+    const updated = a.updatedAt || a.updated_at || a.submittedDate || a.submitted_date;
+    if (updated && Math.round((now - new Date(updated)) / 86400000) > 90) {
+      alerts.push({ severity: 'warning', provider: getProvName(a.providerId || a.provider_id), alert: 'Stale Application', detail: `${a.payerName || a.payer_name || 'Payer'} stalled ${Math.round((now - new Date(updated)) / 86400000)} days (${a.status})`, date: updated, category: 'application' });
+    }
+  });
+
+  alerts.sort((a, b) => ({ critical: 0, urgent: 1, warning: 2, info: 3 }[a.severity] ?? 9) - ({ critical: 0, urgent: 1, warning: 2, info: 3 }[b.severity] ?? 9));
+
+  const critical = alerts.filter(a => a.severity === 'critical').length;
+  const urgent = alerts.filter(a => a.severity === 'urgent').length;
+  const warnings = alerts.filter(a => a.severity === 'warning').length;
+  const info = alerts.filter(a => a.severity === 'info').length;
+
+  const sevBadge = (sev) => {
+    const m = { critical: { bg: '#dc2626', t: 'CRITICAL' }, urgent: { bg: '#f97316', t: 'URGENT' }, warning: { bg: '#eab308', t: 'WARNING' }, info: { bg: '#6b7280', t: 'INFO' } };
+    const s = m[sev] || m.info;
+    return `<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:${s.bg};color:#fff;letter-spacing:0.5px;">${s.t}</span>`;
+  };
+
+  function lastScanStr(arr) {
+    if (!Array.isArray(arr) || !arr.length) return '—';
+    const dates = arr.map(x => x.updatedAt || x.updated_at || x.screenedAt || x.screened_at || x.createdAt || x.created_at).filter(Boolean);
+    return dates.length ? formatDateDisplay(dates.sort().reverse()[0]) : '—';
+  }
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
+      <div class="card" style="border-left:4px solid #dc2626;"><div class="card-body" style="text-align:center;padding:16px;"><div style="font-size:28px;font-weight:800;color:#dc2626;">${critical}</div><div style="font-size:12px;color:var(--gray-500);">Critical</div></div></div>
+      <div class="card" style="border-left:4px solid #f97316;"><div class="card-body" style="text-align:center;padding:16px;"><div style="font-size:28px;font-weight:800;color:#f97316;">${urgent}</div><div style="font-size:12px;color:var(--gray-500);">Urgent</div></div></div>
+      <div class="card" style="border-left:4px solid #eab308;"><div class="card-body" style="text-align:center;padding:16px;"><div style="font-size:28px;font-weight:800;color:#eab308;">${warnings}</div><div style="font-size:12px;color:var(--gray-500);">Warnings</div></div></div>
+      <div class="card" style="border-left:4px solid #6b7280;"><div class="card-body" style="text-align:center;padding:16px;"><div style="font-size:28px;font-weight:800;color:#6b7280;">${info}</div><div style="font-size:12px;color:var(--gray-500);">Info</div></div></div>
+      <div class="card" style="border-left:4px solid var(--brand-600);"><div class="card-body" style="text-align:center;padding:16px;"><div style="font-size:28px;font-weight:800;color:var(--brand-600);">${providers.length}</div><div style="font-size:12px;color:var(--gray-500);">Monitored</div></div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-header"><h3>Monitoring Schedule</h3></div>
+      <div class="card-body" style="padding:0;">
+        <table><thead><tr><th>Check</th><th>Frequency</th><th>Source</th><th>Last Run</th><th>Status</th></tr></thead><tbody>
+          ${[
+            { check: 'License Expiration', freq: 'Daily', source: 'State Licensing Boards', last: lastScanStr(licenses), st: 'active' },
+            { check: 'DEA Registration', freq: 'Weekly', source: 'DEA Registration Database', last: lastScanStr(dea), st: 'active' },
+            { check: 'OIG/SAM Exclusion', freq: 'Monthly', source: 'OIG LEIE + SAM.gov', last: lastScanStr(exclusions), st: 'active' },
+            { check: 'NPI Validation', freq: 'Monthly', source: 'CMS NPPES Registry', last: '—', st: 'active' },
+            { check: 'NPDB Query', freq: 'Quarterly', source: 'Nat. Practitioner Data Bank', last: '—', st: 'planned' },
+            { check: 'Board Certification', freq: 'Quarterly', source: 'ABMS / Specialty Boards', last: '—', st: 'planned' },
+            { check: 'Malpractice Coverage', freq: 'Annually', source: 'Insurance Carriers', last: '—', st: 'planned' },
+          ].map(s => `<tr><td><strong>${s.check}</strong></td><td>${s.freq}</td><td style="font-size:12px;color:var(--gray-600);">${s.source}</td><td style="font-size:12px;">${s.last}</td><td><span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:${s.st === 'active' ? 'rgba(34,197,94,0.12)' : 'rgba(156,163,175,0.12)'};color:${s.st === 'active' ? 'var(--green)' : 'var(--gray-500)'};">${s.st === 'active' ? 'Active' : 'Planned'}</span></td></tr>`).join('')}
+        </tbody></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <h3>Alert Feed (${alerts.length})</h3>
+        <div style="display:flex;gap:8px;">
+          <select class="form-control" style="width:140px;height:32px;font-size:12px;" onchange="document.querySelectorAll('#monitoring-alerts-body tr').forEach(r=>{r.style.display=!this.value||r.dataset.severity===this.value?'':'none'})">
+            <option value="">All Severities</option><option value="critical">Critical</option><option value="urgent">Urgent</option><option value="warning">Warning</option><option value="info">Info</option>
+          </select>
+          <select class="form-control" style="width:140px;height:32px;font-size:12px;" onchange="document.querySelectorAll('#monitoring-alerts-body tr').forEach(r=>{r.style.display=!this.value||r.dataset.category===this.value?'':'none'})">
+            <option value="">All Categories</option><option value="license">License</option><option value="dea">DEA</option><option value="exclusion">Exclusion</option><option value="verification">Verification</option><option value="task">Task</option><option value="application">Application</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap"><table><thead><tr><th>Severity</th><th>Provider</th><th>Alert</th><th>Details</th><th>Date</th></tr></thead>
+          <tbody id="monitoring-alerts-body">
+            ${alerts.map(a => `<tr data-severity="${a.severity}" data-category="${a.category}">
+              <td>${sevBadge(a.severity)}</td><td><strong>${escHtml(a.provider)}</strong></td><td style="font-weight:600;">${escHtml(a.alert)}</td>
+              <td style="font-size:12px;color:var(--gray-600);max-width:300px;">${escHtml(a.detail)}</td><td style="font-size:12px;">${a.date ? formatDateDisplay(a.date) : '—'}</td>
+            </tr>`).join('')}
+            ${!alerts.length ? '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--gray-500);">No alerts — all credentials in good standing.</td></tr>' : ''}
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PROVIDER PORTABLE PROFILE (Shareable Credential Summary)
+// ═══════════════════════════════════════════════════════════════════
+
+async function renderProviderPortableProfile(providerId) {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  if (!providerId) { body.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:48px;color:var(--gray-500);">No provider selected.</div></div>'; return; }
+
+  let provider = null, licenses = [], deaReg = [], exclusions = [], apps = [];
+  try {
+    [provider, licenses, deaReg, exclusions, apps] = await Promise.all([
+      store.getOne('providers', providerId), store.getAll('licenses'),
+      store.getAll('dea_registrations').catch(() => []), store.getAll('exclusions').catch(() => []),
+      store.getAll('applications'),
+    ]);
+    licenses = (licenses || []).filter(l => (l.providerId || l.provider_id) == providerId);
+    deaReg = (deaReg || []).filter(d => (d.providerId || d.provider_id) == providerId);
+    exclusions = (exclusions || []).filter(ex => (ex.providerId || ex.provider_id) == providerId);
+    apps = (apps || []).filter(a => (a.providerId || a.provider_id) == providerId);
+  } catch (e) { console.error('Profile load error:', e); }
+
+  if (!provider) { body.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:48px;color:var(--gray-500);">Provider not found.</div></div>'; return; }
+
+  const now = new Date();
+  const genDate = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const name = `${provider.firstName || ''} ${provider.lastName || ''}`.trim();
+  const activeLicenses = licenses.filter(l => { const exp = l.expirationDate || l.expiration_date; return !exp || new Date(exp) >= now; });
+  const activeDea = deaReg.filter(d => { const exp = d.expirationDate || d.expiration_date; return !exp || new Date(exp) >= now; });
+  const approvedApps = apps.filter(a => a.status === 'approved');
+  const hasExclusion = exclusions.some(ex => ['excluded','flagged'].includes((ex.status || '').toLowerCase()));
+  const wasScreened = exclusions.length > 0;
+  const stateSet = new Set();
+  licenses.forEach(l => { if (l.state) stateSet.add(l.state); });
+  approvedApps.forEach(a => { if (a.state) stateSet.add(a.state); });
+
+  body.innerHTML = `
+    <div style="max-width:800px;margin:0 auto;">
+      <div style="display:flex;gap:8px;margin-bottom:16px;justify-content:flex-end;" class="no-print">
+        <button class="btn" onclick="window.app.copyProviderProfileLink(${providerId})">&#128279; Copy Link</button>
+        <button class="btn" onclick="window.print()">&#128424; Print / PDF</button>
+        <button class="btn" onclick="navigateTo('psv')">&#8592; Back to PSV</button>
+      </div>
+
+      <div class="card" style="margin-bottom:20px;border-top:4px solid var(--brand-600);">
+        <div class="card-body" style="padding:24px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+            <div>
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--brand-600);font-weight:700;margin-bottom:4px;">Credentik Verified Provider Profile</div>
+              <h2 style="margin:0 0 4px;font-size:24px;">${escHtml(name)}</h2>
+              <div style="font-size:14px;color:var(--gray-600);">${escHtml(provider.credentials || '')} ${provider.specialty ? '— ' + escHtml(provider.specialty) : ''}</div>
+              <div style="font-size:13px;color:var(--gray-500);margin-top:4px;">NPI: <code>${escHtml(provider.npi || 'Not provided')}</code>${provider.hexId || provider.hex_id ? ' | ID: <code>' + (provider.hexId || provider.hex_id).toUpperCase() + '</code>' : ''}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:11px;color:var(--gray-400);">Generated: ${genDate}</div>
+              <div style="margin-top:8px;padding:6px 12px;border-radius:8px;background:${hasExclusion ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)'};color:${hasExclusion ? 'var(--red)' : 'var(--green)'};font-weight:700;font-size:13px;">
+                ${hasExclusion ? '&#9888; EXCLUSION FLAG' : wasScreened ? '&#10003; No Exclusions Found' : '&#9675; Not Yet Screened'}
+              </div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:var(--brand-600);">${activeLicenses.length}</div><div style="font-size:11px;color:var(--gray-500);">Active Licenses</div></div>
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:var(--green);">${stateSet.size}</div><div style="font-size:11px;color:var(--gray-500);">States</div></div>
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:var(--brand-600);">${activeDea.length}</div><div style="font-size:11px;color:var(--gray-500);">Active DEA</div></div>
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:var(--green);">${approvedApps.length}</div><div style="font-size:11px;color:var(--gray-500);">Approved Payers</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><h3>State Licenses (${licenses.length})</h3></div>
+        <div class="card-body" style="padding:0;"><table><thead><tr><th>State</th><th>License #</th><th>Type</th><th>Issued</th><th>Expiration</th><th>Status</th></tr></thead><tbody>
+          ${licenses.map(l => { const exp = l.expirationDate || l.expiration_date; const isExp = exp && new Date(exp) < now; const days = exp ? Math.round((new Date(exp) - now) / 86400000) : null;
+            return `<tr><td><strong>${escHtml(l.state || '—')}</strong></td><td><code>${escHtml(l.licenseNumber || l.license_number || '—')}</code></td><td>${escHtml(l.licenseType || l.license_type || '—')}</td><td style="font-size:12px;">${l.issueDate || l.issue_date ? formatDateDisplay(l.issueDate || l.issue_date) : '—'}</td><td style="font-size:12px;">${exp ? formatDateDisplay(exp) : '—'} ${days !== null && days >= 0 && days <= 90 ? '<span style="font-size:10px;color:var(--gold);">(' + days + 'd)</span>' : ''}</td><td><span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:${isExp ? 'rgba(239,68,68,0.12)' : 'rgba(34,197,94,0.12)'};color:${isExp ? 'var(--red)' : 'var(--green)'};">${isExp ? 'Expired' : 'Active'}</span></td></tr>`; }).join('')}
+          ${!licenses.length ? '<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--gray-400);">No licenses on file</td></tr>' : ''}
+        </tbody></table></div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><h3>DEA Registrations (${deaReg.length})</h3></div>
+        <div class="card-body" style="padding:0;"><table><thead><tr><th>DEA Number</th><th>State</th><th>Schedules</th><th>Expiration</th><th>Status</th></tr></thead><tbody>
+          ${deaReg.map(d => { const exp = d.expirationDate || d.expiration_date; const isExp = exp && new Date(exp) < now;
+            return `<tr><td><code>${escHtml(d.deaNumber || d.dea_number || '—')}</code></td><td>${escHtml(d.state || '—')}</td><td style="font-size:12px;">${escHtml(d.schedules || '—')}</td><td style="font-size:12px;">${exp ? formatDateDisplay(exp) : '—'}</td><td><span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:${isExp ? 'rgba(239,68,68,0.12)' : 'rgba(34,197,94,0.12)'};color:${isExp ? 'var(--red)' : 'var(--green)'};">${isExp ? 'Expired' : 'Active'}</span></td></tr>`; }).join('')}
+          ${!deaReg.length ? '<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--gray-400);">No DEA registrations on file</td></tr>' : ''}
+        </tbody></table></div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><h3>Payer Enrollments (${apps.length})</h3></div>
+        <div class="card-body" style="padding:0;"><table><thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th><th>Effective</th></tr></thead><tbody>
+          ${apps.map(a => { const sc = { approved: 'var(--green)', denied: 'var(--red)', in_review: 'var(--brand-600)', submitted: 'var(--blue)', pending_info: 'var(--gold)' }; const c = sc[a.status] || 'var(--gray-500)';
+            return `<tr><td><strong>${escHtml(a.payerName || a.payer_name || '—')}</strong></td><td>${escHtml(a.state || '—')}</td><td><span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:${c}18;color:${c};">${(a.status || '').replace(/_/g, ' ')}</span></td><td style="font-size:12px;">${a.submittedDate || a.submitted_date ? formatDateDisplay(a.submittedDate || a.submitted_date) : '—'}</td><td style="font-size:12px;">${a.effectiveDate || a.effective_date ? formatDateDisplay(a.effectiveDate || a.effective_date) : '—'}</td></tr>`; }).join('')}
+          ${!apps.length ? '<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--gray-400);">No payer enrollments on file</td></tr>' : ''}
+        </tbody></table></div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><h3>Exclusion Screening</h3></div>
+        <div class="card-body" style="padding:${exclusions.length ? '0' : '24px'};${!exclusions.length ? 'text-align:center;color:var(--gray-400);' : ''}">
+          ${exclusions.length ? `<table><thead><tr><th>Source</th><th>Status</th><th>Screened</th><th>Details</th></tr></thead><tbody>
+            ${exclusions.map(ex => `<tr><td>${escHtml(ex.source || 'OIG/SAM')}</td><td><span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:${(ex.status || '').toLowerCase() === 'clear' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)'};color:${(ex.status || '').toLowerCase() === 'clear' ? 'var(--green)' : 'var(--red)'};">${escHtml(ex.status || 'Unknown')}</span></td><td style="font-size:12px;">${ex.screenedAt || ex.screened_at ? formatDateDisplay(ex.screenedAt || ex.screened_at) : '—'}</td><td style="font-size:12px;">${escHtml(ex.details || ex.reason || '—')}</td></tr>`).join('')}
+          </tbody></table>` : 'No exclusion screenings performed yet.'}
+        </div>
+      </div>
+
+      <div style="text-align:center;padding:16px;font-size:11px;color:var(--gray-400);">
+        Generated by Credentik &mdash; ${genDate} &mdash; Point-in-time snapshot. Verify current status at app.credentik.com.
       </div>
     </div>
   `;
