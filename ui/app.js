@@ -12065,21 +12065,31 @@ async function renderOnboardingStub() {
       <div class="card-body">
         ${tokens.length > 0 ? `
           <div class="table-wrap"><table>
-            <thead><tr><th>Provider Email</th><th>Invite Link</th><th>Status</th><th>Expires</th><th></th></tr></thead>
+            <thead><tr><th>Provider</th><th>Email</th><th>Invite Link</th><th>Status</th><th>Expires</th><th>Actions</th></tr></thead>
             <tbody>
               ${tokens.map(t => {
-                const isUsed = !!t.used_at;
-                const isExpired = t.expires_at && new Date(t.expires_at) < new Date();
-                const status = isUsed ? 'Used' : isExpired ? 'Expired' : 'Pending';
+                const email = t.providerEmail || t.provider_email || '';
+                const name = t.providerName || t.provider_name || '';
+                const usedAt = t.usedAt || t.used_at;
+                const expiresAt = t.expiresAt || t.expires_at;
+                const isUsed = !!usedAt;
+                const isExpired = expiresAt && new Date(expiresAt) < new Date();
+                const status = isUsed ? 'Completed' : isExpired ? 'Expired' : 'Pending';
                 const badgeClass = isUsed ? 'approved' : isExpired ? 'denied' : 'pending';
                 const link = `${baseUrl}#onboard/${t.token}`;
                 return `
                 <tr>
-                  <td>${escHtml(t.provider_email || '—')}</td>
-                  <td style="max-width:200px;"><code style="font-size:11px;cursor:pointer;" onclick="navigator.clipboard.writeText('${link}');window.app.showToast('Link copied!')" title="Click to copy">${t.token ? t.token.substring(0, 12) + '...' : t.id}</code></td>
+                  <td><strong>${escHtml(name || '—')}</strong></td>
+                  <td>${escHtml(email || '—')}</td>
+                  <td style="max-width:180px;"><code style="font-size:11px;cursor:pointer;color:var(--brand-600);" onclick="navigator.clipboard.writeText('${link}');showToast('Link copied!','success')" title="Click to copy full link">${t.token ? t.token.substring(0, 16) + '...' : t.id}</code></td>
                   <td><span class="badge badge-${badgeClass}">${status}</span></td>
-                  <td>${formatDateDisplay(t.expires_at)}</td>
-                  <td>${!isUsed ? `<button class="btn btn-sm" style="color:#ef4444;" onclick="window.app.revokeOnboardToken(${t.id})">Revoke</button>` : ''}</td>
+                  <td>${formatDateDisplay(expiresAt)}</td>
+                  <td>
+                    <div class="flex gap-2">
+                      ${!isUsed && !isExpired ? `<button class="btn btn-sm btn-primary" onclick="navigator.clipboard.writeText('${link}');showToast('Link copied — send to provider','success')">Copy Link</button>` : ''}
+                      ${!isUsed ? `<button class="btn btn-sm" style="color:var(--danger-500);" onclick="window.app.revokeOnboardToken(${t.id})">Revoke</button>` : `<span class="text-sm text-muted">${formatDateDisplay(usedAt)}</span>`}
+                    </div>
+                  </td>
                 </tr>`;
               }).join('')}
             </tbody>
