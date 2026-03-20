@@ -5256,13 +5256,15 @@ window.app = {
     if (!overlay) {
       overlay = document.createElement('div');
       overlay.id = 'global-search-overlay';
-      overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,0.6);display:flex;align-items:flex-start;justify-content:center;padding-top:10vh;backdrop-filter:blur(4px);';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-label', 'Command palette');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:var(--surface-overlay);display:flex;align-items:flex-start;justify-content:center;padding-top:10vh;backdrop-filter:blur(4px);';
       overlay.innerHTML = `
-        <div style="width:90%;max-width:640px;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
-          <div style="padding:16px;border-bottom:1px solid var(--gray-200);display:flex;align-items:center;gap:12px;">
-            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--gray-400)" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
-            <input type="text" id="global-search-input" placeholder="Search providers, applications, payers, tasks..." style="flex:1;border:none;outline:none;font-size:16px;background:none;color:var(--gray-900);" autocomplete="off">
-            <kbd style="font-size:11px;padding:2px 6px;border:1px solid var(--gray-300);border-radius:4px;color:var(--gray-500);background:var(--gray-50);">ESC</kbd>
+        <div style="width:90%;max-width:640px;background:var(--surface-raised);border-radius:12px;box-shadow:var(--shadow-2xl);overflow:hidden;border:1px solid var(--border-color);">
+          <div style="padding:16px;border-bottom:1px solid var(--border-color);display:flex;align-items:center;gap:12px;">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--text-quaternary)" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+            <input type="text" id="global-search-input" placeholder="Search or type a command..." style="flex:1;border:none;outline:none;font-size:16px;background:none;color:var(--text-primary);" autocomplete="off" aria-label="Search or command">
+            <kbd style="font-size:11px;padding:2px 6px;border:1px solid var(--border-color-strong);border-radius:4px;color:var(--text-tertiary);background:var(--surface-card);">ESC</kbd>
           </div>
           <div id="global-search-results" style="max-height:60vh;overflow-y:auto;padding:8px;"></div>
         </div>
@@ -5363,15 +5365,15 @@ window.app = {
             }
 
             resultsDiv.innerHTML = results.slice(0, 20).map(r => `
-              <div onclick="${r.action};document.getElementById('global-search-overlay').style.display='none';" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .1s;" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='none'">
+              <div onclick="${r.action};document.getElementById('global-search-overlay').style.display='none';" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .1s;" onmouseenter="this.style.background='var(--table-row-hover)'" onmouseleave="this.style.background='none'">
                 <div style="width:32px;height:32px;border-radius:8px;background:${r.color}15;color:${r.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${r.icon}</div>
                 <div style="flex:1;min-width:0;">
-                  <div style="font-size:14px;font-weight:600;color:var(--gray-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.label}</div>
-                  <div style="font-size:12px;color:var(--gray-500);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.sub}</div>
+                  <div style="font-size:14px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.label}</div>
+                  <div style="font-size:12px;color:var(--text-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.sub}</div>
                 </div>
                 <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${r.color}15;color:${r.color};white-space:nowrap;">${r.type}</span>
               </div>
-            `).join('') + (results.length > 20 ? `<p style="text-align:center;padding:8px;color:var(--gray-400);font-size:12px;">${results.length - 20} more results — refine your search</p>` : '');
+            `).join('') + (results.length > 20 ? `<p style="text-align:center;padding:8px;color:var(--text-quaternary);font-size:12px;">${results.length - 20} more results — refine your search</p>` : '');
           } catch (e) { console.error('Search error:', e); }
         }, 200);
       });
@@ -5380,7 +5382,28 @@ window.app = {
     overlay.style.display = 'flex';
     const input = document.getElementById('global-search-input');
     input.value = '';
-    document.getElementById('global-search-results').innerHTML = '<p style="text-align:center;padding:24px;color:var(--gray-400);font-size:13px;">Type at least 2 characters to search...</p>';
+    // Show quick commands when empty
+    const quickCmds = [
+      { icon: '📊', label: 'Go to Dashboard', sub: 'Overview & analytics', action: "navigateTo('dashboard')" },
+      { icon: '📋', label: 'Go to Applications', sub: 'Credentialing apps', action: "navigateTo('applications')" },
+      { icon: '👤', label: 'Go to Providers', sub: 'Provider directory', action: "navigateTo('providers')" },
+      { icon: '🪪', label: 'Go to Licenses', sub: 'License tracking', action: "navigateTo('licenses')" },
+      { icon: '➕', label: 'Add Application', sub: 'New credentialing app', action: "window.app.quickAddApp()" },
+      { icon: '✅', label: 'Add Task', sub: 'New task or reminder', action: "window.app.showQuickTask()" },
+      { icon: '🔔', label: 'Notifications', sub: 'View notifications', action: "window.app.toggleNotifications()" },
+      { icon: '⚙️', label: 'Settings', sub: 'Account & data', action: "navigateTo('settings')" },
+    ];
+    document.getElementById('global-search-results').innerHTML =
+      `<div style="padding:4px 8px 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-quaternary);">Quick Actions</div>` +
+      quickCmds.map(c => `
+        <div onclick="${c.action};document.getElementById('global-search-overlay').style.display='none';" style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:8px;cursor:pointer;transition:background .1s;" onmouseenter="this.style.background='var(--table-row-hover)'" onmouseleave="this.style.background='none'">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--surface-card);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;">${c.icon}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${c.label}</div>
+            <div style="font-size:11px;color:var(--text-quaternary);">${c.sub}</div>
+          </div>
+        </div>
+      `).join('');
     setTimeout(() => input.focus(), 50);
   },
 
