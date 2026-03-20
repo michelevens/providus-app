@@ -3257,6 +3257,7 @@ async function renderSettings() {
       <button class="tab" onclick="window.app.settingsTab(this, 'settings-licenses')">Licenses (${licenses.length})</button>
       <button class="tab" onclick="window.app.settingsTab(this, 'settings-caqh')">CAQH API</button>
       <button class="tab" onclick="window.app.settingsTab(this, 'settings-integrations')">Integrations</button>
+      <button class="tab" onclick="window.app.settingsTab(this, 'settings-security')">Security</button>
       <button class="tab" onclick="window.app.settingsTab(this, 'settings-danger')">Danger Zone</button>
     </div>
 
@@ -3460,6 +3461,43 @@ async function renderSettings() {
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-security" class="hidden">
+      <div class="card">
+        <div class="card-header"><h3>Two-Factor Authentication (2FA)</h3></div>
+        <div class="card-body" id="2fa-section">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+            <div style="width:48px;height:48px;border-radius:12px;background:var(--brand-100,#cffafe);color:var(--brand-700,#0e7490);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">🔐</div>
+            <div>
+              <div style="font-weight:700;font-size:15px;color:var(--text-primary,var(--gray-900));">Protect your account</div>
+              <div class="text-sm text-muted">Add an extra layer of security with an authenticator app (Google Authenticator, Authy, etc.)</div>
+            </div>
+          </div>
+          <div id="2fa-status-area">
+            <div class="spinner"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Password</h3></div>
+        <div class="card-body">
+          <p class="text-sm text-muted mb-4">Change your password. You'll need your current password to set a new one.</p>
+          <div class="form-row">
+            <div class="form-group"><label>Current Password</label><input type="password" class="form-control" id="current-password" placeholder="Current password"></div>
+            <div class="form-group"><label>New Password</label><input type="password" class="form-control" id="new-password" placeholder="New password (min 8 chars)" data-validate="required,min:8"></div>
+          </div>
+          <button class="btn btn-primary" onclick="window.app.changePassword()">Update Password</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Active Sessions</h3></div>
+        <div class="card-body">
+          <p class="text-sm text-muted">You are currently logged in. Sign out to end your session.</p>
         </div>
       </div>
     </div>
@@ -5991,10 +6029,157 @@ window.app = {
   settingsTab(el, tabId) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    ['settings-import', 'settings-org', 'settings-licenses', 'settings-caqh', 'settings-integrations', 'settings-danger'].forEach(id => {
+    ['settings-import', 'settings-org', 'settings-licenses', 'settings-caqh', 'settings-integrations', 'settings-security', 'settings-danger'].forEach(id => {
       const section = document.getElementById(id);
       if (section) section.classList.toggle('hidden', id !== tabId);
     });
+    // Load 2FA status when security tab is opened
+    if (tabId === 'settings-security') this.load2FAStatus();
+  },
+
+  async load2FAStatus() {
+    const area = document.getElementById('2fa-status-area');
+    if (!area) return;
+    try {
+      const res = await fetch(`${CONFIG.API_URL}/2fa/status`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem(CONFIG.TOKEN_KEY)}`, 'Accept': 'application/json' },
+      });
+      const data = await res.json();
+      const enabled = data.data?.enabled;
+
+      if (enabled) {
+        area.innerHTML = `
+          <div style="display:flex;align-items:center;gap:12px;padding:14px;background:var(--success-50,#f0fdf4);border:1px solid var(--success-100,#dcfce7);border-radius:8px;margin-bottom:16px;">
+            <span style="font-size:20px;">✅</span>
+            <div>
+              <div style="font-weight:600;color:var(--success-700,#15803d);">Two-factor authentication is enabled</div>
+              <div class="text-sm text-muted">Your account is protected with an authenticator app.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button class="btn" onclick="window.app.show2FARecoveryCodes()">View Recovery Codes</button>
+            <button class="btn btn-danger" onclick="window.app.disable2FA()">Disable 2FA</button>
+          </div>
+        `;
+      } else {
+        area.innerHTML = `
+          <div style="display:flex;align-items:center;gap:12px;padding:14px;background:var(--warning-50,#fffbeb);border:1px solid var(--warning-100,#fef3c7);border-radius:8px;margin-bottom:16px;">
+            <span style="font-size:20px;">⚠️</span>
+            <div>
+              <div style="font-weight:600;color:var(--warning-700,#b45309);">Two-factor authentication is not enabled</div>
+              <div class="text-sm text-muted">Your account relies on password only. Enable 2FA for better security.</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Enter your password to enable 2FA</label>
+            <input type="password" class="form-control" id="2fa-password" placeholder="Your current password" style="max-width:300px;">
+          </div>
+          <button class="btn btn-primary" onclick="window.app.enable2FA()">Enable Two-Factor Authentication</button>
+        `;
+      }
+    } catch (e) {
+      area.innerHTML = '<p class="text-muted">Unable to load 2FA status.</p>';
+    }
+  },
+
+  async enable2FA() {
+    const password = document.getElementById('2fa-password')?.value;
+    if (!password) { showToast('Enter your password', 'error'); return; }
+
+    try {
+      const res = await fetch(`${CONFIG.API_URL}/2fa/enable`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem(CONFIG.TOKEN_KEY)}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.message || 'Failed to enable 2FA', 'error'); return; }
+
+      const area = document.getElementById('2fa-status-area');
+      area.innerHTML = `
+        <div style="text-align:center;margin-bottom:20px;">
+          <div style="font-weight:700;font-size:16px;margin-bottom:8px;color:var(--text-primary,var(--gray-900));">Scan this QR code with your authenticator app</div>
+          <div style="background:#fff;display:inline-block;padding:16px;border-radius:12px;border:1px solid var(--border-color,var(--gray-200));margin:12px 0;">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.data.otpauth_url)}" alt="2FA QR Code" width="200" height="200">
+          </div>
+          <div class="text-sm text-muted" style="margin-top:8px;">Or enter this key manually: <code style="background:var(--surface-card,var(--gray-100));padding:2px 6px;border-radius:4px;font-size:13px;font-weight:600;letter-spacing:1px;">${data.data.secret}</code></div>
+        </div>
+        <div class="form-group" style="max-width:300px;margin:0 auto;">
+          <label>Enter the 6-digit code from your app</label>
+          <input type="text" class="form-control" id="2fa-verify-code" placeholder="000000" maxlength="6" style="text-align:center;font-size:24px;letter-spacing:8px;font-weight:700;">
+        </div>
+        <div style="text-align:center;margin-top:12px;">
+          <button class="btn btn-primary" onclick="window.app.verify2FA()">Verify & Activate</button>
+        </div>
+        <div style="margin-top:20px;padding:14px;background:var(--warning-50,#fffbeb);border:1px solid var(--warning-100,#fef3c7);border-radius:8px;">
+          <div style="font-weight:600;font-size:13px;color:var(--warning-700,#b45309);margin-bottom:8px;">Save your recovery codes</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+            ${data.data.recovery_codes.map(c => `<code style="font-size:13px;padding:4px 8px;background:var(--surface-card,#fff);border-radius:4px;text-align:center;">${c}</code>`).join('')}
+          </div>
+          <div class="text-sm text-muted" style="margin-top:8px;">Store these codes somewhere safe. Each code can only be used once.</div>
+        </div>
+      `;
+      setTimeout(() => document.getElementById('2fa-verify-code')?.focus(), 100);
+    } catch (e) { showToast('Error enabling 2FA', 'error'); }
+  },
+
+  async verify2FA() {
+    const code = document.getElementById('2fa-verify-code')?.value?.trim();
+    if (!code || code.length !== 6) { showToast('Enter the 6-digit code', 'error'); return; }
+
+    try {
+      const res = await fetch(`${CONFIG.API_URL}/2fa/verify`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem(CONFIG.TOKEN_KEY)}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.message || 'Invalid code', 'error'); return; }
+
+      showToast('Two-factor authentication enabled!', 'success');
+      this.load2FAStatus();
+    } catch (e) { showToast('Verification failed', 'error'); }
+  },
+
+  async disable2FA() {
+    const password = prompt('Enter your password to disable 2FA:');
+    if (!password) return;
+
+    try {
+      const res = await fetch(`${CONFIG.API_URL}/2fa/disable`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem(CONFIG.TOKEN_KEY)}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.message || 'Failed to disable 2FA', 'error'); return; }
+
+      showToast('Two-factor authentication disabled', 'warning');
+      this.load2FAStatus();
+    } catch (e) { showToast('Error disabling 2FA', 'error'); }
+  },
+
+  async show2FARecoveryCodes() {
+    try {
+      const res = await fetch(`${CONFIG.API_URL}/2fa/recovery-codes`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem(CONFIG.TOKEN_KEY)}`, 'Accept': 'application/json' },
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.message || 'Failed to load codes', 'error'); return; }
+
+      const codes = data.data?.recovery_codes || [];
+      const area = document.getElementById('2fa-status-area');
+      const existingHtml = area.innerHTML;
+      area.innerHTML += `
+        <div style="margin-top:16px;padding:14px;background:var(--info-50,#eff6ff);border:1px solid var(--info-100,#dbeafe);border-radius:8px;" id="recovery-codes-display">
+          <div style="font-weight:600;font-size:13px;color:var(--info-700,#1d4ed8);margin-bottom:8px;">Recovery Codes (${codes.length} remaining)</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+            ${codes.map(c => `<code style="font-size:13px;padding:4px 8px;background:var(--surface-card,#fff);border-radius:4px;text-align:center;">${c}</code>`).join('')}
+          </div>
+          <button class="btn btn-sm" style="margin-top:10px;" onclick="document.getElementById('recovery-codes-display').remove()">Close</button>
+        </div>
+      `;
+    } catch (e) { showToast('Error loading codes', 'error'); }
   },
 
   updateEmbedCode() {
