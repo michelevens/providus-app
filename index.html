@@ -62,29 +62,29 @@
         <p class="auth-switch"><a href="#" onclick="toggleAuthView('forgot');return false;">Forgot password?</a></p>
         <p class="auth-switch">Don't have an account? <a href="#" onclick="toggleAuthView('register');return false;">Create an account</a></p>
 
-        <!-- Demo Accounts -->
+        <!-- Demo Accounts — pre-fills email only, password must be entered -->
         <div class="demo-accounts">
           <div class="demo-label">Quick Demo Login</div>
           <div class="demo-grid">
-            <button class="demo-btn demo-owner" onclick="demoLogin('owner@demo.credentik.com','Demo2026!')">
+            <button class="demo-btn demo-owner" onclick="prefillDemo('owner@demo.credentik.com')">
               <span class="demo-role">Owner</span>
               <span class="demo-desc">Full access + user mgmt</span>
             </button>
-            <button class="demo-btn demo-agency" onclick="demoLogin('agency@demo.credentik.com','Demo2026!')">
+            <button class="demo-btn demo-agency" onclick="prefillDemo('agency@demo.credentik.com')">
               <span class="demo-role">Agency</span>
               <span class="demo-desc">All features</span>
             </button>
-            <button class="demo-btn demo-org" onclick="demoLogin('org@demo.credentik.com','Demo2026!')">
+            <button class="demo-btn demo-org" onclick="prefillDemo('org@demo.credentik.com')">
               <span class="demo-role">Organization</span>
               <span class="demo-desc">Apps, tasks, comms</span>
             </button>
-            <button class="demo-btn demo-provider" onclick="demoLogin('provider@demo.credentik.com','Demo2026!')">
+            <button class="demo-btn demo-provider" onclick="prefillDemo('provider@demo.credentik.com')">
               <span class="demo-role">Provider</span>
               <span class="demo-desc">Read-only self-service</span>
             </button>
           </div>
           <div class="demo-extra">
-            <button class="demo-btn demo-super" onclick="demoLogin('superadmin@credentik.com','Credentik2026!')">
+            <button class="demo-btn demo-super" onclick="prefillDemo('superadmin@credentik.com')">
               <span class="demo-role">Super Admin</span>
               <span class="demo-desc">System-wide admin panel</span>
             </button>
@@ -1237,7 +1237,8 @@
         const json = await res.json();
         if (!res.ok) { errEl.textContent = json.message || 'Failed to accept contract.'; return; }
         const today = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
-        document.getElementById('contract-accept-section').innerHTML = '<div style="text-align:center;padding:24px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;"><div style="font-size:20px;font-weight:700;color:#16a34a;margin-bottom:8px;">Contract Accepted</div><p style="margin:0 0 4px;font-size:14px;color:#475569;">Signed by <strong>'+name+'</strong>'+(title ? ', '+title : '')+'</p><p style="margin:0;font-size:13px;color:#94a3b8;">'+today+'</p></div>';
+        const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        document.getElementById('contract-accept-section').innerHTML = '<div style="text-align:center;padding:24px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;"><div style="font-size:20px;font-weight:700;color:#16a34a;margin-bottom:8px;">Contract Accepted</div><p style="margin:0 0 4px;font-size:14px;color:#475569;">Signed by <strong>'+esc(name)+'</strong>'+(title ? ', '+esc(title) : '')+'</p><p style="margin:0;font-size:13px;color:#94a3b8;">'+today+'</p></div>';
       } catch(e) { errEl.textContent = 'Network error. Please try again.'; }
     }
 
@@ -1300,14 +1301,10 @@
       el.style.display = 'block';
     }
 
-    async function demoLogin(email, password) {
+    function prefillDemo(email) {
       document.getElementById('login-email').value = email;
-      document.getElementById('login-password').value = password;
-      // Brief visual feedback
-      const btns = document.querySelectorAll('.demo-btn');
-      btns.forEach(b => b.style.opacity = '0.5');
-      await handleLogin();
-      btns.forEach(b => b.style.opacity = '1');
+      document.getElementById('login-password').value = '';
+      document.getElementById('login-password').focus();
     }
 
     async function handleLogin() {
