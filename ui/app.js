@@ -3284,6 +3284,7 @@ async function renderSettings() {
       <button class="tab active" onclick="window.app.settingsTab(this, 'settings-import')">Import / Export</button>
       <button class="tab" onclick="window.app.settingsTab(this, 'settings-org')">Organization</button>
       <button class="tab" onclick="window.app.settingsTab(this, 'settings-licenses')">Licenses (${licenses.length})</button>
+      <button class="tab" onclick="window.app.settingsTab(this, 'settings-groups')">Groups</button>
       <button class="tab" onclick="window.app.settingsTab(this, 'settings-caqh')">CAQH API</button>
       <button class="tab" onclick="window.app.settingsTab(this, 'settings-integrations')">Integrations</button>
       <button class="tab" onclick="window.app.settingsTab(this, 'settings-security')">Security</button>
@@ -3360,6 +3361,39 @@ async function renderSettings() {
               `).join('')}
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-groups" class="hidden">
+      <div class="card">
+        <div class="card-header">
+          <h3>Application Groups</h3>
+          <button class="btn btn-primary btn-sm" onclick="window.app.addGroup()">+ Add Group</button>
+        </div>
+        <div class="card-body">
+          <p class="text-sm text-muted mb-4">Define custom groups to organize your credentialing applications (e.g. Priority, Standard, Batch A). Each group gets a label, abbreviation, and color.</p>
+          <div id="groups-list">
+            ${APP_GROUPS.map((g, i) => `
+              <div class="form-row" style="align-items:end;margin-bottom:12px;" id="group-row-${i}">
+                <div class="form-group" style="flex:2;"><label>Label</label><input type="text" class="form-control group-label" value="${escAttr(g.label)}" placeholder="e.g. Priority"></div>
+                <div class="form-group" style="flex:1;max-width:80px;"><label>Short</label><input type="text" class="form-control group-short" value="${escAttr(g.short || '')}" placeholder="P1" maxlength="5"></div>
+                <div class="form-group" style="flex:1;max-width:70px;"><label>Color</label><input type="color" class="group-color" value="${g.color || '#6b7280'}" style="width:100%;height:38px;border:1px solid var(--border-color-strong);border-radius:var(--radius);cursor:pointer;padding:2px;background:var(--surface-input);"></div>
+                <div class="form-group" style="flex:0;margin-bottom:0;"><button class="btn btn-sm" style="color:var(--danger-500);height:38px;" onclick="window.app.removeGroup(${i})" title="Remove">&times;</button></div>
+              </div>
+            `).join('')}
+          </div>
+          <div style="margin-top:16px;">
+            <button class="btn btn-primary" onclick="window.app.saveGroups()">Save Groups</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Preview</h3></div>
+        <div class="card-body">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;" id="groups-preview">
+            ${APP_GROUPS.map(g => `<span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:6px;font-size:13px;font-weight:600;background:${g.color}20;color:${g.color};">${g.short || g.label}</span>`).join('')}
+          </div>
         </div>
       </div>
     </div>
@@ -6058,7 +6092,7 @@ window.app = {
   settingsTab(el, tabId) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    ['settings-import', 'settings-org', 'settings-licenses', 'settings-caqh', 'settings-integrations', 'settings-security', 'settings-danger'].forEach(id => {
+    ['settings-import', 'settings-org', 'settings-licenses', 'settings-groups', 'settings-caqh', 'settings-integrations', 'settings-security', 'settings-danger'].forEach(id => {
       const section = document.getElementById(id);
       if (section) section.classList.toggle('hidden', id !== tabId);
     });
@@ -6186,6 +6220,58 @@ window.app = {
       showToast('Two-factor authentication disabled', 'warning');
       this.load2FAStatus();
     } catch (e) { showToast('Error disabling 2FA', 'error'); }
+  },
+
+  // ── Group Management ──
+  addGroup() {
+    const list = document.getElementById('groups-list');
+    const i = list.children.length;
+    const colors = ['#0891b2', '#3b82f6', '#6b7280', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+    const color = colors[i % colors.length];
+    const div = document.createElement('div');
+    div.className = 'form-row';
+    div.style.cssText = 'align-items:end;margin-bottom:12px;';
+    div.id = `group-row-${i}`;
+    div.innerHTML = `
+      <div class="form-group" style="flex:2;"><label>Label</label><input type="text" class="form-control group-label" value="" placeholder="e.g. Batch B"></div>
+      <div class="form-group" style="flex:1;max-width:80px;"><label>Short</label><input type="text" class="form-control group-short" value="" placeholder="B2" maxlength="5"></div>
+      <div class="form-group" style="flex:1;max-width:70px;"><label>Color</label><input type="color" class="group-color" value="${color}" style="width:100%;height:38px;border:1px solid var(--border-color-strong);border-radius:var(--radius);cursor:pointer;padding:2px;background:var(--surface-input);"></div>
+      <div class="form-group" style="flex:0;margin-bottom:0;"><button class="btn btn-sm" style="color:var(--danger-500);height:38px;" onclick="window.app.removeGroup(${i})" title="Remove">&times;</button></div>
+    `;
+    list.appendChild(div);
+  },
+
+  removeGroup(index) {
+    const row = document.getElementById(`group-row-${index}`);
+    if (row) row.remove();
+  },
+
+  async saveGroups() {
+    const labels = document.querySelectorAll('.group-label');
+    const shorts = document.querySelectorAll('.group-short');
+    const colors = document.querySelectorAll('.group-color');
+    const groups = [];
+    labels.forEach((el, i) => {
+      const label = el.value.trim();
+      if (!label) return;
+      groups.push({
+        id: i + 1,
+        label,
+        short: shorts[i]?.value?.trim() || label.substring(0, 3),
+        color: colors[i]?.value || '#6b7280',
+      });
+    });
+    if (groups.length === 0) { showToast('Add at least one group', 'error'); return; }
+    try {
+      await store.updateAgencyConfig({ waves: groups });
+      APP_GROUPS = groups;
+      showToast('Groups saved!', 'success');
+      // Update preview
+      const preview = document.getElementById('groups-preview');
+      if (preview) {
+        preview.innerHTML = groups.map(g => `<span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:6px;font-size:13px;font-weight:600;background:${g.color}20;color:${g.color};">${g.short || g.label}</span>`).join('');
+      }
+    } catch (e) { showToast('Error saving groups: ' + e.message, 'error'); }
   },
 
   async show2FARecoveryCodes() {
