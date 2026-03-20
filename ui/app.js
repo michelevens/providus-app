@@ -132,6 +132,29 @@ let currentPage = 'dashboard';
 let currentSort = { field: '', dir: 'asc' };
 let filters = { state: '', payer: '', status: '', wave: '', search: '' };
 
+// ─── URL Filter State ───
+function syncFiltersToURL() {
+  const params = new URLSearchParams();
+  if (filters.state) params.set('state', filters.state);
+  if (filters.payer) params.set('payer', filters.payer);
+  if (filters.status) params.set('status', filters.status);
+  if (filters.wave) params.set('wave', filters.wave);
+  if (filters.search) params.set('q', filters.search);
+  const qs = params.toString();
+  const base = location.hash.split('?')[0] || `#${currentPage}`;
+  history.replaceState(null, '', qs ? `${base}?${qs}` : base);
+}
+function readFiltersFromURL() {
+  const qs = location.hash.split('?')[1];
+  if (!qs) return;
+  const params = new URLSearchParams(qs);
+  if (params.has('state')) filters.state = params.get('state');
+  if (params.has('payer')) filters.payer = params.get('payer');
+  if (params.has('status')) filters.status = params.get('status');
+  if (params.has('wave')) filters.wave = params.get('wave');
+  if (params.has('q')) filters.search = params.get('q');
+}
+
 // ─── Init ───
 
 export async function initApp() {
@@ -360,6 +383,9 @@ async function updateNavBadges() {
 
 async function navigateTo(page) {
   currentPage = page;
+
+  // Restore filters from URL if present
+  readFiltersFromURL();
 
   // Update nav active state (sidebar + bottom nav)
   document.querySelectorAll('.nav-item').forEach(el => {
@@ -5580,6 +5606,7 @@ window.app = {
     filters.payer = document.getElementById('filter-payer')?.value || '';
     filters.status = document.getElementById('filter-status')?.value || '';
     filters.wave = document.getElementById('filter-wave')?.value || '';
+    syncFiltersToURL();
     await renderAppTable();
   },
   async sortBy(field) {
@@ -10360,12 +10387,174 @@ function sortArrow(field) {
   return `<span class="sort-arrow">${currentSort.dir === 'asc' ? '\u25B2' : '\u25BC'}</span>`;
 }
 
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
+// ─── Toast Queue System ───
+const _toastQueue = [];
+let _toastActive = false;
+let _toastTimer = null;
+let _toastUndoCallback = null;
+
+function showToast(msg, type = 'info', { undo, duration = 3500 } = {}) {
+  _toastQueue.push({ msg, type, undo, duration });
+  if (!_toastActive) _processToastQueue();
 }
+
+function _processToastQueue() {
+  if (!_toastQueue.length) { _toastActive = false; return; }
+  _toastActive = true;
+  const { msg, type, undo, duration } = _toastQueue.shift();
+  const t = document.getElementById('toast');
+  _toastUndoCallback = undo || null;
+
+  // Icon by type
+  const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
+  const colors = { success: 'var(--success-500)', error: 'var(--danger-500)', warning: 'var(--warning-500)', info: 'var(--brand-400)' };
+
+  t.innerHTML = `
+    <span style="color:${colors[type] || colors.info};font-size:16px;flex-shrink:0;">${icons[type] || icons.info}</span>
+    <span style="flex:1;">${msg}</span>
+    ${undo ? '<button onclick="_undoToast()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Undo</button>' : ''}
+    <button onclick="_dismissToast()" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:16px;cursor:pointer;padding:0 2px;line-height:1;">✕</button>
+  `;
+  t.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(_dismissToast, duration);
+}
+
+function _dismissToast() {
+  clearTimeout(_toastTimer);
+  const t = document.getElementById('toast');
+  t.classList.remove('show');
+  _toastUndoCallback = null;
+  setTimeout(_processToastQueue, 300);
+}
+
+function _undoToast() {
+  if (_toastUndoCallback) { _toastUndoCallback(); _toastUndoCallback = null; }
+  _dismissToast();
+}
+
+// ─── Modal Focus Trap (a11y) ───
+let _focusTrapCleanup = null;
+let _focusTriggerEl = null;
+
+function trapFocus(modalEl) {
+  _focusTriggerEl = document.activeElement;
+  const focusable = modalEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  first.focus();
+
+  const handler = (e) => {
+    if (e.key !== 'Tab') return;
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  };
+  modalEl.addEventListener('keydown', handler);
+  _focusTrapCleanup = () => { modalEl.removeEventListener('keydown', handler); };
+}
+
+function releaseFocus() {
+  if (_focusTrapCleanup) { _focusTrapCleanup(); _focusTrapCleanup = null; }
+  if (_focusTriggerEl) { _focusTriggerEl.focus(); _focusTriggerEl = null; }
+}
+
+// Auto-trap focus when any modal opens
+const _modalObserver = new MutationObserver((mutations) => {
+  mutations.forEach(m => {
+    if (m.type === 'attributes' && m.attributeName === 'class') {
+      const el = m.target;
+      if (el.classList.contains('modal-overlay')) {
+        if (el.classList.contains('active')) {
+          const modal = el.querySelector('.modal');
+          if (modal) { modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); trapFocus(modal); }
+        } else {
+          releaseFocus();
+        }
+      }
+    }
+  });
+});
+// Observe all modal overlays once DOM is ready
+setTimeout(() => {
+  document.querySelectorAll('.modal-overlay').forEach(el => {
+    _modalObserver.observe(el, { attributes: true, attributeFilter: ['class'] });
+  });
+}, 500);
+
+// ─── Inline Form Validation ───
+function validateField(input, rules = {}) {
+  const value = input.value.trim();
+  let error = '';
+
+  if (rules.required && !value) error = 'This field is required';
+  else if (rules.email && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) error = 'Enter a valid email';
+  else if (rules.minLength && value.length < rules.minLength) error = `Minimum ${rules.minLength} characters`;
+  else if (rules.pattern && !rules.pattern.test(value)) error = rules.message || 'Invalid format';
+
+  // Show/hide error
+  let errEl = input.parentElement.querySelector('.field-error');
+  if (error) {
+    input.style.borderColor = 'var(--danger-500)';
+    input.style.boxShadow = 'var(--shadow-ring-danger)';
+    if (!errEl) {
+      errEl = document.createElement('div');
+      errEl.className = 'field-error';
+      errEl.style.cssText = 'color:var(--danger-500);font-size:12px;margin-top:4px;font-weight:500;';
+      input.parentElement.appendChild(errEl);
+    }
+    errEl.textContent = error;
+  } else {
+    input.style.borderColor = '';
+    input.style.boxShadow = '';
+    if (errEl) errEl.remove();
+  }
+  return !error;
+}
+
+function validateForm(formEl) {
+  const inputs = formEl.querySelectorAll('[data-validate]');
+  let valid = true;
+  inputs.forEach(input => {
+    const rules = {};
+    input.dataset.validate.split(',').forEach(r => {
+      r = r.trim();
+      if (r === 'required') rules.required = true;
+      else if (r === 'email') rules.email = true;
+      else if (r.startsWith('min:')) rules.minLength = parseInt(r.split(':')[1]);
+    });
+    if (!validateField(input, rules)) valid = false;
+  });
+  return valid;
+}
+
+// Live validation on blur
+document.addEventListener('focusout', (e) => {
+  const input = e.target;
+  if (!input.dataset?.validate) return;
+  const rules = {};
+  input.dataset.validate.split(',').forEach(r => {
+    r = r.trim();
+    if (r === 'required') rules.required = true;
+    else if (r === 'email') rules.email = true;
+    else if (r.startsWith('min:')) rules.minLength = parseInt(r.split(':')[1]);
+  });
+  validateField(input, rules);
+}, true);
+
+// Clear error on input
+document.addEventListener('input', (e) => {
+  const input = e.target;
+  if (input.style.borderColor === 'var(--danger-500)') {
+    input.style.borderColor = '';
+    input.style.boxShadow = '';
+    const errEl = input.parentElement?.querySelector('.field-error');
+    if (errEl) errEl.remove();
+  }
+}, true);
 
 // ─── Custom Confirm / Prompt (replaces native dialogs) ───
 
