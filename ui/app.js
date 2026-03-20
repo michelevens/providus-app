@@ -4816,7 +4816,7 @@ async function renderCaqhAttestationTab(providers, tracking) {
             return `<tr class="${daysLeft !== null && daysLeft <= 0 ? 'overdue' : ''}">
               <td><strong>${escHtml(e.firstName)} ${escHtml(e.lastName)}</strong></td>
               <td style="font-family:monospace;">${e.caqhId || '—'}</td>
-              <td>${e.attestationDate || '—'}</td>
+              <td>${formatDateDisplay(e.attestationDate)}</td>
               <td>${e.attestationExpires || '—'}</td>
               <td style="font-weight:700;">${daysLeft !== null ? (daysLeft <= 0 ? daysLeft + 'd' : daysLeft + 'd') : '—'}</td>
               <td><span class="badge badge-${severity}">${
@@ -5391,7 +5391,7 @@ window.app = {
             (tasks || []).forEach(t => {
               const title = (t.title || t.description || '').toLowerCase();
               if (title.includes(q)) {
-                results.push({ type: 'Task', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>', label: t.title || t.description, sub: `Due: ${t.dueDate || t.due_date || 'N/A'} — ${t.isCompleted || t.completed ? 'Done' : 'Pending'}`, color: '#10b981', action: `navigateTo('tasks')` });
+                results.push({ type: 'Task', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>', label: t.title || t.description, sub: `Due: ${formatDateDisplay(t.dueDate || t.due_date)} — ${t.isCompleted || t.completed ? 'Done' : 'Pending'}`, color: '#10b981', action: `navigateTo('tasks')` });
               }
             });
 
@@ -6754,7 +6754,7 @@ window.app = {
           <div><strong>NPI:</strong> ${prov.npi || '—'}</div>
           <div><strong>Profile Status:</strong> ${t.profileStatus || 'Not checked'}</div>
           <div><strong>Roster Status:</strong> ${t.rosterStatus || '—'}</div>
-          <div><strong>Last Attested:</strong> ${t.attestationDate || '—'}</div>
+          <div><strong>Last Attested:</strong> ${formatDateDisplay(t.attestationDate)}</div>
           <div><strong>Attestation Expires:</strong> ${t.attestationExpires || '—'}</div>
           <div><strong>Last API Check:</strong> ${t.lastChecked ? new Date(t.lastChecked).toLocaleString() : 'Never'}</div>
           ${t.error ? `<div style="grid-column:span 2;" class="alert alert-danger">Last error: ${escHtml(t.error)}</div>` : ''}
@@ -10560,11 +10560,10 @@ async function renderServiceLines() {
 // ─── Helpers ───
 
 function formatDateDisplay(dateStr) {
-  if (!dateStr) return '-';
+  if (!dateStr) return '—';
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return dateStr;
-  return (d.getMonth() + 1).toString().padStart(2, '0') + '/' +
-    d.getDate().toString().padStart(2, '0') + '/' + d.getFullYear();
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function sortArrow(field) {
@@ -11095,7 +11094,7 @@ async function renderOrgDetailPage(orgId) {
                       <td>${a.state || '—'}</td>
                       <td><span class="badge badge-${a.status}">${(a.status || '').replace(/_/g, ' ')}</span></td>
                       <td>${a.wave ? `<span class="wave-badge wave-${a.wave}">W${a.wave}</span>` : '—'}</td>
-                      <td class="text-sm">${a.submittedDate || a.submitted_date || '—'}</td>
+                      <td class="text-sm">${formatDateDisplay(a.submittedDate || a.submitted_date)}</td>
                     </tr>`;
                 }).join('')}
               </tbody>
