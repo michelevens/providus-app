@@ -789,78 +789,120 @@
         </div>
 
         <div id="onboard-form-wrapper" style="display:none;">
-          <div class="logo">
-            <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="56" height="56" rx="14" fill="#0891b2"/>
-              <path d="M16 20h8c3.3 0 6 2.7 6 6s-2.7 6-6 6h-8V20z" stroke="#fff" stroke-width="2.5" fill="none"/>
-              <path d="M34 20v12l4 4" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
-          <h2>Provider Onboarding</h2>
+          <h2 style="margin-bottom:4px;">Provider Onboarding</h2>
           <p id="onboard-agency-label">Complete your profile to join <strong id="onboard-agency-name"></strong></p>
 
-          <div class="auth-field">
-            <label>Organization <span style="color:#94a3b8;font-weight:normal;">(search by name, NPI, or Org ID)</span></label>
-            <div style="position:relative;">
-              <input type="text" id="onboard-org-search" placeholder="Search by name, NPI, or 6-digit Org ID..." autocomplete="off">
-              <input type="hidden" id="onboard-org-id">
-              <div id="onboard-org-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--gray-900,#1e293b);border:1px solid var(--gray-700,#374151);border-radius:8px;max-height:200px;overflow-y:auto;z-index:100;margin-top:4px;"></div>
-            </div>
-            <div id="onboard-org-selected" style="display:none;margin-top:6px;padding:8px 12px;background:rgba(8,145,178,0.1);border:1px solid rgba(8,145,178,0.3);border-radius:6px;font-size:13px;display:none;">
-              <span id="onboard-org-selected-text"></span>
-              <a href="#" onclick="clearOrgSelection();return false;" style="float:right;color:#ef4444;font-size:12px;">Clear</a>
-            </div>
+          <!-- Progress Bar -->
+          <div style="display:flex;gap:4px;margin:20px 0 24px;">
+            <div id="step-bar-1" style="flex:1;height:4px;border-radius:2px;background:#0891b2;transition:background .3s;"></div>
+            <div id="step-bar-2" style="flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,0.1);transition:background .3s;"></div>
+            <div id="step-bar-3" style="flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,0.1);transition:background .3s;"></div>
+            <div id="step-bar-4" style="flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,0.1);transition:background .3s;"></div>
           </div>
+          <div id="step-label" style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:16px;font-weight:600;">Step 1 of 4 — Personal Info</div>
 
-          <div class="auth-row">
+          <!-- Step 1: Personal Info -->
+          <div id="onboard-step-1" class="onboard-step">
             <div class="auth-field">
-              <label for="onboard-first">First Name *</label>
-              <input type="text" id="onboard-first" placeholder="First name" required>
+              <label>Organization <span style="color:#94a3b8;font-weight:normal;">(search by name, NPI, or Org ID)</span></label>
+              <div style="position:relative;">
+                <input type="text" id="onboard-org-search" placeholder="Search organization..." autocomplete="off">
+                <input type="hidden" id="onboard-org-id">
+                <div id="onboard-org-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--gray-900,#1e293b);border:1px solid var(--gray-700,#374151);border-radius:8px;max-height:200px;overflow-y:auto;z-index:100;margin-top:4px;"></div>
+              </div>
+              <div id="onboard-org-selected" style="display:none;margin-top:6px;padding:8px 12px;background:rgba(8,145,178,0.1);border:1px solid rgba(8,145,178,0.3);border-radius:6px;font-size:13px;">
+                <span id="onboard-org-selected-text"></span>
+                <a href="#" onclick="clearOrgSelection();return false;" style="float:right;color:#ef4444;font-size:12px;">Clear</a>
+              </div>
             </div>
-            <div class="auth-field">
-              <label for="onboard-last">Last Name *</label>
-              <input type="text" id="onboard-last" placeholder="Last name" required>
+            <div class="auth-row">
+              <div class="auth-field"><label for="onboard-first">First Name *</label><input type="text" id="onboard-first" placeholder="First name" required data-validate="required"></div>
+              <div class="auth-field"><label for="onboard-last">Last Name *</label><input type="text" id="onboard-last" placeholder="Last name" required data-validate="required"></div>
             </div>
-          </div>
-
-          <div class="auth-field">
-            <label for="onboard-credentials">Credentials</label>
-            <input type="text" id="onboard-credentials" placeholder="e.g. MD, DO, NP, LCSW">
-          </div>
-
-          <div class="auth-row">
-            <div class="auth-field">
-              <label for="onboard-npi">NPI</label>
-              <input type="text" id="onboard-npi" placeholder="10-digit NPI" maxlength="10" pattern="[0-9]{10}">
+            <div class="auth-row">
+              <div class="auth-field"><label for="onboard-dob">Date of Birth</label><input type="date" id="onboard-dob"></div>
+              <div class="auth-field"><label for="onboard-gender">Gender</label>
+                <select id="onboard-gender" style="width:100%;padding:12px 16px;border:1px solid rgba(255,255,255,0.1);border-radius:var(--radius-lg,12px);background:rgba(255,255,255,0.05);color:#fff;font-size:14px;">
+                  <option value="">Select...</option><option value="male">Male</option><option value="female">Female</option><option value="non-binary">Non-binary</option><option value="other">Other</option><option value="prefer_not_to_say">Prefer not to say</option>
+                </select>
+              </div>
             </div>
-            <div class="auth-field">
-              <label for="onboard-caqh">CAQH ID</label>
-              <input type="text" id="onboard-caqh" placeholder="CAQH ProView ID">
-            </div>
-          </div>
-
-          <div class="auth-row">
-            <div class="auth-field">
-              <label for="onboard-taxonomy">Taxonomy Code</label>
-              <input type="text" id="onboard-taxonomy" placeholder="e.g. 207Q00000X">
-            </div>
-            <div class="auth-field">
-              <label for="onboard-specialty">Specialty</label>
-              <input type="text" id="onboard-specialty" placeholder="e.g. Family Medicine">
+            <div class="auth-field"><label for="onboard-email">Email *</label><input type="email" id="onboard-email" placeholder="your@email.com" required data-validate="required,email"></div>
+            <div class="auth-field"><label for="onboard-phone">Phone</label><input type="tel" id="onboard-phone" placeholder="(555) 123-4567"></div>
+            <div class="auth-field"><label for="onboard-address">Street Address</label><input type="text" id="onboard-address" placeholder="123 Main St"></div>
+            <div class="auth-row">
+              <div class="auth-field"><label for="onboard-city">City</label><input type="text" id="onboard-city" placeholder="City"></div>
+              <div class="auth-field" style="max-width:80px;"><label for="onboard-state">State</label><input type="text" id="onboard-state" placeholder="NY" maxlength="2"></div>
+              <div class="auth-field" style="max-width:100px;"><label for="onboard-zip">ZIP</label><input type="text" id="onboard-zip" placeholder="10001" maxlength="10"></div>
             </div>
           </div>
 
-          <div class="auth-field">
-            <label for="onboard-email">Email *</label>
-            <input type="email" id="onboard-email" placeholder="your@email.com" required>
+          <!-- Step 2: Credentials & IDs -->
+          <div id="onboard-step-2" class="onboard-step" style="display:none;">
+            <div class="auth-field"><label for="onboard-credentials">Credentials</label><input type="text" id="onboard-credentials" placeholder="e.g. NP, APRN, DNP, PA-C"></div>
+            <div class="auth-row">
+              <div class="auth-field"><label for="onboard-npi">NPI *</label><input type="text" id="onboard-npi" placeholder="10-digit NPI" maxlength="10" pattern="[0-9]{10}" data-validate="required"></div>
+              <div class="auth-field"><label for="onboard-caqh">CAQH ID</label><input type="text" id="onboard-caqh" placeholder="CAQH ProView ID"></div>
+            </div>
+            <div class="auth-row">
+              <div class="auth-field"><label for="onboard-taxonomy">Taxonomy Code</label><input type="text" id="onboard-taxonomy" placeholder="e.g. 363L00000X"></div>
+              <div class="auth-field"><label for="onboard-specialty">Specialty</label><input type="text" id="onboard-specialty" placeholder="e.g. Nurse Practitioner"></div>
+            </div>
+            <div class="auth-row">
+              <div class="auth-field"><label for="onboard-primary-state">Primary License State</label><input type="text" id="onboard-primary-state" placeholder="e.g. NY" maxlength="2"></div>
+              <div class="auth-field"><label for="onboard-medicaid">Medicaid ID</label><input type="text" id="onboard-medicaid" placeholder="Medicaid Provider ID"></div>
+            </div>
+            <div class="auth-field"><label for="onboard-ptan">Medicare PTAN</label><input type="text" id="onboard-ptan" placeholder="Provider Transaction Access Number"></div>
           </div>
 
-          <div class="auth-field">
-            <label for="onboard-phone">Phone</label>
-            <input type="tel" id="onboard-phone" placeholder="(555) 123-4567">
+          <!-- Step 3: Practice & Collaborative Agreement (NP-specific) -->
+          <div id="onboard-step-3" class="onboard-step" style="display:none;">
+            <div style="background:rgba(8,145,178,0.08);border:1px solid rgba(8,145,178,0.2);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:#67e8f9;">
+              If your state requires a collaborative practice agreement, please complete this section.
+            </div>
+            <div class="auth-field"><label for="onboard-sup-physician">Supervising / Collaborating Physician</label><input type="text" id="onboard-sup-physician" placeholder="Dr. Jane Smith, MD"></div>
+            <div class="auth-field"><label for="onboard-sup-npi">Supervising Physician NPI</label><input type="text" id="onboard-sup-npi" placeholder="10-digit NPI" maxlength="10"></div>
+            <div class="auth-row">
+              <div class="auth-field"><label for="onboard-cpa-status">Agreement Status</label>
+                <select id="onboard-cpa-status" style="width:100%;padding:12px 16px;border:1px solid rgba(255,255,255,0.1);border-radius:var(--radius-lg,12px);background:rgba(255,255,255,0.05);color:#fff;font-size:14px;">
+                  <option value="">Select...</option><option value="active">Active</option><option value="pending">Pending</option><option value="expired">Expired</option><option value="not_required">Not Required (Full Practice Authority)</option>
+                </select>
+              </div>
+              <div class="auth-field"><label for="onboard-cpa-expiry">Agreement Expiry</label><input type="date" id="onboard-cpa-expiry"></div>
+            </div>
+            <div class="auth-field"><label for="onboard-practice-auth">Practice Authority</label>
+              <select id="onboard-practice-auth" style="width:100%;padding:12px 16px;border:1px solid rgba(255,255,255,0.1);border-radius:var(--radius-lg,12px);background:rgba(255,255,255,0.05);color:#fff;font-size:14px;">
+                <option value="">Select...</option><option value="full">Full Practice Authority</option><option value="reduced">Reduced Practice Authority</option><option value="restricted">Restricted Practice Authority</option>
+              </select>
+            </div>
+            <div class="auth-row">
+              <div class="auth-field" style="display:flex;align-items:center;gap:8px;padding-top:24px;">
+                <input type="checkbox" id="onboard-prescriptive" style="width:auto;min-height:auto;">
+                <label for="onboard-prescriptive" style="text-transform:none;font-size:14px;color:#e2e8f0;letter-spacing:0;">Prescriptive Authority</label>
+              </div>
+              <div class="auth-field" style="display:flex;align-items:center;gap:8px;padding-top:24px;">
+                <input type="checkbox" id="onboard-cs-auth" style="width:auto;min-height:auto;">
+                <label for="onboard-cs-auth" style="text-transform:none;font-size:14px;color:#e2e8f0;letter-spacing:0;">Controlled Substance Authority</label>
+              </div>
+            </div>
+            <div class="auth-field"><label for="onboard-cs-schedule">CS Schedule Authority</label><input type="text" id="onboard-cs-schedule" placeholder="e.g. II-V, III-V"></div>
           </div>
 
-          <button class="btn-enter" id="onboard-submit-btn" onclick="handleOnboardSubmit()">Submit Profile</button>
+          <!-- Step 4: Bio & Review -->
+          <div id="onboard-step-4" class="onboard-step" style="display:none;">
+            <div class="auth-field"><label for="onboard-languages">Languages Spoken</label><input type="text" id="onboard-languages" placeholder="e.g. English, Spanish, Haitian Creole"></div>
+            <div class="auth-field"><label for="onboard-bio">Professional Bio</label><textarea id="onboard-bio" rows="4" placeholder="Brief professional biography..." style="width:100%;padding:12px 16px;border:1px solid rgba(255,255,255,0.1);border-radius:var(--radius-lg,12px);background:rgba(255,255,255,0.05);color:#fff;font-size:14px;resize:vertical;min-height:100px;font-family:inherit;"></textarea></div>
+            <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:14px;margin-top:12px;font-size:13px;color:#6ee7b7;">
+              <strong>Almost done!</strong> Review your information and click Submit to complete your onboarding. You can always update your profile later.
+            </div>
+          </div>
+
+          <!-- Navigation Buttons -->
+          <div style="display:flex;gap:10px;margin-top:20px;">
+            <button id="onboard-prev-btn" onclick="onboardPrevStep()" style="display:none;flex:1;padding:14px;background:rgba(255,255,255,0.05);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:var(--radius-lg,12px);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;">Back</button>
+            <button id="onboard-next-btn" onclick="onboardNextStep()" class="btn-enter" style="flex:2;">Continue</button>
+            <button id="onboard-submit-btn" onclick="handleOnboardSubmit()" class="btn-enter" style="flex:2;display:none;">Submit Profile</button>
+          </div>
           <div class="error" id="onboard-error"></div>
         </div>
       </div>
@@ -1011,33 +1053,86 @@
       document.getElementById('onboard-org-selected').style.display = 'none';
     }
 
+    // ── Onboarding Wizard Step Navigation ──
+    let _onboardStep = 1;
+    const _onboardTotalSteps = 4;
+    const _stepLabels = ['Personal Info', 'Credentials & IDs', 'Practice Authority', 'Bio & Review'];
+
+    function updateOnboardStep() {
+      for (let i = 1; i <= _onboardTotalSteps; i++) {
+        const step = document.getElementById(`onboard-step-${i}`);
+        if (step) step.style.display = i === _onboardStep ? '' : 'none';
+        const bar = document.getElementById(`step-bar-${i}`);
+        if (bar) bar.style.background = i <= _onboardStep ? '#0891b2' : 'rgba(255,255,255,0.1)';
+      }
+      document.getElementById('step-label').textContent = `Step ${_onboardStep} of ${_onboardTotalSteps} — ${_stepLabels[_onboardStep - 1]}`;
+      document.getElementById('onboard-prev-btn').style.display = _onboardStep > 1 ? '' : 'none';
+      document.getElementById('onboard-next-btn').style.display = _onboardStep < _onboardTotalSteps ? '' : 'none';
+      document.getElementById('onboard-submit-btn').style.display = _onboardStep === _onboardTotalSteps ? '' : 'none';
+    }
+
+    function onboardNextStep() {
+      // Validate current step
+      if (_onboardStep === 1) {
+        const first = document.getElementById('onboard-first').value.trim();
+        const last = document.getElementById('onboard-last').value.trim();
+        const email = document.getElementById('onboard-email').value.trim();
+        if (!first || !last || !email) { showError('onboard-error', 'First name, last name, and email are required.'); return; }
+        document.getElementById('onboard-error').style.display = 'none';
+      }
+      if (_onboardStep < _onboardTotalSteps) { _onboardStep++; updateOnboardStep(); }
+    }
+
+    function onboardPrevStep() {
+      if (_onboardStep > 1) { _onboardStep--; updateOnboardStep(); }
+      document.getElementById('onboard-error').style.display = 'none';
+    }
+
     async function handleOnboardSubmit() {
       const btn = document.getElementById('onboard-submit-btn');
-      const firstName = document.getElementById('onboard-first').value.trim();
-      const lastName = document.getElementById('onboard-last').value.trim();
-      const email = document.getElementById('onboard-email').value.trim();
-
-      if (!firstName || !lastName || !email) {
-        showError('onboard-error', 'First name, last name, and email are required.');
-        return;
-      }
-
       btn.disabled = true;
       btn.textContent = 'Submitting...';
 
       try {
+        const val = id => document.getElementById(id)?.value?.trim() || null;
         const body = {
-          first_name: firstName,
-          last_name: lastName,
-          email,
-          credentials: document.getElementById('onboard-credentials').value.trim() || null,
-          npi: document.getElementById('onboard-npi').value.trim() || null,
-          taxonomy: document.getElementById('onboard-taxonomy').value.trim() || null,
-          specialty: document.getElementById('onboard-specialty').value.trim() || null,
-          phone: document.getElementById('onboard-phone').value.trim() || null,
-          caqh_id: document.getElementById('onboard-caqh').value.trim() || null,
+          // Step 1: Personal
+          first_name: val('onboard-first'),
+          last_name: val('onboard-last'),
+          email: val('onboard-email'),
+          phone: val('onboard-phone'),
+          date_of_birth: val('onboard-dob'),
+          gender: val('onboard-gender'),
+          address_street: val('onboard-address'),
+          address_city: val('onboard-city'),
+          address_state: val('onboard-state'),
+          address_zip: val('onboard-zip'),
           organization_id: document.getElementById('onboard-org-id').value ? parseInt(document.getElementById('onboard-org-id').value) : null,
+          // Step 2: Credentials
+          credentials: val('onboard-credentials'),
+          npi: val('onboard-npi'),
+          caqh_id: val('onboard-caqh'),
+          taxonomy: val('onboard-taxonomy'),
+          specialty: val('onboard-specialty'),
+          state_of_primary_license: val('onboard-primary-state'),
+          medicaid_id: val('onboard-medicaid'),
+          medicare_ptan: val('onboard-ptan'),
+          // Step 3: Practice Authority
+          supervising_physician: val('onboard-sup-physician'),
+          supervising_physician_npi: val('onboard-sup-npi'),
+          collaborative_agreement_status: val('onboard-cpa-status'),
+          collaborative_agreement_expiry: val('onboard-cpa-expiry'),
+          practice_authority: val('onboard-practice-auth'),
+          prescriptive_authority: document.getElementById('onboard-prescriptive')?.checked || false,
+          controlled_substance_authority: document.getElementById('onboard-cs-auth')?.checked || false,
+          cs_schedule_authority: val('onboard-cs-schedule'),
+          // Step 4: Bio
+          languages_spoken: val('onboard-languages'),
+          bio: val('onboard-bio'),
         };
+
+        // Remove null values
+        Object.keys(body).forEach(k => { if (body[k] === null || body[k] === '') delete body[k]; });
 
         const res = await fetch(`${API_BASE}/onboard/${_onboardToken}`, {
           method: 'POST',
