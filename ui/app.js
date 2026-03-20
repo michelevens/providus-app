@@ -96,6 +96,29 @@ const APPLICATION_STATUSES = [
   { value: 'withdrawn', label: 'Withdrawn', color: '#6B7280', bg: '#E5E7EB' },
 ];
 
+// Application Groups (loaded from agency config, defaults below)
+let APP_GROUPS = [
+  { id: 1, label: 'Group 1', short: 'G1', color: '#0891b2' },
+  { id: 2, label: 'Group 2', short: 'G2', color: '#3b82f6' },
+  { id: 3, label: 'Group 3', short: 'G3', color: '#6b7280' },
+];
+
+function getGroupDef(id) {
+  return APP_GROUPS.find(g => g.id === Number(id)) || { id, label: `Group ${id}`, short: `G${id}`, color: '#6b7280' };
+}
+
+function groupBadge(id) {
+  if (!id) return '—';
+  const g = getGroupDef(id);
+  return `<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:0.02em;background:${g.color}20;color:${g.color};">${g.short}</span>`;
+}
+
+function groupOptions(selectedId, includeAll = false) {
+  let html = includeAll ? '<option value="">All Groups</option>' : '';
+  html += APP_GROUPS.map(g => `<option value="${g.id}" ${Number(selectedId) === g.id ? 'selected' : ''}>${g.label}</option>`).join('');
+  return html;
+}
+
 const LICENSE_STATUSES = [
   { value: 'active', label: 'Active' },
   { value: 'pending', label: 'Pending' },
@@ -175,6 +198,15 @@ export async function initApp() {
   try { TELEHEALTH_POLICIES = await store.getReference('telehealth_policies') || []; } catch (e) { console.error('Failed to load telehealth policies:', e); }
   try { DEFAULT_STRATEGIES = await store.getAll('strategies') || []; } catch (e) { console.error('Failed to load strategies:', e); }
   US_TOTAL_POP = STATES.reduce((sum, s) => sum + (s.population || 0), 0);
+
+  // Load custom group definitions from agency config
+  try {
+    const agencyConfig = await store.getAgencyConfig();
+    const waves = agencyConfig?.waves || agencyConfig?.config?.waves;
+    if (waves && Array.isArray(waves) && waves.length > 0) {
+      APP_GROUPS = waves;
+    }
+  } catch (e) { /* use defaults */ }
 
   // Display app version
   const versionEl = document.getElementById('app-version');
@@ -1470,10 +1502,7 @@ async function renderApplications() {
         ${APPLICATION_STATUSES.map(s => `<option value="${s.value}" ${filters.status === s.value ? 'selected' : ''}>${s.label}</option>`).join('')}
       </select>
       <select class="form-control" id="filter-wave" onchange="window.app.applyFilters()">
-        <option value="">All Waves</option>
-        <option value="1" ${filters.wave === '1' ? 'selected' : ''}>Wave 1</option>
-        <option value="2" ${filters.wave === '2' ? 'selected' : ''}>Wave 2</option>
-        <option value="3" ${filters.wave === '3' ? 'selected' : ''}>Wave 3</option>
+        ${groupOptions(filters.wave, true)}
       </select>
       <input type="text" class="form-control search-input" placeholder="Search..." value="${filters.search}" oninput="window.app.filters.search=this.value;window.app.renderAppTable()">
     </div>
@@ -1483,7 +1512,7 @@ async function renderApplications() {
           <tr>
             <th style="width:30px;"><input type="checkbox" onchange="document.querySelectorAll('.app-checkbox').forEach(c=>c.checked=this.checked);window.app.onBulkCheckChange();"></th>
             <th style="width:70px;">ID</th>
-            <th onclick="window.app.sortBy('wave')">Wave ${sortArrow('wave')}</th>
+            <th onclick="window.app.sortBy('wave')">Group ${sortArrow('wave')}</th>
             <th onclick="window.app.sortBy('state')">State ${sortArrow('state')}</th>
             <th onclick="window.app.sortBy('payerName')">Payer ${sortArrow('payerName')}</th>
             <th onclick="window.app.sortBy('status')">Status ${sortArrow('status')}</th>
@@ -1569,7 +1598,7 @@ async function renderAppTable(prefetchedApps = null) {
     return `<tr>
       <td><input type="checkbox" class="app-checkbox" data-app-id="${a.id}" onchange="window.app.onBulkCheckChange()"></td>
       <td><span style="font-family:monospace;font-size:11px;color:var(--brand-600);">${toHexId(a.id)}</span></td>
-      <td><span class="wave-badge wave-${a.wave || 1}">W${a.wave || '-'}</span></td>
+      <td>${groupBadge(a.wave)}</td>
       <td><strong>${getStateName(a.state)}</strong></td>
       <td title="${a.payerContactName ? escAttr(a.payerContactName + (a.payerContactPhone ? ' | ' + a.payerContactPhone : '')) : ''}">${payerName}${a.payerContactName ? ' <span class="text-sm text-muted">&#128222;</span>' : ''}</td>
       <td><span class="badge badge-${a.status}">${statusObj.label}</span></td>
@@ -5930,11 +5959,11 @@ window.app = {
         </div>
         <div style="overflow-x:auto;">
           <table>
-            <thead><tr><th>Wave</th><th>State</th><th>Payer</th><th>Est $/mo</th><th>Notes</th></tr></thead>
+            <thead><tr><th>Group</th><th>State</th><th>Payer</th><th>Est $/mo</th><th>Notes</th></tr></thead>
             <tbody>
               ${result.batch.map(a => `
                 <tr>
-                  <td><span class="wave-badge wave-${a.wave}">W${a.wave}</span></td>
+                  <td>${groupBadge(a.wave)}</td>
                   <td>${getStateName(a.state)}</td>
                   <td>${a.payerName}</td>
                   <td>$${(a.estMonthlyRevenue || 0).toLocaleString()}</td>
@@ -6529,14 +6558,14 @@ window.app = {
     if (!wave) { showToast('Select a wave first'); return; }
     const selected = Array.from(document.querySelectorAll('.app-checkbox:checked')).map(el => el.dataset.appId);
     for (const id of selected) { await store.update('applications', id, { wave: Number(wave) }); }
-    showToast(`Updated ${selected.length} applications to Wave ${wave}`);
+    showToast(`Updated ${selected.length} applications to ${getGroupDef(wave).label}`);
     await renderAppTable();
   },
   async exportSelectedCSV() {
     const selected = Array.from(document.querySelectorAll('.app-checkbox:checked')).map(el => el.dataset.appId);
     const apps = [];
     for (const id of selected) { const a = await store.getOne('applications', id); if (a) apps.push(a); }
-    const headers = ['State', 'Payer', 'Status', 'Wave', 'Submitted', 'Effective Date', 'Est Revenue', 'Notes'];
+    const headers = ['State', 'Payer', 'Status', 'Group', 'Submitted', 'Effective Date', 'Est Revenue', 'Notes'];
     const rows = apps.map(a => {
       const payer = getPayerById(a.payerId);
       return [a.state, payer ? payer.name : (a.payerName || ''), a.status, a.wave || '', a.submittedDate || '', a.effectiveDate || '', a.estMonthlyRevenue || 0, (a.notes || '').replace(/"/g, '""')];
@@ -6642,7 +6671,7 @@ window.app = {
       report = `DETAILED APPLICATION STATUS REPORT\nGenerated: ${now}\n${'═'.repeat(50)}\n\n`;
       apps.forEach(a => {
         report += `${a.payerName} — ${getStateName(a.state)}\n`;
-        report += `  Status: ${a.status} | Wave: ${a.wave || '—'} | Submitted: ${a.submittedDate || 'N/A'}\n\n`;
+        report += `  Status: ${a.status} | Group: ${a.wave ? getGroupDef(a.wave).label : '—'} | Submitted: ${a.submittedDate || 'N/A'}\n\n`;
       });
     } else if (type === 'license') {
       report = `LICENSE STATUS REPORT\nGenerated: ${now}\n${'═'.repeat(50)}\n\n`;
@@ -6662,7 +6691,7 @@ window.app = {
     const result = document.getElementById('export-result');
     if (format === 'csv' && (type === 'detailed' || type === 'license')) {
       let csv = type === 'detailed'
-        ? 'Payer,State,Status,Wave,Submitted\n' + apps.map(a => `"${a.payerName}","${getStateName(a.state)}","${a.status}","${a.wave || ''}","${a.submittedDate || ''}"`).join('\n')
+        ? 'Payer,State,Status,Group,Submitted\n' + apps.map(a => `"${a.payerName}","${getStateName(a.state)}","${a.status}","${a.wave ? getGroupDef(a.wave).label : ''}","${a.submittedDate || ''}"`).join('\n')
         : 'License Type,State,Status,Expires,Number\n' + licenses.map(l => `"${l.licenseType || ''}","${getStateName(l.state)}","${l.status}","${l.expirationDate || ''}","${l.licenseNumber || ''}"`).join('\n');
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
@@ -9103,11 +9132,9 @@ async function openApplicationModal(id) {
     </div>
     <div class="form-row-3">
       <div class="form-group">
-        <label>Wave</label>
+        <label>Group</label>
         <select class="form-control" id="field-wave">
-          <option value="1" ${existing?.wave === 1 ? 'selected' : ''}>Wave 1</option>
-          <option value="2" ${existing?.wave === 2 ? 'selected' : ''}>Wave 2</option>
-          <option value="3" ${existing?.wave === 3 ? 'selected' : ''}>Wave 3</option>
+          ${groupOptions(existing?.wave)}
         </select>
       </div>
       <div class="form-group">
@@ -9721,10 +9748,8 @@ async function renderBulkBar() {
     </select>
     <button class="btn btn-sm btn-primary" onclick="window.app.bulkUpdateStatus()">Apply</button>
     <select class="form-control" id="bulk-wave" style="width:auto;min-width:100px;">
-      <option value="">Set Wave...</option>
-      <option value="1">Wave 1</option>
-      <option value="2">Wave 2</option>
-      <option value="3">Wave 3</option>
+      <option value="">Set Group...</option>
+      ${groupOptions()}
     </select>
     <button class="btn btn-sm btn-primary" onclick="window.app.bulkUpdateWave()">Apply</button>
     <button class="btn btn-sm" onclick="window.app.exportSelectedCSV()">Export CSV</button>
@@ -9767,7 +9792,7 @@ async function renderApplicationTimeline(appId) {
   body.innerHTML = `
     <div class="alert alert-info" style="margin-bottom:16px;">
       <strong>Status:</strong> <span class="badge badge-${app.status}">${app.status}</span>
-      &nbsp;|&nbsp; <strong>Wave:</strong> ${app.wave || '-'}
+      &nbsp;|&nbsp; <strong>Group:</strong> ${app.wave ? getGroupDef(app.wave).label : '-'}
       &nbsp;|&nbsp; <strong>Submitted:</strong> ${formatDateDisplay(app.submittedDate)}
       ${app.effectiveDate ? ` &nbsp;|&nbsp; <strong>Effective:</strong> ${formatDateDisplay(app.effectiveDate)}` : ''}
     </div>
@@ -11082,7 +11107,7 @@ async function renderOrgDetailPage(orgId) {
         <div class="card-body" style="padding:0;">
           ${orgApps.length === 0 ? '<div class="empty-state" style="padding:30px;"><p>No applications for this organization.</p></div>' : `
             <table>
-              <thead><tr><th>Provider</th><th>Payer</th><th>State</th><th>Status</th><th>Wave</th><th>Submitted</th></tr></thead>
+              <thead><tr><th>Provider</th><th>Payer</th><th>State</th><th>Status</th><th>Group</th><th>Submitted</th></tr></thead>
               <tbody>
                 ${orgApps.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 50).map(a => {
                   const prov = providers.find(p => p.id == (a.providerId || a.provider_id));
@@ -11093,7 +11118,7 @@ async function renderOrgDetailPage(orgId) {
                       <td><strong>${escHtml(a.payerName || a.payer_name || '')}</strong></td>
                       <td>${a.state || '—'}</td>
                       <td><span class="badge badge-${a.status}">${(a.status || '').replace(/_/g, ' ')}</span></td>
-                      <td>${a.wave ? `<span class="wave-badge wave-${a.wave}">W${a.wave}</span>` : '—'}</td>
+                      <td>${groupBadge(a.wave)}</td>
                       <td class="text-sm">${formatDateDisplay(a.submittedDate || a.submitted_date)}</td>
                     </tr>`;
                 }).join('')}
@@ -11782,7 +11807,7 @@ async function renderKanbanBoard() {
                 <div style="font-size:12px;color:var(--gray-500);margin-bottom:4px;">${escHtml(payerName)}</div>
                 <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-400);">
                   <span>${escHtml(a.state || '—')}</span>
-                  ${a.wave ? `<span>W${a.wave}</span>` : ''}
+                  ${a.wave ? `<span>${getGroupDef(a.wave).short}</span>` : ''}
                   <span>${daysInStatus}d</span>
                 </div>
               </div>`;
