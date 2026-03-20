@@ -481,6 +481,10 @@
         <div class="header-actions-group">
           <div class="page-header-actions" id="page-actions"></div>
           <div class="header-icon-bar">
+            <button class="header-icon-btn" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode">
+              <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="display:none;"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/></svg>
+              <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M13.5 8.5a5.5 5.5 0 01-7-7A5.5 5.5 0 108 14a5.5 5.5 0 005.5-5.5z"/></svg>
+            </button>
             <button class="header-icon-btn" onclick="window.app.openGlobalSearch()" title="Search (Ctrl+K)">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
             </button>
@@ -1251,6 +1255,40 @@
     window.addEventListener('hashchange', () => {
       if (location.hash.match(/^#onboard\//)) checkOnboardHash();
       if (location.hash.match(/^#contract\//)) checkContractHash();
+    });
+  </script>
+
+  <!-- Theme Toggle -->
+  <script>
+    function initTheme() {
+      const saved = localStorage.getItem('credentik_theme');
+      if (saved) {
+        document.documentElement.setAttribute('data-theme', saved);
+      } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+      updateThemeIcon();
+    }
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('credentik_theme', next);
+      updateThemeIcon();
+    }
+    function updateThemeIcon() {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+        (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      const sun = document.getElementById('theme-icon-sun');
+      const moon = document.getElementById('theme-icon-moon');
+      if (sun && moon) {
+        sun.style.display = isDark ? 'block' : 'none';
+        moon.style.display = isDark ? 'none' : 'block';
+      }
+    }
+    initTheme();
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (!localStorage.getItem('credentik_theme')) updateThemeIcon();
     });
   </script>
 
