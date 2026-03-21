@@ -450,7 +450,7 @@ async function navigateTo(page) {
     case 'applications':
       pageTitle.textContent = 'Applications';
       pageSubtitle.textContent = 'All credentialing applications';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openAddModal()">+ Add Application</button> <button class="btn" onclick="window.app.openCrossFacilityCredentialing()">Cross-Facility</button>' + printBtn;
+      pageActions.innerHTML = '<button class="btn btn-gold btn-sm" onclick="window.app.openAddModal()">+ Add</button> <button class="btn btn-sm" onclick="window.app.openCrossFacilityCredentialing()">Cross-Facility</button>' + printBtn;
       await renderApplications();
       break;
     case 'followups':

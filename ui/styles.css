@@ -893,7 +893,7 @@ body.funding-hub-active .page-header {
 .page-header {
   background: var(--header-bg);
   border-bottom: 1px solid var(--border-color);
-  padding: 0 var(--sp-8);
+  padding: 0 var(--sp-6);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -903,6 +903,8 @@ body.funding-hub-active .page-header {
   min-height: var(--header-height);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .page-header h2 {
   font-size: 18px;
@@ -919,14 +921,18 @@ body.funding-hub-active .page-header {
 
 .header-actions-group {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
   margin-left: auto;
 }
 .page-header-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
+}
+.page-header-actions .btn {
+  padding: 6px 12px;
+  font-size: 12px;
 }
 
 /* ─── HEADER ICON BAR ─── */
@@ -940,13 +946,13 @@ body.funding-hub-active .page-header {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius);
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   background: var(--surface-card);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 15px;
   color: var(--text-tertiary);
   transition: all var(--duration-fast) var(--ease);
 }
