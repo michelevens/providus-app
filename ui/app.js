@@ -11025,10 +11025,6 @@ function toHexId(id) {
   return Number(id).toString(16).toUpperCase().padStart(6, '0');
 }
 
-function escAttr(str) {
-  return escHtml(str);
-}
-
 function timeAgo(dateStr) {
   if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();
