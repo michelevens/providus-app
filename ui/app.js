@@ -798,6 +798,8 @@ async function navigateTo(page) {
 // ─── Dashboard ───
 
 async function renderDashboard() {
+  const body = document.getElementById('page-body');
+  try {
   // Provider self-service: if role=provider, show simplified dashboard
   const currentUser = auth.getUser();
   if (currentUser?.role === 'provider') {
@@ -1281,6 +1283,13 @@ async function renderDashboard() {
 
   // ─── Render Charts (after DOM is ready) ───
   requestAnimationFrame(() => renderDashboardCharts(stats, apps, licenses));
+  } catch (e) {
+    console.error('Dashboard render error:', e);
+    if (body) body.innerHTML = `<div class="alert alert-danger" style="margin:24px 0;">
+      <strong>Dashboard failed to load.</strong> ${escHtml(e.message || 'Unknown error')}.
+      <button class="btn btn-sm" onclick="navigateTo('dashboard')" style="margin-left:8px;">Retry</button>
+    </div>`;
+  }
 }
 
 // ─── Dashboard Charts ───
