@@ -10868,14 +10868,15 @@ document.addEventListener('input', (e) => {
 
 let _confirmResolve = null;
 
-function appConfirm(message, { title = 'Confirm', okLabel = 'Confirm', okClass = 'btn-primary', cancelLabel = 'Cancel' } = {}) {
+function appConfirm(message, { title = 'Confirm', okLabel = 'Confirm', okClass = 'btn-primary', cancelLabel = 'Cancel', raw = false } = {}) {
   return new Promise(resolve => {
     _confirmResolve = resolve;
     document.getElementById('confirm-modal-title').textContent = title;
-    document.getElementById('confirm-modal-message').textContent = message;
+    const msgEl = document.getElementById('confirm-modal-message');
+    if (raw) { msgEl.innerHTML = message; } else { msgEl.textContent = message; }
     document.getElementById('confirm-modal-input').style.display = 'none';
-    document.getElementById('confirm-modal-ok').textContent = okLabel;
-    document.getElementById('confirm-modal-ok').className = 'btn ' + okClass;
+    const okBtn = document.getElementById('confirm-modal-ok');
+    if (okLabel) { okBtn.textContent = okLabel; okBtn.className = 'btn ' + okClass; okBtn.style.display = ''; } else { okBtn.style.display = 'none'; }
     document.getElementById('confirm-modal-cancel').textContent = cancelLabel;
     document.getElementById('confirm-modal').classList.add('active');
   });
