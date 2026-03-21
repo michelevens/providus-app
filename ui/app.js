@@ -450,7 +450,7 @@ async function navigateTo(page) {
     case 'applications':
       pageTitle.textContent = 'Applications';
       pageSubtitle.textContent = 'All credentialing applications';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openAddModal()">+ Add Application</button>' + printBtn;
+      pageActions.innerHTML = printBtn;
       await renderApplications();
       break;
     case 'followups':
@@ -1497,6 +1497,10 @@ async function renderApplications() {
   }).filter(Boolean))].sort();
 
   body.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div></div>
+      <button class="btn btn-gold" onclick="window.app.openAddModal()">+ Add Application</button>
+    </div>
     <div class="filters-bar">
       <select class="form-control" id="filter-state" onchange="window.app.applyFilters()">
         <option value="">All States</option>
