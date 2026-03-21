@@ -13883,16 +13883,16 @@ async function renderFaqPage() {
     </div>
 
     <!-- FAQ Modal -->
-    <div class="modal" id="faq-modal">
-      <div class="modal-content" style="max-width:560px;">
+    <div class="modal-overlay" id="faq-modal">
+      <div class="modal" style="max-width:560px;">
         <div class="modal-header">
-          <h3 id="faq-modal-title">Add FAQ</h3>
+          <h2 id="faq-modal-title">Add FAQ</h2>
           <button class="modal-close" onclick="document.getElementById('faq-modal').classList.remove('active')">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="auth-field" style="margin:0 0 12px;"><label>Question *</label><input type="text" id="faq-question" class="form-control"></div>
-          <div class="auth-field" style="margin:0 0 12px;"><label>Answer *</label><textarea id="faq-answer" class="form-control" rows="5" style="resize:vertical;"></textarea></div>
-          <div class="auth-field" style="margin:0;"><label>Category</label>
+          <div class="form-group"><label>Question *</label><input type="text" id="faq-question" class="form-control" data-validate="required"></div>
+          <div class="form-group"><label>Answer *</label><textarea id="faq-answer" class="form-control" rows="5" style="resize:vertical;" data-validate="required"></textarea></div>
+          <div class="form-group"><label>Category</label>
             <select id="faq-category" class="form-control">
               <option value="general">General</option>
               <option value="credentialing">Credentialing</option>
@@ -13902,7 +13902,7 @@ async function renderFaqPage() {
           </div>
           <input type="hidden" id="faq-edit-id" value="">
         </div>
-        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+        <div class="modal-footer">
           <button class="btn" onclick="document.getElementById('faq-modal').classList.remove('active')">Cancel</button>
           <button class="btn btn-primary" onclick="window.app.saveFaq()">Save FAQ</button>
         </div>
