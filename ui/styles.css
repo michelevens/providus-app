@@ -425,7 +425,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* ─── Demo Login Buttons ─── */
 .demo-accounts {
-  margin-top: 20px;
+  margin-top: 24px;
   padding-top: 20px;
   border-top: 1px solid rgba(255,255,255,0.06);
 }
@@ -435,7 +435,7 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: 1.2px;
   color: var(--gray-500);
   font-weight: 600;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   text-align: center;
 }
 .demo-grid {
@@ -443,16 +443,12 @@ h1, h2, h3, h4, h5, h6 {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
-.demo-extra {
-  margin-top: 8px;
-}
 .demo-btn {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.03);
   cursor: pointer;
@@ -462,16 +458,26 @@ h1, h2, h3, h4, h5, h6 {
 }
 .demo-btn:hover {
   border-color: var(--brand-500);
-  background: rgba(8,145,178,0.08);
+  background: rgba(8,145,178,0.1);
+  transform: translateY(-1px);
+}
+.demo-btn:active { transform: translateY(0); }
+.demo-btn:disabled { cursor: wait; }
+.demo-icon {
+  font-size: 22px;
+  flex-shrink: 0;
 }
 .demo-role {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  color: var(--gray-200);
+  color: var(--gray-100);
+  display: block;
 }
 .demo-desc {
   font-size: 10px;
   color: var(--gray-500);
+  display: block;
+  margin-top: 1px;
 }
 .demo-owner .demo-role { color: #f59e0b; }
 .demo-agency .demo-role { color: #10b981; }
@@ -708,7 +714,23 @@ body.funding-hub-active .page-header {
 }
 
 @media (max-width: 480px) {
-  .auth-box { padding: 36px 24px; }
+  .auth-gate { padding: 16px; align-items: flex-start; padding-top: 10vh; }
+  .auth-box {
+    padding: 28px 20px;
+    width: 100%;
+    max-width: 100%;
+    border-radius: var(--radius-xl);
+  }
+  .auth-box h2 { font-size: 20px; }
+  .auth-box p { font-size: 13px; margin-bottom: 20px; }
+  .auth-box input { padding: 12px 14px; font-size: 14px; letter-spacing: 1px; }
+  .auth-box .btn-enter { padding: 12px; font-size: 14px; }
+  .demo-grid { grid-template-columns: 1fr; gap: 6px; }
+  .demo-btn { padding: 10px 12px; }
+  .demo-icon { font-size: 18px; }
+  .demo-role { font-size: 12px; }
+  .auth-switch { font-size: 12px; }
+  .auth-field label { font-size: 12px; }
 }
 
 /* ═══════════════════════════════════════════
