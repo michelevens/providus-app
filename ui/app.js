@@ -9801,11 +9801,15 @@ function handleNppesProxy(payload) {
     if (!institution) { showToast('Institution is required'); return; }
     try {
       await store.createProviderEducation(providerId, {
+        institutionName: institution,
         institution,
         degree: getPresetValue('edu-degree'),
+        degreeType: getPresetValue('edu-degree'),
         fieldOfStudy: getPresetValue('edu-field'),
+        specialty: getPresetValue('edu-field'),
         startDate: document.getElementById('edu-start')?.value || '',
         endDate: document.getElementById('edu-end')?.value || '',
+        graduationDate: document.getElementById('edu-end')?.value || '',
       });
       showToast('Education record added');
       document.getElementById('education-modal').classList.remove('active');
@@ -9846,8 +9850,10 @@ function handleNppesProxy(payload) {
     try {
       await store.createProviderBoard(providerId, {
         boardName,
+        board: boardName,
         specialty: getPresetValue('board-specialty'),
         certificateNumber: document.getElementById('board-cert-num')?.value?.trim() || '',
+        certNumber: document.getElementById('board-cert-num')?.value?.trim() || '',
         issueDate: document.getElementById('board-issue')?.value || '',
         expirationDate: document.getElementById('board-exp')?.value || '',
       });
@@ -9867,9 +9873,11 @@ function handleNppesProxy(payload) {
     if (!carrier) { showToast('Insurance carrier is required'); return; }
     try {
       await store.createProviderMalpractice(providerId, {
+        insuranceCarrier: carrier,
         carrier,
         policyNumber: document.getElementById('mal-policy')?.value?.trim() || '',
         coverageAmount: getPresetValue('mal-coverage'),
+        coverage: getPresetValue('mal-coverage'),
         effectiveDate: document.getElementById('mal-effective')?.value || '',
         expirationDate: document.getElementById('mal-expiration')?.value || '',
       });
@@ -9892,7 +9900,9 @@ function handleNppesProxy(payload) {
     try {
       await store.createProviderWorkHistory(providerId, {
         employer,
+        organization: employer,
         position: getPresetValue('wh-position'),
+        title: getPresetValue('wh-position'),
         department: document.getElementById('wh-department')?.value?.trim() || '',
         startDate: document.getElementById('wh-start')?.value || '',
         endDate: document.getElementById('wh-end')?.value || '',
@@ -9917,8 +9927,11 @@ function handleNppesProxy(payload) {
     try {
       await store.createProviderCme(providerId, {
         title,
+        courseName: title,
         provider: getPresetValue('cme-provider'),
+        accreditingBody: getPresetValue('cme-provider'),
         credits: parseFloat(document.getElementById('cme-credits')?.value) || 0,
+        hours: parseFloat(document.getElementById('cme-credits')?.value) || 0,
         category: document.getElementById('cme-category')?.value || '',
         completionDate: document.getElementById('cme-date')?.value || '',
       });
