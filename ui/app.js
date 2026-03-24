@@ -62,6 +62,125 @@ window.addEventListener('online', () => {
   if (typeof showToast === 'function') showToast('Connection restored');
 });
 
+// ─── Provider Profile Presets ───
+// Prepopulated options for provider credentialing profile fields.
+// Users can still type custom values via the "Other" option.
+
+const PRESET_INSTITUTIONS = [
+  'Johns Hopkins University','Harvard Medical School','Yale School of Medicine','Stanford University School of Medicine',
+  'University of Pennsylvania','Columbia University','Duke University','University of Michigan',
+  'University of California, San Francisco','Northwestern University','Emory University','University of Pittsburgh',
+  'University of Florida','University of Miami','University of South Florida','Nova Southeastern University',
+  'Barry University','Florida Atlantic University','University of Central Florida','Florida International University',
+  'Walden University','Chamberlain University','Frontier Nursing University','Vanderbilt University',
+  'Georgetown University','George Washington University','University of Maryland','University of Virginia',
+  'University of North Carolina','Rush University','University of Illinois Chicago','Arizona State University',
+  'University of Arizona','Oregon Health & Science University','University of Colorado','Case Western Reserve University',
+  'University of Cincinnati','University of Alabama at Birmingham','Medical University of South Carolina',
+  'Uniformed Services University','Meharry Medical College','Howard University','Morehouse School of Medicine',
+];
+
+const PRESET_DEGREES = [
+  'MD','DO','PhD','PsyD','DNP','MSN','MSW','LCSW','MA','MS','BSN','BA','BS',
+  'PharmD','MPH','MHA','MBA','EdD','Residency','Fellowship','Post-Doctoral','Certificate',
+];
+
+const PRESET_FIELDS_OF_STUDY = [
+  'Psychiatry','Psychiatric Mental Health','Family Nurse Practitioner','Psychology','Clinical Psychology',
+  'Counseling Psychology','Social Work','Clinical Social Work','Marriage & Family Therapy',
+  'Substance Abuse Counseling','Behavioral Health','Neuroscience','Psychopharmacology',
+  'Child & Adolescent Psychiatry','Geriatric Psychiatry','Forensic Psychiatry','Addiction Psychiatry',
+  'Consultation-Liaison Psychiatry','Emergency Psychiatry','Nursing','Advanced Practice Nursing',
+];
+
+const PRESET_BOARDS = [
+  { name: 'American Board of Psychiatry and Neurology (ABPN)', specialties: ['Psychiatry','Child & Adolescent Psychiatry','Addiction Psychiatry','Forensic Psychiatry','Geriatric Psychiatry','Consultation-Liaison Psychiatry','Brain Injury Medicine'] },
+  { name: 'American Nurses Credentialing Center (ANCC)', specialties: ['Psychiatric-Mental Health NP (PMHNP-BC)','Family NP (FNP-BC)','Adult-Gerontology NP','Pediatric NP'] },
+  { name: 'American Academy of Nurse Practitioners (AANP)', specialties: ['Family NP (FNP)','Adult-Gerontology NP','Emergency NP'] },
+  { name: 'National Board for Certified Counselors (NBCC)', specialties: ['National Certified Counselor (NCC)','Certified Clinical Mental Health Counselor (CCMHC)','Master Addictions Counselor (MAC)'] },
+  { name: 'Association of Social Work Boards (ASWB)', specialties: ['Licensed Clinical Social Worker (LCSW)','Licensed Master Social Worker (LMSW)'] },
+  { name: 'American Board of Professional Psychology (ABPP)', specialties: ['Clinical Psychology','Clinical Neuropsychology','Forensic Psychology','Clinical Child & Adolescent Psychology','Behavioral & Cognitive Psychology'] },
+  { name: 'American Board of Addiction Medicine (ABAM)', specialties: ['Addiction Medicine'] },
+  { name: 'American Board of Preventive Medicine', specialties: ['Addiction Medicine','Preventive Medicine'] },
+  { name: 'Commission on Rehabilitation Counselor Certification (CRCC)', specialties: ['Certified Rehabilitation Counselor (CRC)'] },
+  { name: 'National Board of Forensic Evaluators', specialties: ['Forensic Mental Health Evaluator'] },
+];
+
+const PRESET_MALPRACTICE_CARRIERS = [
+  'HPSO (Healthcare Providers Service Organization)','NSO (Nursing Service Organization)',
+  'Proliability / Mercer','CM&F Group','American Professional Agency (APA)',
+  'CPH & Associates','The Doctors Company','ProAssurance','MLMIC (Medical Liability Mutual Insurance)',
+  'NORCAL Group','Coverys','MagMutual','Medical Protective','Berkshire Medical Group',
+  'State Volunteer Mutual Insurance','Zurich','CNA','Liberty Mutual',
+];
+
+const PRESET_COVERAGE_AMOUNTS = [
+  '$1M / $3M','$1M / $1M','$2M / $4M','$2M / $6M','$500K / $1.5M','$500K / $1M','$1M / $5M',
+];
+
+const PRESET_EMPLOYERS = [
+  'Private Practice','Community Mental Health Center','Hospital — Inpatient Psych Unit',
+  'Hospital — Emergency Department','VA Medical Center','Federally Qualified Health Center (FQHC)',
+  'University / Academic Medical Center','Residential Treatment Facility','Substance Abuse Treatment Center',
+  'Correctional Facility','Telehealth Practice','School-Based Health Center','Group Practice',
+  'Skilled Nursing Facility','Home Health Agency','Crisis Stabilization Unit',
+];
+
+const PRESET_POSITIONS = [
+  'Attending Psychiatrist','Staff Psychiatrist','Psychiatric NP (PMHNP)','Nurse Practitioner',
+  'Clinical Psychologist','Licensed Clinical Social Worker','Licensed Professional Counselor',
+  'Medical Director','Clinical Director','Program Director','Chief of Psychiatry',
+  'Resident Physician','Fellow','Locum Tenens','Independent Contractor','Supervisor',
+];
+
+const PRESET_CME_PROVIDERS = [
+  'American Psychiatric Association (APA)','American Psychological Association (APA)',
+  'American Nurses Credentialing Center (ANCC)','American Academy of Nurse Practitioners (AANP)',
+  'National Association of Social Workers (NASW)','American Medical Association (AMA)',
+  'Accreditation Council for Continuing Medical Education (ACCME)',
+  'National Board for Certified Counselors (NBCC)','Psychiatry & Behavioral Health Learning Network',
+  'CME Outfitters','Medscape','UpToDate','American Academy of Child & Adolescent Psychiatry (AACAP)',
+  'American Academy of Addiction Psychiatry (AAAP)','National Council for Mental Wellbeing',
+  'SAMHSA','American Association for Marriage & Family Therapy (AAMFT)',
+  'Beck Institute','Motivational Interviewing Network of Trainers (MINT)',
+  'PESI','CrossCountry Education','NetCE','CE4Less',
+];
+
+const PRESET_CME_COURSES = [
+  'Psychopharmacology Update','Opioid Prescribing & Pain Management','Suicide Risk Assessment & Prevention',
+  'Trauma-Informed Care','Cognitive Behavioral Therapy (CBT) Fundamentals','DBT Skills Training',
+  'Motivational Interviewing','Cultural Competency in Mental Health','Ethics in Behavioral Health',
+  'HIPAA Compliance','Telehealth Best Practices','Substance Use Disorder Treatment Updates',
+  'Child & Adolescent Mental Health','Geriatric Psychiatry Update','Medication-Assisted Treatment (MAT)',
+  'ADHD Assessment & Treatment','Anxiety Disorders Update','Mood Disorders: Diagnosis & Treatment',
+  'Eating Disorders: Evidence-Based Approaches','Sleep Disorders in Psychiatric Practice',
+  'Psychotherapy Supervision','Documentation & Risk Management','Mandated Reporter Training',
+  'Domestic Violence Screening','Human Trafficking Recognition','Implicit Bias Training',
+];
+
+// Helper: builds a <select> + "Other" text input combo
+function presetSelectHtml(id, options, label, placeholder = '', required = false) {
+  return `
+    <div class="auth-field" style="margin:0;">
+      <label>${label}${required ? ' *' : ''}</label>
+      <select id="${id}" class="form-control" onchange="if(this.value==='__other__'){this.nextElementSibling.style.display='';this.nextElementSibling.focus();}else{this.nextElementSibling.style.display='none';this.nextElementSibling.value='';}">
+        <option value="">Select...</option>
+        ${options.map(o => `<option value="${typeof o === 'string' ? o : o.name}">${typeof o === 'string' ? o : o.name}</option>`).join('')}
+        <option value="__other__">Other (type custom)...</option>
+      </select>
+      <input type="text" id="${id}-custom" class="form-control" placeholder="${placeholder || 'Type custom value...'}" style="display:none;margin-top:4px;">
+    </div>`;
+}
+// Helper: gets value from preset select (returns custom if "Other" selected)
+function getPresetValue(id) {
+  const sel = document.getElementById(id);
+  if (!sel) return '';
+  if (sel.value === '__other__') {
+    return document.getElementById(`${id}-custom`)?.value?.trim() || '';
+  }
+  return sel.value;
+}
+
 // ─── Reference Data (loaded at init from API) ───
 
 let PAYER_CATALOG = [];
@@ -9039,19 +9158,19 @@ function handleNppesProxy(payload) {
     if (tab) tab.style.display = '';
   },
   openEducationModal(providerId) {
-    ['edu-institution','edu-degree','edu-field','edu-start','edu-end'].forEach(f => {
-      const el = document.getElementById(f); if (el) el.value = '';
+    ['edu-institution','edu-institution-custom','edu-degree','edu-degree-custom','edu-field','edu-field-custom','edu-start','edu-end'].forEach(f => {
+      const el = document.getElementById(f); if (el) { el.value = ''; if (f.endsWith('-custom')) el.style.display = 'none'; }
     });
     document.getElementById('education-modal').classList.add('active');
   },
   async saveEducation(providerId) {
-    const institution = document.getElementById('edu-institution')?.value?.trim();
+    const institution = getPresetValue('edu-institution');
     if (!institution) { showToast('Institution is required'); return; }
     try {
       await store.createProviderEducation(providerId, {
         institution,
-        degree: document.getElementById('edu-degree')?.value || '',
-        fieldOfStudy: document.getElementById('edu-field')?.value?.trim() || '',
+        degree: getPresetValue('edu-degree'),
+        fieldOfStudy: getPresetValue('edu-field'),
         startDate: document.getElementById('edu-start')?.value || '',
         endDate: document.getElementById('edu-end')?.value || '',
       });
@@ -9061,18 +9180,40 @@ function handleNppesProxy(payload) {
     } catch (e) { showToast('Error: ' + e.message); }
   },
   openBoardModal(providerId) {
-    ['board-name','board-specialty','board-cert-num','board-issue','board-exp'].forEach(f => {
+    ['board-name','board-name-custom','board-specialty','board-specialty-custom','board-cert-num','board-issue','board-exp'].forEach(f => {
       const el = document.getElementById(f); if (el) el.value = '';
     });
+    // Wire board name → specialty cascade
+    const boardSel = document.getElementById('board-name');
+    if (boardSel) {
+      boardSel.onchange = function() {
+        const specSel = document.getElementById('board-specialty');
+        if (!specSel) return;
+        // Show custom input if "Other"
+        const customInput = document.getElementById('board-name-custom');
+        if (this.value === '__other__') {
+          if (customInput) { customInput.style.display = ''; customInput.focus(); }
+        } else {
+          if (customInput) { customInput.style.display = 'none'; customInput.value = ''; }
+        }
+        // Populate specialties for selected board
+        const board = PRESET_BOARDS.find(b => b.name === this.value);
+        specSel.innerHTML = '<option value="">Select...</option>';
+        if (board && board.specialties) {
+          board.specialties.forEach(s => { specSel.innerHTML += `<option value="${s}">${s}</option>`; });
+        }
+        specSel.innerHTML += '<option value="__other__">Other (type custom)...</option>';
+      };
+    }
     document.getElementById('board-modal').classList.add('active');
   },
   async saveBoard(providerId) {
-    const boardName = document.getElementById('board-name')?.value?.trim();
+    const boardName = getPresetValue('board-name');
     if (!boardName) { showToast('Board name is required'); return; }
     try {
       await store.createProviderBoard(providerId, {
         boardName,
-        specialty: document.getElementById('board-specialty')?.value?.trim() || '',
+        specialty: getPresetValue('board-specialty'),
         certificateNumber: document.getElementById('board-cert-num')?.value?.trim() || '',
         issueDate: document.getElementById('board-issue')?.value || '',
         expirationDate: document.getElementById('board-exp')?.value || '',
@@ -9083,19 +9224,19 @@ function handleNppesProxy(payload) {
     } catch (e) { showToast('Error: ' + e.message); }
   },
   openMalpracticeModal(providerId) {
-    ['mal-carrier','mal-policy','mal-coverage','mal-effective','mal-expiration'].forEach(f => {
-      const el = document.getElementById(f); if (el) el.value = '';
+    ['mal-carrier','mal-carrier-custom','mal-policy','mal-coverage','mal-coverage-custom','mal-effective','mal-expiration'].forEach(f => {
+      const el = document.getElementById(f); if (el) { el.value = ''; if (f.endsWith('-custom')) el.style.display = 'none'; }
     });
     document.getElementById('malpractice-modal').classList.add('active');
   },
   async saveMalpractice(providerId) {
-    const carrier = document.getElementById('mal-carrier')?.value?.trim();
+    const carrier = getPresetValue('mal-carrier');
     if (!carrier) { showToast('Insurance carrier is required'); return; }
     try {
       await store.createProviderMalpractice(providerId, {
         carrier,
         policyNumber: document.getElementById('mal-policy')?.value?.trim() || '',
-        coverageAmount: document.getElementById('mal-coverage')?.value?.trim() || '',
+        coverageAmount: getPresetValue('mal-coverage'),
         effectiveDate: document.getElementById('mal-effective')?.value || '',
         expirationDate: document.getElementById('mal-expiration')?.value || '',
       });
@@ -9107,18 +9248,18 @@ function handleNppesProxy(payload) {
 
   // ─── Work History ───
   openWorkHistoryModal(providerId) {
-    ['wh-employer','wh-position','wh-department','wh-start','wh-end','wh-reason'].forEach(f => {
-      const el = document.getElementById(f); if (el) el.value = '';
+    ['wh-employer','wh-employer-custom','wh-position','wh-position-custom','wh-department','wh-start','wh-end','wh-reason'].forEach(f => {
+      const el = document.getElementById(f); if (el) { el.value = ''; if (f.endsWith('-custom')) el.style.display = 'none'; }
     });
     document.getElementById('work-history-modal').classList.add('active');
   },
   async saveWorkHistory(providerId) {
-    const employer = document.getElementById('wh-employer')?.value?.trim();
+    const employer = getPresetValue('wh-employer');
     if (!employer) { showToast('Employer is required'); return; }
     try {
       await store.createProviderWorkHistory(providerId, {
         employer,
-        position: document.getElementById('wh-position')?.value?.trim() || '',
+        position: getPresetValue('wh-position'),
         department: document.getElementById('wh-department')?.value?.trim() || '',
         startDate: document.getElementById('wh-start')?.value || '',
         endDate: document.getElementById('wh-end')?.value || '',
@@ -9132,18 +9273,18 @@ function handleNppesProxy(payload) {
 
   // ─── CME ───
   openCmeModal(providerId) {
-    ['cme-title','cme-provider','cme-credits','cme-category','cme-date'].forEach(f => {
-      const el = document.getElementById(f); if (el) el.value = '';
+    ['cme-title','cme-title-custom','cme-provider','cme-provider-custom','cme-credits','cme-category','cme-date'].forEach(f => {
+      const el = document.getElementById(f); if (el) { el.value = ''; if (f.endsWith('-custom')) el.style.display = 'none'; }
     });
     document.getElementById('cme-modal').classList.add('active');
   },
   async saveCme(providerId) {
-    const title = document.getElementById('cme-title')?.value?.trim();
+    const title = getPresetValue('cme-title');
     if (!title) { showToast('Course title is required'); return; }
     try {
       await store.createProviderCme(providerId, {
         title,
-        provider: document.getElementById('cme-provider')?.value?.trim() || '',
+        provider: getPresetValue('cme-provider'),
         credits: parseFloat(document.getElementById('cme-credits')?.value) || 0,
         category: document.getElementById('cme-category')?.value || '',
         completionDate: document.getElementById('cme-date')?.value || '',
@@ -14870,23 +15011,10 @@ async function renderProviderProfilePage(providerId) {
           <button class="modal-close" onclick="document.getElementById('education-modal').classList.remove('active')">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="auth-field" style="margin:0 0 12px;"><label>Institution *</label><input type="text" id="edu-institution" class="form-control" placeholder="e.g. Johns Hopkins University"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div class="auth-field" style="margin:0;"><label>Degree</label>
-              <select id="edu-degree" class="form-control">
-                <option value="">Select...</option>
-                <option value="MD">MD</option>
-                <option value="DO">DO</option>
-                <option value="PhD">PhD</option>
-                <option value="MSN">MSN</option>
-                <option value="DNP">DNP</option>
-                <option value="PA">PA</option>
-                <option value="Residency">Residency</option>
-                <option value="Fellowship">Fellowship</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            <div class="auth-field" style="margin:0;"><label>Field / Specialty</label><input type="text" id="edu-field" class="form-control"></div>
+          ${presetSelectHtml('edu-institution', PRESET_INSTITUTIONS, 'Institution', 'Type institution name...', true)}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+            ${presetSelectHtml('edu-degree', PRESET_DEGREES, 'Degree')}
+            ${presetSelectHtml('edu-field', PRESET_FIELDS_OF_STUDY, 'Field / Specialty', 'e.g. Psychiatric Mental Health')}
             <div class="auth-field" style="margin:0;"><label>Start Date</label><input type="date" id="edu-start" class="form-control"></div>
             <div class="auth-field" style="margin:0;"><label>End Date</label><input type="date" id="edu-end" class="form-control"></div>
           </div>
@@ -14935,9 +15063,15 @@ async function renderProviderProfilePage(providerId) {
           <button class="modal-close" onclick="document.getElementById('board-modal').classList.remove('active')">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="auth-field" style="margin:0 0 12px;"><label>Board Name *</label><input type="text" id="board-name" class="form-control" placeholder="e.g. American Board of Psychiatry"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div class="auth-field" style="margin:0;"><label>Specialty</label><input type="text" id="board-specialty" class="form-control"></div>
+          ${presetSelectHtml('board-name', PRESET_BOARDS, 'Board Name', 'Type board name...', true)}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+            <div class="auth-field" style="margin:0;"><label>Specialty</label>
+              <select id="board-specialty" class="form-control" onchange="if(this.value==='__other__'){this.nextElementSibling.style.display='';this.nextElementSibling.focus();}else{this.nextElementSibling.style.display='none';this.nextElementSibling.value='';}">
+                <option value="">Select board first...</option>
+                <option value="__other__">Other (type custom)...</option>
+              </select>
+              <input type="text" id="board-specialty-custom" class="form-control" placeholder="Type custom specialty..." style="display:none;margin-top:4px;">
+            </div>
             <div class="auth-field" style="margin:0;"><label>Certificate #</label><input type="text" id="board-cert-num" class="form-control"></div>
             <div class="auth-field" style="margin:0;"><label>Issue Date</label><input type="date" id="board-issue" class="form-control"></div>
             <div class="auth-field" style="margin:0;"><label>Expiration Date</label><input type="date" id="board-exp" class="form-control"></div>
@@ -14987,10 +15121,10 @@ async function renderProviderProfilePage(providerId) {
           <button class="modal-close" onclick="document.getElementById('malpractice-modal').classList.remove('active')">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="auth-field" style="margin:0 0 12px;"><label>Insurance Carrier *</label><input type="text" id="mal-carrier" class="form-control"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          ${presetSelectHtml('mal-carrier', PRESET_MALPRACTICE_CARRIERS, 'Insurance Carrier', 'Type carrier name...', true)}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
             <div class="auth-field" style="margin:0;"><label>Policy Number</label><input type="text" id="mal-policy" class="form-control"></div>
-            <div class="auth-field" style="margin:0;"><label>Coverage Amount</label><input type="text" id="mal-coverage" class="form-control" placeholder="e.g. $1M/$3M"></div>
+            ${presetSelectHtml('mal-coverage', PRESET_COVERAGE_AMOUNTS, 'Coverage Amount', 'e.g. $1M/$3M')}
             <div class="auth-field" style="margin:0;"><label>Effective Date</label><input type="date" id="mal-effective" class="form-control"></div>
             <div class="auth-field" style="margin:0;"><label>Expiration Date</label><input type="date" id="mal-expiration" class="form-control"></div>
           </div>
@@ -15035,9 +15169,9 @@ async function renderProviderProfilePage(providerId) {
           <button class="modal-close" onclick="document.getElementById('work-history-modal').classList.remove('active')">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="auth-field" style="margin:0 0 12px;"><label>Employer / Organization *</label><input type="text" id="wh-employer" class="form-control" placeholder="e.g. Johns Hopkins Hospital"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div class="auth-field" style="margin:0;"><label>Position / Title</label><input type="text" id="wh-position" class="form-control" placeholder="e.g. Attending Psychiatrist"></div>
+          ${presetSelectHtml('wh-employer', PRESET_EMPLOYERS, 'Employer / Organization', 'Type employer name...', true)}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+            ${presetSelectHtml('wh-position', PRESET_POSITIONS, 'Position / Title', 'e.g. Attending Psychiatrist')}
             <div class="auth-field" style="margin:0;"><label>Department</label><input type="text" id="wh-department" class="form-control"></div>
             <div class="auth-field" style="margin:0;"><label>Start Date</label><input type="date" id="wh-start" class="form-control"></div>
             <div class="auth-field" style="margin:0;"><label>End Date</label><input type="date" id="wh-end" class="form-control"><div style="font-size:11px;color:var(--gray-400);margin-top:2px;">Leave blank if current</div></div>
@@ -15083,9 +15217,9 @@ async function renderProviderProfilePage(providerId) {
           <button class="modal-close" onclick="document.getElementById('cme-modal').classList.remove('active')">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="auth-field" style="margin:0 0 12px;"><label>Course / Activity Title *</label><input type="text" id="cme-title" class="form-control" placeholder="e.g. Psychopharmacology Update 2026"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div class="auth-field" style="margin:0;"><label>Accrediting Body / Provider</label><input type="text" id="cme-provider" class="form-control" placeholder="e.g. APA, ACCME"></div>
+          ${presetSelectHtml('cme-title', PRESET_CME_COURSES, 'Course / Activity Title', 'Type course title...', true)}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+            ${presetSelectHtml('cme-provider', PRESET_CME_PROVIDERS, 'Accrediting Body / Provider', 'e.g. APA, ACCME')}
             <div class="auth-field" style="margin:0;"><label>Credits / Hours</label><input type="number" id="cme-credits" class="form-control" step="0.5" min="0" placeholder="e.g. 20"></div>
             <div class="auth-field" style="margin:0;"><label>Category</label>
               <select id="cme-category" class="form-control">
