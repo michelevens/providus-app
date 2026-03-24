@@ -13,6 +13,7 @@ import batchGenerator from '../core/batch-generator.js';
 import emailGenerator from '../core/email-generator.js';
 import caqhApi from '../core/caqh-api.js';
 import taxonomyApi from '../core/taxonomy-api.js';
+import { SUPPLEMENTAL_PAYERS } from '../data/missing-payers-catalog.js';
 
 // ─── Google Places Autocomplete ───
 
@@ -174,11 +175,24 @@ const PAYER_TAG_MAP = {
 };
 
 function enrichPayerTags() {
+  // Tag existing payers from API
   PAYER_CATALOG.forEach(p => {
     if (!p.tags || p.tags.length === 0) {
       p.tags = PAYER_TAG_MAP[p.name] || [];
     }
   });
+
+  // Merge supplemental payers not yet in the API catalog
+  const existingNames = new Set(PAYER_CATALOG.map(p => p.name.toLowerCase()));
+  let added = 0;
+  for (const sp of SUPPLEMENTAL_PAYERS) {
+    if (!existingNames.has(sp.name.toLowerCase())) {
+      PAYER_CATALOG.push(sp);
+      existingNames.add(sp.name.toLowerCase());
+      added++;
+    }
+  }
+  if (added > 0) console.log(`[Credentik] Merged ${added} supplemental payers into catalog (total: ${PAYER_CATALOG.length})`);
 }
 
 function getPayerById(id) {

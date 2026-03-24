@@ -1,14 +1,15 @@
 /**
- * Missing Payers Catalog — Behavioral Health / Psychiatric Provider Credentialing
+ * Supplemental Payers Catalog — Behavioral Health / Psychiatric Provider Credentialing
  * Generated: 2026-03-24
  *
- * These payers are NOT in the existing catalog of 63 payers.
- * IDs start at 100 to avoid conflicts.
+ * These payers supplement the API-served catalog. They are merged into PAYER_CATALOG
+ * at init time so the app always shows the full catalog, even before backend seeding.
+ * IDs start at 100 to avoid conflicts with API-assigned IDs.
  *
- * Usage: Run in browser console while logged in, or import into a seed script.
+ * Also runnable in browser console to persist to the backend (see bottom of file).
  */
 
-const missingPayers = [
+export const SUPPLEMENTAL_PAYERS = [
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 1. BEHAVIORAL HEALTH CARVE-OUTS / SPECIALTY
@@ -290,32 +291,28 @@ const missingPayers = [
 // ──────────────────────────────────────────────
 // TOTAL:                             ~141 new payers (after removing duplicates with existing catalog)
 
-// ── Browser Console Import ──
-// Paste this entire file into the browser console while logged in.
-// It will add all missing payers to the catalog, skipping any that already exist.
+// ── Browser Console Seed (optional — persists to backend) ──
+// To persist these payers to the API, run in browser console:
+//   import('./data/missing-payers-catalog.js').then(m => m.seedToBackend())
 
-(async function seedMissingPayers() {
-  'use strict';
+export async function seedToBackend() {
   const log = (msg) => console.log(`%c[SEED] ${msg}`, 'color:#059669;font-weight:bold;');
-  const warn = (msg) => console.warn(`[SEED] ${msg}`);
 
-  log(`Starting import of ${missingPayers.length} payers...`);
+  log(`Starting import of ${SUPPLEMENTAL_PAYERS.length} payers...`);
 
-  // Load current catalog to check for duplicates
   const existing = await store.getPayers();
   const existingNames = new Set(existing.map(p => p.name.toLowerCase()));
   log(`Current catalog has ${existing.length} payers.`);
 
   let created = 0, skipped = 0, failed = 0;
 
-  for (const payer of missingPayers) {
+  for (const payer of SUPPLEMENTAL_PAYERS) {
     if (existingNames.has(payer.name.toLowerCase())) {
       log(`  ⊘ SKIP: "${payer.name}" already exists`);
       skipped++;
       continue;
     }
     try {
-      // Don't send the local id — let the backend assign one
       const { id, ...data } = payer;
       const result = await store.createPayer(data);
       log(`  ✚ CREATED: "${payer.name}" → id=${result.id} (${payer.category})`);
@@ -326,9 +323,8 @@ const missingPayers = [
     }
   }
 
-  console.log('');
   log('═══════════════════════════════════════════════════');
   log(`SEED COMPLETE — Created: ${created}, Skipped: ${skipped}, Failed: ${failed}`);
   log(`Catalog now has ${existing.length + created} payers total.`);
   log('═══════════════════════════════════════════════════');
-})();
+}
