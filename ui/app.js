@@ -7830,6 +7830,9 @@ function handleNppesProxy(payload) {
       return;
     }
 
+    const btn = document.querySelector('#invite-user-form .btn-primary');
+    const btnText = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
     try {
       await store.inviteUser({
         first_name: firstName,
@@ -7841,9 +7844,19 @@ function handleNppesProxy(payload) {
         provider_id: providerId ? parseInt(providerId) : null,
       });
       showToast('User created successfully');
+      // Reset form
+      ['invite-first-name','invite-last-name','invite-email','invite-password'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+      });
+      document.getElementById('invite-user-form')?.classList.add('hidden');
       await renderUsersStub();
     } catch (e) {
-      if (errEl) { errEl.textContent = e.message || 'Failed to create user'; errEl.classList.remove('hidden'); }
+      console.error('Failed to create user:', e);
+      const msg = e.message || e.error || 'Failed to create user. Check the console for details.';
+      if (errEl) { errEl.textContent = msg; errEl.classList.remove('hidden'); }
+      showToast('Error: ' + msg);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = btnText; }
     }
   },
   async editUserRole(userId, currentRole) {
