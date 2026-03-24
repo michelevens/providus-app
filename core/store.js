@@ -503,6 +503,14 @@ class Store {
         return result.data || result;
     }
 
+    async createPayer(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/payers`, {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+        return result.data || result;
+    }
+
     async getPayerPlans(payerId) {
         const result = await this._fetch(`${CONFIG.API_URL}/payers/${payerId}/plans`);
         return result.data || result;

@@ -9806,7 +9806,7 @@ async function updateNotificationBell() {
 }
 
 async function renderNotifications() {
-  const alerts = getAlerts();
+  const alerts = await getAlerts();
   const body = document.getElementById('notification-body');
   if (!body) return;
 
