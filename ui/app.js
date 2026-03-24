@@ -1619,6 +1619,16 @@ async function renderApplications() {
   const body = document.getElementById('page-body');
   const apps = store.filterByScope(await store.getAll('applications'));
 
+  // Compute summary stats
+  const total = apps.length;
+  const credentialed = apps.filter(a => a.status === 'credentialed' || a.status === 'approved').length;
+  const inProgress = apps.filter(a => ['submitted', 'in_review', 'pending_info', 'gathering_docs', 'new'].includes(a.status)).length;
+  const denied = apps.filter(a => a.status === 'denied').length;
+  const onHold = apps.filter(a => a.status === 'on_hold' || a.status === 'withdrawn').length;
+  const uniqueStates = new Set(apps.map(a => a.state).filter(Boolean)).size;
+  const uniquePayers = new Set(apps.map(a => a.payerId || a.payerName).filter(Boolean)).size;
+  const totalRevenue = apps.reduce((sum, a) => sum + (a.estMonthlyRevenue || 0), 0);
+
   // Build filter options
   const states = [...new Set(apps.map(a => a.state).filter(Boolean))].sort();
   const payers = [...new Set(apps.map(a => {
@@ -1627,6 +1637,53 @@ async function renderApplications() {
   }).filter(Boolean))].sort();
 
   body.innerHTML = `
+    <!-- Summary Cards -->
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">
+      <div class="stat-card">
+        <div class="label">Total Applications</div>
+        <div class="value">${total}</div>
+        <div class="sub">${uniqueStates} state${uniqueStates !== 1 ? 's' : ''} · ${uniquePayers} payer${uniquePayers !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="stat-card" style="cursor:pointer;" onclick="document.getElementById('filter-status').value='approved';window.app.applyFilters();">
+        <div class="label">Credentialed / Approved</div>
+        <div class="value green">${credentialed}</div>
+        <div class="sub">${total > 0 ? Math.round(credentialed / total * 100) : 0}% of total</div>
+      </div>
+      <div class="stat-card" style="cursor:pointer;" onclick="document.getElementById('filter-status').value='in_review';window.app.applyFilters();">
+        <div class="label">In Progress</div>
+        <div class="value blue">${inProgress}</div>
+        <div class="sub">${total > 0 ? Math.round(inProgress / total * 100) : 0}% of total</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Est. Monthly Revenue</div>
+        <div class="value" style="color:var(--brand-600);">$${totalRevenue.toLocaleString()}</div>
+        <div class="sub">${denied > 0 ? `${denied} denied` : ''}${denied > 0 && onHold > 0 ? ' · ' : ''}${onHold > 0 ? `${onHold} on hold/withdrawn` : ''}${denied === 0 && onHold === 0 ? 'from approved applications' : ''}</div>
+      </div>
+    </div>
+
+    <!-- Status Breakdown Bar -->
+    ${total > 0 ? `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-body" style="padding:10px 16px;">
+        <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;gap:2px;">
+          ${APPLICATION_STATUSES.map(s => {
+            const count = apps.filter(a => a.status === s.value).length;
+            if (count === 0) return '';
+            return `<div style="flex:${count};background:${s.color};border-radius:2px;" title="${s.label}: ${count}"></div>`;
+          }).join('')}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;">
+          ${APPLICATION_STATUSES.map(s => {
+            const count = apps.filter(a => a.status === s.value).length;
+            if (count === 0) return '';
+            return `<span style="font-size:11px;color:var(--text-muted);cursor:pointer;" onclick="document.getElementById('filter-status').value='${s.value}';window.app.applyFilters();">
+              <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color};vertical-align:middle;margin-right:3px;"></span>${s.label} (${count})
+            </span>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>` : ''}
+
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <div></div>
       <button class="btn btn-gold" onclick="window.app.openAddModal()">+ Add Application</button>
