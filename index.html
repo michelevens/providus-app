@@ -1462,40 +1462,37 @@
       btns.forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
       document.getElementById('auth-error').style.display = 'none';
 
-      // Demo passwords to try in order
-      const passwords = ['Demo@2026!', 'demo123', 'Demo123!', 'password'];
-
-      async function tryLogin(pw) {
-        const res = await fetch('https://api.credentik.com/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password: pw })
-        });
-        if (!res.ok) return null;
-        return await res.json();
+      // Safe JSON fetch — returns null if response is not valid JSON
+      async function safeFetch(url, body) {
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          if (!res.ok) return null;
+          const ct = res.headers.get('content-type') || '';
+          if (!ct.includes('application/json')) return null;
+          const data = await res.json();
+          return (data && data.token) ? data : null;
+        } catch (_) { return null; }
       }
 
       try {
-        // Try dedicated demo-login endpoint first
         let data = null;
-        try {
-          const res = await fetch('https://api.credentik.com/api/auth/demo-login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email })
-          });
-          if (res.ok) data = await res.json();
-        } catch (_) { /* endpoint may not exist */ }
 
-        // Fallback: try common demo passwords
+        // 1. Try dedicated demo-login endpoint
+        data = await safeFetch('https://api.credentik.com/api/auth/demo-login', { email });
+
+        // 2. Fallback: try common demo passwords
         if (!data) {
-          for (const pw of passwords) {
-            data = await tryLogin(pw);
+          for (const pw of ['Demo@2026!', 'demo123', 'Demo123!', 'password']) {
+            data = await safeFetch('https://api.credentik.com/api/auth/login', { email, password: pw });
             if (data) break;
           }
         }
 
-        if (!data || !data.token) {
+        if (!data) {
           showError('auth-error', 'Demo login failed. The demo account may not be set up yet. Try signing in manually with your credentials.');
           btns.forEach(b => { b.disabled = false; b.style.opacity = ''; });
           return;
