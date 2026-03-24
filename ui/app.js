@@ -1874,59 +1874,121 @@ async function renderApplications() {
     return p ? p.name : (a.payerName || '');
   }).filter(Boolean))].sort();
 
+  // View toggle state
+  if (typeof window._appViewMode === 'undefined') window._appViewMode = 'list';
+  const viewMode = window._appViewMode || 'list';
+
+  // Days-in-status helper
+  const daysInStatus = (a) => {
+    const ref = a.statusChangedDate || a.submittedDate || a.createdAt;
+    if (!ref) return null;
+    return Math.floor((Date.now() - new Date(ref).getTime()) / 86400000);
+  };
+
   body.innerHTML = `
-    <!-- Summary Cards -->
-    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">
-      <div class="stat-card">
-        <div class="label">Total Applications</div>
-        <div class="value">${total}</div>
-        <div class="sub">${uniqueStates} state${uniqueStates !== 1 ? 's' : ''} · ${uniquePayers} payer${uniquePayers !== 1 ? 's' : ''}</div>
+    <style>
+      .v2-apps-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;cursor:default;}
+      .v2-apps-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .v2-apps-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;}
+      .v2-apps-stat .v2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .v2-apps-stat .v2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .v2-apps-stat .v2-sub{font-size:12px;color:var(--text-muted);margin-top:4px;}
+      .v2-apps-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;}
+      .v2-apps-pipeline{background:white;border-radius:16px;padding:16px 20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+      .v2-apps-pipeline-bar{display:flex;height:10px;border-radius:5px;overflow:hidden;gap:2px;}
+      .v2-apps-pipeline-labels{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;}
+      .v2-apps-pipeline-labels span{font-size:11px;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;gap:4px;transition:color 0.15s;}
+      .v2-apps-pipeline-labels span:hover{color:var(--text-primary);}
+      .v2-apps-pipeline-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
+      .v2-apps-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap;}
+      .v2-apps-view-toggle{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+      .v2-apps-view-toggle button{padding:6px 14px;font-size:12px;font-weight:600;border:none;background:white;cursor:pointer;transition:background 0.15s,color 0.15s;}
+      .v2-apps-view-toggle button.active{background:var(--brand-600);color:white;}
+      .v2-apps-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;}
+      .v2-apps-card{background:white;border-radius:16px;padding:0;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;border:1px solid var(--gray-100);}
+      .v2-apps-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.1);}
+      .v2-apps-card-accent{height:4px;width:100%;}
+      .v2-apps-card-body{padding:16px 20px;}
+      .v2-apps-card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;}
+      .v2-apps-card-payer{font-size:15px;font-weight:700;color:var(--text-primary);line-height:1.3;}
+      .v2-apps-card-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+      .v2-apps-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+      .v2-apps-card-stats{display:flex;gap:16px;margin-bottom:12px;padding:10px 0;border-top:1px solid var(--gray-100);}
+      .v2-apps-card-stats div{flex:1;text-align:center;}
+      .v2-apps-card-stats .cs-label{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);}
+      .v2-apps-card-stats .cs-val{font-size:16px;font-weight:700;margin-top:2px;}
+      .v2-apps-card-actions{display:flex;gap:6px;padding-top:10px;border-top:1px solid var(--gray-100);}
+      .v2-apps-card-actions button{flex:1;}
+      @media(max-width:768px){.v2-apps-grid{grid-template-columns:repeat(2,1fr);}.v2-apps-card-grid{grid-template-columns:1fr;}}
+    </style>
+
+    <!-- V2 Summary Cards -->
+    <div class="v2-apps-grid">
+      <div class="v2-apps-stat" style="cursor:pointer;" onclick="document.getElementById('filter-status').value='';window.app.applyFilters();">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--brand-600),var(--brand-400));"></div>
+        <div class="v2-label">Total Applications</div>
+        <div class="v2-val" style="color:var(--brand-600);">${total}</div>
+        <div class="v2-sub">${uniqueStates} state${uniqueStates !== 1 ? 's' : ''} &middot; ${uniquePayers} payer${uniquePayers !== 1 ? 's' : ''}</div>
       </div>
-      <div class="stat-card" style="cursor:pointer;" onclick="document.getElementById('filter-status').value='approved';window.app.applyFilters();">
-        <div class="label">Credentialed / Approved</div>
-        <div class="value green">${credentialed}</div>
-        <div class="sub">${total > 0 ? Math.round(credentialed / total * 100) : 0}% of total</div>
+      <div class="v2-apps-stat" style="cursor:pointer;" onclick="document.getElementById('filter-status').value='approved';window.app.applyFilters();">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+        <div class="v2-label">Credentialed / Approved</div>
+        <div class="v2-val" style="color:#16a34a;">${credentialed}</div>
+        <div class="v2-sub">${total > 0 ? Math.round(credentialed / total * 100) : 0}% of total</div>
       </div>
-      <div class="stat-card" style="cursor:pointer;" onclick="document.getElementById('filter-status').value='in_review';window.app.applyFilters();">
-        <div class="label">In Progress</div>
-        <div class="value blue">${inProgress}</div>
-        <div class="sub">${total > 0 ? Math.round(inProgress / total * 100) : 0}% of total</div>
+      <div class="v2-apps-stat" style="cursor:pointer;" onclick="document.getElementById('filter-status').value='in_review';window.app.applyFilters();">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div>
+        <div class="v2-label">In Progress</div>
+        <div class="v2-val" style="color:#2563eb;">${inProgress}</div>
+        <div class="v2-sub">${total > 0 ? Math.round(inProgress / total * 100) : 0}% of total</div>
       </div>
-      <div class="stat-card">
-        <div class="label">Est. Monthly Revenue</div>
-        <div class="value" style="color:var(--brand-600);">$${totalRevenue.toLocaleString()}</div>
-        <div class="sub">${denied > 0 ? `${denied} denied` : ''}${denied > 0 && onHold > 0 ? ' · ' : ''}${onHold > 0 ? `${onHold} on hold/withdrawn` : ''}${denied === 0 && onHold === 0 ? 'from approved applications' : ''}</div>
+      <div class="v2-apps-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#a855f7,#c084fc);"></div>
+        <div class="v2-label">Est. Monthly Revenue</div>
+        <div class="v2-val" style="color:var(--brand-600);">$${totalRevenue.toLocaleString()}</div>
+        <div class="v2-sub">${denied > 0 ? `${denied} denied` : ''}${denied > 0 && onHold > 0 ? ' &middot; ' : ''}${onHold > 0 ? `${onHold} on hold/withdrawn` : ''}${denied === 0 && onHold === 0 ? 'from approved applications' : ''}</div>
       </div>
     </div>
 
-    <!-- Status Breakdown Bar -->
+    <!-- V2 Status Pipeline Bar -->
     ${total > 0 ? `
-    <div class="card" style="margin-bottom:16px;">
-      <div class="card-body" style="padding:10px 16px;">
-        <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;gap:2px;">
-          ${APPLICATION_STATUSES.map(s => {
-            const count = apps.filter(a => a.status === s.value).length;
-            if (count === 0) return '';
-            return `<div style="flex:${count};background:${s.color};border-radius:2px;" title="${s.label}: ${count}"></div>`;
-          }).join('')}
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;">
-          ${APPLICATION_STATUSES.map(s => {
-            const count = apps.filter(a => a.status === s.value).length;
-            if (count === 0) return '';
-            return `<span style="font-size:11px;color:var(--text-muted);cursor:pointer;" onclick="document.getElementById('filter-status').value='${s.value}';window.app.applyFilters();">
-              <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color};vertical-align:middle;margin-right:3px;"></span>${s.label} (${count})
-            </span>`;
-          }).join('')}
-        </div>
+    <div class="v2-apps-pipeline">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);">Status Pipeline</span>
+        <span style="font-size:11px;color:var(--text-muted);">${total} total</span>
+      </div>
+      <div class="v2-apps-pipeline-bar">
+        ${APPLICATION_STATUSES.map(s => {
+          const count = apps.filter(a => a.status === s.value).length;
+          if (count === 0) return '';
+          return `<div style="flex:${count};background:${s.color};border-radius:3px;transition:flex 0.3s;" title="${s.label}: ${count}"></div>`;
+        }).join('')}
+      </div>
+      <div class="v2-apps-pipeline-labels">
+        ${APPLICATION_STATUSES.map(s => {
+          const count = apps.filter(a => a.status === s.value).length;
+          if (count === 0) return '';
+          return `<span onclick="document.getElementById('filter-status').value='${s.value}';window.app.applyFilters();">
+            <span class="v2-apps-pipeline-dot" style="background:${s.color};"></span>${s.label} <strong>${count}</strong>
+          </span>`;
+        }).join('')}
       </div>
     </div>` : ''}
 
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <div></div>
+    <!-- Toolbar: View Toggle + Add Button -->
+    <div class="v2-apps-toolbar">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="v2-apps-view-toggle">
+          <button class="${viewMode === 'list' ? 'active' : ''}" onclick="window._appViewMode='list';window.app.renderAppTable();">List</button>
+          <button class="${viewMode === 'cards' ? 'active' : ''}" onclick="window._appViewMode='cards';window.app.renderAppTable();">Cards</button>
+        </div>
+        <span style="font-size:12px;color:var(--text-muted);" id="app-result-count"></span>
+      </div>
       <button class="btn btn-gold" onclick="window.app.openAddModal()">+ Add Application</button>
     </div>
-    <div class="filters-bar">
+
+    <!-- Filters -->
+    <div class="filters-bar" style="margin-bottom:16px;">
       <select class="form-control" id="filter-state" onchange="window.app.applyFilters()">
         <option value="">All States</option>
         ${states.map(s => `<option value="${s}" ${filters.state === s ? 'selected' : ''}>${getStateName(s)}</option>`).join('')}
@@ -1944,31 +2006,39 @@ async function renderApplications() {
       </select>
       <input type="text" class="form-control search-input" placeholder="Search..." value="${filters.search}" oninput="window.app.filters.search=this.value;window.app.renderAppTable()">
     </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th style="width:30px;"><input type="checkbox" onchange="document.querySelectorAll('.app-checkbox').forEach(c=>c.checked=this.checked);window.app.onBulkCheckChange();"></th>
-            <th style="width:70px;">ID</th>
-            <th onclick="window.app.sortBy('wave')">Group ${sortArrow('wave')}</th>
-            <th onclick="window.app.sortBy('state')">State ${sortArrow('state')}</th>
-            <th onclick="window.app.sortBy('payerName')">Payer ${sortArrow('payerName')}</th>
-            <th onclick="window.app.sortBy('status')">Status ${sortArrow('status')}</th>
-            <th onclick="window.app.sortBy('type')">Type ${sortArrow('type')}</th>
-            <th onclick="window.app.sortBy('submittedDate')">Submitted ${sortArrow('submittedDate')}</th>
-            <th onclick="window.app.sortBy('effectiveDate')">Effective ${sortArrow('effectiveDate')}</th>
-            <th onclick="window.app.sortBy('estMonthlyRevenue')">Est. $/mo ${sortArrow('estMonthlyRevenue')}</th>
-            <th>Notes</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="app-table-body"></tbody>
-      </table>
-      <div class="empty-state hidden" id="app-empty">
-        <h3>No applications</h3>
-        <p>Add applications manually or use the Batch Generator to create application sets from strategy profiles.</p>
-        <button class="btn btn-gold" onclick="window.app.openAddModal()">+ Add Application</button>
+
+    <!-- List view container -->
+    <div id="app-list-view" style="display:${viewMode === 'list' ? 'block' : 'none'};">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:30px;"><input type="checkbox" onchange="document.querySelectorAll('.app-checkbox').forEach(c=>c.checked=this.checked);window.app.onBulkCheckChange();"></th>
+              <th style="width:70px;">ID</th>
+              <th onclick="window.app.sortBy('wave')">Group ${sortArrow('wave')}</th>
+              <th onclick="window.app.sortBy('state')">State ${sortArrow('state')}</th>
+              <th onclick="window.app.sortBy('payerName')">Payer ${sortArrow('payerName')}</th>
+              <th onclick="window.app.sortBy('status')">Status ${sortArrow('status')}</th>
+              <th onclick="window.app.sortBy('type')">Type ${sortArrow('type')}</th>
+              <th onclick="window.app.sortBy('submittedDate')">Submitted ${sortArrow('submittedDate')}</th>
+              <th onclick="window.app.sortBy('effectiveDate')">Effective ${sortArrow('effectiveDate')}</th>
+              <th onclick="window.app.sortBy('estMonthlyRevenue')">Est. $/mo ${sortArrow('estMonthlyRevenue')}</th>
+              <th>Notes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="app-table-body"></tbody>
+        </table>
       </div>
+    </div>
+
+    <!-- Card view container -->
+    <div id="app-card-view" class="v2-apps-card-grid" style="display:${viewMode === 'cards' ? 'grid' : 'none'};"></div>
+
+    <div class="empty-state hidden" id="app-empty">
+      <h3>No applications</h3>
+      <p>Add applications manually or use the Batch Generator to create application sets from strategy profiles.</p>
+      <button class="btn btn-gold" onclick="window.app.openAddModal()">+ Add Application</button>
     </div>
   `;
 
@@ -1977,9 +2047,10 @@ async function renderApplications() {
 
 async function renderAppTable(prefetchedApps = null) {
   const apps = prefetchedApps || await store.getAll('applications');
+  const allProviders = await store.getAll('providers').catch(() => []);
   const tbody = document.getElementById('app-table-body');
   const empty = document.getElementById('app-empty');
-  if (!tbody) return;
+  if (!tbody && !document.getElementById('app-card-view')) return;
 
   let filtered = apps.filter(a => {
     if (filters.state && a.state !== filters.state) return false;
@@ -2020,43 +2091,101 @@ async function renderAppTable(prefetchedApps = null) {
     filtered.sort((a, b) => (a.wave || 9) - (b.wave || 9) || (a.state || '').localeCompare(b.state || ''));
   }
 
+  const countEl = document.getElementById('app-result-count');
+  const listView = document.getElementById('app-list-view');
+  const cardView = document.getElementById('app-card-view');
+  const viewMode = window._appViewMode || 'list';
+
   if (filtered.length === 0) {
-    tbody.innerHTML = '';
+    if (tbody) tbody.innerHTML = '';
+    if (cardView) cardView.innerHTML = '';
     empty.classList.remove('hidden');
+    if (countEl) countEl.textContent = '';
     return;
   }
 
   empty.classList.add('hidden');
-  tbody.innerHTML = filtered.map(a => {
-    const payer = getPayerById(a.payerId);
-    const payerName = payer ? payer.name : (a.payerName || '-');
-    const statusObj = APPLICATION_STATUSES.find(s => s.value === a.status) || APPLICATION_STATUSES[0];
-    const typeLabel = a.type === 'group' ? 'Group' : a.type === 'both' ? 'Both' : 'Indiv';
+  if (countEl) countEl.textContent = `${filtered.length} application${filtered.length !== 1 ? 's' : ''}`;
 
-    return `<tr>
-      <td><input type="checkbox" class="app-checkbox" data-app-id="${a.id}" onchange="window.app.onBulkCheckChange()"></td>
-      <td><span style="font-family:monospace;font-size:11px;color:var(--brand-600);">${toHexId(a.id)}</span></td>
-      <td>${groupBadge(a.wave)}</td>
-      <td><strong>${getStateName(a.state)}</strong></td>
-      <td title="${a.payerContactName ? escAttr(a.payerContactName + (a.payerContactPhone ? ' | ' + a.payerContactPhone : '')) : ''}">${payerName}${a.payerContactName ? ' <span class="text-sm text-muted">&#128222;</span>' : ''}</td>
-      <td><span class="badge badge-${a.status}">${statusObj.label}</span></td>
-      <td class="text-sm">${typeLabel}</td>
-      <td class="text-sm">${formatDateDisplay(a.submittedDate)}</td>
-      <td class="text-sm">${formatDateDisplay(a.effectiveDate)}</td>
-      <td>$${(a.estMonthlyRevenue || 0).toLocaleString()}</td>
-      <td class="truncate" title="${escAttr(a.notes || '')}">${a.notes || '-'}</td>
-      <td>
-        <div class="flex gap-2 action-btns">
-          <button class="btn btn-sm btn-primary" onclick="window.app.openLogEntry('${a.id}')" title="Log activity">Log</button>
-          <button class="btn btn-sm" onclick="window.app.viewTimeline('${a.id}')" title="View timeline">TL</button>
-          <button class="btn btn-sm" onclick="window.app.openDocChecklist('${a.id}')" title="Document checklist">Docs</button>
-          <button class="btn btn-sm" onclick="window.app.aiPredictTimeline('${a.id}')" title="AI Timeline Prediction">AI</button>
-          <button class="btn btn-sm" onclick="window.app.editApplication('${a.id}')">Edit</button>
-          <button class="btn btn-sm btn-danger" onclick="window.app.deleteApplication('${a.id}')">Del</button>
+  // Show/hide views
+  if (listView) listView.style.display = viewMode === 'list' ? 'block' : 'none';
+  if (cardView) cardView.style.display = viewMode === 'cards' ? 'grid' : 'none';
+
+  // Always render list view tbody
+  if (tbody) {
+    tbody.innerHTML = filtered.map(a => {
+      const payer = getPayerById(a.payerId);
+      const payerName = payer ? payer.name : (a.payerName || '-');
+      const statusObj = APPLICATION_STATUSES.find(s => s.value === a.status) || APPLICATION_STATUSES[0];
+      const typeLabel = a.type === 'group' ? 'Group' : a.type === 'both' ? 'Both' : 'Indiv';
+
+      return `<tr>
+        <td><input type="checkbox" class="app-checkbox" data-app-id="${a.id}" onchange="window.app.onBulkCheckChange()"></td>
+        <td><span style="font-family:monospace;font-size:11px;color:var(--brand-600);">${toHexId(a.id)}</span></td>
+        <td>${groupBadge(a.wave)}</td>
+        <td><strong>${getStateName(a.state)}</strong></td>
+        <td title="${a.payerContactName ? escAttr(a.payerContactName + (a.payerContactPhone ? ' | ' + a.payerContactPhone : '')) : ''}">${payerName}${a.payerContactName ? ' <span class="text-sm text-muted">&#128222;</span>' : ''}</td>
+        <td><span class="badge badge-${a.status}">${statusObj.label}</span></td>
+        <td class="text-sm">${typeLabel}</td>
+        <td class="text-sm">${formatDateDisplay(a.submittedDate)}</td>
+        <td class="text-sm">${formatDateDisplay(a.effectiveDate)}</td>
+        <td>$${(a.estMonthlyRevenue || 0).toLocaleString()}</td>
+        <td class="truncate" title="${escAttr(a.notes || '')}">${a.notes || '-'}</td>
+        <td>
+          <div class="flex gap-2 action-btns">
+            <button class="btn btn-sm btn-primary" onclick="window.app.openLogEntry('${a.id}')" title="Log activity">Log</button>
+            <button class="btn btn-sm" onclick="window.app.viewTimeline('${a.id}')" title="View timeline">TL</button>
+            <button class="btn btn-sm" onclick="window.app.openDocChecklist('${a.id}')" title="Document checklist">Docs</button>
+            <button class="btn btn-sm" onclick="window.app.aiPredictTimeline('${a.id}')" title="AI Timeline Prediction">AI</button>
+            <button class="btn btn-sm" onclick="window.app.editApplication('${a.id}')">Edit</button>
+            <button class="btn btn-sm btn-danger" onclick="window.app.deleteApplication('${a.id}')">Del</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Render card view
+  if (cardView) {
+    cardView.innerHTML = filtered.map(a => {
+      const payer = getPayerById(a.payerId);
+      const payerName = payer ? payer.name : (a.payerName || '-');
+      const statusObj = APPLICATION_STATUSES.find(s => s.value === a.status) || APPLICATION_STATUSES[0];
+      const typeLabel = a.type === 'group' ? 'Group' : a.type === 'both' ? 'Both' : 'Indiv';
+      const ref = a.statusChangedDate || a.submittedDate || a.createdAt;
+      const daysIn = ref ? Math.floor((Date.now() - new Date(ref).getTime()) / 86400000) : null;
+      const providerObj = a.providerId ? allProviders?.find(p => p.id === a.providerId) : null;
+      const provName = providerObj ? `${providerObj.firstName} ${providerObj.lastName}` : '';
+
+      return `<div class="v2-apps-card">
+        <div class="v2-apps-card-accent" style="background:${statusObj.color};"></div>
+        <div class="v2-apps-card-body">
+          <div class="v2-apps-card-top">
+            <div>
+              <div class="v2-apps-card-payer">${payerName}</div>
+              ${provName ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${escHtml(provName)}</div>` : ''}
+            </div>
+            <span style="font-family:monospace;font-size:10px;color:var(--gray-400);">${toHexId(a.id)}</span>
+          </div>
+          <div class="v2-apps-card-meta">
+            <span class="v2-apps-pill" style="background:var(--gray-100);color:var(--text-primary);">${getStateName(a.state)}</span>
+            <span class="v2-apps-pill" style="background:${statusObj.color}18;color:${statusObj.color};">${statusObj.label}</span>
+            <span class="v2-apps-pill" style="background:var(--gray-50);color:var(--text-muted);">${typeLabel}</span>
+            ${a.wave ? `<span class="v2-apps-pill" style="background:var(--brand-50);color:var(--brand-600);">G${a.wave}</span>` : ''}
+          </div>
+          <div class="v2-apps-card-stats">
+            <div><div class="cs-label">Days in Status</div><div class="cs-val" style="color:${daysIn > 60 ? 'var(--red)' : daysIn > 30 ? 'var(--warning-500)' : 'var(--text-primary)'};">${daysIn !== null ? daysIn : '-'}</div></div>
+            <div><div class="cs-label">Submitted</div><div class="cs-val" style="font-size:13px;">${formatDateDisplay(a.submittedDate) || '-'}</div></div>
+            <div><div class="cs-label">Est. $/mo</div><div class="cs-val" style="color:var(--brand-600);font-size:14px;">$${(a.estMonthlyRevenue || 0).toLocaleString()}</div></div>
+          </div>
+          <div class="v2-apps-card-actions">
+            <button class="btn btn-sm" onclick="window.app.editApplication('${a.id}')">Edit</button>
+            <button class="btn btn-sm btn-primary" onclick="window.app.openLogEntry('${a.id}')">Follow-up</button>
+          </div>
         </div>
-      </td>
-    </tr>`;
-  }).join('');
+      </div>`;
+    }).join('');
+  }
 }
 
 // ─── Follow-ups Page ───
@@ -2069,25 +2198,102 @@ async function renderFollowups() {
   const completed = store.filterByScope((await store.getAll('followups')).filter(f => f.completedDate))
     .sort((a, b) => (b.completedDate || '').localeCompare(a.completedDate || ''));
 
-  const overdueHtml = overdue.length > 0 ? await renderFollowupTable('Overdue', overdue, true) : '';
-  const upcomingHtml = upcoming.length > 0 ? await renderFollowupTable('Upcoming (Next 14 Days)', upcoming, true) : '';
-  const completedHtml = completed.length > 0 ? await renderFollowupTable('Recently Completed', completed.slice(0, 10), false) : '';
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  const dueToday = allOpen.filter(f => f.dueDate === todayStr);
+  const totalDue = allOpen.length;
+
+  // Build 7-day calendar strip
+  const calDays = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    const ds = d.toISOString().split('T')[0];
+    const dayFollowups = allOpen.filter(f => f.dueDate === ds);
+    const overdueOnDay = i === 0 ? overdue.length : 0;
+    calDays.push({ date: d, dateStr: ds, count: dayFollowups.length, overdueCount: overdueOnDay, isToday: i === 0 });
+  }
+
+  const overdueHtml = overdue.length > 0 ? await renderFollowupTable('Overdue', overdue, true, 'var(--red)') : '';
+  const upcomingHtml = upcoming.length > 0 ? await renderFollowupTable('Upcoming (Next 14 Days)', upcoming, true, 'var(--blue)') : '';
+  const completedHtml = completed.length > 0 ? await renderFollowupTable('Recently Completed', completed.slice(0, 10), false, 'var(--green)') : '';
 
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
-      <div class="stat-card"><div class="label">Overdue</div><div class="value red">${overdue.length}</div></div>
-      <div class="stat-card"><div class="label">Upcoming (14 days)</div><div class="value amber">${upcoming.length}</div></div>
-      <div class="stat-card"><div class="label">Completed</div><div class="value green">${completed.length}</div></div>
+    <style>
+      .v2-fu-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .v2-fu-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .v2-fu-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;}
+      .v2-fu-stat .v2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .v2-fu-stat .v2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .v2-fu-stat .v2-sub{font-size:12px;color:var(--text-muted);margin-top:4px;}
+      .v2-fu-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;}
+      .v2-fu-cal{display:flex;gap:8px;padding:16px 20px;background:white;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);margin-bottom:20px;overflow-x:auto;}
+      .v2-fu-cal-day{flex:1;min-width:80px;text-align:center;padding:12px 8px;border-radius:12px;transition:background 0.15s;cursor:default;}
+      .v2-fu-cal-day.today{background:var(--brand-50);border:2px solid var(--brand-600);}
+      .v2-fu-cal-day .day-name{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);}
+      .v2-fu-cal-day .day-num{font-size:20px;font-weight:700;margin:4px 0;}
+      .v2-fu-cal-day .day-dots{display:flex;gap:3px;justify-content:center;min-height:8px;}
+      .v2-fu-section{margin-bottom:16px;}
+      .v2-fu-section .card{border-radius:16px;overflow:hidden;}
+      .v2-fu-row-overdue td:first-child{box-shadow:inset 4px 0 0 var(--red);}
+      .v2-fu-row-today td:first-child{box-shadow:inset 4px 0 0 var(--warning-500);}
+      .v2-fu-row-upcoming td:first-child{box-shadow:inset 4px 0 0 var(--green);}
+      @media(max-width:768px){.v2-fu-grid{grid-template-columns:repeat(2,1fr);}}
+    </style>
+
+    <!-- V2 Stat Cards -->
+    <div class="v2-fu-grid">
+      <div class="v2-fu-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--brand-600),var(--brand-400));"></div>
+        <div class="v2-label">Total Due</div>
+        <div class="v2-val" style="color:var(--brand-600);">${totalDue}</div>
+        <div class="v2-sub">open follow-ups</div>
+      </div>
+      <div class="v2-fu-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#ef4444,#f87171);"></div>
+        <div class="v2-label">Overdue</div>
+        <div class="v2-val" style="color:#dc2626;">${overdue.length}</div>
+        <div class="v2-sub">need immediate action</div>
+      </div>
+      <div class="v2-fu-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div>
+        <div class="v2-label">Due Today</div>
+        <div class="v2-val" style="color:#d97706;">${dueToday.length}</div>
+        <div class="v2-sub">${todayStr}</div>
+      </div>
+      <div class="v2-fu-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div>
+        <div class="v2-label">Upcoming</div>
+        <div class="v2-val" style="color:#2563eb;">${upcoming.length}</div>
+        <div class="v2-sub">next 14 days</div>
+      </div>
     </div>
 
-    ${overdueHtml}
-    ${upcomingHtml}
-    ${overdue.length === 0 && upcoming.length === 0 ? '<div class="alert alert-success">No pending follow-ups. All caught up.</div>' : ''}
-    ${completedHtml}
+    <!-- 7-Day Calendar Strip -->
+    <div class="v2-fu-cal">
+      ${calDays.map(d => {
+        const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const dotColor = d.overdueCount > 0 ? 'var(--red)' : d.count > 0 ? 'var(--blue)' : '';
+        return `<div class="v2-fu-cal-day ${d.isToday ? 'today' : ''}">
+          <div class="day-name">${dayNames[d.date.getDay()]}</div>
+          <div class="day-num">${d.date.getDate()}</div>
+          <div class="day-dots">
+            ${d.overdueCount > 0 ? `<span style="width:8px;height:8px;border-radius:50%;background:var(--red);" title="${d.overdueCount} overdue"></span>` : ''}
+            ${Array.from({length: Math.min(d.count, 4)}, () => `<span style="width:6px;height:6px;border-radius:50%;background:var(--blue);"></span>`).join('')}
+            ${d.count > 4 ? `<span style="font-size:9px;color:var(--text-muted);">+${d.count - 4}</span>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div class="v2-fu-section">${overdueHtml}</div>
+    <div class="v2-fu-section">${upcomingHtml}</div>
+    ${overdue.length === 0 && upcoming.length === 0 ? '<div class="alert alert-success" style="border-radius:16px;">No pending follow-ups. All caught up.</div>' : ''}
+    <div class="v2-fu-section">${completedHtml}</div>
   `;
 }
 
-async function renderFollowupTable(title, followups, showAction) {
+async function renderFollowupTable(title, followups, showAction, accentColor) {
   // Pre-resolve all async app lookups
   const rows = [];
   for (const fu of followups) {
@@ -2095,9 +2301,10 @@ async function renderFollowupTable(title, followups, showAction) {
     const payer = app ? (getPayerById(app.payerId) || { name: app.payerName }) : {};
     rows.push({ fu, app, payer });
   }
+  const todayStr = new Date().toISOString().split('T')[0];
   return `
-    <div class="card">
-      <div class="card-header"><h3>${title} (${followups.length})</h3></div>
+    <div class="card" style="border-radius:16px;overflow:hidden;">
+      <div class="card-header" style="border-left:4px solid ${accentColor || 'var(--brand-600)'};"><h3>${title} (${followups.length})</h3></div>
       <div class="card-body" style="padding:0;">
         <table>
           <thead><tr>
@@ -2109,10 +2316,12 @@ async function renderFollowupTable(title, followups, showAction) {
           </tr></thead>
           <tbody>
             ${rows.map(({ fu, app, payer }) => {
-              const isOverdue = fu.dueDate && fu.dueDate <= new Date().toISOString().split('T')[0] && !fu.completedDate;
-              return `<tr class="${isOverdue ? 'overdue' : ''}">
+              const isOverdue = fu.dueDate && fu.dueDate < todayStr && !fu.completedDate;
+              const isDueToday = fu.dueDate === todayStr && !fu.completedDate;
+              const rowClass = isOverdue ? 'v2-fu-row-overdue' : isDueToday ? 'v2-fu-row-today' : (showAction ? 'v2-fu-row-upcoming' : '');
+              return `<tr class="${isOverdue ? 'overdue' : ''} ${rowClass}">
                 <td><strong>${payer.name || 'Unknown'}</strong> — ${app ? getStateName(app.state) : ''}</td>
-                <td>${formatDateDisplay(fu.dueDate)}</td>
+                <td style="${isOverdue ? 'color:var(--red);font-weight:600;' : isDueToday ? 'color:var(--warning-500);font-weight:600;' : ''}">${formatDateDisplay(fu.dueDate)}</td>
                 <td>${fu.type || '-'}</td>
                 <td>${fu.method || '-'}</td>
                 ${showAction ? `<td><button class="btn btn-sm btn-primary" onclick="window.app.completeFollowupPrompt('${fu.id}')">Complete</button></td>` :
@@ -3188,52 +3397,129 @@ async function renderProviders() {
   const licenses = store.filterByScope(await store.getAll('licenses'));
   const apps = store.filterByScope(await store.getAll('applications'));
 
+  // Compute total stats
+  const activeProvCount = providers.filter(p => p.active !== false).length;
+  const totalApps = apps.length;
+  const uniqueStates = [...new Set(licenses.map(l => l.state).filter(Boolean))].length;
+
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
-      <div class="stat-card"><div class="label">Total Providers</div><div class="value">${providers.length}</div></div>
-      <div class="stat-card"><div class="label">Active</div><div class="value green">${providers.filter(p => p.active !== false).length}</div></div>
-      <div class="stat-card"><div class="label">Total Licenses</div><div class="value blue">${licenses.length}</div></div>
+    <style>
+      .v2-prov-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-bottom:20px;}
+      .v2-prov-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .v2-prov-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .v2-prov-stat .v2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .v2-prov-stat .v2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .v2-prov-stat .v2-sub{font-size:12px;color:var(--text-muted);margin-top:4px;}
+      .v2-prov-stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+      .v2-prov-card{background:white;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;border:1px solid var(--gray-100);}
+      .v2-prov-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.1);}
+      .v2-prov-card-body{padding:20px 24px;}
+      .v2-prov-top{display:flex;gap:16px;align-items:flex-start;margin-bottom:16px;}
+      .v2-prov-avatar{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:white;flex-shrink:0;}
+      .v2-prov-info{flex:1;min-width:0;}
+      .v2-prov-name{font-size:17px;font-weight:700;color:var(--text-primary);line-height:1.3;cursor:pointer;}
+      .v2-prov-name:hover{color:var(--brand-600);}
+      .v2-prov-creds{font-size:12px;color:var(--text-muted);margin-top:2px;}
+      .v2-prov-details{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+      .v2-prov-detail{font-size:12px;color:var(--text-muted);}
+      .v2-prov-detail strong{color:var(--text-primary);font-weight:600;}
+      .v2-prov-pills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+      .v2-prov-pill{display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;}
+      .v2-prov-ring-wrap{position:relative;width:44px;height:44px;flex-shrink:0;}
+      .v2-prov-ring-wrap svg{width:44px;height:44px;transform:rotate(-90deg);}
+      .v2-prov-ring-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--text-primary);}
+      .v2-prov-actions{display:flex;gap:6px;padding-top:14px;border-top:1px solid var(--gray-100);}
+      @media(max-width:768px){.v2-prov-grid{grid-template-columns:1fr;}.v2-prov-stats-row{grid-template-columns:repeat(2,1fr);}}
+    </style>
+
+    <!-- V2 Stat Cards -->
+    <div class="v2-prov-stats-row">
+      <div class="v2-prov-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--brand-600),var(--brand-400));"></div>
+        <div class="v2-label">Total Providers</div>
+        <div class="v2-val" style="color:var(--brand-600);">${providers.length}</div>
+      </div>
+      <div class="v2-prov-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+        <div class="v2-label">Active</div>
+        <div class="v2-val" style="color:#16a34a;">${activeProvCount}</div>
+      </div>
+      <div class="v2-prov-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div>
+        <div class="v2-label">Total Licenses</div>
+        <div class="v2-val" style="color:#2563eb;">${licenses.length}</div>
+        <div class="v2-sub">${uniqueStates} states</div>
+      </div>
+      <div class="v2-prov-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#a855f7,#c084fc);"></div>
+        <div class="v2-label">Applications</div>
+        <div class="v2-val" style="color:#7c3aed;">${totalApps}</div>
+      </div>
     </div>
 
-    ${providers.map(p => {
+    <!-- V2 Provider Card Grid -->
+    <div class="v2-prov-grid">
+    ${providers.map((p, idx) => {
       const provLicenses = licenses.filter(l => l.providerId === p.id);
       const provApps = apps.filter(a => a.providerId === p.id);
       const activeLic = provLicenses.filter(l => l.status === 'active').length;
       const pendingLic = provLicenses.filter(l => l.status === 'pending').length;
+      const licStates = provLicenses.map(l => l.state).filter((v, i, a) => a.indexOf(v) === i).length;
+      const initials = (p.firstName?.[0] || '') + (p.lastName?.[0] || '');
+      // Completion ring: rough estimate based on available data fields
+      const fields = [p.npi, p.specialty, p.taxonomy, p.email, p.phone, p.credentials];
+      const filled = fields.filter(Boolean).length;
+      const pct = Math.round((filled / fields.length) * 100);
+      const gradients = ['linear-gradient(135deg,#6366f1,#8b5cf6)','linear-gradient(135deg,#0ea5e9,#06b6d4)','linear-gradient(135deg,#f43f5e,#ec4899)','linear-gradient(135deg,#f59e0b,#eab308)','linear-gradient(135deg,#10b981,#34d399)','linear-gradient(135deg,#6366f1,#a855f7)'];
+      const grad = gradients[idx % gradients.length];
+      const circumference = 2 * Math.PI * 17;
+      const dashOffset = circumference - (pct / 100) * circumference;
+      const ringColor = pct >= 80 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
+
       return `
-        <div class="card">
-          <div class="card-header">
-            <h3><a href="#" onclick="event.preventDefault();window.app.openProviderProfile('${p.id}')" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--gray-300);" onmouseover="this.style.color='var(--brand-600)'" onmouseout="this.style.color='inherit'">${escHtml(p.firstName)} ${escHtml(p.lastName)}, ${escHtml(p.credentials)}</a> <span style="font-size:12px;font-weight:500;color:var(--gray-400);margin-left:8px;">#${toHexId(p.id)}</span></h3>
-            <div style="display:flex;gap:8px;">
-              <button class="btn btn-sm" onclick="window.app.openProviderProfile('${p.id}')" title="View Profile">Profile</button>
-              <button class="btn btn-sm" onclick="window.app.openProviderPrintout('${p.id}')" title="Print Credential Sheet" style="display:inline-flex;align-items:center;gap:4px;">
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11H2.5A1 1 0 011.5 10V6.5A1 1 0 012.5 5.5h11a1 1 0 011 1V10a1 1 0 01-1 1H12"/><path d="M4 5.5V1.5h8v4"/><rect x="4" y="9" width="8" height="5.5" rx="0.5"/></svg> Credential Sheet
-              </button>
+        <div class="v2-prov-card">
+          <div style="height:4px;background:${grad};"></div>
+          <div class="v2-prov-card-body">
+            <div class="v2-prov-top">
+              <div class="v2-prov-avatar" style="background:${grad};">${initials}</div>
+              <div class="v2-prov-info">
+                <div class="v2-prov-name" onclick="window.app.openProviderProfile('${p.id}')">${escHtml(p.firstName)} ${escHtml(p.lastName)}, ${escHtml(p.credentials || '')}</div>
+                <div class="v2-prov-creds">${escHtml(p.specialty) || 'No specialty'} &middot; <span class="badge badge-${p.active !== false ? 'active' : 'inactive'}" style="font-size:10px;">${p.active !== false ? 'Active' : 'Inactive'}</span></div>
+              </div>
+              <div class="v2-prov-ring-wrap" title="Profile ${pct}% complete">
+                <svg viewBox="0 0 44 44">
+                  <circle cx="22" cy="22" r="17" fill="none" stroke="var(--gray-100)" stroke-width="3"/>
+                  <circle cx="22" cy="22" r="17" fill="none" stroke="${ringColor}" stroke-width="3" stroke-linecap="round"
+                    stroke-dasharray="${circumference}" stroke-dashoffset="${dashOffset}"/>
+                </svg>
+                <div class="v2-prov-ring-pct">${pct}%</div>
+              </div>
+            </div>
+            <div class="v2-prov-details">
+              <div class="v2-prov-detail"><strong>NPI:</strong> ${p.npi || '---'}</div>
+              <div class="v2-prov-detail"><strong>Taxonomy:</strong> ${p.taxonomy || '---'}</div>
+              <div class="v2-prov-detail"><strong>#${toHexId(p.id)}</strong></div>
+            </div>
+            <div class="v2-prov-pills">
+              <span class="v2-prov-pill" style="background:rgba(59,130,246,0.1);color:#2563eb;">${provLicenses.length} License${provLicenses.length !== 1 ? 's' : ''}</span>
+              <span class="v2-prov-pill" style="background:rgba(168,85,247,0.1);color:#7c3aed;">${provApps.length} App${provApps.length !== 1 ? 's' : ''}</span>
+              ${licStates > 0 ? `<span class="v2-prov-pill" style="background:rgba(34,197,94,0.1);color:#16a34a;">${licStates} State${licStates !== 1 ? 's' : ''}</span>` : ''}
+              ${activeLic > 0 ? `<span class="v2-prov-pill" style="background:rgba(34,197,94,0.08);color:#16a34a;">${activeLic} Active</span>` : ''}
+              ${pendingLic > 0 ? `<span class="v2-prov-pill" style="background:rgba(245,158,11,0.1);color:#d97706;">${pendingLic} Pending</span>` : ''}
+            </div>
+            <div class="v2-prov-actions">
+              <button class="btn btn-sm btn-primary" onclick="window.app.openProviderProfile('${p.id}')">View Profile</button>
+              <button class="btn btn-sm" onclick="window.app.openProviderPrintout('${p.id}')" title="Print Credential Sheet">Credential Sheet</button>
               <button class="btn btn-sm" onclick="window.app.editProvider('${p.id}')">Edit</button>
               <button class="btn btn-sm btn-danger" onclick="window.app.deleteProvider('${p.id}')">Delete</button>
-            </div>
-          </div>
-          <div class="card-body">
-            <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:16px;">
-              <div><span class="text-sm text-muted">System ID:</span> <strong style="font-family:monospace;color:var(--brand-600);">${toHexId(p.id)}</strong></div>
-              <div><span class="text-sm text-muted">NPI:</span> <strong>${p.npi || '—'}</strong></div>
-              <div><span class="text-sm text-muted">Specialty:</span> <strong>${escHtml(p.specialty) || '—'}</strong></div>
-              <div><span class="text-sm text-muted">Taxonomy:</span> <strong>${p.taxonomy || '—'}</strong></div>
-              <div><span class="text-sm text-muted">Email:</span> ${escHtml(p.email) || '—'}</div>
-              <div><span class="text-sm text-muted">Phone:</span> ${escHtml(p.phone) || '—'}</div>
-              <div><span class="text-sm text-muted">Status:</span> <span class="badge badge-${p.active !== false ? 'active' : 'inactive'}">${p.active !== false ? 'Active' : 'Inactive'}</span></div>
-            </div>
-            <div style="display:flex;gap:16px;flex-wrap:wrap;">
-              <div class="stat-card" style="flex:1;min-width:120px;"><div class="label">Licenses</div><div class="value">${provLicenses.length}</div><div class="sub">${activeLic} active, ${pendingLic} pending</div></div>
-              <div class="stat-card" style="flex:1;min-width:120px;"><div class="label">Applications</div><div class="value">${provApps.length}</div></div>
-              <div class="stat-card" style="flex:1;min-width:120px;"><div class="label">Licensed States</div><div class="value blue">${provLicenses.map(l => l.state).filter((v, i, a) => a.indexOf(v) === i).length}</div></div>
             </div>
           </div>
         </div>
       `;
     }).join('')}
+    </div>
 
-    ${providers.length === 0 ? '<div class="empty-state"><h3>No providers yet</h3><p>Click "+ Add Provider" to add your first provider.</p></div>' : ''}
+    ${providers.length === 0 ? '<div class="empty-state" style="border-radius:16px;"><h3>No providers yet</h3><p>Click "+ Add Provider" to add your first provider.</p></div>' : ''}
   `;
 }
 
@@ -3380,7 +3666,40 @@ async function renderLicenses() {
 
   const tab = _licTab || 'licenses';
 
+  // Compute expiring-soon count
+  const expiringSoon = licenses.filter(l => {
+    if (!l.expirationDate) return false;
+    const d = new Date(l.expirationDate);
+    return d >= new Date() && d < new Date(Date.now() + 90 * 86400000);
+  });
+  const uniqueLicStates = [...new Set(licenses.map(l => l.state).filter(Boolean))].sort();
+
+  // Build expiration timeline data
+  const licSorted = [...licenses].filter(l => l.expirationDate).sort((a, b) => a.expirationDate.localeCompare(b.expirationDate));
+
   body.innerHTML = `
+    <style>
+      .v2-lic-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .v2-lic-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .v2-lic-stat .v2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .v2-lic-stat .v2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .v2-lic-stat .v2-sub{font-size:12px;color:var(--text-muted);margin-top:4px;}
+      .v2-lic-stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:20px;}
+      .v2-lic-map{background:white;border-radius:16px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);margin-bottom:20px;}
+      .v2-lic-map-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:10px;}
+      .v2-lic-state-pills{display:flex;flex-wrap:wrap;gap:6px;}
+      .v2-lic-state-pill{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(59,130,246,0.1);color:#2563eb;transition:transform 0.15s;}
+      .v2-lic-state-pill:hover{transform:scale(1.05);}
+      .v2-lic-timeline{background:white;border-radius:16px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);margin-bottom:20px;}
+      .v2-lic-tl-bar{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--gray-50);}
+      .v2-lic-tl-bar:last-child{border-bottom:none;}
+      .v2-lic-tl-state{font-size:12px;font-weight:600;width:80px;flex-shrink:0;}
+      .v2-lic-tl-fill{height:6px;border-radius:3px;min-width:4px;transition:width 0.3s;}
+      .v2-lic-tl-date{font-size:10px;color:var(--text-muted);white-space:nowrap;width:70px;text-align:right;flex-shrink:0;}
+      .v2-lic-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle;flex-shrink:0;}
+      @media(max-width:768px){.v2-lic-stats-row{grid-template-columns:repeat(2,1fr);}}
+    </style>
+
     <!-- Tab bar -->
     <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid var(--gray-200);padding-bottom:0;">
       <button class="btn btn-sm ${tab === 'licenses' ? 'btn-primary' : ''}" onclick="window.app.switchLicTab('licenses')" style="border-radius:8px 8px 0 0;border-bottom:none;">Licenses</button>
@@ -3391,26 +3710,84 @@ async function renderLicenses() {
     <!-- Licenses tab -->
     <div id="lic-tab-licenses" style="display:${tab === 'licenses' ? 'block' : 'none'};">
       ${providers.length > 1 ? `
-      <div class="card" style="margin-bottom:16px;">
-        <div class="card-body" style="padding:12px 16px;">
-          <div class="form-group" style="margin:0;max-width:300px;">
-            <label style="font-size:12px;margin-bottom:4px;">Filter by Provider</label>
-            <select class="form-control" onchange="window.app.filterLicByProvider(this.value)">
-              <option value="">All Providers</option>
-              ${providers.map(p => `<option value="${p.id}" ${selectedProvider === p.id ? 'selected' : ''}>${p.firstName} ${p.lastName}</option>`).join('')}
-            </select>
-          </div>
+      <div style="margin-bottom:16px;background:white;border-radius:16px;padding:12px 20px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <div class="form-group" style="margin:0;max-width:300px;">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:4px;">Filter by Provider</label>
+          <select class="form-control" onchange="window.app.filterLicByProvider(this.value)">
+            <option value="">All Providers</option>
+            ${providers.map(p => `<option value="${p.id}" ${selectedProvider === p.id ? 'selected' : ''}>${p.firstName} ${p.lastName}</option>`).join('')}
+          </select>
         </div>
       </div>` : ''}
 
-      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
-        <div class="stat-card"><div class="label">Total Licenses</div><div class="value">${licenses.length}</div></div>
-        <div class="stat-card"><div class="label">Active</div><div class="value green">${active.length}</div></div>
-        <div class="stat-card"><div class="label">Pending</div><div class="value" style="color:var(--warning-500);">${pending.length}</div></div>
-        <div class="stat-card"><div class="label">Expiring/Expired</div><div class="value red">${expired.length}</div></div>
+      <!-- V2 Stat Cards -->
+      <div class="v2-lic-stats-row">
+        <div class="v2-lic-stat">
+          <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--brand-600),var(--brand-400));"></div>
+          <div class="v2-label">Total Licenses</div>
+          <div class="v2-val" style="color:var(--brand-600);">${licenses.length}</div>
+        </div>
+        <div class="v2-lic-stat">
+          <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+          <div class="v2-label">Active</div>
+          <div class="v2-val" style="color:#16a34a;">${active.length}</div>
+        </div>
+        <div class="v2-lic-stat">
+          <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div>
+          <div class="v2-label">Pending</div>
+          <div class="v2-val" style="color:#d97706;">${pending.length}</div>
+        </div>
+        <div class="v2-lic-stat">
+          <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#f97316,#fb923c);"></div>
+          <div class="v2-label">Expiring (&lt;90d)</div>
+          <div class="v2-val" style="color:#ea580c;">${expiringSoon.length}</div>
+        </div>
+        <div class="v2-lic-stat">
+          <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#ef4444,#f87171);"></div>
+          <div class="v2-label">Expired</div>
+          <div class="v2-val" style="color:#dc2626;">${expired.length}</div>
+        </div>
       </div>
 
-      <div class="card">
+      <!-- Licensed States Map Placeholder -->
+      ${uniqueLicStates.length > 0 ? `
+      <div class="v2-lic-map">
+        <div class="v2-lic-map-title">Licensed in ${uniqueLicStates.length} State${uniqueLicStates.length !== 1 ? 's' : ''}</div>
+        <div class="v2-lic-state-pills">
+          ${uniqueLicStates.map(s => {
+            const sLic = licenses.filter(l => l.state === s);
+            const sActive = sLic.some(l => l.status === 'active');
+            const sExpired = sLic.some(l => l.expirationDate && new Date(l.expirationDate) < new Date());
+            const bg = sExpired ? 'rgba(239,68,68,0.1)' : sActive ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)';
+            const color = sExpired ? '#dc2626' : sActive ? '#16a34a' : '#d97706';
+            return `<span class="v2-lic-state-pill" style="background:${bg};color:${color};">${getStateName(s)} (${s})</span>`;
+          }).join('')}
+        </div>
+      </div>` : ''}
+
+      <!-- Expiration Timeline -->
+      ${licSorted.length > 0 ? `
+      <div class="v2-lic-timeline">
+        <div class="v2-lic-map-title">Expiration Timeline</div>
+        ${licSorted.slice(0, 15).map(l => {
+          const dLeft = Math.round((new Date(l.expirationDate) - new Date()) / 86400000);
+          const maxDays = 365;
+          const widthPct = Math.max(2, Math.min(100, ((dLeft > 0 ? dLeft : 0) / maxDays) * 100));
+          const barColor = dLeft < 0 ? '#ef4444' : dLeft < 90 ? '#f59e0b' : '#22c55e';
+          const dotColor = dLeft < 0 ? '#ef4444' : dLeft < 90 ? '#f59e0b' : '#22c55e';
+          return `<div class="v2-lic-tl-bar">
+            <span class="v2-lic-dot" style="background:${dotColor};"></span>
+            <span class="v2-lic-tl-state">${l.state}</span>
+            <div style="flex:1;background:var(--gray-100);border-radius:3px;height:6px;overflow:hidden;">
+              <div class="v2-lic-tl-fill" style="width:${widthPct}%;background:${barColor};"></div>
+            </div>
+            <span class="v2-lic-tl-date" style="color:${barColor};font-weight:${dLeft < 90 ? '600' : '400'};">${dLeft < 0 ? 'Expired' : dLeft + 'd'}</span>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
+
+      <!-- License Table -->
+      <div class="card" style="border-radius:16px;overflow:hidden;">
         <div class="card-header">
           <h3>All State Licenses</h3>
         </div>
@@ -3436,6 +3813,7 @@ async function renderLicenses() {
                 const daysLeft = l.expirationDate ? Math.round((new Date(l.expirationDate) - new Date()) / 86400000) : null;
                 const expClass = isExpired ? 'color:var(--red);font-weight:600;' :
                   isExpiringSoon ? 'color:var(--warning-500);font-weight:600;' : '';
+                const statusDotColor = isExpired ? '#ef4444' : l.status === 'active' ? '#22c55e' : l.status === 'pending' ? '#f59e0b' : 'var(--gray-300)';
                 const verStatus = l.verificationStatus || l.verification_status;
                 const verDate = l.verifiedAt || l.verified_at || l.lastVerifiedAt || l.last_verified_at;
                 const verBadge = verStatus === 'verified'
@@ -3454,7 +3832,7 @@ async function renderLicenses() {
                   : '';
                 return `
                   <tr>
-                    <td><strong>${getStateName(l.state)}</strong> (${l.state})</td>
+                    <td><span class="v2-lic-dot" style="background:${statusDotColor};"></span><strong>${getStateName(l.state)}</strong> (${l.state})</td>
                     <td><code>${escHtml(l.licenseNumber) || '-'}</code></td>
                     <td>${escHtml(l.licenseType) || '-'}</td>
                     <td><span class="badge badge-${l.status}">${l.status}</span> ${verBadge}</td>
@@ -3679,7 +4057,27 @@ async function renderPayers() {
     strategic:{ label: 'Strategic',      icon: '🎯' },
   };
 
+  const bcbsCount = (categories.bcbs_anthem || []).length +
+    (categories.bcbs_hcsc || []).length +
+    (categories.bcbs_highmark || []).length +
+    (categories.bcbs_independent || []).length;
+
   body.innerHTML = `
+    <style>
+      .v2-payers-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .v2-payers-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .v2-payers-stat .v2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .v2-payers-stat .v2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .v2-payers-stat .v2-sub{font-size:12px;color:var(--text-muted);margin-top:4px;}
+      .v2-payers-stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:20px;}
+      .v2-payers-filter{background:white;border-radius:16px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,0.06);margin-bottom:20px;}
+      .v2-payers-filter-group{margin-bottom:10px;}
+      .v2-payers-filter-group:last-child{margin-bottom:0;}
+      .v2-payers-group-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;display:flex;align-items:center;gap:4px;}
+      .v2-payers-cat-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:11px;font-size:11px;font-weight:700;background:var(--brand-50);color:var(--brand-600);margin-left:8px;}
+      @media(max-width:768px){.v2-payers-stats-row{grid-template-columns:repeat(2,1fr);}}
+    </style>
+
     <!-- View Tabs -->
     <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid var(--border);padding-bottom:0;">
       <button class="btn btn-sm" style="border-radius:8px 8px 0 0;border-bottom:3px solid ${_payerView === 'catalog' ? 'var(--brand-600)' : 'transparent'};font-weight:${_payerView === 'catalog' ? '700' : '400'};padding:8px 16px;"
@@ -3688,47 +4086,65 @@ async function renderPayers() {
         onclick="window.app.setPayerView('planner')">Strategic Planner</button>
     </div>
 
-    <!-- Stats -->
-    <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);">
-      <div class="stat-card"><div class="label">Total Payers</div><div class="value">${PAYER_CATALOG.length}</div>${_payerTagFilters.size > 0 ? `<div class="sub">${filteredPayers.length} matching</div>` : ''}</div>
-      <div class="stat-card"><div class="label">Behavioral Health</div><div class="value" style="color:#6b21a8;">${bhCount}</div></div>
-      <div class="stat-card"><div class="label">Telehealth</div><div class="value blue">${thCount}</div></div>
-      <div class="stat-card"><div class="label">Tagged</div><div class="value green">${taggedCount}</div><div class="sub">of ${PAYER_CATALOG.length}</div></div>
-      <div class="stat-card"><div class="label">BCBS Plans</div><div class="value" style="color:var(--brand-600);">${
-        (categories.bcbs_anthem || []).length +
-        (categories.bcbs_hcsc || []).length +
-        (categories.bcbs_highmark || []).length +
-        (categories.bcbs_independent || []).length
-      }</div></div>
+    <!-- V2 Stats -->
+    <div class="v2-payers-stats-row">
+      <div class="v2-payers-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--brand-600),var(--brand-400));"></div>
+        <div class="v2-label">Total Payers</div>
+        <div class="v2-val" style="color:var(--brand-600);">${PAYER_CATALOG.length}</div>
+        ${_payerTagFilters.size > 0 ? `<div class="v2-sub">${filteredPayers.length} matching</div>` : ''}
+      </div>
+      <div class="v2-payers-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#7c3aed,#a855f7);"></div>
+        <div class="v2-label">Behavioral Health</div>
+        <div class="v2-val" style="color:#6b21a8;">${bhCount}</div>
+      </div>
+      <div class="v2-payers-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div>
+        <div class="v2-label">Telehealth</div>
+        <div class="v2-val" style="color:#2563eb;">${thCount}</div>
+      </div>
+      <div class="v2-payers-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+        <div class="v2-label">Tagged</div>
+        <div class="v2-val" style="color:#16a34a;">${taggedCount}</div>
+        <div class="v2-sub">of ${PAYER_CATALOG.length}</div>
+      </div>
+      <div class="v2-payers-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#0369a1,#0ea5e9);"></div>
+        <div class="v2-label">BCBS Plans</div>
+        <div class="v2-val" style="color:var(--brand-600);">${bcbsCount}</div>
+      </div>
     </div>
 
-    <!-- Tag Filter Bar -->
-    <div class="card" style="margin-bottom:16px;">
-      <div class="card-body" style="padding:10px 16px;">
-        <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
-          <strong style="font-size:11px;color:var(--text-muted);padding-top:3px;">Filter:</strong>
-          ${Object.entries(tagGroups).map(([groupKey, grp]) => {
-            const groupTags = Object.entries(PAYER_TAG_DEFS).filter(([, def]) => def.group === groupKey);
-            return `<div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center;">
-              <span style="font-size:10px;color:var(--text-muted);margin-right:2px;" title="${grp.label}">${grp.icon}</span>
-              ${groupTags.map(([key, def]) => `
-                <span class="payer-tag payer-tag-filter ${_payerTagFilters.has(key) ? 'active' : ''}"
-                      style="background:${def.bg};color:${def.color};"
-                      onclick="window.app.togglePayerTagFilter('${key}')">${def.label}</span>
-              `).join('')}
-            </div>`;
-          }).join('<span style="border-left:1px solid var(--border);height:20px;"></span>')}
-          ${_payerTagFilters.size > 0 ? `<button class="btn btn-sm" onclick="window.app.clearPayerTagFilters()" style="font-size:10px;padding:2px 8px;">Clear all</button>` : ''}
-        </div>
+    <!-- V2 Tag Filter Bar with Group Headers -->
+    <div class="v2-payers-filter">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);">Filter by Tags</span>
+        ${_payerTagFilters.size > 0 ? `<span style="font-size:11px;color:var(--brand-600);font-weight:600;">${_payerTagFilters.size} active</span><button class="btn btn-sm" onclick="window.app.clearPayerTagFilters()" style="font-size:10px;padding:2px 8px;margin-left:4px;">Clear all</button>` : ''}
       </div>
+      ${Object.entries(tagGroups).map(([groupKey, grp]) => {
+        const groupTags = Object.entries(PAYER_TAG_DEFS).filter(([, def]) => def.group === groupKey);
+        const activeInGroup = groupTags.filter(([key]) => _payerTagFilters.has(key)).length;
+        return `<div class="v2-payers-filter-group">
+          <div class="v2-payers-group-label">${grp.icon} ${grp.label}${activeInGroup > 0 ? ` <span style="background:var(--brand-600);color:white;padding:1px 6px;border-radius:8px;font-size:9px;">${activeInGroup}</span>` : ''}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">
+            ${groupTags.map(([key, def]) => `
+              <span class="payer-tag payer-tag-filter ${_payerTagFilters.has(key) ? 'active' : ''}"
+                    style="background:${def.bg};color:${def.color};"
+                    onclick="window.app.togglePayerTagFilter('${key}')">${def.label}</span>
+            `).join('')}
+          </div>
+        </div>`;
+      }).join('')}
     </div>
 
     ${_payerView === 'planner' ? renderPayerStrategicPlanner(filteredPayers) : `
     <!-- Catalog View -->
     ${Object.entries(categories).map(([cat, payers]) => `
-      <div class="card">
-        <div class="card-header">
-          <h3>${categoryLabels[cat] || cat} (${payers.length})</h3>
+      <div class="card" style="border-radius:16px;overflow:hidden;">
+        <div class="card-header" style="display:flex;align-items:center;">
+          <h3>${categoryLabels[cat] || cat}<span class="v2-payers-cat-badge">${payers.length}</span></h3>
         </div>
         <div class="card-body" style="padding:0;">
           <table>
@@ -4521,15 +4937,68 @@ async function renderTasksPage() {
   const fUpcoming = applyFilters(upcoming);
   const fCompleted = applyFilters(completed);
 
+  // Completion progress for the week
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const weekStartStr = weekStart.toISOString().split('T')[0];
+  const completedThisWeek = completed.filter(t => (t.completedAt || '') >= weekStartStr).length;
+  const totalThisWeek = pending.length + completedThisWeek;
+  const completionPct = totalThisWeek > 0 ? Math.round((completedThisWeek / totalThisWeek) * 100) : 0;
+
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
-      <div class="stat-card"><div class="label">Overdue</div><div class="value red">${overdue.length}</div></div>
-      <div class="stat-card"><div class="label">Due Today</div><div class="value amber">${dueToday.length}</div></div>
-      <div class="stat-card"><div class="label">Upcoming</div><div class="value blue">${upcoming.length}</div></div>
-      <div class="stat-card"><div class="label">Completed</div><div class="value green">${completed.length}</div></div>
+    <style>
+      .v2-tasks-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .v2-tasks-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .v2-tasks-stat .v2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .v2-tasks-stat .v2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .v2-tasks-stat .v2-sub{font-size:12px;color:var(--text-muted);margin-top:4px;}
+      .v2-tasks-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;}
+      .v2-tasks-progress{background:white;border-radius:16px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,0.06);margin-bottom:20px;display:flex;align-items:center;gap:16px;}
+      .v2-tasks-progress-bar{flex:1;height:10px;background:var(--gray-100);border-radius:5px;overflow:hidden;}
+      .v2-tasks-progress-fill{height:100%;border-radius:5px;transition:width 0.4s ease;}
+      .v2-tasks-pri-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle;}
+      @media(max-width:768px){.v2-tasks-grid{grid-template-columns:repeat(2,1fr);}}
+    </style>
+
+    <!-- V2 Stat Cards -->
+    <div class="v2-tasks-grid">
+      <div class="v2-tasks-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#ef4444,#f87171);"></div>
+        <div class="v2-label">Overdue</div>
+        <div class="v2-val" style="color:#dc2626;">${overdue.length}</div>
+        <div class="v2-sub">need attention</div>
+      </div>
+      <div class="v2-tasks-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div>
+        <div class="v2-label">Due Today</div>
+        <div class="v2-val" style="color:#d97706;">${dueToday.length}</div>
+        <div class="v2-sub">${today}</div>
+      </div>
+      <div class="v2-tasks-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div>
+        <div class="v2-label">Upcoming</div>
+        <div class="v2-val" style="color:#2563eb;">${upcoming.length}</div>
+        <div class="v2-sub">scheduled</div>
+      </div>
+      <div class="v2-tasks-stat">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+        <div class="v2-label">Completed</div>
+        <div class="v2-val" style="color:#16a34a;">${completedThisWeek}</div>
+        <div class="v2-sub">this week</div>
+      </div>
     </div>
 
-    <div id="task-page-add-form" style="display:none;margin-bottom:16px;padding:16px;border:1px solid var(--border);border-radius:8px;background:white;box-shadow:var(--shadow);">
+    <!-- Weekly Completion Progress -->
+    <div class="v2-tasks-progress">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);white-space:nowrap;">Weekly Progress</span>
+      <div class="v2-tasks-progress-bar">
+        <div class="v2-tasks-progress-fill" style="width:${completionPct}%;background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+      </div>
+      <span style="font-size:14px;font-weight:700;color:${completionPct >= 80 ? '#16a34a' : completionPct >= 50 ? '#d97706' : '#dc2626'};min-width:40px;text-align:right;">${completionPct}%</span>
+      <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${completedThisWeek}/${totalThisWeek} tasks</span>
+    </div>
+
+    <div id="task-page-add-form" style="display:none;margin-bottom:16px;padding:16px;border:1px solid var(--border);border-radius:16px;background:white;box-shadow:var(--shadow);">
       <h3 style="margin-bottom:12px;font-size:15px;">New Task</h3>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <div style="grid-column:1/-1;position:relative;">
@@ -4601,7 +5070,7 @@ async function renderTasksPage() {
 
 function renderTaskSection(title, tasks, today, color, appsMap) {
   return `
-    <div class="card" style="margin-bottom:12px;">
+    <div class="card" style="margin-bottom:12px;border-radius:16px;overflow:hidden;border-left:4px solid ${color};">
       <div class="card-header"><h3 style="color:${color};">${title} (${tasks.length})</h3></div>
       <div class="card-body" style="padding:0;">
         <table>
@@ -4628,7 +5097,7 @@ function renderTaskPageRow(task, today, appsMap) {
       <div style="font-weight:${isDone ? '400' : '600'};${isDone ? 'text-decoration:line-through;' : ''}cursor:${task.notes ? 'help' : 'default'};" ${task.notes ? `title="${escAttr(task.notes)}"` : ''}>${escHtml(task.title)}${task.recurrence ? ` <span style="font-size:10px;padding:1px 5px;background:var(--teal);color:white;border-radius:3px;">&#8635; ${task.recurrence}</span>` : ''}${task.notes ? ' <span style="font-size:10px;color:var(--text-muted);">&#x1f4dd;</span>' : ''}</div>
     </td>
     <td><span style="font-size:12px;">${cat.icon} ${cat.label}</span></td>
-    <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${pri.color}15;color:${pri.color};font-weight:600;">${pri.label}</span></td>
+    <td><span class="v2-tasks-pri-dot" style="background:${pri.color};"></span><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${pri.color}15;color:${pri.color};font-weight:600;">${pri.label}</span></td>
     <td style="white-space:nowrap;${isOverdue ? 'color:var(--red);font-weight:600;' : ''}">${task.dueDate ? formatDateDisplay(task.dueDate) : '-'}</td>
     <td>${linkedLabel || '-'}</td>
     <td style="white-space:nowrap;">

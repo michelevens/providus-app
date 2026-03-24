@@ -1458,45 +1458,56 @@
     }
 
     async function demoLogin(email) {
-      // Show loading state on the clicked button
       const btns = document.querySelectorAll('.demo-btn');
       btns.forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
+      document.getElementById('auth-error').style.display = 'none';
 
-      try {
-        const res = await fetch('https://api.credentik.com/api/auth/demo-login', {
+      // Demo passwords to try in order
+      const passwords = ['Demo@2026!', 'demo123', 'Demo123!', 'password'];
+
+      async function tryLogin(pw) {
+        const res = await fetch('https://api.credentik.com/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email })
+          body: JSON.stringify({ email, password: pw })
         });
+        if (!res.ok) return null;
+        return await res.json();
+      }
 
-        if (!res.ok) {
-          // Fallback: try regular login with default demo password
-          const res2 = await fetch('https://api.credentik.com/api/auth/login', {
+      try {
+        // Try dedicated demo-login endpoint first
+        let data = null;
+        try {
+          const res = await fetch('https://api.credentik.com/api/auth/demo-login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password: 'Demo@2026!' })
+            body: JSON.stringify({ email })
           });
-          if (!res2.ok) {
-            const err = await res2.json().catch(() => ({}));
-            showError('auth-error', err.message || 'Demo login failed. Try signing in manually.');
-            btns.forEach(b => { b.disabled = false; b.style.opacity = ''; });
-            return;
+          if (res.ok) data = await res.json();
+        } catch (_) { /* endpoint may not exist */ }
+
+        // Fallback: try common demo passwords
+        if (!data) {
+          for (const pw of passwords) {
+            data = await tryLogin(pw);
+            if (data) break;
           }
-          const data2 = await res2.json();
-          localStorage.setItem('credentik_token', data2.token);
-          localStorage.setItem('credentik_user', JSON.stringify(data2.user));
-          showApp(data2.user);
-          import('./ui/app.js').then(m => m.initApp());
+        }
+
+        if (!data || !data.token) {
+          showError('auth-error', 'Demo login failed. The demo account may not be set up yet. Try signing in manually with your credentials.');
+          btns.forEach(b => { b.disabled = false; b.style.opacity = ''; });
           return;
         }
 
-        const data = await res.json();
         localStorage.setItem('credentik_token', data.token);
         localStorage.setItem('credentik_user', JSON.stringify(data.user));
         showApp(data.user);
         import('./ui/app.js').then(m => m.initApp());
       } catch (err) {
-        showError('auth-error', 'Unable to connect. Please try again.');
+        console.error('Demo login error:', err);
+        showError('auth-error', 'Unable to connect to the server. Check your internet connection and try again.');
         btns.forEach(b => { b.disabled = false; b.style.opacity = ''; });
       }
     }
