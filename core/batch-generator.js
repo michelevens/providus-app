@@ -99,6 +99,11 @@ async function generateBatch(options = {}) {
         if (rule.payerIds || rule.payer_ids) {
             const ids = rule.payerIds || rule.payer_ids;
             payers = payerCatalog.filter(p => ids.includes(p.id));
+        } else if (rule.payerTags || rule.payer_tags) {
+            const tags = rule.payerTags || rule.payer_tags;
+            payers = payerCatalog.filter(p =>
+                Array.isArray(p.tags) && tags.every(t => p.tags.includes(t))
+            );
         } else if (rule.payerCategory || rule.payer_category) {
             const cat = rule.payerCategory || rule.payer_category;
             payers = payerCatalog.filter(p => p.category === cat);

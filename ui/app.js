@@ -68,6 +68,119 @@ let STATES = [];
 let TELEHEALTH_POLICIES = [];
 let DEFAULT_STRATEGIES = [];
 
+// ─── Payer Strategic Tags ───
+
+const PAYER_TAG_DEFS = {
+  // Clinical Focus — purple
+  behavioral_health:      { label: 'Behavioral Health',      group: 'clinical', bg: '#f3e8ff', color: '#6b21a8' },
+  substance_use:          { label: 'Substance Use',          group: 'clinical', bg: '#f3e8ff', color: '#6b21a8' },
+  autism_aba:             { label: 'Autism / ABA',           group: 'clinical', bg: '#f3e8ff', color: '#6b21a8' },
+  pediatric:             { label: 'Pediatric',              group: 'clinical', bg: '#f3e8ff', color: '#6b21a8' },
+  // Access / Delivery — teal
+  telehealth_friendly:    { label: 'Telehealth',             group: 'access',   bg: '#e0f2fe', color: '#0369a1' },
+  cross_state_telehealth: { label: 'Cross-State Telehealth', group: 'access',   bg: '#e0f2fe', color: '#0369a1' },
+  no_referral_required:   { label: 'No Referral Needed',     group: 'access',   bg: '#e0f2fe', color: '#0369a1' },
+  // Business / Revenue — green & red
+  high_reimbursement:     { label: 'High Reimb.',            group: 'business', bg: '#d1fae5', color: '#065f46' },
+  fast_credentialing:     { label: 'Fast Cred (<60d)',       group: 'business', bg: '#d1fae5', color: '#065f46' },
+  slow_credentialing:     { label: 'Slow Cred (>120d)',      group: 'business', bg: '#fee2e2', color: '#991b1b' },
+  high_volume:            { label: 'High Volume',            group: 'business', bg: '#d1fae5', color: '#065f46' },
+  medicare_advantage:     { label: 'Medicare Advantage',     group: 'business', bg: '#dbeafe', color: '#1d4ed8' },
+  // Credentialing Process — blue & amber
+  caqh_accepts:           { label: 'CAQH',                  group: 'process',  bg: '#dbeafe', color: '#1d4ed8' },
+  availity_enrolled:      { label: 'Availity',              group: 'process',  bg: '#dbeafe', color: '#1d4ed8' },
+  portal_required:        { label: 'Portal Required',       group: 'process',  bg: '#fef3c7', color: '#92400e' },
+  paper_application:      { label: 'Paper App',             group: 'process',  bg: '#fef3c7', color: '#92400e' },
+  // Strategic
+  must_have:              { label: 'Must Have',              group: 'strategic', bg: '#d1fae5', color: '#065f46' },
+  growing_market:         { label: 'Growing Market',         group: 'strategic', bg: '#e0f2fe', color: '#0369a1' },
+  panel_often_closed:     { label: 'Panel Often Closed',     group: 'strategic', bg: '#fee2e2', color: '#991b1b' },
+  medicaid_prerequisite:  { label: 'Medicaid Prereq.',       group: 'strategic', bg: '#fef3c7', color: '#92400e' },
+};
+
+function renderPayerTags(tags) {
+  if (!Array.isArray(tags) || tags.length === 0) return '';
+  return tags.map(t => {
+    const def = PAYER_TAG_DEFS[t];
+    if (!def) return '';
+    return `<span class="payer-tag" style="background:${def.bg};color:${def.color};" title="${def.label}">${def.label}</span>`;
+  }).join(' ');
+}
+
+let _payerTagFilters = new Set();
+let _payerView = 'catalog'; // 'catalog' | 'planner'
+
+// Tag enrichment for payers that don't yet have tags from the API
+const PAYER_TAG_MAP = {
+  // ─── National (Big 5) ───
+  'UnitedHealthcare':     ['must_have','behavioral_health','high_volume','caqh_accepts','telehealth_friendly','substance_use'],
+  'Aetna':                ['must_have','behavioral_health','high_volume','caqh_accepts','availity_enrolled','telehealth_friendly','substance_use'],
+  'Cigna':                ['must_have','behavioral_health','high_volume','caqh_accepts','telehealth_friendly','substance_use'],
+  'Humana':               ['must_have','high_volume','caqh_accepts','telehealth_friendly','medicare_advantage'],
+  'Medicare':             ['must_have','high_volume','portal_required','telehealth_friendly','behavioral_health'],
+  'Centene/Ambetter':     ['high_volume','behavioral_health','telehealth_friendly','growing_market'],
+  'Molina Healthcare':    ['high_volume','behavioral_health','medicaid_prerequisite','telehealth_friendly'],
+  'Oscar Health':         ['telehealth_friendly','fast_credentialing','growing_market','behavioral_health'],
+  'Tricare':              ['behavioral_health','substance_use','telehealth_friendly','portal_required'],
+  'Kaiser Permanente':    ['must_have','high_volume','behavioral_health','panel_often_closed','portal_required'],
+  'Medicaid':             ['must_have','high_volume','behavioral_health','substance_use','portal_required'],
+  // ─── BCBS — Anthem / Elevance ───
+  'Anthem/Elevance':      ['must_have','high_volume','caqh_accepts','availity_enrolled','telehealth_friendly','behavioral_health'],
+  // ─── BCBS — HCSC ───
+  'HCSC':                 ['high_volume','caqh_accepts','behavioral_health','telehealth_friendly'],
+  'BCBS of Illinois':     ['high_volume','caqh_accepts','behavioral_health'],
+  // ─── BCBS — Highmark ───
+  'Highmark BCBS':        ['high_volume','caqh_accepts','behavioral_health','telehealth_friendly'],
+  // ─── BCBS — Independent ───
+  'Florida Blue':         ['must_have','high_volume','caqh_accepts','telehealth_friendly','behavioral_health'],
+  'BCBS of Arizona':      ['high_volume','caqh_accepts','telehealth_friendly','cross_state_telehealth','behavioral_health'],
+  'Premera Blue Cross':   ['high_volume','caqh_accepts','telehealth_friendly','behavioral_health'],
+  'Regence BlueShield':   ['high_volume','caqh_accepts','telehealth_friendly','cross_state_telehealth','behavioral_health'],
+  'BCBS of North Carolina': ['high_volume','caqh_accepts','behavioral_health'],
+  'BCBS of Tennessee':    ['high_volume','caqh_accepts','behavioral_health'],
+  'BCBS of South Carolina': ['caqh_accepts','behavioral_health'],
+  'BCBS of Massachusetts': ['high_volume','caqh_accepts','behavioral_health','telehealth_friendly'],
+  'Horizon BCBS':         ['high_volume','caqh_accepts','behavioral_health'],
+  'BCBS of Alabama':      ['caqh_accepts','behavioral_health'],
+  'Independence Blue Cross': ['high_volume','caqh_accepts','behavioral_health'],
+  'Wellmark BCBS':        ['caqh_accepts','behavioral_health'],
+  'BCBS of Georgia':      ['high_volume','caqh_accepts','behavioral_health'],
+  'BCBS of Texas':        ['must_have','high_volume','caqh_accepts','behavioral_health'],
+  // ─── Regional ───
+  'Moda Health':          ['telehealth_friendly','behavioral_health','fast_credentialing'],
+  'Providence Health Plan': ['telehealth_friendly','behavioral_health','high_volume'],
+  'AvMed':                ['behavioral_health','telehealth_friendly'],
+  'Simply Healthcare':    ['behavioral_health','medicaid_prerequisite'],
+  'Sunshine Health':      ['behavioral_health','medicaid_prerequisite'],
+  'CareSource':           ['behavioral_health','substance_use','high_volume'],
+  'WellCare':             ['behavioral_health','high_volume','medicare_advantage'],
+  'EmblemHealth':         ['high_volume','behavioral_health','slow_credentialing'],
+  'Healthfirst':          ['high_volume','behavioral_health'],
+  'Fidelis Care':         ['behavioral_health','substance_use'],
+  'UPMC Health Plan':     ['behavioral_health','telehealth_friendly','high_volume'],
+  'Banner | Aetna':       ['telehealth_friendly','behavioral_health'],
+  'Mercy Care':           ['behavioral_health','substance_use','medicaid_prerequisite'],
+  'Health Plan of Nevada': ['behavioral_health','high_volume'],
+  'HealthPartners':       ['behavioral_health','telehealth_friendly','high_volume'],
+  'Priority Health':      ['behavioral_health','telehealth_friendly'],
+  'Medical Mutual':       ['behavioral_health','telehealth_friendly','high_reimbursement'],
+  'Optima Health':        ['behavioral_health','telehealth_friendly'],
+  'Superior HealthPlan':  ['behavioral_health','medicaid_prerequisite'],
+  'Community Health Plan of WA': ['behavioral_health','medicaid_prerequisite'],
+  'BCBS of Kansas':       ['caqh_accepts','behavioral_health'],
+  'BCBS of Louisiana':    ['caqh_accepts','behavioral_health'],
+  'BCBS of Michigan':     ['high_volume','caqh_accepts','behavioral_health'],
+  'BCBS of Minnesota':    ['caqh_accepts','behavioral_health','telehealth_friendly'],
+};
+
+function enrichPayerTags() {
+  PAYER_CATALOG.forEach(p => {
+    if (!p.tags || p.tags.length === 0) {
+      p.tags = PAYER_TAG_MAP[p.name] || [];
+    }
+  });
+}
+
 function getPayerById(id) {
   return PAYER_CATALOG.find(p => p.id === id) || null;
 }
@@ -198,6 +311,9 @@ export async function initApp() {
   try { TELEHEALTH_POLICIES = await store.getReference('telehealth_policies') || []; } catch (e) { console.error('Failed to load telehealth policies:', e); }
   try { DEFAULT_STRATEGIES = await store.getAll('strategies') || []; } catch (e) { console.error('Failed to load strategies:', e); }
   US_TOTAL_POP = STATES.reduce((sum, s) => sum + (s.population || 0), 0);
+
+  // Enrich existing payers with strategic tags (client-side until API supports tags natively)
+  enrichPayerTags();
 
   // Load custom group definitions from agency config
   try {
@@ -3211,15 +3327,10 @@ async function renderDeaTab(providers) {
 
 async function renderPayers() {
   const body = document.getElementById('page-body');
-  const categories = {};
-  PAYER_CATALOG.forEach(p => {
-    const cat = p.category || 'other';
-    if (!categories[cat]) categories[cat] = [];
-    categories[cat].push(p);
-  });
 
   const categoryLabels = {
     national: 'National (Big 5)',
+    behavioral: 'Behavioral Health / EAP',
     bcbs_anthem: 'BCBS — Anthem / Elevance',
     bcbs_hcsc: 'BCBS — HCSC',
     bcbs_highmark: 'BCBS — Highmark',
@@ -3230,19 +3341,81 @@ async function renderPayers() {
     other: 'Other',
   };
 
+  // Apply tag filters
+  let filteredPayers = PAYER_CATALOG;
+  if (_payerTagFilters.size > 0) {
+    filteredPayers = PAYER_CATALOG.filter(p =>
+      Array.isArray(p.tags) && [..._payerTagFilters].every(t => p.tags.includes(t))
+    );
+  }
+
+  // Group by category
+  const categories = {};
+  filteredPayers.forEach(p => {
+    const cat = p.category || 'other';
+    if (!categories[cat]) categories[cat] = [];
+    categories[cat].push(p);
+  });
+
+  const taggedCount = PAYER_CATALOG.filter(p => p.tags?.length > 0).length;
+  const bhCount = PAYER_CATALOG.filter(p => p.tags?.includes('behavioral_health')).length;
+  const thCount = PAYER_CATALOG.filter(p => p.tags?.includes('telehealth_friendly')).length;
+
+  // Tag groups for the filter bar
+  const tagGroups = {
+    clinical: { label: 'Clinical Focus', icon: '🧠' },
+    access:   { label: 'Access',         icon: '📡' },
+    business: { label: 'Business',       icon: '💰' },
+    process:  { label: 'Process',        icon: '📋' },
+    strategic:{ label: 'Strategic',      icon: '🎯' },
+  };
+
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
-      <div class="stat-card"><div class="label">Total Payers</div><div class="value">${PAYER_CATALOG.length}</div></div>
-      <div class="stat-card"><div class="label">National</div><div class="value blue">${(categories.national || []).length}</div></div>
+    <!-- View Tabs -->
+    <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid var(--border);padding-bottom:0;">
+      <button class="btn btn-sm" style="border-radius:8px 8px 0 0;border-bottom:3px solid ${_payerView === 'catalog' ? 'var(--brand-600)' : 'transparent'};font-weight:${_payerView === 'catalog' ? '700' : '400'};padding:8px 16px;"
+        onclick="window.app.setPayerView('catalog')">Payer Catalog</button>
+      <button class="btn btn-sm" style="border-radius:8px 8px 0 0;border-bottom:3px solid ${_payerView === 'planner' ? 'var(--brand-600)' : 'transparent'};font-weight:${_payerView === 'planner' ? '700' : '400'};padding:8px 16px;"
+        onclick="window.app.setPayerView('planner')">Strategic Planner</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);">
+      <div class="stat-card"><div class="label">Total Payers</div><div class="value">${PAYER_CATALOG.length}</div>${_payerTagFilters.size > 0 ? `<div class="sub">${filteredPayers.length} matching</div>` : ''}</div>
+      <div class="stat-card"><div class="label">Behavioral Health</div><div class="value" style="color:#6b21a8;">${bhCount}</div></div>
+      <div class="stat-card"><div class="label">Telehealth</div><div class="value blue">${thCount}</div></div>
+      <div class="stat-card"><div class="label">Tagged</div><div class="value green">${taggedCount}</div><div class="sub">of ${PAYER_CATALOG.length}</div></div>
       <div class="stat-card"><div class="label">BCBS Plans</div><div class="value" style="color:var(--brand-600);">${
         (categories.bcbs_anthem || []).length +
         (categories.bcbs_hcsc || []).length +
         (categories.bcbs_highmark || []).length +
         (categories.bcbs_independent || []).length
       }</div></div>
-      <div class="stat-card"><div class="label">Regional</div><div class="value">${(categories.regional || []).length}</div></div>
     </div>
 
+    <!-- Tag Filter Bar -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-body" style="padding:10px 16px;">
+        <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <strong style="font-size:11px;color:var(--text-muted);padding-top:3px;">Filter:</strong>
+          ${Object.entries(tagGroups).map(([groupKey, grp]) => {
+            const groupTags = Object.entries(PAYER_TAG_DEFS).filter(([, def]) => def.group === groupKey);
+            return `<div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center;">
+              <span style="font-size:10px;color:var(--text-muted);margin-right:2px;" title="${grp.label}">${grp.icon}</span>
+              ${groupTags.map(([key, def]) => `
+                <span class="payer-tag payer-tag-filter ${_payerTagFilters.has(key) ? 'active' : ''}"
+                      style="background:${def.bg};color:${def.color};"
+                      onclick="window.app.togglePayerTagFilter('${key}')">${def.label}</span>
+              `).join('')}
+            </div>`;
+          }).join('<span style="border-left:1px solid var(--border);height:20px;"></span>')}
+          ${_payerTagFilters.size > 0 ? `<button class="btn btn-sm" onclick="window.app.clearPayerTagFilters()" style="font-size:10px;padding:2px 8px;">Clear all</button>` : ''}
+        </div>
+      </div>
+    </div>
+
+    ${_payerView === 'planner' ? renderPayerStrategicPlanner(filteredPayers) : `
+    <!-- Catalog View -->
     ${Object.entries(categories).map(([cat, payers]) => `
       <div class="card">
         <div class="card-header">
@@ -3254,9 +3427,9 @@ async function renderPayers() {
               <tr>
                 <th>Payer</th>
                 <th>Parent Org</th>
-                <th>Stedi ID</th>
                 <th>Avg Cred Days</th>
                 <th>States</th>
+                <th>Tags</th>
                 <th>Notes</th>
               </tr>
             </thead>
@@ -3265,9 +3438,9 @@ async function renderPayers() {
                 <tr>
                   <td><strong>${escHtml(p.name)}</strong></td>
                   <td>${escHtml(p.parentOrg) || '-'}</td>
-                  <td><code>${escHtml(p.stediId) || '-'}</code></td>
-                  <td>${p.avgCredDays || '-'} days</td>
+                  <td>${p.avgCredDays ? p.avgCredDays + ' days' : '-'}</td>
                   <td class="text-sm">${Array.isArray(p.states) ? p.states.join(', ') : '-'}</td>
+                  <td>${renderPayerTags(p.tags)}</td>
                   <td class="text-sm text-muted">${escHtml(p.notes) || ''}</td>
                 </tr>
               `).join('')}
@@ -3276,6 +3449,105 @@ async function renderPayers() {
         </div>
       </div>
     `).join('')}
+    `}
+  `;
+}
+
+// ─── Strategic Planner View ───
+
+function renderPayerStrategicPlanner(payers) {
+  const all = payers.length > 0 ? payers : PAYER_CATALOG;
+  const byTag = (tag) => all.filter(p => p.tags?.includes(tag));
+
+  const mustHave = byTag('must_have');
+  const quickWins = byTag('fast_credentialing').filter(p => !mustHave.includes(p));
+  const telehealthOpps = byTag('telehealth_friendly');
+  const highReimb = byTag('high_reimbursement');
+  const caution = all.filter(p => p.tags?.includes('slow_credentialing') || p.tags?.includes('panel_often_closed'));
+
+  // Credentialing method summary
+  const caqhCount = byTag('caqh_accepts').length;
+  const availityCount = byTag('availity_enrolled').length;
+  const portalCount = byTag('portal_required').length;
+  const paperCount = byTag('paper_application').length;
+
+  function strategicTable(list, showWhy) {
+    if (list.length === 0) return '<p style="padding:16px;color:var(--text-muted);text-align:center;">No payers match this criteria.</p>';
+    return `<table>
+      <thead><tr><th>Payer</th><th>Category</th><th>States</th><th>Avg Cred</th><th>Tags</th></tr></thead>
+      <tbody>${list.map(p => `<tr>
+        <td><strong>${escHtml(p.name)}</strong><div class="text-sm text-muted">${escHtml(p.parentOrg) || ''}</div></td>
+        <td class="text-sm">${escHtml(p.category) || '-'}</td>
+        <td class="text-sm">${Array.isArray(p.states) ? (p.states.length > 6 ? p.states.slice(0, 6).join(', ') + ` +${p.states.length - 6}` : p.states.join(', ')) : '-'}</td>
+        <td>${p.avgCredDays ? p.avgCredDays + 'd' : '-'}</td>
+        <td>${renderPayerTags(p.tags)}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  return `
+    <!-- Credentialing Method Summary -->
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">
+      <div class="stat-card" style="cursor:pointer;" onclick="window.app.togglePayerTagFilter('caqh_accepts')">
+        <div class="label">CAQH Accepts</div><div class="value blue">${caqhCount}</div><div class="sub">easiest workflow</div>
+      </div>
+      <div class="stat-card" style="cursor:pointer;" onclick="window.app.togglePayerTagFilter('availity_enrolled')">
+        <div class="label">Availity</div><div class="value blue">${availityCount}</div><div class="sub">electronic enrollment</div>
+      </div>
+      <div class="stat-card" style="cursor:pointer;" onclick="window.app.togglePayerTagFilter('portal_required')">
+        <div class="label">Portal Required</div><div class="value amber">${portalCount}</div><div class="sub">payer-specific portal</div>
+      </div>
+      <div class="stat-card" style="cursor:pointer;" onclick="window.app.togglePayerTagFilter('paper_application')">
+        <div class="label">Paper App</div><div class="value red">${paperCount}</div><div class="sub">fax / mail required</div>
+      </div>
+    </div>
+
+    <!-- Must-Have Payers -->
+    <div class="card">
+      <div class="card-header" style="border-left:4px solid #065f46;">
+        <h3>Must-Have Payers (${mustHave.length})</h3>
+        <span class="text-sm text-muted">Essential for most behavioral health practices — credential these first</span>
+      </div>
+      <div class="card-body" style="padding:0;">${strategicTable(mustHave)}</div>
+    </div>
+
+    <!-- Quick Wins -->
+    <div class="card">
+      <div class="card-header" style="border-left:4px solid #0369a1;">
+        <h3>Quick Wins — Fast Credentialing (${quickWins.length})</h3>
+        <span class="text-sm text-muted">Under 60 days — get credentialed fast while waiting on slower payers</span>
+      </div>
+      <div class="card-body" style="padding:0;">${strategicTable(quickWins)}</div>
+    </div>
+
+    <!-- Telehealth Opportunities -->
+    <div class="card">
+      <div class="card-header" style="border-left:4px solid #0369a1;">
+        <h3>Telehealth-Friendly Payers (${telehealthOpps.length})</h3>
+        <span class="text-sm text-muted">Support telehealth delivery — essential for multi-state or virtual practices</span>
+      </div>
+      <div class="card-body" style="padding:0;">${strategicTable(telehealthOpps)}</div>
+    </div>
+
+    <!-- High Reimbursement -->
+    ${highReimb.length > 0 ? `
+    <div class="card">
+      <div class="card-header" style="border-left:4px solid #065f46;">
+        <h3>High Reimbursement (${highReimb.length})</h3>
+        <span class="text-sm text-muted">Above-average rates for behavioral health services</span>
+      </div>
+      <div class="card-body" style="padding:0;">${strategicTable(highReimb)}</div>
+    </div>` : ''}
+
+    <!-- Caution / Long Lead -->
+    ${caution.length > 0 ? `
+    <div class="card">
+      <div class="card-header" style="border-left:4px solid #991b1b;">
+        <h3>Caution — Slow or Restricted (${caution.length})</h3>
+        <span class="text-sm text-muted">Panels often closed or credentialing takes 120+ days — plan ahead</span>
+      </div>
+      <div class="card-body" style="padding:0;">${strategicTable(caution)}</div>
+    </div>` : ''}
   `;
 }
 
@@ -6625,6 +6897,21 @@ window.app = {
   },
 
   showToast,
+
+  // Payer tag filters & strategic planner
+  togglePayerTagFilter(tag) {
+    if (_payerTagFilters.has(tag)) _payerTagFilters.delete(tag);
+    else _payerTagFilters.add(tag);
+    renderPayers();
+  },
+  clearPayerTagFilters() {
+    _payerTagFilters.clear();
+    renderPayers();
+  },
+  setPayerView(view) {
+    _payerView = view;
+    renderPayers();
+  },
 
   // Notifications (#1)
   async toggleNotifications() {
