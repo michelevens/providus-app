@@ -6686,7 +6686,7 @@ window.app = {
   },
 
   async disable2FA() {
-    const password = prompt('Enter your password to disable 2FA:');
+    const password = await appPrompt('Enter your password to disable 2FA:', { title: 'Disable Two-Factor Authentication', placeholder: 'Password' });
     if (!password) return;
 
     try {
@@ -7744,8 +7744,11 @@ function handleNppesProxy(payload) {
 
   // ── User Management ───────────────────────────────────────
   inviteUser() {
-    const form = document.getElementById('invite-user-form');
-    if (form) { form.classList.remove('hidden'); form.scrollIntoView({ behavior: 'smooth' }); }
+    ['invite-first-name','invite-last-name','invite-email','invite-password'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    document.getElementById('invite-error')?.classList.add('hidden');
+    document.getElementById('invite-user-modal')?.classList.add('active');
   },
   generatePassword() {
     const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -7784,7 +7787,7 @@ function handleNppesProxy(payload) {
   },
 
   async revokeOnboardToken(id) {
-    if (!confirm('Revoke this onboarding token?')) return;
+    if (!await appConfirm('Revoke this onboarding token? The invite link will no longer work.', { title: 'Revoke Token', okLabel: 'Revoke', okClass: 'btn-danger' })) return;
     try {
       await store._fetch(`${CONFIG.API_URL}/onboard/tokens/${id}`, { method: 'DELETE' });
       showToast('Token revoked');
@@ -7793,8 +7796,7 @@ function handleNppesProxy(payload) {
   },
 
   cancelInvite() {
-    const form = document.getElementById('invite-user-form');
-    if (form) form.classList.add('hidden');
+    document.getElementById('invite-user-modal')?.classList.remove('active');
     document.getElementById('invite-error')?.classList.add('hidden');
   },
   onInviteRoleChange() {
@@ -7830,7 +7832,7 @@ function handleNppesProxy(payload) {
       return;
     }
 
-    const btn = document.querySelector('#invite-user-form .btn-primary');
+    const btn = document.querySelector('#invite-user-modal .btn-primary');
     const btnText = btn?.textContent;
     if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
     try {
@@ -7844,11 +7846,7 @@ function handleNppesProxy(payload) {
         provider_id: providerId ? parseInt(providerId) : null,
       });
       showToast('User created successfully');
-      // Reset form
-      ['invite-first-name','invite-last-name','invite-email','invite-password'].forEach(id => {
-        const el = document.getElementById(id); if (el) el.value = '';
-      });
-      document.getElementById('invite-user-form')?.classList.add('hidden');
+      document.getElementById('invite-user-modal')?.classList.remove('active');
       await renderUsersStub();
     } catch (e) {
       console.error('Failed to create user:', e);
@@ -7860,33 +7858,73 @@ function handleNppesProxy(payload) {
     }
   },
   async editUserRole(userId, currentRole) {
+    const roleLabels = {
+      agency: 'Agency (Full Access)',
+      staff: 'Staff (Credentialing Coordinator)',
+      organization: 'Organization',
+      provider: 'Provider',
+    };
     const roles = ['agency', 'staff', 'organization', 'provider'].filter(r => r !== currentRole);
-    const newRole = prompt(`Change role from "${currentRole}" to:\n\nOptions: ${roles.join(', ')}`);
-    if (!newRole || !['agency', 'staff', 'organization', 'provider'].includes(newRole)) return;
+    const radioHtml = roles.map(r =>
+      `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:6px;">
+        <input type="radio" name="role-change" value="${r}"> <strong>${roleLabels[r]}</strong>
+      </label>`
+    ).join('');
+
+    const confirmed = await appConfirm(
+      `<div style="margin-bottom:12px;">Current role: <strong>${roleLabels[currentRole] || currentRole}</strong></div>
+       <div style="margin-bottom:8px;font-weight:600;">Select new role:</div>
+       ${radioHtml}`,
+      { title: 'Change User Role', okLabel: 'Change Role', raw: true }
+    );
+    if (!confirmed) return;
+
+    const selected = document.querySelector('input[name="role-change"]:checked')?.value;
+    if (!selected) { showToast('Please select a role'); return; }
 
     try {
-      const data = { role: newRole };
-      if (newRole === 'organization') {
+      const data = { role: selected };
+      if (selected === 'organization') {
         const orgs = await store.getAll('organizations');
-        const orgId = prompt('Enter organization ID:\n\n' + orgs.map(o => `${o.id}: ${o.name}`).join('\n'));
-        if (!orgId) return;
+        const orgHtml = orgs.map(o =>
+          `<label style="display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:4px;">
+            <input type="radio" name="org-select" value="${o.id}"> ${escHtml(o.name)}
+          </label>`
+        ).join('');
+        const orgConfirmed = await appConfirm(
+          `<div style="margin-bottom:8px;font-weight:600;">Assign to organization:</div>${orgHtml}`,
+          { title: 'Select Organization', okLabel: 'Assign', raw: true }
+        );
+        if (!orgConfirmed) return;
+        const orgId = document.querySelector('input[name="org-select"]:checked')?.value;
+        if (!orgId) { showToast('Please select an organization'); return; }
         data.organization_id = parseInt(orgId);
       }
-      if (newRole === 'provider') {
+      if (selected === 'provider') {
         const provs = await store.getAll('providers');
-        const provId = prompt('Enter provider ID:\n\n' + provs.map(p => `${p.id}: ${(p.firstName || '') + ' ' + (p.lastName || '')}`).join('\n'));
-        if (!provId) return;
+        const provHtml = provs.map(p =>
+          `<label style="display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:4px;">
+            <input type="radio" name="prov-select" value="${p.id}"> ${escHtml((p.firstName || '') + ' ' + (p.lastName || ''))} <span style="color:var(--text-muted);font-size:12px;">(${p.credentials || ''})</span>
+          </label>`
+        ).join('');
+        const provConfirmed = await appConfirm(
+          `<div style="margin-bottom:8px;font-weight:600;">Assign to provider:</div>${provHtml}`,
+          { title: 'Select Provider', okLabel: 'Assign', raw: true }
+        );
+        if (!provConfirmed) return;
+        const provId = document.querySelector('input[name="prov-select"]:checked')?.value;
+        if (!provId) { showToast('Please select a provider'); return; }
         data.provider_id = parseInt(provId);
       }
       await store.updateUser(userId, data);
-      showToast('Role updated');
+      showToast('Role updated successfully');
       await renderUsersStub();
     } catch (e) {
       showToast('Error: ' + (e.message || 'Failed to update role'));
     }
   },
   async deactivateUser(userId, name) {
-    if (!confirm(`Deactivate user "${name}"? They will no longer be able to log in.`)) return;
+    if (!await appConfirm(`Deactivate user "<strong>${name}</strong>"? They will no longer be able to log in.`, { title: 'Deactivate User', okLabel: 'Deactivate', okClass: 'btn-danger', raw: true })) return;
     try {
       await store.deleteUser(userId);
       showToast('User deactivated');
@@ -7905,7 +7943,7 @@ function handleNppesProxy(payload) {
     }
   },
   async resetUserPassword(userId, userName) {
-    if (!confirm(`Send a password reset email to ${userName}? They will receive a link to set a new password.`)) return;
+    if (!await appConfirm(`Send a password reset email to <strong>${userName}</strong>? They will receive a link to set a new password.`, { title: 'Reset Password', okLabel: 'Send Reset Email', raw: true })) return;
     try {
       await store.resetUserPassword(userId);
       showToast('Password reset email sent to ' + userName);
@@ -7914,11 +7952,11 @@ function handleNppesProxy(payload) {
     }
   },
   async changeUserEmail(userId, currentEmail) {
-    const newEmail = prompt(`Change email for this user.\n\nCurrent: ${currentEmail}\n\nEnter new email address:`);
+    const newEmail = await appPrompt('Enter new email address:', { title: 'Change User Email', placeholder: currentEmail });
     if (!newEmail || !newEmail.trim()) return;
     if (newEmail.trim() === currentEmail) { showToast('Email is the same'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) { showToast('Invalid email format'); return; }
-    if (!confirm(`Change email from:\n${currentEmail}\n\nTo:\n${newEmail.trim()}\n\nThe user will need to use the new email to log in.`)) return;
+    if (!await appConfirm(`Change email from:<br><strong>${escHtml(currentEmail)}</strong><br><br>To:<br><strong>${escHtml(newEmail.trim())}</strong><br><br>The user will need to use the new email to log in.`, { title: 'Confirm Email Change', okLabel: 'Change Email', raw: true })) return;
     try {
       await store.changeUserEmail(userId, newEmail.trim());
       showToast('Email updated successfully');
@@ -12003,39 +12041,52 @@ async function renderUsersStub() {
       <div class="stat-card"><div class="label">Provider</div><div class="value" style="color:var(--text-muted);">${providerUsers.length}</div></div>
     </div>
 
-    <!-- Invite User Form (hidden by default) -->
-    <div id="invite-user-form" class="card hidden" style="margin-bottom:16px;border-left:4px solid var(--brand-600);">
-      <div class="card-header"><h3>Invite / Create User</h3></div>
-      <div class="card-body">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-          <input type="text" id="invite-first-name" class="form-control" placeholder="First Name *">
-          <input type="text" id="invite-last-name" class="form-control" placeholder="Last Name *">
+    <!-- Invite User Modal -->
+    <div class="modal-overlay" id="invite-user-modal">
+      <div class="modal" style="max-width:560px;">
+        <div class="modal-header">
+          <h3>Invite / Create User</h3>
+          <button class="modal-close" onclick="window.app.cancelInvite()">&times;</button>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-          <input type="email" id="invite-email" class="form-control" placeholder="Email Address *">
-          <div style="display:flex;gap:4px;">
-            <input type="text" id="invite-password" class="form-control" placeholder="Temporary Password *" style="flex:1;">
-            <button type="button" class="btn btn-sm" onclick="window.app.generatePassword()" title="Generate strong password" style="white-space:nowrap;">Generate</button>
+        <div class="modal-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div class="auth-field" style="margin:0;"><label>First Name *</label><input type="text" id="invite-first-name" class="form-control" placeholder="First Name"></div>
+            <div class="auth-field" style="margin:0;"><label>Last Name *</label><input type="text" id="invite-last-name" class="form-control" placeholder="Last Name"></div>
           </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div class="auth-field" style="margin:0;"><label>Email Address *</label><input type="email" id="invite-email" class="form-control" placeholder="user@example.com"></div>
+            <div class="auth-field" style="margin:0;">
+              <label>Temporary Password *</label>
+              <div style="display:flex;gap:4px;">
+                <input type="text" id="invite-password" class="form-control" placeholder="Password" style="flex:1;">
+                <button type="button" class="btn btn-sm" onclick="window.app.generatePassword()" title="Generate strong password" style="white-space:nowrap;">Generate</button>
+              </div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div class="auth-field" style="margin:0;">
+              <label>Role *</label>
+              <select id="invite-role" class="form-control" onchange="window.app.onInviteRoleChange()">
+                <option value="agency">Agency (Full Access)</option>
+                <option value="staff">Staff (Credentialing Coordinator)</option>
+                <option value="organization">Organization</option>
+                <option value="provider">Provider</option>
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;">
+              <select id="invite-org" class="form-control hidden" style="margin-top:22px;">
+                <option value="">Select Organization *</option>
+                ${orgs.map(o => `<option value="${o.id}">${escHtml(o.name)}</option>`).join('')}
+              </select>
+              <select id="invite-provider" class="form-control hidden" style="margin-top:22px;">
+                <option value="">Select Provider *</option>
+                ${providers.map(p => `<option value="${p.id}">${escHtml((p.firstName || '') + ' ' + (p.lastName || ''))}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div id="invite-error" class="alert alert-danger hidden" style="margin-bottom:10px;"></div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
-          <select id="invite-role" class="form-control" onchange="window.app.onInviteRoleChange()">
-            <option value="agency">Agency (Full Access)</option>
-            <option value="staff">Staff (Credentialing Coordinator)</option>
-            <option value="organization">Organization</option>
-            <option value="provider">Provider</option>
-          </select>
-          <select id="invite-org" class="form-control hidden">
-            <option value="">Select Organization *</option>
-            ${orgs.map(o => `<option value="${o.id}">${escHtml(o.name)}</option>`).join('')}
-          </select>
-          <select id="invite-provider" class="form-control hidden">
-            <option value="">Select Provider *</option>
-            ${providers.map(p => `<option value="${p.id}">${escHtml((p.firstName || '') + ' ' + (p.lastName || ''))}</option>`).join('')}
-          </select>
-        </div>
-        <div id="invite-error" class="alert alert-danger hidden" style="margin-bottom:10px;"></div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
           <button class="btn" onclick="window.app.cancelInvite()">Cancel</button>
           <button class="btn btn-primary" onclick="window.app.submitInvite()">Create User</button>
         </div>
