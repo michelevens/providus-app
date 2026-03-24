@@ -752,6 +752,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderUsersStub();
       break;
+    case 'audit-trail':
+      pageTitle.textContent = 'Audit Trail';
+      pageSubtitle.textContent = 'Track who changed what and when';
+      pageActions.innerHTML = printBtn;
+      await renderAuditTrail();
+      break;
     case 'onboarding':
       pageTitle.textContent = 'Provider Onboarding';
       pageSubtitle.textContent = 'Onboarding tokens and self-service registration';
@@ -6969,6 +6975,85 @@ window.app = {
 
   showToast,
 
+  // Audit trail
+  async filterAuditTrail() {
+    const collection = document.getElementById('audit-filter-collection')?.value || '';
+    const action = document.getElementById('audit-filter-action')?.value || '';
+    const user = document.getElementById('audit-filter-user')?.value || '';
+    const search = (document.getElementById('audit-search')?.value || '').toLowerCase();
+
+    let entries = [];
+    try { entries = await store.getAuditLog(); } catch {}
+
+    if (collection) entries = entries.filter(e => e.collection === collection);
+    if (action) entries = entries.filter(e => e.action === action);
+    if (user) entries = entries.filter(e => e.user_name === user);
+    if (search) entries = entries.filter(e =>
+      JSON.stringify(e).toLowerCase().includes(search)
+    );
+
+    const tbody = document.getElementById('audit-table-body');
+    if (!tbody) return;
+
+    const actionIcon = (a) => ({ create: '➕', update: '✏️', delete: '🗑️' }[a] || '📝');
+    const actionColor = (a) => ({ create: '#059669', update: '#2563eb', delete: '#dc2626' }[a] || '#6b7280');
+    const timeAgoShort = (ts) => {
+      if (!ts) return '';
+      const diff = Date.now() - new Date(ts).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs}h ago`;
+      const days = Math.floor(hrs / 24);
+      if (days < 30) return `${days}d ago`;
+      return new Date(ts).toLocaleDateString();
+    };
+    const formatChanges = (changes) => {
+      if (!changes) return '';
+      return Object.entries(changes).map(([field, diff]) => {
+        const from = diff.from == null || diff.from === '' ? '<em>empty</em>' : escHtml(String(diff.from));
+        const to = diff.to == null || diff.to === '' ? '<em>empty</em>' : escHtml(String(diff.to));
+        return `<div style="font-size:11px;margin:2px 0;"><strong>${escHtml(field)}</strong>: <span style="text-decoration:line-through;color:var(--red);opacity:.7;">${from}</span> → <span style="color:var(--green);">${to}</span></div>`;
+      }).join('');
+    };
+
+    if (entries.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted);">No events match your filters.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = entries.slice(0, 200).map(e => `
+      <tr>
+        <td><div style="font-size:12px;">${timeAgoShort(e.timestamp)}</div><div style="font-size:10px;color:var(--text-muted);">${e.timestamp ? new Date(e.timestamp).toLocaleString() : ''}</div></td>
+        <td><strong style="font-size:12px;">${escHtml(e.user_name || 'System')}</strong><div style="font-size:10px;color:var(--text-muted);">${escHtml(e.user_role || '')}</div></td>
+        <td><span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:${actionColor(e.action)};">${actionIcon(e.action)} ${e.action}</span></td>
+        <td style="font-size:12px;">${escHtml(e.collection || '')}</td>
+        <td><code style="font-size:11px;">${e.record_id ? ('#' + String(e.record_id).slice(-6)) : '-'}</code></td>
+        <td>${e.changes ? formatChanges(e.changes) : (e.action === 'create' ? '<span style="font-size:11px;color:var(--green);">New record created</span>' : e.action === 'delete' ? '<span style="font-size:11px;color:var(--red);">Record deleted</span>' : '-')}</td>
+      </tr>
+    `).join('');
+  },
+  exportAuditCSV() {
+    const entries = store.getLocalAuditLog();
+    if (entries.length === 0) { showToast('No audit data to export'); return; }
+    const headers = ['Timestamp', 'User', 'Role', 'Action', 'Collection', 'Record ID', 'Changes'];
+    const rows = entries.map(e => [
+      e.timestamp || '',
+      e.user_name || '',
+      e.user_role || '',
+      e.action || '',
+      e.collection || '',
+      e.record_id || '',
+      e.changes ? Object.entries(e.changes).map(([k, v]) => `${k}: ${v.from} → ${v.to}`).join('; ') : '',
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `audit-trail-${new Date().toISOString().split('T')[0]}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    showToast('Audit trail exported');
+  },
+
   // Payer tag filters & strategic planner
   togglePayerTagFilter(tag) {
     if (_payerTagFilters.has(tag)) _payerTagFilters.delete(tag);
@@ -7597,7 +7682,8 @@ function handleNppesProxy(payload) {
     const role = document.getElementById('invite-role')?.value;
     const orgSel = document.getElementById('invite-org');
     const provSel = document.getElementById('invite-provider');
-    if (orgSel) orgSel.classList.toggle('hidden', role === 'agency');
+    // Agency and Staff see all data (no org/provider scope needed)
+    if (orgSel) orgSel.classList.toggle('hidden', role === 'agency' || role === 'staff');
     if (provSel) provSel.classList.toggle('hidden', role !== 'provider');
   },
   async submitInvite() {
@@ -7642,9 +7728,9 @@ function handleNppesProxy(payload) {
     }
   },
   async editUserRole(userId, currentRole) {
-    const roles = ['agency', 'organization', 'provider'].filter(r => r !== currentRole);
+    const roles = ['agency', 'staff', 'organization', 'provider'].filter(r => r !== currentRole);
     const newRole = prompt(`Change role from "${currentRole}" to:\n\nOptions: ${roles.join(', ')}`);
-    if (!newRole || !['agency', 'organization', 'provider'].includes(newRole)) return;
+    if (!newRole || !['agency', 'staff', 'organization', 'provider'].includes(newRole)) return;
 
     try {
       const data = { role: newRole };
@@ -11741,6 +11827,7 @@ async function renderUsersStub() {
     const map = {
       superadmin: { label: 'Super Admin', cls: 'approved', icon: '&#9733;' },
       agency: { label: 'Agency', cls: 'approved', icon: '&#127970;' },
+      staff: { label: 'Staff', cls: 'in_review', icon: '&#128221;' },
       organization: { label: 'Organization', cls: 'submitted', icon: '&#127963;' },
       provider: { label: 'Provider', cls: 'pending', icon: '&#129658;' },
     };
@@ -11749,15 +11836,17 @@ async function renderUsersStub() {
   };
 
   const agencyUsers = users.filter(u => u.role === 'agency' || u.role === 'superadmin');
+  const staffUsers = users.filter(u => u.role === 'staff');
   const orgUsers = users.filter(u => u.role === 'organization');
   const providerUsers = users.filter(u => u.role === 'provider');
 
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
+    <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);">
       <div class="stat-card"><div class="label">Total Users</div><div class="value">${users.length}</div></div>
       <div class="stat-card"><div class="label">Agency</div><div class="value" style="color:var(--green);">${agencyUsers.length}</div></div>
+      <div class="stat-card"><div class="label">Staff</div><div class="value" style="color:var(--amber);">${staffUsers.length}</div></div>
       <div class="stat-card"><div class="label">Organization</div><div class="value" style="color:var(--brand-600);">${orgUsers.length}</div></div>
-      <div class="stat-card"><div class="label">Provider</div><div class="value" style="color:var(--amber);">${providerUsers.length}</div></div>
+      <div class="stat-card"><div class="label">Provider</div><div class="value" style="color:var(--text-muted);">${providerUsers.length}</div></div>
     </div>
 
     <!-- Invite User Form (hidden by default) -->
@@ -11778,6 +11867,7 @@ async function renderUsersStub() {
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
           <select id="invite-role" class="form-control" onchange="window.app.onInviteRoleChange()">
             <option value="agency">Agency (Full Access)</option>
+            <option value="staff">Staff (Credentialing Coordinator)</option>
             <option value="organization">Organization</option>
             <option value="provider">Provider</option>
           </select>
@@ -11845,6 +11935,122 @@ async function renderUsersStub() {
             }).join('')}
           </tbody>
         </table>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Audit Trail Page ───
+
+async function renderAuditTrail() {
+  const body = document.getElementById('page-body');
+  if (!auth.isAgency()) {
+    body.innerHTML = '<div class="alert alert-danger">Agency access required to view audit trail.</div>';
+    return;
+  }
+
+  let entries = [];
+  try { entries = await store.getAuditLog(); } catch {}
+
+  // Filters
+  const collections = [...new Set(entries.map(e => e.collection).filter(Boolean))].sort();
+  const actions = [...new Set(entries.map(e => e.action).filter(Boolean))].sort();
+  const users = [...new Set(entries.map(e => e.user_name).filter(Boolean))].sort();
+
+  const actionIcon = (action) => {
+    const icons = { create: '➕', update: '✏️', delete: '🗑️' };
+    return icons[action] || '📝';
+  };
+
+  const actionColor = (action) => {
+    const colors = { create: '#059669', update: '#2563eb', delete: '#dc2626' };
+    return colors[action] || '#6b7280';
+  };
+
+  const formatChanges = (changes) => {
+    if (!changes) return '';
+    return Object.entries(changes).map(([field, diff]) => {
+      const from = diff.from === null || diff.from === '' ? '<em>empty</em>' : escHtml(String(diff.from));
+      const to = diff.to === null || diff.to === '' ? '<em>empty</em>' : escHtml(String(diff.to));
+      return `<div style="font-size:11px;margin:2px 0;"><strong>${escHtml(field)}</strong>: <span style="text-decoration:line-through;color:var(--red);opacity:.7;">${from}</span> → <span style="color:var(--green);">${to}</span></div>`;
+    }).join('');
+  };
+
+  const timeAgoShort = (ts) => {
+    if (!ts) return '';
+    const diff = Date.now() - new Date(ts).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 30) return `${days}d ago`;
+    return new Date(ts).toLocaleDateString();
+  };
+
+  body.innerHTML = `
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">
+      <div class="stat-card"><div class="label">Total Events</div><div class="value">${entries.length}</div></div>
+      <div class="stat-card"><div class="label">Creates</div><div class="value green">${entries.filter(e => e.action === 'create').length}</div></div>
+      <div class="stat-card"><div class="label">Updates</div><div class="value blue">${entries.filter(e => e.action === 'update').length}</div></div>
+      <div class="stat-card"><div class="label">Deletes</div><div class="value red">${entries.filter(e => e.action === 'delete').length}</div></div>
+    </div>
+
+    <div class="filters-bar" style="margin-bottom:16px;">
+      <select class="form-control" id="audit-filter-collection" onchange="window.app.filterAuditTrail()">
+        <option value="">All Collections</option>
+        ${collections.map(c => `<option value="${c}">${c}</option>`).join('')}
+      </select>
+      <select class="form-control" id="audit-filter-action" onchange="window.app.filterAuditTrail()">
+        <option value="">All Actions</option>
+        ${actions.map(a => `<option value="${a}">${a}</option>`).join('')}
+      </select>
+      <select class="form-control" id="audit-filter-user" onchange="window.app.filterAuditTrail()">
+        <option value="">All Users</option>
+        ${users.map(u => `<option value="${u}">${u}</option>`).join('')}
+      </select>
+      <input type="text" class="form-control search-input" id="audit-search" placeholder="Search..." oninput="window.app.filterAuditTrail()">
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>Activity Log</h3>
+        <button class="btn btn-sm" onclick="window.app.exportAuditCSV()">Export CSV</button>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:140px;">When</th>
+              <th style="width:160px;">User</th>
+              <th style="width:70px;">Action</th>
+              <th style="width:130px;">Collection</th>
+              <th style="width:80px;">Record</th>
+              <th>Changes</th>
+            </tr>
+          </thead>
+          <tbody id="audit-table-body">
+            ${entries.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted);">No audit events yet. Changes will be tracked as users create, edit, and delete records.</td></tr>' : ''}
+            ${entries.slice(0, 200).map(e => `
+              <tr>
+                <td>
+                  <div style="font-size:12px;">${timeAgoShort(e.timestamp)}</div>
+                  <div style="font-size:10px;color:var(--text-muted);">${e.timestamp ? new Date(e.timestamp).toLocaleString() : ''}</div>
+                </td>
+                <td>
+                  <strong style="font-size:12px;">${escHtml(e.user_name || 'System')}</strong>
+                  <div style="font-size:10px;color:var(--text-muted);">${escHtml(e.user_role || '')}</div>
+                </td>
+                <td><span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:${actionColor(e.action)};">${actionIcon(e.action)} ${e.action}</span></td>
+                <td style="font-size:12px;">${escHtml(e.collection || '')}</td>
+                <td><code style="font-size:11px;">${e.record_id ? ('#' + (typeof e.record_id === 'number' ? e.record_id : String(e.record_id).slice(-6))) : '-'}</code></td>
+                <td>${e.changes ? formatChanges(e.changes) : (e.action === 'create' ? '<span style="font-size:11px;color:var(--green);">New record created</span>' : e.action === 'delete' ? '<span style="font-size:11px;color:var(--red);">Record deleted</span>' : '-')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ${entries.length > 200 ? `<div style="padding:12px;text-align:center;font-size:12px;color:var(--text-muted);">Showing first 200 of ${entries.length} events</div>` : ''}
       </div>
     </div>
   `;

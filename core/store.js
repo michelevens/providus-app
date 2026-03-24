@@ -299,26 +299,107 @@ class Store {
             body: JSON.stringify(data),
         });
         this._invalidateCache(collection);
-        this._emit('created', { collection, item: result.data || result });
-        return result.data || result;
+        const item = result.data || result;
+        this._emit('created', { collection, item });
+        this._logAudit('create', collection, item.id, null, data);
+        return item;
     }
 
     async update(collection, id, data) {
+        // Capture previous state for audit diff
+        let previous = null;
+        try { previous = await this.getOne(collection, id); } catch {}
         const result = await this._fetch(`${this._url(collection)}/${id}`, {
             method: 'PUT',
             body: JSON.stringify(data),
         });
         this._invalidateCache(collection);
-        this._emit('updated', { collection, item: result.data || result });
-        return result.data || result;
+        const item = result.data || result;
+        this._emit('updated', { collection, item });
+        this._logAudit('update', collection, id, previous, data);
+        return item;
     }
 
     async remove(collection, id) {
+        // Capture previous state for audit
+        let previous = null;
+        try { previous = await this.getOne(collection, id); } catch {}
         await this._fetch(`${this._url(collection)}/${id}`, {
             method: 'DELETE',
         });
         this._invalidateCache(collection);
         this._emit('deleted', { collection, id });
+        this._logAudit('delete', collection, id, previous, null);
+    }
+
+    // ── Audit Trail ──
+
+    _logAudit(action, collection, recordId, previous, current) {
+        try {
+            const user = auth.getUser();
+            const entry = {
+                action,
+                collection,
+                record_id: recordId,
+                user_id: user?.id || null,
+                user_name: user ? `${user.first_name || user.firstName || ''} ${user.last_name || user.lastName || ''}`.trim() : 'System',
+                user_role: user?.role || null,
+                timestamp: new Date().toISOString(),
+                changes: action === 'update' ? this._diffFields(previous, current) : null,
+                snapshot: action === 'delete' ? previous : (action === 'create' ? current : null),
+            };
+            // Fire-and-forget — never block the main operation
+            this._fetch(`${CONFIG.API_URL}/audit-logs`, {
+                method: 'POST',
+                body: JSON.stringify(entry),
+            }).catch(() => {}); // silently fail if API doesn't support it yet
+            // Also store locally for immediate UI access
+            this._appendLocalAudit(entry);
+        } catch {}
+    }
+
+    _diffFields(previous, current) {
+        if (!previous || !current) return null;
+        const changes = {};
+        const allKeys = new Set([...Object.keys(previous), ...Object.keys(current)]);
+        for (const key of allKeys) {
+            if (['id', 'createdAt', 'updatedAt', 'created_at', 'updated_at'].includes(key)) continue;
+            const prev = previous[key];
+            const curr = current[key];
+            if (JSON.stringify(prev) !== JSON.stringify(curr)) {
+                changes[key] = { from: prev ?? null, to: curr ?? null };
+            }
+        }
+        return Object.keys(changes).length > 0 ? changes : null;
+    }
+
+    _appendLocalAudit(entry) {
+        try {
+            const key = `${CONFIG.CACHE_PREFIX}audit_log`;
+            const existing = JSON.parse(localStorage.getItem(key) || '[]');
+            existing.unshift(entry);
+            // Keep last 500 entries locally
+            if (existing.length > 500) existing.length = 500;
+            localStorage.setItem(key, JSON.stringify(existing));
+        } catch {}
+    }
+
+    getLocalAuditLog() {
+        try {
+            const key = `${CONFIG.CACHE_PREFIX}audit_log`;
+            return JSON.parse(localStorage.getItem(key) || '[]');
+        } catch { return []; }
+    }
+
+    async getAuditLog(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        try {
+            const result = await this._fetch(`${CONFIG.API_URL}/audit-logs${query ? '?' + query : ''}`);
+            return result.data || result;
+        } catch {
+            // Fallback to local audit log if API doesn't support it yet
+            return this.getLocalAuditLog();
+        }
     }
 
     // ── Reference data (cached longer, public endpoints) ──

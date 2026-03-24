@@ -39,8 +39,12 @@ class Auth {
         return ['superadmin', 'agency'].includes(this.user?.role);
     }
 
+    isStaffOrAbove() {
+        return ['superadmin', 'agency', 'staff'].includes(this.user?.role);
+    }
+
     isOrganization() {
-        return ['superadmin', 'agency', 'organization'].includes(this.user?.role);
+        return ['superadmin', 'agency', 'staff', 'organization'].includes(this.user?.role);
     }
 
     isProviderRole() {
