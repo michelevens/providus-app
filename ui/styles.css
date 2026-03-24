@@ -2445,3 +2445,814 @@ textarea:focus-visible {
 .modal .ql-editor { min-height: 200px; line-height: 1.6; }
 .modal .ql-toolbar { border-radius: 8px 8px 0 0; border-color: var(--gray-200); }
 .modal .ql-container { border-radius: 0 0 8px 8px; border-color: var(--gray-200); }
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE-FIRST RESPONSIVE OVERHAUL — Native App Feel
+   Added: 2026-03-24
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── 10. PWA Feel — Global ─── */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.page-body,
+.modal-body,
+.sidebar-nav,
+.table-wrap,
+.notification-body {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ─── 9. Touch Improvements — Global ─── */
+a, button, [role="button"], .nav-item, .btn, .tab,
+.bottom-nav-item, .stat-card, .notif-item, .demo-btn,
+.tools-dropdown-item, .policy-row, .funding-nav-item {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ═══════════════════════════════════════════
+   TABLET — 1024px
+   ═══════════════════════════════════════════ */
+
+@media (max-width: 1024px) {
+  /* 6. Sidebar — semi-transparent overlay already exists, ensure blur */
+  .sidebar-overlay {
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  /* 3. Stat cards — verify 2-col on tablet (already set at 768, add for 1024) */
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+
+  /* 2. Tables — ensure horizontal scroll */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+  }
+
+  /* 8. Filters — slightly tighter */
+  .filters-bar {
+    gap: 8px;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   MOBILE — 768px
+   ═══════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+
+  /* ─── 1. Bottom Navigation Bar — Enhanced ─── */
+  .bottom-nav {
+    background: var(--surface-card);
+    border-top: 1px solid var(--border-color);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+    padding: 2px 0 0;
+    padding-bottom: max(4px, env(safe-area-inset-bottom, 4px));
+    transition: transform 0.3s var(--ease);
+  }
+
+  /* Slide-up entrance */
+  .bottom-nav {
+    animation: bottomNavSlideUp 0.4s var(--ease-spring);
+  }
+  @keyframes bottomNavSlideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .bottom-nav-item {
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 12px;
+    min-width: 60px;
+    min-height: 48px;
+    justify-content: center;
+    position: relative;
+    border-radius: var(--radius-lg);
+    transition: color 0.2s var(--ease), transform 0.1s var(--ease);
+  }
+
+  .bottom-nav-item svg,
+  .bottom-nav-item .icon {
+    width: 24px;
+    height: 24px;
+    font-size: 20px;
+    transition: transform 0.15s var(--ease);
+  }
+
+  .bottom-nav-item span:last-child,
+  .bottom-nav-item .nav-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1;
+  }
+
+  /* Active state with brand color pill */
+  .bottom-nav-item.active {
+    color: var(--brand-600);
+  }
+  .bottom-nav-item.active::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 28px;
+    background: var(--brand-100);
+    border-radius: var(--radius-full);
+    z-index: -1;
+    animation: pillFadeIn 0.25s var(--ease-out);
+  }
+  @keyframes pillFadeIn {
+    from { opacity: 0; transform: translateX(-50%) scale(0.7); }
+    to { opacity: 1; transform: translateX(-50%) scale(1); }
+  }
+
+  /* Haptic-feel tap effect */
+  .bottom-nav-item:active {
+    transform: scale(0.88);
+    transition-duration: 0.06s;
+  }
+
+  /* Badge positioning fix */
+  .bottom-nav-item .nav-badge {
+    position: absolute;
+    top: 0;
+    right: 8px;
+  }
+
+  /* ─── 2. Tables on Mobile — Card Layout ─── */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+  .table-wrap::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Scroll hint gradient */
+  .table-wrap {
+    position: relative;
+  }
+  .table-wrap::after {
+    content: '';
+    position: sticky;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 24px;
+    background: linear-gradient(to left, var(--surface-card), transparent);
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* Sticky first column */
+  table thead th:first-child,
+  table tbody td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background: var(--surface-card);
+  }
+  table thead th:first-child {
+    background: var(--table-header-bg);
+    z-index: 4;
+  }
+  table tbody td:first-child::after {
+    content: '';
+    position: absolute;
+    right: -8px;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    background: linear-gradient(to right, rgba(0,0,0,0.04), transparent);
+    pointer-events: none;
+  }
+
+  /* ─── 4. Modals — Full-screen bottom sheet ─── */
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .modal {
+    max-width: 100%;
+    width: 100%;
+    margin: 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    max-height: 95vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Drag handle at top of modal */
+  .modal::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: var(--gray-300);
+    border-radius: var(--radius-full);
+    margin: 8px auto 0;
+    flex-shrink: 0;
+  }
+
+  .modal-header {
+    padding: 12px 20px 16px;
+  }
+  .modal-header h2 {
+    font-size: 17px;
+  }
+
+  /* Larger touch targets for modal buttons */
+  .modal-footer {
+    padding: 16px 20px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+  }
+  .modal-footer .btn {
+    min-height: 48px;
+    padding: 12px 20px;
+    font-size: 15px;
+    border-radius: var(--radius-lg);
+    flex: 1;
+  }
+  .modal-close {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    border-radius: var(--radius);
+  }
+
+  /* ─── 5. Page Header — Compact ─── */
+  .page-header {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 10px 16px;
+    min-height: 52px;
+    gap: 6px;
+  }
+  .page-header h2 {
+    font-size: 16px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .page-header .subtitle {
+    display: none;
+  }
+
+  /* Collapse header actions into compact row */
+  .header-actions-group {
+    gap: 4px;
+    margin-left: 0;
+  }
+  .page-header-actions .btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    min-height: 36px;
+  }
+
+  /* ─── 6. Sidebar — Swipe gesture area (visual cue) ─── */
+  .sidebar.open ~ .sidebar-overlay::before {
+    content: '';
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 20px;
+    z-index: 101;
+  }
+
+  /* ─── 7. Cards — Flush edges on mobile ─── */
+  .card {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    margin-left: -16px;
+    margin-right: -16px;
+  }
+  .card-header {
+    padding: 14px 16px;
+  }
+  .card-body {
+    padding: 14px 16px;
+  }
+  .card-footer {
+    padding: 12px 16px;
+  }
+
+  /* ─── 7. Forms — Single column, iOS-safe inputs ─── */
+  .form-row,
+  .form-row-3 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .form-group {
+    margin-bottom: 14px;
+  }
+  .form-control,
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="date"],
+  input[type="url"],
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px !important; /* Prevent iOS zoom */
+    padding: 10px 14px;
+    border-radius: var(--radius);
+  }
+
+  /* ─── 8. Filters — Collapse into scrollable row ─── */
+  .filters-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 8px;
+    padding-bottom: 4px;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .filters-bar::-webkit-scrollbar {
+    display: none;
+  }
+  .filters-bar .form-control {
+    min-width: 140px;
+    flex-shrink: 0;
+  }
+  .filters-bar .search-input {
+    min-width: 180px;
+    flex-shrink: 0;
+  }
+
+  /* ─── 9. Touch Improvements ─── */
+  .btn,
+  .nav-item,
+  .tab,
+  .bottom-nav-item,
+  .notif-item,
+  .tools-dropdown-item {
+    min-height: 44px;
+  }
+
+  /* Tabs — horizontal scroll on mobile */
+  .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 0;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .tab {
+    min-height: 44px;
+    padding: 10px 16px;
+    flex-shrink: 0;
+  }
+
+  /* Notification panel — full width */
+  .notification-panel {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-height: 70vh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    animation: modalSlideUp 0.3s var(--ease-spring);
+  }
+  .notification-panel::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: var(--gray-300);
+    border-radius: var(--radius-full);
+    margin: 8px auto 0;
+  }
+
+  /* Tools dropdown — bottom sheet on mobile */
+  .tools-dropdown-panel {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-height: 60vh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    animation: modalSlideUp 0.3s var(--ease-spring);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tools-dropdown-panel::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: var(--gray-300);
+    border-radius: var(--radius-full);
+    margin: 8px auto 4px;
+  }
+  .tools-dropdown-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 8px;
+  }
+  .tools-dropdown-item {
+    padding: 14px 12px;
+    border-radius: var(--radius-lg);
+  }
+  .tools-dropdown-overlay.active {
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+
+  /* Calendar grid — compact on mobile */
+  .cal-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Empty state — less padding */
+  .empty-state {
+    padding: 40px 20px;
+  }
+
+  /* Bulk bar — stack */
+  .bulk-bar {
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+  }
+
+  /* Toast — above bottom nav */
+  .toast {
+    left: 12px;
+    right: 12px;
+    bottom: max(80px, calc(76px + env(safe-area-inset-bottom, 0px)));
+    border-radius: var(--radius-lg);
+  }
+
+  /* Activity timeline — tighter */
+  .activity-entry {
+    gap: 10px;
+    padding: 10px 0;
+  }
+  .activity-icon {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    font-size: 14px;
+  }
+
+  /* Page body — account for bottom nav */
+  .page-body {
+    padding-bottom: max(80px, calc(72px + env(safe-area-inset-bottom, 0px)));
+  }
+}
+
+/* ═══════════════════════════════════════════
+   SMALL PHONE — 480px
+   ═══════════════════════════════════════════ */
+
+@media (max-width: 480px) {
+  /* 3. Stat cards — single column */
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .stat-card {
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .stat-card .value {
+    font-size: 22px;
+    order: 2;
+    margin-left: auto;
+  }
+  .stat-card .label {
+    font-size: 11px;
+    order: 1;
+    margin-bottom: 0;
+  }
+  .stat-card .sub {
+    display: none;
+  }
+  .stat-card::before {
+    width: 3px;
+    height: auto;
+    top: 8px;
+    bottom: 8px;
+    left: 0;
+    right: auto;
+  }
+
+  /* Page body — minimal padding */
+  .page-body {
+    padding: 10px 12px;
+    padding-bottom: max(80px, calc(72px + env(safe-area-inset-bottom, 0px)));
+  }
+
+  /* Cards — full bleed */
+  .card {
+    margin-left: -12px;
+    margin-right: -12px;
+  }
+
+  /* Bottom nav — 5 items tighter */
+  .bottom-nav-item {
+    min-width: 48px;
+    padding: 4px 6px;
+    gap: 1px;
+  }
+  .bottom-nav-item svg,
+  .bottom-nav-item .icon {
+    width: 22px;
+    height: 22px;
+  }
+  .bottom-nav-item span:last-child,
+  .bottom-nav-item .nav-label {
+    font-size: 9px;
+  }
+
+  /* Modal — full screen on small phones */
+  .modal {
+    max-height: 100vh;
+    min-height: 60vh;
+    border-radius: 0;
+  }
+  .modal-body {
+    padding: 16px;
+  }
+
+  /* Buttons — full width in footers */
+  .modal-footer {
+    flex-direction: column;
+  }
+  .modal-footer .btn {
+    width: 100%;
+  }
+
+  /* Header — super compact */
+  .page-header h2 {
+    font-size: 15px;
+  }
+
+  /* Auth box — tighter on tiny screens */
+  .auth-box {
+    padding: 24px 16px;
+  }
+
+  /* Table minimum width smaller */
+  table {
+    min-width: 500px;
+  }
+
+  /* Calendar — 2-col on tiny */
+  .cal-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Badge — compact */
+  .badge {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   VERY SMALL PHONE — 360px
+   ═══════════════════════════════════════════ */
+
+@media (max-width: 360px) {
+  .page-body {
+    padding: 8px;
+    padding-bottom: max(80px, calc(72px + env(safe-area-inset-bottom, 0px)));
+  }
+  .card {
+    margin-left: -8px;
+    margin-right: -8px;
+  }
+  .page-header {
+    padding: 8px 12px;
+  }
+  .page-header h2 {
+    font-size: 14px;
+  }
+  .stat-card .value {
+    font-size: 20px;
+  }
+  .bottom-nav-item {
+    min-width: 44px;
+    padding: 4px 4px;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   TOUCH DEVICE ENHANCEMENTS
+   ═══════════════════════════════════════════ */
+
+@media (hover: none) and (pointer: coarse) {
+  /* Remove hover-only interactions — show actions inline */
+  .nav-item:hover {
+    background: transparent;
+    color: var(--gray-400);
+  }
+  .nav-item.active:hover {
+    background: rgba(6, 182, 212, 0.1);
+    color: var(--brand-300);
+  }
+
+  /* Tap feedback */
+  .nav-item:active {
+    background: var(--brand-100);
+    transform: scale(0.98);
+    transition-duration: 0.06s;
+  }
+  .btn:active {
+    transform: scale(0.97);
+    transition-duration: 0.06s;
+  }
+  .stat-card:active {
+    transform: scale(0.98);
+    transition-duration: 0.06s;
+  }
+  tbody tr:active {
+    background: var(--brand-50) !important;
+  }
+  .card:active {
+    transform: scale(0.995);
+    transition-duration: 0.06s;
+  }
+  .tab:active {
+    background: var(--gray-100);
+    transform: scale(0.97);
+  }
+  .notif-item:active {
+    background: var(--gray-100);
+  }
+
+  /* All clickable: 44px minimum */
+  a, button, [role="button"], select {
+    min-height: 44px;
+  }
+
+  /* Better scrollbar hiding on touch */
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
+  * {
+    scrollbar-width: none;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   SAFE AREA INSETS — Notched Phones (iPhone X+)
+   ═══════════════════════════════════════════ */
+
+@supports (padding-top: env(safe-area-inset-top)) {
+  .bottom-nav {
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+  .modal {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  @media (max-width: 768px) {
+    .page-body {
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
+    }
+    .page-header {
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
+    }
+  }
+
+  @media (max-width: 480px) {
+    .page-body {
+      padding-left: max(12px, env(safe-area-inset-left));
+      padding-right: max(12px, env(safe-area-inset-right));
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════
+   LANDSCAPE PHONE
+   ═══════════════════════════════════════════ */
+
+@media (max-height: 480px) and (orientation: landscape) {
+  .bottom-nav {
+    padding-top: 2px;
+    padding-bottom: max(2px, env(safe-area-inset-bottom, 2px));
+  }
+  .bottom-nav-item {
+    min-height: 40px;
+    padding: 2px 8px;
+  }
+  .bottom-nav-item svg,
+  .bottom-nav-item .icon {
+    width: 20px;
+    height: 20px;
+  }
+  .bottom-nav-item span:last-child,
+  .bottom-nav-item .nav-label {
+    font-size: 9px;
+  }
+  .modal {
+    max-height: 100vh;
+  }
+  .page-body {
+    padding-bottom: max(56px, calc(48px + env(safe-area-inset-bottom, 0px)));
+  }
+}
+
+/* ═══════════════════════════════════════════
+   DARK MODE — Mobile-specific adjustments
+   ═══════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  [data-theme="dark"] .bottom-nav,
+  :root:not([data-theme="light"]) .bottom-nav {
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+  }
+  [data-theme="dark"] .bottom-nav-item.active::before,
+  :root:not([data-theme="light"]) .bottom-nav-item.active::before {
+    background: rgba(6, 182, 212, 0.15);
+  }
+  [data-theme="dark"] .modal::before,
+  :root:not([data-theme="light"]) .modal::before {
+    background: var(--gray-600);
+  }
+  [data-theme="dark"] table thead th:first-child,
+  :root:not([data-theme="light"]) table thead th:first-child {
+    background: var(--table-header-bg);
+  }
+  [data-theme="dark"] table tbody td:first-child,
+  :root:not([data-theme="light"]) table tbody td:first-child {
+    background: var(--surface-card);
+  }
+  [data-theme="dark"] table tbody td:first-child::after {
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.15), transparent);
+  }
+}
+
+/* ═══════════════════════════════════════════
+   REDUCED MOTION — Accessibility
+   ═══════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  .bottom-nav,
+  .bottom-nav-item,
+  .modal,
+  .modal-overlay,
+  .sidebar,
+  .notification-panel,
+  .tools-dropdown-panel {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+  .bottom-nav-item:active {
+    transform: none;
+  }
+  .bottom-nav-item.active::before {
+    animation: none;
+  }
+}

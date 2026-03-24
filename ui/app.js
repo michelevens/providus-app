@@ -12744,62 +12744,403 @@ async function renderKanbanBoard() {
   let apps = [];
   let providers = [];
   try {
-    apps = store.filterByScope(await store.getAll('applications'));
-    providers = await store.getAll('providers');
+    [apps, providers] = await Promise.all([
+      store.getAll('applications').then(a => store.filterByScope(a)),
+      store.getAll('providers')
+    ]);
   } catch (e) { console.error('Kanban error:', e); }
   if (!Array.isArray(apps)) apps = [];
+  if (!Array.isArray(providers)) providers = [];
 
+  // ── Build lookup maps ──
   const providerMap = {};
-  providers.forEach(p => { providerMap[p.id || p.provider_id] = `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim(); });
-
-  const statuses = [
-    { key: 'not_started', label: 'Not Started', color: '#6b7280' },
-    { key: 'submitted', label: 'Submitted', color: '#3b82f6' },
-    { key: 'in_review', label: 'In Review', color: '#f59e0b' },
-    { key: 'pending_info', label: 'Pending Info', color: '#ef4444' },
-    { key: 'approved', label: 'Approved', color: '#10b981' },
-    { key: 'denied', label: 'Denied', color: '#dc2626' },
-  ];
-
-  const columns = statuses.map(s => {
-    const colApps = apps.filter(a => (a.status || 'not_started') === s.key);
-    return { ...s, apps: colApps };
+  providers.forEach(p => {
+    providerMap[p.id || p.provider_id] = `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim();
   });
 
-  body.innerHTML = `
-    <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:16px;min-height:500px;">
-      ${columns.map(col => `
-        <div style="min-width:240px;max-width:280px;flex:1;background:var(--gray-50);border-radius:10px;padding:10px;display:flex;flex-direction:column;"
-             ondragover="event.preventDefault();this.style.outline='2px solid var(--brand-600)'"
-             ondragleave="this.style.outline='none'"
-             ondrop="this.style.outline='none';window.app.kanbanDrop(event.dataTransfer.getData('text/plain'),'${col.key}')">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:4px 6px;">
-            <span style="font-weight:700;font-size:13px;color:${col.color};">${col.label}</span>
-            <span style="background:${col.color};color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:600;">${col.apps.length}</span>
-          </div>
-          <div style="flex:1;display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:600px;">
-            ${col.apps.length > 0 ? col.apps.map(a => {
-              const provName = providerMap[a.providerId || a.provider_id] || 'Unknown';
-              const payerName = a.payerName || a.payer_name || a.payer?.name || '—';
-              const daysInStatus = a.updatedAt || a.updated_at ? Math.floor((Date.now() - new Date(a.updatedAt || a.updated_at)) / 86400000) : 0;
-              return `<div draggable="true" ondragstart="event.dataTransfer.setData('text/plain','${a.id}')"
-                style="background:#fff;border-radius:8px;padding:10px 12px;cursor:grab;box-shadow:0 1px 3px rgba(0,0,0,.08);border-left:3px solid ${col.color};transition:box-shadow .15s;"
-                onmouseenter="this.style.boxShadow='0 4px 12px rgba(0,0,0,.12)'" onmouseleave="this.style.boxShadow='0 1px 3px rgba(0,0,0,.08)'"
-                onclick="window.app.viewApplication('${a.id}')">
-                <div style="font-weight:600;font-size:13px;margin-bottom:4px;">${escHtml(provName)}</div>
-                <div style="font-size:12px;color:var(--gray-500);margin-bottom:4px;">${escHtml(payerName)}</div>
-                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-400);">
-                  <span>${escHtml(a.state || '—')}</span>
-                  ${a.wave ? `<span>${getGroupDef(a.wave).short}</span>` : ''}
-                  <span>${daysInStatus}d</span>
-                </div>
-              </div>`;
-            }).join('') : '<div style="text-align:center;padding:20px;color:var(--gray-400);font-size:12px;">No applications</div>'}
+  const payers = apps.map(a => a.payerName || a.payer_name || a.payer?.name || '').filter(Boolean);
+  const uniquePayers = [...new Set(payers)].sort();
+  const states = apps.map(a => a.state).filter(Boolean);
+  const uniqueStates = [...new Set(states)].sort();
+  const groups = apps.map(a => a.wave).filter(Boolean);
+  const uniqueGroups = [...new Set(groups)].sort((a, b) => a - b);
+  const uniqueProviderIds = [...new Set(apps.map(a => a.providerId || a.provider_id).filter(Boolean))];
+
+  // ── Internal filter / view state (persisted on window.app) ──
+  if (!window.app._kb) {
+    window.app._kb = {
+      view: 'board',
+      showEmpty: true,
+      collapsed: {},
+      filterState: '',
+      filterPayer: '',
+      filterProvider: '',
+      filterGroup: '',
+      search: '',
+    };
+  }
+  const kb = window.app._kb;
+
+  // ── Apply local filters ──
+  let filtered = apps.slice();
+  if (kb.filterState) filtered = filtered.filter(a => a.state === kb.filterState);
+  if (kb.filterPayer) filtered = filtered.filter(a => (a.payerName || a.payer_name || a.payer?.name || '') === kb.filterPayer);
+  if (kb.filterProvider) filtered = filtered.filter(a => (a.providerId || a.provider_id) === kb.filterProvider);
+  if (kb.filterGroup) filtered = filtered.filter(a => String(a.wave) === String(kb.filterGroup));
+  if (kb.search) {
+    const q = kb.search.toLowerCase();
+    filtered = filtered.filter(a => {
+      const payer = (a.payerName || a.payer_name || a.payer?.name || '').toLowerCase();
+      const prov = (providerMap[a.providerId || a.provider_id] || '').toLowerCase();
+      const note = (a.notes || '').toLowerCase();
+      return payer.includes(q) || prov.includes(q) || note.includes(q) || (a.state || '').toLowerCase().includes(q);
+    });
+  }
+
+  // ── Build columns from APPLICATION_STATUSES ──
+  const columns = APPLICATION_STATUSES.map(s => {
+    const colApps = filtered.filter(a => (a.status || 'new') === s.value);
+    return { ...s, key: s.value, apps: colApps };
+  }).filter(col => kb.showEmpty || col.apps.length > 0);
+
+  // ── Summary stats ──
+  const totalApps = filtered.length;
+  const totalRevenue = filtered.reduce((sum, a) => sum + (parseFloat(a.estRevenue || a.est_revenue || 0) || 0), 0);
+
+  // ── If "Table" view selected, delegate to existing table renderer ──
+  if (kb.view === 'table') {
+    body.innerHTML = _kbStyles() + _kbSummaryStrip(totalApps, totalRevenue, filtered, columns) +
+      _kbFilters(kb, uniqueStates, uniquePayers, uniqueProviderIds, providerMap, uniqueGroups) +
+      '<div id="app-table-wrap"><table class="table" id="app-table"><thead><tr>' +
+      '<th>Payer</th><th>Provider</th><th>State</th><th>Status</th><th>Group</th><th>Days</th><th>Actions</th>' +
+      '</tr></thead><tbody id="app-table-body"></tbody></table><div id="app-empty" style="display:none;text-align:center;padding:40px;color:var(--gray-400);">No applications found</div></div>';
+    await renderAppTable(filtered);
+    return;
+  }
+
+  // ── Board view ──
+  const columnsHtml = columns.map(col => {
+    const isCollapsed = kb.collapsed[col.key];
+    const cardsHtml = col.apps.map(a => _kbCard(a, col, providerMap)).join('');
+    return `
+      <div class="kb-column${isCollapsed ? ' kb-col-collapsed' : ''}" data-status="${col.key}"
+           ondragover="window.app._kbDragOver(event)" ondragleave="window.app._kbDragLeave(event)" ondrop="window.app._kbDrop(event)">
+        <div class="kb-col-header" style="--col-color:${col.color};--col-bg:${col.bg}">
+          <div class="kb-col-header-left" onclick="window.app._kbToggleCol('${col.key}')">
+            <span class="kb-col-chevron">${isCollapsed ? '&#9654;' : '&#9660;'}</span>
+            <span class="kb-col-dot" style="background:${col.color}"></span>
+            <span class="kb-col-title">${escHtml(col.label)}</span>
+            <span class="kb-col-count" style="background:${col.color}">${col.apps.length}</span>
           </div>
         </div>
-      `).join('')}
+        <div class="kb-col-body${isCollapsed ? ' kb-hidden' : ''}">
+          ${cardsHtml || '<div class="kb-empty-col">No applications</div>'}
+        </div>
+      </div>`;
+  }).join('');
+
+  body.innerHTML = _kbStyles() +
+    _kbSummaryStrip(totalApps, totalRevenue, filtered, columns) +
+    _kbFilters(kb, uniqueStates, uniquePayers, uniqueProviderIds, providerMap, uniqueGroups) +
+    `<div class="kb-board">${columnsHtml}</div>`;
+
+  // ── Wire up drag/drop & actions on window.app ──
+  window.app._kbDragOver = function(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const col = e.currentTarget;
+    const colBody = col.querySelector('.kb-col-body');
+    const cards = [...colBody.querySelectorAll('.kb-card')];
+    // Remove existing indicators
+    col.querySelectorAll('.kb-drop-indicator').forEach(el => el.remove());
+    col.classList.add('kb-col-dragover');
+    // Find insert position
+    const indicator = document.createElement('div');
+    indicator.className = 'kb-drop-indicator';
+    const afterCard = cards.reduce((closest, card) => {
+      const box = card.getBoundingClientRect();
+      const offset = e.clientY - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) return { offset, element: card };
+      return closest;
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+    if (afterCard) colBody.insertBefore(indicator, afterCard);
+    else colBody.appendChild(indicator);
+  };
+
+  window.app._kbDragLeave = function(e) {
+    const col = e.currentTarget;
+    if (!col.contains(e.relatedTarget)) {
+      col.classList.remove('kb-col-dragover');
+      col.querySelectorAll('.kb-drop-indicator').forEach(el => el.remove());
+    }
+  };
+
+  window.app._kbDrop = async function(e) {
+    e.preventDefault();
+    const col = e.currentTarget;
+    col.classList.remove('kb-col-dragover');
+    col.querySelectorAll('.kb-drop-indicator').forEach(el => el.remove());
+    const appId = e.dataTransfer.getData('text/plain');
+    const newStatus = col.dataset.status;
+    if (!appId || !newStatus) return;
+    // Find existing app to check if status actually changed
+    const existingApp = apps.find(a => String(a.id) === String(appId));
+    if (existingApp && (existingApp.status || 'new') === newStatus) return;
+    const note = await appPrompt('Add a note for this status change (optional):', {
+      title: 'Status Change Note',
+      placeholder: 'e.g. Received confirmation from payer...',
+      okLabel: 'Move'
+    });
+    if (note === null) { await renderKanbanBoard(); return; } // Cancelled
+    try {
+      await window.app.kanbanDrop(appId, newStatus);
+    } catch(err) {
+      showToast('Error: ' + (err.message || 'Could not transition'));
+      await renderKanbanBoard();
+    }
+  };
+
+  window.app._kbDragStart = function(e, id) {
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.target.closest('.kb-card').classList.add('kb-card-dragging');
+  };
+
+  window.app._kbDragEnd = function(e) {
+    e.target.closest('.kb-card')?.classList.remove('kb-card-dragging');
+    document.querySelectorAll('.kb-drop-indicator').forEach(el => el.remove());
+    document.querySelectorAll('.kb-col-dragover').forEach(el => el.classList.remove('kb-col-dragover'));
+  };
+
+  window.app._kbToggleCol = function(key) {
+    kb.collapsed[key] = !kb.collapsed[key];
+    renderKanbanBoard();
+  };
+
+  window.app._kbSetView = function(view) {
+    kb.view = view;
+    renderKanbanBoard();
+  };
+
+  window.app._kbFilter = function(field, value) {
+    kb[field] = value;
+    renderKanbanBoard();
+  };
+
+  window.app._kbSearch = function(value) {
+    kb.search = value;
+    renderKanbanBoard();
+  };
+
+  window.app._kbToggleEmpty = function(checked) {
+    kb.showEmpty = checked;
+    renderKanbanBoard();
+  };
+
+  window.app._kbFollowUp = async function(id) {
+    const note = await appPrompt('Follow-up note:', {
+      title: 'Create Follow-up',
+      placeholder: 'e.g. Called payer, waiting on callback...',
+      okLabel: 'Save Follow-up'
+    });
+    if (note === null) return;
+    try {
+      await store.add('followups', {
+        applicationId: id,
+        type: 'general',
+        notes: note,
+        dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      });
+      showToast('Follow-up created');
+    } catch (err) {
+      showToast('Error creating follow-up');
+    }
+  };
+
+  window.app._kbDelete = async function(id) {
+    await window.app.deleteApplication(id);
+  };
+}
+
+// ── Kanban: CSS Styles ──
+function _kbStyles() {
+  return `<style>
+/* ── Kanban Board Reset ── */
+.kb-summary{display:flex;align-items:center;gap:20px;padding:12px 18px;background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 100%);border:1px solid #e2e8f0;border-radius:12px;margin-bottom:12px;flex-wrap:wrap}
+.kb-summary-stat{display:flex;flex-direction:column;align-items:center;min-width:64px}
+.kb-summary-stat .kb-stat-value{font-size:22px;font-weight:800;color:#1e293b;line-height:1.1}
+.kb-summary-stat .kb-stat-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-top:2px}
+.kb-summary-divider{width:1px;height:32px;background:#cbd5e1}
+.kb-summary-statuses{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.kb-status-pip{display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:default;transition:transform .15s}
+.kb-status-pip:hover{transform:scale(1.06)}
+.kb-status-pip .pip-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+/* ── Filters ── */
+.kb-filters{display:flex;gap:10px;align-items:center;padding:10px 14px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:14px;flex-wrap:wrap}
+.kb-filters select,.kb-filters input[type="text"]{height:34px;padding:0 10px;border:1px solid #d1d5db;border-radius:7px;font-size:13px;background:#fff;color:#334155;outline:none;transition:border-color .15s,box-shadow .15s}
+.kb-filters select:focus,.kb-filters input[type="text"]:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.12)}
+.kb-filters select{min-width:110px;cursor:pointer}
+.kb-filters input[type="text"]{min-width:160px}
+.kb-view-toggle{display:flex;border:1px solid #d1d5db;border-radius:7px;overflow:hidden;margin-left:auto}
+.kb-view-btn{padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#fff;color:#64748b;transition:all .15s}
+.kb-view-btn.active{background:#4f46e5;color:#fff}
+.kb-view-btn:hover:not(.active){background:#f1f5f9}
+.kb-filters label{display:flex;align-items:center;gap:5px;font-size:12px;color:#475569;cursor:pointer;white-space:nowrap}
+
+/* ── Board ── */
+.kb-board{display:flex;gap:14px;overflow-x:auto;padding-bottom:16px;min-height:500px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
+.kb-board::-webkit-scrollbar{height:8px}
+.kb-board::-webkit-scrollbar-track{background:#f1f5f9;border-radius:8px}
+.kb-board::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:8px}
+.kb-board::-webkit-scrollbar-thumb:hover{background:#64748b}
+
+/* ── Column ── */
+.kb-column{min-width:270px;max-width:310px;flex:1 0 270px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;display:flex;flex-direction:column;scroll-snap-align:start;transition:background .2s,border-color .2s}
+.kb-column.kb-col-collapsed{max-width:200px;min-width:180px}
+.kb-column.kb-col-dragover{background:#eef2ff;border-color:#818cf8}
+.kb-col-header{padding:12px 14px 10px;border-bottom:1px solid #e2e8f0;border-radius:12px 12px 0 0;background:linear-gradient(180deg,var(--col-bg) 0%,#f8fafc 100%)}
+.kb-col-header-left{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.kb-col-chevron{font-size:9px;color:#94a3b8;width:14px;text-align:center;transition:transform .2s}
+.kb-col-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.kb-col-title{font-size:13px;font-weight:700;color:#1e293b;letter-spacing:.01em}
+.kb-col-count{font-size:10px;font-weight:700;color:#fff;padding:1px 7px;border-radius:10px;min-width:20px;text-align:center;line-height:1.6}
+.kb-col-body{flex:1;display:flex;flex-direction:column;gap:8px;padding:10px;overflow-y:auto;max-height:calc(100vh - 340px);min-height:60px}
+.kb-col-body.kb-hidden{display:none}
+.kb-empty-col{text-align:center;padding:28px 10px;color:#94a3b8;font-size:12px;font-style:italic}
+
+/* ── Drop Indicator ── */
+.kb-drop-indicator{height:3px;background:#6366f1;border-radius:3px;margin:2px 0;animation:kb-pulse .8s ease-in-out infinite alternate;flex-shrink:0}
+@keyframes kb-pulse{from{opacity:.5;transform:scaleX(.96)}to{opacity:1;transform:scaleX(1)}}
+
+/* ── Card ── */
+.kb-card{background:#fff;border-radius:10px;padding:14px 16px 12px;cursor:grab;box-shadow:0 1px 3px rgba(0,0,0,.06),0 0 0 1px rgba(0,0,0,.03);border-left:3.5px solid var(--card-accent);transition:box-shadow .18s,transform .18s,opacity .18s;position:relative}
+.kb-card:hover{box-shadow:0 8px 25px rgba(0,0,0,.1),0 0 0 1px rgba(99,102,241,.15);transform:translateY(-1px)}
+.kb-card:active{cursor:grabbing}
+.kb-card.kb-card-dragging{opacity:.45;transform:rotate(2deg) scale(.97)}
+.kb-card-payer{font-size:14px;font-weight:700;color:#1e293b;margin-bottom:4px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kb-card-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap}
+.kb-card-provider{font-size:12px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px}
+.kb-card-state-pill{display:inline-flex;align-items:center;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#e0e7ff;color:#4338ca;letter-spacing:.04em;flex-shrink:0}
+.kb-card-group-pill{display:inline-flex;align-items:center;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.04em;flex-shrink:0}
+.kb-card-days{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px}
+.kb-card-days.green{background:#d1fae5;color:#065f46}
+.kb-card-days.amber{background:#fef3c7;color:#92400e}
+.kb-card-days.red{background:#fee2e2;color:#991b1b}
+.kb-card-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;font-size:11px;color:#94a3b8}
+.kb-card-meta span{display:inline-flex;align-items:center;gap:3px}
+.kb-card-notes{font-size:11px;color:#64748b;margin-top:6px;padding:5px 8px;background:#f8fafc;border-radius:6px;border:1px solid #f1f5f9;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kb-card-actions{position:absolute;top:8px;right:8px;display:flex;gap:3px;opacity:0;transition:opacity .15s;pointer-events:none}
+.kb-card:hover .kb-card-actions{opacity:1;pointer-events:auto}
+.kb-card-actions button{width:26px;height:26px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:background .12s;background:rgba(241,245,249,.9);color:#475569}
+.kb-card-actions button:hover{background:#e0e7ff;color:#4338ca}
+.kb-card-actions button.kb-act-danger:hover{background:#fee2e2;color:#dc2626}
+
+/* ── Responsive ── */
+@media(max-width:768px){
+  .kb-board{gap:10px;scroll-snap-type:x mandatory}
+  .kb-column{min-width:260px;max-width:280px}
+  .kb-filters{gap:6px}
+  .kb-filters select,.kb-filters input[type="text"]{font-size:12px;height:30px;min-width:90px}
+  .kb-summary{padding:10px 12px;gap:12px}
+}
+</style>`;
+}
+
+// ── Kanban: Summary Strip ──
+function _kbSummaryStrip(totalApps, totalRevenue, filtered, columns) {
+  const statusPips = columns.map(col =>
+    `<span class="kb-status-pip" style="background:${col.bg || col.color + '18'};color:${col.color}" title="${escHtml(col.label)}: ${col.apps.length}">
+      <span class="pip-dot" style="background:${col.color}"></span>${col.apps.length}
+    </span>`
+  ).join('');
+
+  const revenueStr = totalRevenue > 0 ? `$${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—';
+
+  return `<div class="kb-summary">
+    <div class="kb-summary-stat">
+      <span class="kb-stat-value">${totalApps}</span>
+      <span class="kb-stat-label">Applications</span>
     </div>
-  `;
+    <div class="kb-summary-divider"></div>
+    <div class="kb-summary-stat">
+      <span class="kb-stat-value">${revenueStr}</span>
+      <span class="kb-stat-label">Est. Monthly Rev</span>
+    </div>
+    <div class="kb-summary-divider"></div>
+    <div class="kb-summary-statuses">${statusPips}</div>
+  </div>`;
+}
+
+// ── Kanban: Filters Bar ──
+function _kbFilters(kb, uniqueStates, uniquePayers, uniqueProviderIds, providerMap, uniqueGroups) {
+  return `<div class="kb-filters">
+    <select onchange="window.app._kbFilter('filterState',this.value)" title="Filter by State">
+      <option value="">All States</option>
+      ${uniqueStates.map(s => `<option value="${escHtml(s)}"${kb.filterState === s ? ' selected' : ''}>${escHtml(s)}</option>`).join('')}
+    </select>
+    <select onchange="window.app._kbFilter('filterPayer',this.value)" title="Filter by Payer">
+      <option value="">All Payers</option>
+      ${uniquePayers.map(p => `<option value="${escHtml(p)}"${kb.filterPayer === p ? ' selected' : ''}>${escHtml(p)}</option>`).join('')}
+    </select>
+    <select onchange="window.app._kbFilter('filterProvider',this.value)" title="Filter by Provider">
+      <option value="">All Providers</option>
+      ${uniqueProviderIds.map(id => `<option value="${escHtml(String(id))}"${kb.filterProvider === String(id) ? ' selected' : ''}>${escHtml(providerMap[id] || 'Unknown')}</option>`).join('')}
+    </select>
+    <select onchange="window.app._kbFilter('filterGroup',this.value)" title="Filter by Group">
+      <option value="">All Groups</option>
+      ${uniqueGroups.map(g => `<option value="${g}"${String(kb.filterGroup) === String(g) ? ' selected' : ''}>${escHtml(getGroupDef(g).label)}</option>`).join('')}
+    </select>
+    <input type="text" placeholder="&#128269; Search applications..." value="${escHtml(kb.search)}" oninput="window.app._kbSearch(this.value)" />
+    <label><input type="checkbox" ${kb.showEmpty ? 'checked' : ''} onchange="window.app._kbToggleEmpty(this.checked)"> Show empty</label>
+    <div class="kb-view-toggle">
+      <button class="kb-view-btn${kb.view === 'board' ? ' active' : ''}" onclick="window.app._kbSetView('board')">&#9638; Board</button>
+      <button class="kb-view-btn${kb.view === 'table' ? ' active' : ''}" onclick="window.app._kbSetView('table')">&#9776; Table</button>
+    </div>
+  </div>`;
+}
+
+// ── Kanban: Card Renderer ──
+function _kbCard(a, col, providerMap) {
+  const payerName = a.payerName || a.payer_name || a.payer?.name || '—';
+  const provName = providerMap[a.providerId || a.provider_id] || '';
+  const stateCode = a.state || '';
+  const updatedAt = a.updatedAt || a.updated_at || a.statusChangedAt || a.status_changed_at;
+  const daysInStatus = updatedAt ? Math.floor((Date.now() - new Date(updatedAt)) / 86400000) : 0;
+  const daysClass = daysInStatus < 30 ? 'green' : daysInStatus < 60 ? 'amber' : 'red';
+  const effectiveDate = a.effectiveDate || a.effective_date;
+  const estRevenue = parseFloat(a.estRevenue || a.est_revenue || 0) || 0;
+  const notes = a.notes || '';
+  const wave = a.wave;
+  const groupDef = wave ? getGroupDef(wave) : null;
+  const appId = a.id;
+
+  let metaParts = '';
+  if (effectiveDate) metaParts += `<span title="Effective Date">&#128197; ${formatDateDisplay(effectiveDate)}</span>`;
+  if (estRevenue > 0) metaParts += `<span title="Est. Monthly Revenue">&#36;${estRevenue.toLocaleString()}/mo</span>`;
+
+  return `<div class="kb-card" style="--card-accent:${col.color}" draggable="true"
+    ondragstart="window.app._kbDragStart(event,'${appId}')" ondragend="window.app._kbDragEnd(event)"
+    onclick="window.app.viewApplication('${appId}')">
+    <div class="kb-card-actions" onclick="event.stopPropagation()">
+      <button title="Edit" onclick="window.app.viewApplication('${appId}')">&#9998;</button>
+      <button title="Follow-up" onclick="window.app._kbFollowUp('${appId}')">&#128340;</button>
+      <button class="kb-act-danger" title="Delete" onclick="window.app._kbDelete('${appId}')">&#128465;</button>
+    </div>
+    <div class="kb-card-payer" title="${escHtml(payerName)}">${escHtml(payerName)}</div>
+    <div class="kb-card-row">
+      ${stateCode ? `<span class="kb-card-state-pill">${escHtml(stateCode)}</span>` : ''}
+      ${groupDef ? `<span class="kb-card-group-pill" style="background:${groupDef.color}18;color:${groupDef.color}">${escHtml(groupDef.short)}</span>` : ''}
+      ${provName ? `<span class="kb-card-provider" title="${escHtml(provName)}">${escHtml(provName)}</span>` : ''}
+    </div>
+    <div class="kb-card-row" style="justify-content:space-between">
+      <span class="kb-card-days ${daysClass}" title="${daysInStatus} days in this status">&#9201; ${daysInStatus}d</span>
+      ${metaParts ? `<div class="kb-card-meta">${metaParts}</div>` : ''}
+    </div>
+    ${notes ? `<div class="kb-card-notes" title="${escHtml(notes)}">${escHtml(notes.substring(0, 40))}${notes.length > 40 ? '...' : ''}</div>` : ''}
+  </div>`;
 }
 
 // ─── Calendar Page ───
@@ -15104,7 +15445,171 @@ async function renderProviderProfilePage(providerId) {
   const pageSubtitle = document.getElementById('page-subtitle');
   if (pageSubtitle) pageSubtitle.textContent = provName + (credential ? ', ' + credential : '') + ` | ID: ${toHexId(providerId)}`;
 
+  // --- Credential Passport computations ---
+  const cpNow = new Date();
+  const cpActiveLicenses = providerLicenses.filter(l => l.status === 'active');
+  const cpActiveBoards = boards.filter(b => {
+    const exp = b.expirationDate || b.expiration_date;
+    return exp ? new Date(exp) > cpNow : true;
+  });
+  const cpActiveMalpractice = malpractice.filter(m => {
+    const exp = m.expirationDate || m.expiration_date;
+    return exp ? new Date(exp) > cpNow : true;
+  });
+  const cpHasEducation = education.length > 0;
+  const cpHasBoards = cpActiveBoards.length > 0;
+  const cpHasMalpractice = cpActiveMalpractice.length > 0;
+  const cpHasLicenses = cpActiveLicenses.length > 0;
+  const cpHasWorkHistory = workHistory.length > 0;
+  const cpHasCme = cme.length > 0;
+  const cpHasReferences = references.length >= 3;
+  const cpHasDocuments = documents.length > 0;
+
+  const cpSegments = [
+    { label: 'Education',   met: cpHasEducation,   weight: 15, color: '#6366f1' },
+    { label: 'Board Certs', met: cpHasBoards,      weight: 15, color: '#8b5cf6' },
+    { label: 'Malpractice', met: cpHasMalpractice,  weight: 15, color: '#ec4899' },
+    { label: 'Licenses',    met: cpHasLicenses,     weight: 20, color: '#14b8a6' },
+    { label: 'Work History', met: cpHasWorkHistory, weight: 10, color: '#f59e0b' },
+    { label: 'CME',         met: cpHasCme,          weight: 10, color: '#3b82f6' },
+    { label: 'References',  met: cpHasReferences,   weight: 10, color: '#10b981' },
+    { label: 'Documents',   met: cpHasDocuments,     weight: 5,  color: '#64748b' },
+  ];
+  const cpTotal = cpSegments.reduce((s, seg) => s + (seg.met ? seg.weight : 0), 0);
+
+  // Build SVG ring arcs — each segment spans proportional arc of the full 360
+  const cpRadius = 70;
+  const cpCircumference = 2 * Math.PI * cpRadius;
+  let cpRingArcs = '';
+  let cpOffset = 0;
+  for (const seg of cpSegments) {
+    const segLength = (seg.weight / 100) * cpCircumference;
+    const filledLength = seg.met ? segLength : 0;
+    const gapLength = cpCircumference - filledLength;
+    cpRingArcs += `<circle cx="80" cy="80" r="${cpRadius}" fill="none" stroke="${seg.met ? seg.color : '#e2e8f0'}" stroke-width="12" stroke-dasharray="${filledLength} ${gapLength}" stroke-dashoffset="${-cpOffset}" stroke-linecap="round" transform="rotate(-90 80 80)"/>`;
+    cpOffset += segLength;
+  }
+
+  const cpMalpracticeStatus = malpractice.length === 0 ? 'None' : (cpActiveMalpractice.length > 0 ? 'Active' : 'Expired');
+  const cpMalpracticeColor = cpMalpracticeStatus === 'Active' ? 'var(--green-600, #16a34a)' : (cpMalpracticeStatus === 'Expired' ? 'var(--red-600, #dc2626)' : 'var(--gray-500, #6b7280)');
+  const cpProviderInitials = ((provider.firstName || provider.first_name || '').charAt(0) + (provider.lastName || provider.last_name || '').charAt(0)).toUpperCase() || '?';
+  const cpProviderStatus = provider.status || 'unknown';
+  const cpStatusBadgeClass = cpProviderStatus === 'active' ? 'approved' : 'inactive';
+
+  // Missing items
+  const cpMissing = [];
+  if (!cpHasEducation) cpMissing.push('Education records');
+  if (!cpHasBoards) cpMissing.push('Board Certification');
+  if (!cpHasMalpractice) cpMissing.push(malpractice.length > 0 ? 'Malpractice policy expired' : 'Malpractice policy');
+  if (!cpHasLicenses) cpMissing.push('Active license');
+  if (!cpHasWorkHistory) cpMissing.push('Work history');
+  if (!cpHasCme) cpMissing.push('CME records');
+  if (!cpHasReferences) cpMissing.push(references.length > 0 ? `${3 - references.length} more reference(s) needed` : '3 References needed');
+  if (!cpHasDocuments) cpMissing.push('Documents');
+
+  const cpLastUpdated = provider.updatedAt || provider.updated_at || provider.createdAt || provider.created_at || '';
+
   body.innerHTML = `
+    <style>
+      .cp-hero{display:grid;grid-template-columns:260px 1fr 220px;gap:24px;background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 50%,#f5f3ff 100%);border:1px solid var(--gray-200,#e2e8f0);border-radius:16px;padding:28px 32px;margin-bottom:24px;align-items:start;}
+      .cp-identity{display:flex;flex-direction:column;gap:10px;}
+      .cp-avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 12px rgba(99,102,241,.3);flex-shrink:0;}
+      .cp-identity-top{display:flex;align-items:center;gap:16px;}
+      .cp-identity h2{font-size:24px;font-weight:700;margin:0;color:var(--gray-900,#111827);line-height:1.2;}
+      .cp-identity .cp-cred{color:var(--gray-500,#6b7280);font-size:14px;margin-top:2px;}
+      .cp-meta-row{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13px;color:var(--gray-600,#4b5563);}
+      .cp-meta-row code{background:var(--gray-100,#f3f4f6);padding:1px 6px;border-radius:4px;font-size:12px;}
+      .cp-edit-link{font-size:12px;color:var(--brand-600,#4f46e5);text-decoration:none;cursor:pointer;margin-top:4px;}
+      .cp-edit-link:hover{text-decoration:underline;}
+      .cp-ring-container{display:flex;flex-direction:column;align-items:center;gap:12px;}
+      .cp-ring-svg{filter:drop-shadow(0 2px 8px rgba(0,0,0,.08));}
+      .cp-ring-pct{font-size:36px;font-weight:800;fill:var(--gray-900,#111827);}
+      .cp-ring-label{font-size:11px;fill:var(--gray-500,#6b7280);text-transform:uppercase;letter-spacing:.5px;}
+      .cp-legend{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:12px;color:var(--gray-600,#4b5563);}
+      .cp-legend-item{display:flex;align-items:center;gap:6px;}
+      .cp-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+      .cp-legend-check{font-size:11px;margin-left:auto;}
+      .cp-stats{display:flex;flex-direction:column;gap:12px;}
+      .cp-stat{background:#fff;border:1px solid var(--gray-200,#e2e8f0);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;}
+      .cp-stat-label{font-size:11px;color:var(--gray-500,#6b7280);text-transform:uppercase;letter-spacing:.5px;font-weight:600;}
+      .cp-stat-value{font-size:20px;font-weight:700;color:var(--gray-900,#111827);}
+      .cp-stat-value.sm{font-size:14px;font-weight:600;}
+      .cp-missing{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px 18px;margin-bottom:24px;display:flex;align-items:flex-start;gap:10px;font-size:13px;color:#92400e;line-height:1.5;}
+      .cp-missing-icon{flex-shrink:0;font-size:18px;margin-top:1px;}
+      .cp-missing strong{font-weight:700;}
+      @media(max-width:900px){.cp-hero{grid-template-columns:1fr;text-align:center;}.cp-identity-top{justify-content:center;}.cp-meta-row{justify-content:center;}.cp-legend{justify-content:center;}}
+      @media(max-width:600px){.cp-hero{padding:20px 16px;gap:20px;}}
+    </style>
+
+    <!-- Credential Passport Hero -->
+    <div class="cp-hero">
+      <!-- Left: Identity Card -->
+      <div class="cp-identity">
+        <div class="cp-identity-top">
+          <div class="cp-avatar">${escHtml(cpProviderInitials)}</div>
+          <div>
+            <h2>${escHtml(provName)}</h2>
+            ${credential ? `<div class="cp-cred">${escHtml(credential)}</div>` : ''}
+            <span class="badge badge-${cpStatusBadgeClass}" style="margin-top:4px;display:inline-block;">${escHtml(cpProviderStatus)}</span>
+          </div>
+        </div>
+        <div class="cp-meta-row">
+          <span>NPI: <code>${escHtml(provider.npi || '---')}</code></span>
+          <span>${escHtml(provider.specialty || provider.taxonomyDesc || '---')}</span>
+        </div>
+        <div class="cp-meta-row">
+          <span>Taxonomy: <code>${escHtml(provider.taxonomyCode || provider.taxonomy_code || '---')}</code></span>
+        </div>
+        <a class="cp-edit-link" onclick="window.app.switchProfileTab('overview')">Edit Profile</a>
+      </div>
+
+      <!-- Center: Completion Ring -->
+      <div class="cp-ring-container">
+        <svg class="cp-ring-svg" width="160" height="160" viewBox="0 0 160 160">
+          <circle cx="80" cy="80" r="${cpRadius}" fill="none" stroke="#f1f5f9" stroke-width="12"/>
+          ${cpRingArcs}
+          <text x="80" y="74" text-anchor="middle" class="cp-ring-pct">${cpTotal}%</text>
+          <text x="80" y="92" text-anchor="middle" class="cp-ring-label">Ready</text>
+        </svg>
+        <div class="cp-legend">
+          ${cpSegments.map(seg => `
+            <div class="cp-legend-item">
+              <span class="cp-legend-dot" style="background:${seg.met ? seg.color : '#cbd5e1'}"></span>
+              <span>${seg.label}</span>
+              <span class="cp-legend-check" style="color:${seg.met ? '#16a34a' : '#dc2626'}">${seg.met ? '\u2713' : '\u2717'}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Right: Quick Stats -->
+      <div class="cp-stats">
+        <div class="cp-stat">
+          <span class="cp-stat-label">Active Licenses</span>
+          <span class="cp-stat-value">${cpActiveLicenses.length}</span>
+        </div>
+        <div class="cp-stat">
+          <span class="cp-stat-label">Board Certs</span>
+          <span class="cp-stat-value">${cpActiveBoards.length}</span>
+        </div>
+        <div class="cp-stat">
+          <span class="cp-stat-label">Malpractice</span>
+          <span class="cp-stat-value sm" style="color:${cpMalpracticeColor}">${cpMalpracticeStatus}</span>
+        </div>
+        <div class="cp-stat">
+          <span class="cp-stat-label">Last Updated</span>
+          <span class="cp-stat-value sm">${cpLastUpdated ? formatDateDisplay(cpLastUpdated) : '---'}</span>
+        </div>
+      </div>
+    </div>
+
+    ${cpMissing.length > 0 ? `
+    <div class="cp-missing">
+      <span class="cp-missing-icon">\u26A0\uFE0F</span>
+      <div><strong>Missing:</strong> ${cpMissing.map(m => escHtml(m)).join(', ')}</div>
+    </div>` : ''}
+
+    <!-- Tab Navigation -->
     <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap;border-bottom:1px solid var(--gray-200);padding-bottom:0;">
       ${tabs.map((t, i) => `
         <button class="btn btn-sm profile-tab ${i === 0 ? 'btn-primary' : ''}" data-tab="${t.id}" onclick="window.app.switchProfileTab('${t.id}')" style="border-radius:8px 8px 0 0;border-bottom:none;margin-bottom:-1px;${i === 0 ? 'border-bottom:2px solid var(--brand-600);' : ''}">${t.label}</button>
