@@ -1144,400 +1144,513 @@ async function renderDashboard() {
     return new Date(l.expirationDate) < today;
   });
 
-  const body = document.getElementById('page-body');
+  // ─── Mission Control: compute derived data ───
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const firstName = currentUser?.first_name || 'there';
+
+  // Pipeline progress
+  const pipelineApproved = apps.filter(a => a.status === 'approved' || a.status === 'credentialed').length;
+  const pipelineTotal = apps.length || 1;
+  const pipelinePct = Math.round((pipelineApproved / pipelineTotal) * 100);
+
+  // Revenue
+  const totalRevenue = stats.estMonthlyRevenue || 0;
+
+  // Compliance score — based on license health + doc completion
+  const totalLicenses = licenses.length || 1;
+  const healthyLicenses = activeLic.length;
+  const licHealthPct = Math.round((healthyLicenses / totalLicenses) * 100);
+  const complianceScore = Math.round((licHealthPct * 0.5) + (overallDocPct * 0.5));
+  const complianceColor = complianceScore >= 90 ? '#10B981' : complianceScore >= 70 ? '#F59E0B' : '#EF4444';
+  const complianceGrad = complianceScore >= 90 ? 'linear-gradient(135deg, #10B981, #059669)' : complianceScore >= 70 ? 'linear-gradient(135deg, #F59E0B, #D97706)' : 'linear-gradient(135deg, #EF4444, #DC2626)';
+
+  // Action items count
+  const actionItemCount = overdue.length + expiringLic.length + overdueTasks.length;
+
+  // Build attention feed items
+  const attentionItems = [];
+  overdue.forEach(fu => {
+    const app = apps.find(a => a.id === fu.applicationId);
+    const payer = app ? (getPayerById(app.payerId) || { name: app.payerName }) : {};
+    const daysAgo = Math.floor((today - new Date(fu.dueDate)) / 86400000);
+    attentionItems.push({
+      type: 'overdue-followup',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+      color: '#EF4444',
+      bg: '#FEF2F2',
+      title: `Follow-up overdue: ${payer.name || 'Unknown'}`,
+      subtitle: app ? getStateName(app.state) + ' — ' + (fu.type || 'status check') : fu.type || 'status check',
+      time: daysAgo + 'd overdue',
+      urgency: daysAgo + 100,
+      action: () => `window.app.completeFollowupPrompt('${fu.id}')`,
+      actionLabel: 'Complete'
+    });
+  });
+  expiringLic.forEach(l => {
+    const daysLeft = Math.floor((new Date(l.expirationDate) - today) / 86400000);
+    attentionItems.push({
+      type: 'expiring-license',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v2m0 4h.01M5.07 19h13.86a2 2 0 001.74-2.97L13.74 4.03a2 2 0 00-3.48 0L3.33 16.03A2 2 0 005.07 19z"/></svg>',
+      color: '#F59E0B',
+      bg: '#FFFBEB',
+      title: `License expiring: ${getStateName(l.state)}`,
+      subtitle: `#${escHtml(l.licenseNumber || '—')} — expires ${formatDateDisplay(l.expirationDate)}`,
+      time: daysLeft + 'd left',
+      urgency: 90 - daysLeft,
+      action: () => `window.app.navigateTo('licenses')`,
+      actionLabel: 'Renew'
+    });
+  });
+  overdueTasks.forEach(t => {
+    const daysAgo = Math.floor((today - new Date(t.dueDate)) / 86400000);
+    attentionItems.push({
+      type: 'overdue-task',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/></svg>',
+      color: '#EF4444',
+      bg: '#FEF2F2',
+      title: `Task overdue: ${escHtml(t.title)}`,
+      subtitle: t.priority ? t.priority.charAt(0).toUpperCase() + t.priority.slice(1) + ' priority' : 'Normal priority',
+      time: daysAgo + 'd overdue',
+      urgency: daysAgo + 50,
+      action: () => `window.app.showQuickTask()`,
+      actionLabel: 'View'
+    });
+  });
+  // Pending apps needing action
+  apps.filter(a => a.status === 'pending_info' || a.status === 'new').slice(0, 4).forEach(a => {
+    const payer = getPayerById(a.payerId) || { name: a.payerName };
+    const statusObj = APPLICATION_STATUSES.find(s => s.value === a.status) || APPLICATION_STATUSES[0];
+    attentionItems.push({
+      type: 'pending-app',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+      color: '#3B82F6',
+      bg: '#EFF6FF',
+      title: `${statusObj.label}: ${payer.name || 'Unknown'}`,
+      subtitle: getStateName(a.state),
+      time: formatDateDisplay(a.createdAt || a.created_at),
+      urgency: 10,
+      action: () => `window.app.viewApplication('${a.id}')`,
+      actionLabel: 'Open'
+    });
+  });
+  attentionItems.sort((a, b) => b.urgency - a.urgency);
+  const attentionSlice = attentionItems.slice(0, 8);
+
+  // Audit log
+  const auditLog = (store.getLocalAuditLog() || []).slice(0, 5);
+
+  // Upcoming follow-ups/tasks
+  const upcomingItems = [
+    ...upcoming.slice(0, 3).map(fu => {
+      const app = apps.find(a => a.id === fu.applicationId);
+      const payer = app ? (getPayerById(app.payerId) || { name: app.payerName }) : {};
+      return { title: payer.name || 'Follow-up', date: fu.dueDate, type: 'follow-up' };
+    }),
+    ...pendingTasks.filter(t => t.dueDate && t.dueDate >= taskToday).sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 3).map(t => ({
+      title: t.title, date: t.dueDate, type: 'task'
+    }))
+  ].sort((a, b) => (a.date || '').localeCompare(b.date || '')).slice(0, 3);
+
+  // Application status distribution for pipeline bar
+  const statusCounts = APPLICATION_STATUSES.map(s => ({
+    ...s,
+    count: apps.filter(a => a.status === s.value).length
+  })).filter(s => s.count > 0);
+
+  // Kanban columns (5 main statuses)
+  const kanbanStatuses = ['new', 'submitted', 'in_review', 'approved', 'credentialed'];
+  const kanbanCols = kanbanStatuses.map(val => {
+    const statusObj = APPLICATION_STATUSES.find(s => s.value === val) || { label: val, color: '#6B7280', bg: '#F3F4F6' };
+    const colApps = apps.filter(a => a.status === val);
+    return { ...statusObj, apps: colApps };
+  });
+
+  // SVG progress ring helper
+  const ringSize = 90;
+  const ringStroke = 7;
+  const ringRadius = (ringSize - ringStroke) / 2;
+  const ringCirc = 2 * Math.PI * ringRadius;
+  const ringOffset = ringCirc - (pipelinePct / 100) * ringCirc;
+
+  // Compliance ring
+  const compRingOffset = ringCirc - (complianceScore / 100) * ringCirc;
+
   body.innerHTML = `
-    <!-- Organization & Provider Summary -->
-    <div class="card" style="margin-bottom:20px;border-left:3px solid var(--brand-500);">
-      <div class="card-body" style="display:flex;gap:32px;flex-wrap:wrap;align-items:center;">
-        <div style="display:flex;align-items:center;gap:14px;">
-          <div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,var(--brand-500),var(--brand-600));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;flex-shrink:0;">${(org.name || 'E').charAt(0)}</div>
+    <style>
+      .mc-welcome {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 16px; padding: 20px 28px; margin-bottom: 20px;
+        display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+        color: #fff; position: relative; overflow: hidden;
+      }
+      .mc-welcome::before {
+        content: ''; position: absolute; top: -50%; right: -20%; width: 300px; height: 300px;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        border-radius: 50%;
+      }
+      .mc-welcome h2 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+      .mc-welcome .mc-welcome-sub { font-size: 13px; opacity: 0.85; margin-top: 2px; }
+      .mc-welcome .mc-welcome-right { font-size: 12px; opacity: 0.7; text-align: right; }
+
+      .mc-hero-grid {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px;
+      }
+      @media (max-width: 900px) { .mc-hero-grid { grid-template-columns: repeat(2, 1fr); } }
+      .mc-hero-card {
+        background: #fff; border-radius: 16px; padding: 24px; position: relative;
+        border: 1px solid var(--gray-200); cursor: pointer; transition: all 0.2s ease;
+        overflow: hidden;
+      }
+      .mc-hero-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.08); border-color: var(--gray-300); }
+      .mc-hero-card .mc-hero-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-500); margin-bottom: 12px; }
+      .mc-hero-card .mc-hero-value { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+      .mc-hero-card .mc-hero-sub { font-size: 12px; color: var(--gray-500); margin-top: 8px; }
+      .mc-hero-card .mc-hero-accent {
+        position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      }
+
+      .mc-two-col { display: grid; grid-template-columns: 3fr 2fr; gap: 20px; margin-bottom: 20px; }
+      @media (max-width: 900px) { .mc-two-col { grid-template-columns: 1fr; } }
+
+      .mc-section-title {
+        font-size: 15px; font-weight: 700; color: var(--gray-800); margin-bottom: 14px;
+        display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em;
+      }
+      .mc-section-title .mc-count {
+        background: var(--gray-100); color: var(--gray-600); font-size: 11px; font-weight: 700;
+        padding: 2px 8px; border-radius: 10px;
+      }
+
+      .mc-attention { display: flex; flex-direction: column; gap: 8px; }
+      .mc-attention-item {
+        display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+        background: #fff; border-radius: 12px; border: 1px solid var(--gray-200);
+        transition: all 0.15s ease;
+      }
+      .mc-attention-item:hover { border-color: var(--gray-300); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+      .mc-attention-icon {
+        width: 34px; height: 34px; border-radius: 10px; display: flex;
+        align-items: center; justify-content: center; flex-shrink: 0;
+      }
+      .mc-attention-body { flex: 1; min-width: 0; }
+      .mc-attention-title { font-size: 13px; font-weight: 600; color: var(--gray-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .mc-attention-sub { font-size: 11px; color: var(--gray-500); margin-top: 1px; }
+      .mc-attention-time { font-size: 10px; font-weight: 600; color: var(--gray-400); white-space: nowrap; margin-right: 4px; }
+      .mc-attention-btn {
+        padding: 5px 12px; border-radius: 8px; font-size: 11px; font-weight: 600;
+        border: 1px solid var(--gray-200); background: #fff; color: var(--gray-700);
+        cursor: pointer; white-space: nowrap; transition: all 0.15s;
+      }
+      .mc-attention-btn:hover { background: var(--gray-50); border-color: var(--gray-300); }
+
+      .mc-quick-glance {
+        background: #fff; border-radius: 14px; border: 1px solid var(--gray-200);
+        padding: 18px; margin-bottom: 14px;
+      }
+      .mc-quick-glance:last-child { margin-bottom: 0; }
+      .mc-quick-glance h4 {
+        font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+        color: var(--gray-500); margin: 0 0 12px 0;
+      }
+
+      .mc-pipeline-bar {
+        display: flex; height: 28px; border-radius: 8px; overflow: hidden; width: 100%;
+        background: var(--gray-100);
+      }
+      .mc-pipeline-segment {
+        display: flex; align-items: center; justify-content: center;
+        font-size: 10px; font-weight: 700; color: #fff; transition: width 0.3s;
+        min-width: 0; position: relative;
+      }
+      .mc-pipeline-segment span { white-space: nowrap; overflow: hidden; }
+      .mc-pipeline-legend {
+        display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;
+      }
+      .mc-pipeline-legend-item {
+        display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--gray-600);
+      }
+      .mc-pipeline-legend-dot { width: 8px; height: 8px; border-radius: 3px; flex-shrink: 0; }
+
+      .mc-activity-item {
+        display: flex; align-items: flex-start; gap: 10px; padding: 8px 0;
+        border-bottom: 1px solid var(--gray-100); font-size: 12px;
+      }
+      .mc-activity-item:last-child { border-bottom: none; }
+      .mc-activity-dot {
+        width: 6px; height: 6px; border-radius: 50%; background: var(--gray-300);
+        flex-shrink: 0; margin-top: 5px;
+      }
+      .mc-activity-text { flex: 1; color: var(--gray-600); line-height: 1.4; }
+      .mc-activity-text strong { color: var(--gray-800); font-weight: 600; }
+      .mc-activity-time { font-size: 10px; color: var(--gray-400); white-space: nowrap; }
+
+      .mc-upcoming-item {
+        display: flex; align-items: center; gap: 10px; padding: 8px 0;
+        border-bottom: 1px solid var(--gray-100); font-size: 12px;
+      }
+      .mc-upcoming-item:last-child { border-bottom: none; }
+      .mc-upcoming-date {
+        width: 44px; height: 44px; border-radius: 10px; background: var(--gray-50);
+        display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0;
+        border: 1px solid var(--gray-200);
+      }
+      .mc-upcoming-date .mc-up-month { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--gray-500); }
+      .mc-upcoming-date .mc-up-day { font-size: 16px; font-weight: 800; color: var(--gray-800); line-height: 1; }
+
+      .mc-kanban-preview {
+        background: #fff; border-radius: 16px; border: 1px solid var(--gray-200);
+        padding: 20px; margin-bottom: 20px;
+      }
+      .mc-kanban-header {
+        display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+      }
+      .mc-kanban-cols {
+        display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px;
+      }
+      @media (max-width: 900px) { .mc-kanban-cols { grid-template-columns: repeat(3, 1fr); } }
+      .mc-kanban-col {
+        background: var(--gray-50); border-radius: 12px; padding: 12px; min-height: 120px;
+      }
+      .mc-kanban-col-header {
+        display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+      }
+      .mc-kanban-col-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+      .mc-kanban-col-count {
+        font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 8px;
+      }
+      .mc-kanban-card {
+        background: #fff; border-radius: 8px; padding: 10px 12px; margin-bottom: 6px;
+        border: 1px solid var(--gray-200); font-size: 12px; cursor: pointer;
+        transition: all 0.15s;
+      }
+      .mc-kanban-card:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.06); border-color: var(--gray-300); }
+      .mc-kanban-card:last-child { margin-bottom: 0; }
+      .mc-kanban-card-title { font-weight: 600; color: var(--gray-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .mc-kanban-card-sub { font-size: 10px; color: var(--gray-500); margin-top: 2px; }
+
+      .mc-progress-ring { transform: rotate(-90deg); }
+      .mc-ring-bg { fill: none; stroke: var(--gray-200); }
+      .mc-ring-fg { fill: none; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease; }
+
+      .mc-spark-bars { display: flex; align-items: flex-end; gap: 2px; height: 30px; }
+      .mc-spark-bar { width: 4px; border-radius: 2px; background: rgba(16,185,129,0.3); transition: height 0.3s; }
+      .mc-spark-bar:last-child { background: #10B981; }
+    </style>
+
+    <!-- Row 1: Welcome Banner -->
+    <div class="mc-welcome">
+      <div>
+        <h2>${greeting}, ${escHtml(firstName)}</h2>
+        <div class="mc-welcome-sub">${escHtml(org.name || 'Your Organization')} &middot; ${providers.length} provider${providers.length !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="mc-welcome-right">
+        <div style="font-size:13px;font-weight:600;">${today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</div>
+        <div style="margin-top:2px;opacity:0.7;">Last sync: just now</div>
+      </div>
+    </div>
+
+    <!-- Row 2: Hero Metrics -->
+    <div class="mc-hero-grid">
+      <!-- Credentialing Pipeline -->
+      <div class="mc-hero-card" onclick="window.app.navigateTo('applications')" title="View all applications">
+        <div class="mc-hero-accent" style="background:linear-gradient(90deg,#667eea,#764ba2);"></div>
+        <div class="mc-hero-label">Credentialing Pipeline</div>
+        <div style="display:flex;align-items:center;gap:16px;">
+          <svg class="mc-progress-ring" width="${ringSize}" height="${ringSize}" viewBox="0 0 ${ringSize} ${ringSize}">
+            <circle class="mc-ring-bg" cx="${ringSize/2}" cy="${ringSize/2}" r="${ringRadius}" stroke-width="${ringStroke}"/>
+            <circle class="mc-ring-fg" cx="${ringSize/2}" cy="${ringSize/2}" r="${ringRadius}" stroke-width="${ringStroke}"
+              stroke="url(#pipelineGrad)" stroke-dasharray="${ringCirc}" stroke-dashoffset="${ringOffset}"/>
+            <defs><linearGradient id="pipelineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" style="stop-color:#667eea"/><stop offset="100%" style="stop-color:#764ba2"/>
+            </linearGradient></defs>
+          </svg>
           <div>
-            <div style="font-size:17px;font-weight:700;color:var(--gray-900);letter-spacing:-0.01em;"><a href="#" onclick="event.preventDefault();window._selectedOrgId=${org.id};window.app.navigateTo('org-detail')" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--gray-300);" onmouseover="this.style.color='var(--brand-600)'" onmouseout="this.style.color='inherit'">${escHtml(org.name) || 'Not Set'}</a> <span style="font-size:11px;font-weight:400;color:var(--gray-400);">#${toHexId(org.id)}</span></div>
-            <div style="font-size:12px;color:var(--gray-500);margin-top:1px;">Org ID: <strong style="font-family:monospace;">${toHexId(org.id)}</strong> &nbsp;&middot;&nbsp; NPI: ${org.npi || '—'} &nbsp;&middot;&nbsp; EIN: ${org.taxId || '—'}</div>
+            <div class="mc-hero-value" style="color:var(--gray-800);">${pipelinePct}%</div>
+            <div class="mc-hero-sub">${pipelineApproved} of ${apps.length} approved</div>
           </div>
         </div>
-        ${providers.map(p => `
-          <div style="border-left:1px solid var(--gray-200);padding-left:24px;display:flex;align-items:center;gap:12px;">
-            <div style="width:36px;height:36px;border-radius:50%;background:var(--gray-100);display:flex;align-items:center;justify-content:center;color:var(--gray-600);font-weight:700;font-size:13px;flex-shrink:0;">${(p.firstName || '?').charAt(0)}${(p.lastName || '?').charAt(0)}</div>
-            <div>
-              <div style="font-size:15px;font-weight:600;color:var(--gray-800);"><a href="#" onclick="event.preventDefault();window.app.openProviderProfile('${p.id}')" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--gray-300);" onmouseover="this.style.color='var(--brand-600)'" onmouseout="this.style.color='inherit'">${escHtml(p.firstName)} ${escHtml(p.lastName)}, ${escHtml(p.credentials)}</a> <span style="font-size:11px;font-weight:400;color:var(--gray-400);">#${toHexId(p.id)}</span></div>
-              <div style="font-size:12px;color:var(--gray-500);margin-top:1px;">NPI: ${p.npi || '—'} &nbsp;&middot;&nbsp; ${escHtml(p.specialty)}</div>
-            </div>
+      </div>
+
+      <!-- Revenue Potential -->
+      <div class="mc-hero-card" onclick="window.app.navigateTo('applications')" title="View revenue details">
+        <div class="mc-hero-accent" style="background:linear-gradient(90deg,#10B981,#059669);"></div>
+        <div class="mc-hero-label">Revenue Potential</div>
+        <div class="mc-hero-value" style="color:#059669;">$${totalRevenue.toLocaleString()}</div>
+        <div class="mc-hero-sub">est. monthly revenue</div>
+        <div class="mc-spark-bars" style="position:absolute;bottom:20px;right:20px;">
+          ${[35,50,40,65,45,55,70,60,80,75,90,100].map(h => `<div class="mc-spark-bar" style="height:${h}%;"></div>`).join('')}
+        </div>
+      </div>
+
+      <!-- Compliance Score -->
+      <div class="mc-hero-card" onclick="window.app.navigateTo('licenses')" title="View license compliance">
+        <div class="mc-hero-accent" style="background:${complianceGrad};"></div>
+        <div class="mc-hero-label">Compliance Score</div>
+        <div style="display:flex;align-items:center;gap:16px;">
+          <svg class="mc-progress-ring" width="${ringSize}" height="${ringSize}" viewBox="0 0 ${ringSize} ${ringSize}">
+            <circle class="mc-ring-bg" cx="${ringSize/2}" cy="${ringSize/2}" r="${ringRadius}" stroke-width="${ringStroke}"/>
+            <circle class="mc-ring-fg" cx="${ringSize/2}" cy="${ringSize/2}" r="${ringRadius}" stroke-width="${ringStroke}"
+              stroke="${complianceColor}" stroke-dasharray="${ringCirc}" stroke-dashoffset="${compRingOffset}"/>
+          </svg>
+          <div>
+            <div class="mc-hero-value" style="color:${complianceColor};">${complianceScore}%</div>
+            <div class="mc-hero-sub">${activeLic.length} active, ${expiringLic.length + expiredLic.length} at risk</div>
           </div>
-        `).join('')}
+        </div>
+      </div>
+
+      <!-- Action Items -->
+      <div class="mc-hero-card" onclick="document.getElementById('mc-attention-section')?.scrollIntoView({behavior:'smooth'})" title="View action items">
+        <div class="mc-hero-accent" style="background:linear-gradient(90deg,${actionItemCount > 0 ? '#EF4444,#F59E0B' : '#10B981,#059669'});"></div>
+        <div class="mc-hero-label">Action Items</div>
+        <div class="mc-hero-value" style="color:${actionItemCount > 0 ? '#EF4444' : '#10B981'};">${actionItemCount}</div>
+        <div class="mc-hero-sub" style="margin-top:10px;">
+          ${overdue.length > 0 ? `<span style="display:inline-block;padding:2px 6px;border-radius:4px;background:#FEF2F2;color:#EF4444;font-size:10px;font-weight:600;margin-right:4px;">${overdue.length} follow-ups</span>` : ''}
+          ${expiringLic.length > 0 ? `<span style="display:inline-block;padding:2px 6px;border-radius:4px;background:#FFFBEB;color:#F59E0B;font-size:10px;font-weight:600;margin-right:4px;">${expiringLic.length} licenses</span>` : ''}
+          ${overdueTasks.length > 0 ? `<span style="display:inline-block;padding:2px 6px;border-radius:4px;background:#FEF2F2;color:#EF4444;font-size:10px;font-weight:600;">${overdueTasks.length} tasks</span>` : ''}
+          ${actionItemCount === 0 ? '<span style="color:#10B981;font-weight:600;">All clear</span>' : ''}
+        </div>
       </div>
     </div>
 
-    <!-- License Stats -->
-    <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);">
-      <div class="stat-card">
-        <div class="label">Licensed States</div>
-        <div class="value">${licenses.length}</div>
+    <!-- Row 3: Two-Column Layout -->
+    <div class="mc-two-col">
+      <!-- Left: What Needs Your Attention -->
+      <div>
+        <div class="mc-section-title" id="mc-attention-section">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gray-400)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          What Needs Your Attention
+          <span class="mc-count">${attentionItems.length}</span>
+        </div>
+        <div class="mc-attention">
+          ${attentionSlice.length > 0 ? attentionSlice.map(item => `
+            <div class="mc-attention-item">
+              <div class="mc-attention-icon" style="background:${item.bg};color:${item.color};">
+                ${item.icon}
+              </div>
+              <div class="mc-attention-body">
+                <div class="mc-attention-title">${item.title}</div>
+                <div class="mc-attention-sub">${item.subtitle}</div>
+              </div>
+              <span class="mc-attention-time">${item.time}</span>
+              <button class="mc-attention-btn" onclick="${item.action()}">${item.actionLabel}</button>
+            </div>
+          `).join('') : `
+            <div style="text-align:center;padding:40px 20px;color:var(--gray-400);">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px;"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <div style="font-size:14px;font-weight:600;color:var(--gray-600);">You're all caught up</div>
+              <div style="font-size:12px;margin-top:4px;">No urgent items right now</div>
+            </div>
+          `}
+          ${attentionItems.length > 8 ? `
+            <button class="mc-attention-btn" style="align-self:center;margin-top:4px;padding:8px 20px;" onclick="window.app.navigateTo('followups')">
+              View all ${attentionItems.length} items &rarr;
+            </button>
+          ` : ''}
+        </div>
       </div>
-      <div class="stat-card">
-        <div class="label">Active</div>
-        <div class="value green">${activeLic.length}</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Pending</div>
-        <div class="value" style="color:var(--warning-500);">${pendingLic.length}</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Expiring (&lt;90d)</div>
-        <div class="value ${expiringLic.length > 0 ? 'red' : ''}">${expiringLic.length}</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Expired</div>
-        <div class="value ${expiredLic.length > 0 ? 'red' : ''}">${expiredLic.length}</div>
-      </div>
-    </div>
 
-    <!-- Telehealth Readiness -->
-    <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);">
-      <div class="stat-card">
-        <div class="label">Avg Readiness</div>
-        <div class="value" style="color:${avgReadiness >= 7 ? 'var(--green)' : avgReadiness >= 5 ? 'var(--gold)' : 'var(--red)'};">${avgReadiness}/10</div>
-        <div class="sub">${licensedStates.length} licensed states</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Full Practice Auth</div>
-        <div class="value green">${licensedPolicies.filter(p => p.practiceAuthority === 'full').length}</div>
-        <div class="sub">of ${licensedPolicies.length} states</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Restricted States</div>
-        <div class="value ${restrictedLicensed.length > 0 ? 'red' : ''}">${restrictedLicensed.length}</div>
-        <div class="sub">need CPA/supervision</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">CS Limitations</div>
-        <div class="value ${csLimited.length > 0 ? 'red' : ''}">${csLimited.length}</div>
-        <div class="sub">Sched II restricted</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">No Audio-Only</div>
-        <div class="value ${noAudioOnly.length > 0 ? 'red' : ''}">${noAudioOnly.length}</div>
-        <div class="sub">video required</div>
-      </div>
-    </div>
+      <!-- Right: Quick Glances -->
+      <div>
+        <!-- Application Pipeline -->
+        <div class="mc-quick-glance">
+          <h4>Application Pipeline</h4>
+          ${statusCounts.length > 0 ? `
+            <div class="mc-pipeline-bar">
+              ${statusCounts.map(s => {
+                const pct = (s.count / apps.length) * 100;
+                return `<div class="mc-pipeline-segment" style="width:${pct}%;background:${s.color};" title="${s.label}: ${s.count}">
+                  ${pct > 8 ? `<span>${s.count}</span>` : ''}
+                </div>`;
+              }).join('')}
+            </div>
+            <div class="mc-pipeline-legend">
+              ${statusCounts.map(s => `
+                <div class="mc-pipeline-legend-item">
+                  <div class="mc-pipeline-legend-dot" style="background:${s.color};"></div>
+                  ${s.label} (${s.count})
+                </div>
+              `).join('')}
+            </div>
+          ` : '<div style="text-align:center;padding:12px;color:var(--gray-400);font-size:12px;">No applications yet</div>'}
+        </div>
 
-    <!-- Policy Alerts -->
-    ${(restrictedLicensed.length > 0 || csLimited.length > 0) ? `
-    <div class="card">
-      <div class="card-header">
-        <h3>Policy Alerts</h3>
-        <button class="btn btn-sm" onclick="window.app.navigateTo('policies')">View All Policies</button>
-      </div>
-      <div class="card-body" style="padding:0;">
-        <table>
-          <thead><tr><th>State</th><th>Issue</th><th>Details</th><th>Score</th></tr></thead>
-          <tbody>
-            ${restrictedLicensed.map(p => `<tr>
-              <td><strong>${getStateName(p.state)}</strong></td>
-              <td><span class="badge badge-denied">Restricted Practice</span></td>
-              <td class="text-sm">${escHtml(p.cpaNotes)}</td>
-              <td><span style="font-weight:700;color:var(--red);">${p.readinessScore}/10</span></td>
-            </tr>`).join('')}
-            ${csLimited.map(p => `<tr>
-              <td><strong>${getStateName(p.state)}</strong></td>
-              <td><span class="badge badge-pending">CS Limited</span></td>
-              <td class="text-sm">${escHtml(p.csNotes) || 'Controlled substance restrictions apply'}</td>
-              <td><span style="font-weight:700;color:${p.readinessScore >= 5 ? 'var(--gold)' : 'var(--red)'};">${p.readinessScore}/10</span></td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>` : ''}
-
-    <!-- Expansion Opportunities -->
-    ${topExpansion.length > 0 ? `
-    <div class="card">
-      <div class="card-header">
-        <h3>Top Expansion Opportunities</h3>
-        <button class="btn btn-sm" onclick="window.app.navigateTo('policies')">View All</button>
-      </div>
-      <div class="card-body">
-        <div style="display:flex;gap:12px;flex-wrap:wrap;">
-          ${topExpansion.map(p => {
-            const appCount = apps.filter(a => a.state === p.state).length;
-            return `<div class="stat-card" style="min-width:140px;flex:1;max-width:200px;cursor:pointer;border-top:3px solid var(--success-500);" onclick="window.app.navigateTo('policies')">
-              <div class="label">${getStateName(p.state)}</div>
-              <div class="value" style="font-size:22px;color:var(--success-600);">${p.readinessScore}/10</div>
-              <div class="sub">${p.practiceAuthority} practice</div>
-              <div class="sub">${p.controlledSubstances === 'allowed' ? 'CS allowed' : 'CS limited'} &middot; ${p.audioOnly ? 'Audio OK' : 'Video only'}</div>
-              ${appCount > 0 ? `<div class="sub" style="color:var(--brand-600);font-weight:500;">${appCount} app(s) started</div>` : ''}
+        <!-- Recent Activity -->
+        <div class="mc-quick-glance">
+          <h4>Recent Activity</h4>
+          ${auditLog.length > 0 ? auditLog.map(entry => {
+            const when = entry.timestamp ? new Date(entry.timestamp) : null;
+            const timeAgo = when ? (() => {
+              const mins = Math.floor((today - when) / 60000);
+              if (mins < 1) return 'just now';
+              if (mins < 60) return mins + 'm ago';
+              const hrs = Math.floor(mins / 60);
+              if (hrs < 24) return hrs + 'h ago';
+              return Math.floor(hrs / 24) + 'd ago';
+            })() : '';
+            return `<div class="mc-activity-item">
+              <div class="mc-activity-dot"></div>
+              <div class="mc-activity-text"><strong>${escHtml(entry.user_name || 'System')}</strong> ${escHtml(entry.action || '')} ${escHtml(entry.collection || '')}</div>
+              <div class="mc-activity-time">${timeAgo}</div>
             </div>`;
-          }).join('')}
+          }).join('') : '<div style="text-align:center;padding:12px;color:var(--gray-400);font-size:12px;">No recent activity</div>'}
         </div>
-        <div class="text-sm text-muted" style="margin-top:12px;">States with readiness score 8+ where you're not yet licensed. Full practice authority, telehealth-friendly.</div>
-      </div>
-    </div>` : ''}
 
-    <!-- Application Stats -->
-    <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);">
-      <div class="stat-card">
-        <div class="label">Applications</div>
-        <div class="value">${stats.total}</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Approved</div>
-        <div class="value green">${stats.approved}</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">In Progress</div>
-        <div class="value blue">${stats.inProgress}</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Est. Monthly Rev</div>
-        <div class="value green">$${stats.estMonthlyRevenue.toLocaleString()}</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Follow-ups Due</div>
-        <div class="value ${overdue.length > 0 ? 'red' : ''}">${overdue.length}</div>
-        <div class="sub">${upcoming.length} upcoming</div>
+        <!-- Upcoming -->
+        <div class="mc-quick-glance">
+          <h4>Upcoming</h4>
+          ${upcomingItems.length > 0 ? upcomingItems.map(item => {
+            const d = item.date ? new Date(item.date + 'T00:00:00') : null;
+            const monthStr = d ? d.toLocaleDateString('en-US', { month: 'short' }) : '';
+            const dayStr = d ? d.getDate() : '';
+            return `<div class="mc-upcoming-item">
+              <div class="mc-upcoming-date">
+                <div class="mc-up-month">${monthStr}</div>
+                <div class="mc-up-day">${dayStr}</div>
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:600;color:var(--gray-800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(item.title)}</div>
+                <div style="font-size:11px;color:var(--gray-500);margin-top:1px;">${item.type === 'follow-up' ? 'Follow-up due' : 'Task due'} &middot; ${formatDateDisplay(item.date)}</div>
+              </div>
+            </div>`;
+          }).join('') : '<div style="text-align:center;padding:12px;color:var(--gray-400);font-size:12px;">Nothing upcoming</div>'}
+        </div>
       </div>
     </div>
 
-    <!-- Expiring / Expired Licenses Alert -->
-    ${(expiringLic.length > 0 || expiredLic.length > 0) ? `
-    <div class="card">
-      <div class="card-header">
-        <h3>License Alerts</h3>
-        <button class="btn btn-sm" onclick="window.app.navigateTo('licenses')">View All Licenses</button>
+    <!-- Row 4: Application Kanban Preview -->
+    <div class="mc-kanban-preview">
+      <div class="mc-kanban-header">
+        <div class="mc-section-title" style="margin-bottom:0;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gray-400)" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          Application Board
+          <span class="mc-count">${apps.length} total</span>
+        </div>
+        <button class="btn btn-sm" onclick="window.app.navigateTo('applications')" style="font-size:12px;font-weight:600;">Open Full Board &rarr;</button>
       </div>
-      <div class="card-body" style="padding:0;">
-        <table>
-          <thead><tr><th>State</th><th>License #</th><th>Expiration</th><th>Status</th></tr></thead>
-          <tbody>
-            ${[...expiredLic, ...expiringLic].sort((a, b) => (a.expirationDate || '').localeCompare(b.expirationDate || '')).map(l => {
-              const isExp = new Date(l.expirationDate) < today;
-              return `<tr>
-                <td><strong>${getStateName(l.state)}</strong> (${l.state})</td>
-                <td><code>${escHtml(l.licenseNumber) || '-'}</code></td>
-                <td style="color:${isExp ? 'var(--red)' : 'var(--gold)'};font-weight:600;">${formatDateDisplay(l.expirationDate)} ${isExp ? '(EXPIRED)' : '(expiring soon)'}</td>
-                <td><span class="badge badge-${l.status}">${l.status}</span></td>
-              </tr>`;
+      <div class="mc-kanban-cols">
+        ${kanbanCols.map(col => `
+          <div class="mc-kanban-col">
+            <div class="mc-kanban-col-header">
+              <span class="mc-kanban-col-title" style="color:${col.color};">${col.label}</span>
+              <span class="mc-kanban-col-count" style="background:${col.bg};color:${col.color};">${col.apps.length}</span>
+            </div>
+            ${col.apps.slice(0, 2).map(a => {
+              const payer = getPayerById(a.payerId) || { name: a.payerName };
+              return `<div class="mc-kanban-card" onclick="window.app.viewApplication('${a.id}')">
+                <div class="mc-kanban-card-title">${escHtml(payer.name || 'Unknown')}</div>
+                <div class="mc-kanban-card-sub">${getStateName(a.state)}</div>
+              </div>`;
             }).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>` : ''}
-
-    <!-- Overdue Follow-ups -->
-    ${overdue.length > 0 ? `
-    <div class="card">
-      <div class="card-header">
-        <h3>Overdue Follow-ups (${overdue.length})</h3>
-        <button class="btn btn-sm" onclick="window.app.navigateTo('followups')">View All</button>
-      </div>
-      <div class="card-body" style="padding:0;">
-        <table>
-          <thead><tr><th>Application</th><th>Due Date</th><th>Type</th><th>Action</th></tr></thead>
-          <tbody>
-            ${overdueRows.map(({ fu, app, payer }) => `<tr class="overdue">
-                <td><strong>${payer.name || 'Unknown'}</strong> — ${app ? getStateName(app.state) : ''}</td>
-                <td>${formatDateDisplay(fu.dueDate)}</td>
-                <td>${fu.type || 'status_check'}</td>
-                <td><button class="btn btn-sm btn-primary" onclick="window.app.completeFollowupPrompt('${fu.id}')">Complete</button></td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>` : ''}
-
-    <!-- Escalation Candidates -->
-    ${escalations.length > 0 ? `
-    <div class="card">
-      <div class="card-header">
-        <h3>Escalation Candidates (${escalations.length})</h3>
-      </div>
-      <div class="card-body" style="padding:0;">
-        <table>
-          <thead><tr><th>Application</th><th>Age (days)</th><th>Follow-ups</th><th>Reason</th></tr></thead>
-          <tbody>
-            ${escalations.slice(0, 5).map(esc => {
-              const payer = getPayerById(esc.application.payerId) || { name: esc.application.payerName };
-              return `<tr>
-                <td><strong>${payer.name || 'Unknown'}</strong> — ${getStateName(esc.application.state)}</td>
-                <td>${esc.ageDays}</td>
-                <td>${esc.followupCount}</td>
-                <td class="text-sm text-muted">${esc.reason}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>` : ''}
-
-    <!-- Tasks & Document Progress -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-      <div class="card">
-            <div class="card-header">
-              <h3>Tasks Overview</h3>
-              <button class="btn btn-sm" onclick="window.app.showQuickTask()">View All</button>
-            </div>
-            <div class="card-body">
-              <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px;">
-                <div class="stat-card" style="padding:8px 10px;"><div class="label">Pending</div><div class="value" style="font-size:20px;">${pendingTasks.length}</div></div>
-                <div class="stat-card" style="padding:8px 10px;"><div class="label">Overdue</div><div class="value" style="font-size:20px;color:var(--red);">${overdueTasks.length}</div></div>
-                <div class="stat-card" style="padding:8px 10px;"><div class="label">Due Today</div><div class="value" style="font-size:20px;color:var(--warning-600);">${dueTodayTasks.length}</div></div>
-                <div class="stat-card" style="padding:8px 10px;"><div class="label">Urgent/High</div><div class="value" style="font-size:20px;color:var(--brand-600);">${urgentTasks.length}</div></div>
-              </div>
-              ${overdueTasks.length > 0 || dueTodayTasks.length > 0 ? `
-                <div style="font-size:12px;">
-                  ${[...overdueTasks, ...dueTodayTasks].slice(0, 4).map(t => `
-                    <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--gray-100);">
-                      <span style="font-size:10px;padding:1px 4px;border-radius:3px;background:${t.dueDate < taskToday ? 'var(--red)' : 'var(--warning-600)'}15;color:${t.dueDate < taskToday ? 'var(--red)' : 'var(--warning-600)'};font-weight:600;">${t.dueDate < taskToday ? 'OVERDUE' : 'TODAY'}</span>
-                      <span style="font-size:12px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(t.title)}</span>
-                    </div>
-                  `).join('')}
-                </div>
-              ` : '<div class="text-sm text-muted" style="text-align:center;padding:8px;">No urgent tasks right now.</div>'}
-            </div>
-          </div>
-      <div class="card">
-            <div class="card-header">
-              <h3>Document Completion</h3>
-              <button class="btn btn-sm" onclick="window.app.navigateTo('applications')">View Apps</button>
-            </div>
-            <div class="card-body">
-              <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-                <div style="flex:1;height:10px;background:var(--gray-200);border-radius:5px;overflow:hidden;">
-                  <div style="width:${overallDocPct}%;height:100%;background:${overallDocPct === 100 ? 'var(--green)' : 'var(--teal)'};border-radius:5px;transition:width 0.3s;"></div>
-                </div>
-                <span style="font-size:14px;font-weight:700;color:${overallDocPct === 100 ? 'var(--green)' : 'var(--teal)'};">${overallDocPct}%</span>
-              </div>
-              <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px;">
-                <div class="stat-card" style="padding:8px 10px;"><div class="label">Applications</div><div class="value" style="font-size:20px;">${apps.length}</div></div>
-                <div class="stat-card" style="padding:8px 10px;"><div class="label">Docs Complete</div><div class="value" style="font-size:20px;color:var(--green);">${fullyComplete}</div></div>
-                <div class="stat-card" style="padding:8px 10px;"><div class="label">Need Docs</div><div class="value" style="font-size:20px;color:${apps.length - fullyComplete > 0 ? 'var(--warning-600)' : 'var(--green)'};">${apps.length - fullyComplete}</div></div>
-              </div>
-              ${lowApps.length > 0 ? `
-                <div style="font-size:12px;">
-                  ${lowApps.slice(0, 4).map(a => `
-                    <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--gray-100);">
-                      <div style="width:40px;height:6px;background:var(--gray-200);border-radius:3px;overflow:hidden;"><div style="width:${a.docPct}%;height:100%;background:${a.docPct < 30 ? 'var(--red)' : a.docPct < 70 ? 'var(--warning-600)' : 'var(--green)'};border-radius:3px;"></div></div>
-                      <span style="font-size:11px;font-weight:600;min-width:32px;">${a.docPct}%</span>
-                      <span style="font-size:12px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${getStateName(a.state)} — ${a.payerName}</span>
-                    </div>
-                  `).join('')}
-                </div>
-              ` : '<div class="text-sm text-muted" style="text-align:center;padding:8px;">No applications yet.</div>'}
-            </div>
-          </div>
-    </div>
-
-    <!-- Charts Row -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:0;">
-      <div class="card">
-        <div class="card-header"><h3>Application Pipeline</h3></div>
-        <div class="card-body" style="position:relative;height:260px;">
-          ${stats.total > 0
-            ? '<canvas id="chart-pipeline"></canvas>'
-            : '<div class="text-sm text-muted" style="padding-top:80px;text-align:center;">No applications yet.</div>'}
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header"><h3>Revenue by State</h3></div>
-        <div class="card-body" style="position:relative;height:260px;">
-          ${apps.filter(a => a.status === 'approved' && a.estMonthlyRevenue > 0).length > 0
-            ? '<canvas id="chart-revenue"></canvas>'
-            : '<div class="text-sm text-muted" style="padding-top:80px;text-align:center;">No approved revenue data yet.</div>'}
-        </div>
-      </div>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div class="card">
-        <div class="card-header"><h3>License Expiration Timeline</h3></div>
-        <div class="card-body" style="position:relative;height:260px;">
-          ${licenses.length > 0
-            ? '<canvas id="chart-license-timeline"></canvas>'
-            : '<div class="text-sm text-muted" style="padding-top:80px;text-align:center;">No licenses yet.</div>'}
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header">
-          <h3>Payer Catalog</h3>
-          <button class="btn btn-sm" onclick="window.app.navigateTo('payers')">View All ${PAYER_CATALOG.length} Payers</button>
-        </div>
-        <div class="card-body" style="position:relative;height:260px;">
-          <canvas id="chart-payers"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- Smart Recommendations -->
-    ${(() => {
-      const recs = [];
-      // Expiring licenses
-      const urgentLic = licenses.filter(l => {
-        if (!l.expirationDate) return false;
-        const d = new Date(l.expirationDate);
-        return d > today && d <= new Date(Date.now() + 30 * 86400000);
-      });
-      if (urgentLic.length > 0) {
-        recs.push({ icon: '&#9888;', color: 'var(--red)', title: `${urgentLic.length} license(s) expiring within 30 days`, desc: urgentLic.map(l => `${getStateName(l.state)} — expires ${formatDateDisplay(l.expirationDate)}`).join(', '), action: 'licenses', actionLabel: 'View Licenses' });
-      }
-      // Expired licenses
-      if (expiredLic.length > 0) {
-        recs.push({ icon: '&#10007;', color: 'var(--red)', title: `${expiredLic.length} expired license(s) need renewal`, desc: 'Expired licenses prevent billing and may trigger compliance violations.', action: 'licenses', actionLabel: 'Renew Now' });
-      }
-      // Overdue follow-ups
-      if (overdue.length > 0) {
-        recs.push({ icon: '&#128337;', color: 'var(--warning-500)', title: `${overdue.length} overdue follow-up(s)`, desc: 'Delayed follow-ups slow credentialing. Average delay compounds over time.', action: 'followups', actionLabel: 'View Follow-ups' });
-      }
-      // Escalations
-      if (escalations.length > 0) {
-        recs.push({ icon: '&#9650;', color: 'var(--warning-500)', title: `${escalations.length} application(s) need escalation`, desc: 'Applications stuck longer than expected. Consider contacting payer directly.', action: 'applications', actionLabel: 'View Applications' });
-      }
-      // Document gaps
-      const incompleteApps = apps.filter(a => {
-        if (['approved','denied','withdrawn'].includes(a.status)) return false;
-        const docs = a.documentChecklist || {};
-        return !CRED_DOCUMENTS.every(d => docs[d.id]?.completed);
-      });
-      if (incompleteApps.length > 0) {
-        recs.push({ icon: '&#128196;', color: 'var(--brand-600)', title: `${incompleteApps.length} application(s) missing documents`, desc: 'Incomplete document checklists delay credentialing submissions.', action: 'applications', actionLabel: 'Complete Docs' });
-      }
-      // High-value expansion
-      if (topExpansion.length > 0) {
-        const topState = topExpansion[0];
-        recs.push({ icon: '&#127919;', color: 'var(--green)', title: `Expansion opportunity: ${getStateName(topState.state)}`, desc: `Readiness score ${topState.readinessScore}/10 — ${topState.practiceAuthority} practice authority, ${topState.controlledSubstances === 'allowed' ? 'CS allowed' : 'CS limited'}.`, action: 'policies', actionLabel: 'View Policies' });
-      }
-      // Overdue tasks
-      if (overdueTasks.length > 0) {
-        recs.push({ icon: '&#9745;', color: 'var(--warning-500)', title: `${overdueTasks.length} overdue task(s)`, desc: 'Overdue tasks may indicate process bottlenecks.', action: 'tasks', actionLabel: 'View Tasks' });
-      }
-      // All good!
-      if (recs.length === 0) {
-        recs.push({ icon: '&#10003;', color: 'var(--green)', title: 'All clear!', desc: 'No urgent actions needed. All credentials and tasks are in good standing.', action: null, actionLabel: null });
-      }
-
-      return recs.length > 0 ? `
-    <div class="card">
-      <div class="card-header">
-        <h3>Smart Recommendations</h3>
-        <span class="text-sm text-muted">${recs.length} action${recs.length !== 1 ? 's' : ''}</span>
-      </div>
-      <div class="card-body" style="padding:8px 16px;">
-        ${recs.slice(0, 6).map(r => `
-          <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--gray-100);">
-            <div style="width:28px;height:28px;border-radius:6px;background:${r.color}12;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;color:${r.color};">${r.icon}</div>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:600;color:var(--gray-800);">${r.title}</div>
-              <div style="font-size:11px;color:var(--gray-500);margin-top:1px;">${r.desc}</div>
-            </div>
-            ${r.action ? `<button class="btn btn-sm" onclick="window.app.navigateTo('${r.action}')" style="flex-shrink:0;font-size:11px;">${r.actionLabel}</button>` : ''}
+            ${col.apps.length > 2 ? `<div style="text-align:center;font-size:10px;color:var(--gray-400);padding-top:4px;">+${col.apps.length - 2} more</div>` : ''}
+            ${col.apps.length === 0 ? `<div style="text-align:center;font-size:11px;color:var(--gray-400);padding:16px 0;">—</div>` : ''}
           </div>
         `).join('')}
       </div>
-    </div>` : '';
-    })()}
+    </div>
   `;
 
-  // ─── Render Charts (after DOM is ready) ───
-  requestAnimationFrame(() => renderDashboardCharts(stats, apps, licenses));
   } catch (e) {
     console.error('Dashboard render error:', e);
     if (body) body.innerHTML = `<div class="alert alert-danger" style="margin:24px 0;">
