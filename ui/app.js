@@ -2111,6 +2111,13 @@ async function renderAppTable(prefetchedApps = null) {
   if (listView) listView.style.display = viewMode === 'list' ? 'block' : 'none';
   if (cardView) cardView.style.display = viewMode === 'cards' ? 'grid' : 'none';
 
+  // Inject V2 hover style if not already present
+  if (!document.getElementById('appv2-style')) {
+    const s = document.createElement('style'); s.id = 'appv2-style';
+    s.textContent = '.app-table-v2 tr:hover{background:var(--gray-50,#f9fafb);}';
+    document.head.appendChild(s);
+    const tw = document.querySelector('.table-wrap'); if (tw) tw.style.borderRadius = '16px';
+  }
   // Always render list view tbody
   if (tbody) {
     tbody.innerHTML = filtered.map(a => {
@@ -3962,23 +3969,32 @@ async function renderMonitoringTab() {
     const dea = summary.dea || {};
 
     container.innerHTML = `
+      <style>
+        .montab-stat{background:var(--surface-card,#fff);border-radius:16px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}
+        .montab-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
+        .montab-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}
+        .montab-stat .value{font-size:28px;font-weight:800;line-height:1.1;}
+        .montab-stat .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;}
+        .montab-card{border-radius:16px!important;overflow:hidden;}
+        .montab-card table tr:hover{background:var(--gray-50,#f9fafb);}
+      </style>
       <!-- Summary cards -->
       <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">
-        <div class="stat-card"><div class="label">Total Licenses</div><div class="value">${lic.total || 0}</div></div>
-        <div class="stat-card"><div class="label">Verified via NPPES</div><div class="value green">${ver.verified || 0}</div></div>
-        <div class="stat-card"><div class="label">Mismatches Found</div><div class="value" style="color:var(--warning-500);">${ver.mismatch || 0}</div></div>
-        <div class="stat-card"><div class="label">Never Verified</div><div class="value red">${ver.neverVerified || 0}</div></div>
+        <div class="stat-card montab-stat"><div class="label">Total Licenses</div><div class="value">${lic.total || 0}</div></div>
+        <div class="stat-card montab-stat" style="--montab-accent:var(--green);"><div class="label">Verified via NPPES</div><div class="value green">${ver.verified || 0}</div></div>
+        <div class="stat-card montab-stat"><div class="label">Mismatches Found</div><div class="value" style="color:var(--warning-500);">${ver.mismatch || 0}</div></div>
+        <div class="stat-card montab-stat"><div class="label">Never Verified</div><div class="value red">${ver.neverVerified || 0}</div></div>
       </div>
 
       <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">
-        <div class="stat-card"><div class="label">Expired</div><div class="value red">${lic.expired || 0}</div></div>
-        <div class="stat-card"><div class="label">Expiring ≤30 days</div><div class="value" style="color:var(--red);">${lic.expiring30 || lic.expiring_30 || 0}</div></div>
-        <div class="stat-card"><div class="label">Expiring 31-60 days</div><div class="value" style="color:var(--warning-500);">${lic.expiring60 || lic.expiring_60 || 0}</div></div>
-        <div class="stat-card"><div class="label">Expiring 61-90 days</div><div class="value" style="color:var(--blue);">${lic.expiring90 || lic.expiring_90 || 0}</div></div>
+        <div class="stat-card montab-stat"><div class="label">Expired</div><div class="value red">${lic.expired || 0}</div></div>
+        <div class="stat-card montab-stat"><div class="label">Expiring ≤30 days</div><div class="value" style="color:var(--red);">${lic.expiring30 || lic.expiring_30 || 0}</div></div>
+        <div class="stat-card montab-stat"><div class="label">Expiring 31-60 days</div><div class="value" style="color:var(--warning-500);">${lic.expiring60 || lic.expiring_60 || 0}</div></div>
+        <div class="stat-card montab-stat"><div class="label">Expiring 61-90 days</div><div class="value" style="color:var(--blue);">${lic.expiring90 || lic.expiring_90 || 0}</div></div>
       </div>
 
       <!-- Bulk verify button -->
-      <div class="card" style="margin-bottom:16px;">
+      <div class="card montab-card" style="margin-bottom:16px;">
         <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
           <h3>NPPES License Verification</h3>
           <button class="btn btn-gold" id="bulk-verify-btn" onclick="window.app.bulkVerifyLicenses()">Verify All Licenses</button>
@@ -3993,7 +4009,7 @@ async function renderMonitoringTab() {
       </div>
 
       <!-- Expiring items -->
-      <div class="card">
+      <div class="card montab-card">
         <div class="card-header"><h3>Expiring Licenses & DEA (Next 90 Days)</h3></div>
         <div class="card-body" style="padding:0;">
           ${renderExpiringTable(expiring)}
@@ -4001,7 +4017,7 @@ async function renderMonitoringTab() {
       </div>
     `;
   } catch (err) {
-    container.innerHTML = `<div class="card"><div class="card-body" style="color:var(--red);">Error loading monitoring data: ${escHtml(err.message)}</div></div>`;
+    container.innerHTML = `<div class="card montab-card"><div class="card-body" style="color:var(--red);">Error loading monitoring data: ${escHtml(err.message)}</div></div>`;
   }
 }
 
@@ -4046,16 +4062,25 @@ async function renderDeaTab(providers) {
     const deas = await store.getDeaRegistrations();
 
     container.innerHTML = `
+      <style>
+        .deatab-stat{background:var(--surface-card,#fff);border-radius:16px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}
+        .deatab-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
+        .deatab-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}
+        .deatab-stat .value{font-size:28px;font-weight:800;line-height:1.1;}
+        .deatab-stat .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;}
+        .deatab-card{border-radius:16px!important;overflow:hidden;}
+        .deatab-card table tr:hover{background:var(--gray-50,#f9fafb);}
+      </style>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);flex:1;margin-right:16px;">
-          <div class="stat-card"><div class="label">Total DEA</div><div class="value">${deas.length}</div></div>
-          <div class="stat-card"><div class="label">Active</div><div class="value green">${deas.filter(d => d.status === 'active').length}</div></div>
-          <div class="stat-card"><div class="label">Expired</div><div class="value red">${deas.filter(d => d.status === 'expired' || (d.expirationDate && new Date(d.expirationDate) < new Date())).length}</div></div>
+          <div class="stat-card deatab-stat"><div class="label">Total DEA</div><div class="value">${deas.length}</div></div>
+          <div class="stat-card deatab-stat"><div class="label">Active</div><div class="value green">${deas.filter(d => d.status === 'active').length}</div></div>
+          <div class="stat-card deatab-stat"><div class="label">Expired</div><div class="value red">${deas.filter(d => d.status === 'expired' || (d.expirationDate && new Date(d.expirationDate) < new Date())).length}</div></div>
         </div>
         <button class="btn btn-gold" onclick="window.app.openDeaModal()">+ Add DEA</button>
       </div>
 
-      <div class="card">
+      <div class="card deatab-card">
         <div class="card-header"><h3>DEA Registrations</h3></div>
         <div class="card-body" style="padding:0;">
           ${deas.length === 0 ? '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No DEA registrations on file.</div>' : `
@@ -5238,20 +5263,24 @@ async function renderTaskModal() {
 
   const body = document.getElementById('task-modal-body');
   body.innerHTML = `
+    <style>
+      .tmv2-stat{border-radius:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+      .tmv2-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}
+    </style>
     <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
-      <div class="stat-card" style="flex:1;min-width:80px;padding:8px 12px;">
+      <div class="stat-card tmv2-stat" style="flex:1;min-width:80px;padding:8px 12px;">
         <div class="label">Overdue</div>
         <div class="value" style="font-size:20px;color:var(--red);">${overdue.length}</div>
       </div>
-      <div class="stat-card" style="flex:1;min-width:80px;padding:8px 12px;">
+      <div class="stat-card tmv2-stat" style="flex:1;min-width:80px;padding:8px 12px;">
         <div class="label">Due Today</div>
         <div class="value" style="font-size:20px;color:var(--warning-600);">${dueToday.length}</div>
       </div>
-      <div class="stat-card" style="flex:1;min-width:80px;padding:8px 12px;">
+      <div class="stat-card tmv2-stat" style="flex:1;min-width:80px;padding:8px 12px;">
         <div class="label">Upcoming</div>
         <div class="value" style="font-size:20px;color:var(--brand-600);">${upcoming.length}</div>
       </div>
-      <div class="stat-card" style="flex:1;min-width:80px;padding:8px 12px;">
+      <div class="stat-card tmv2-stat" style="flex:1;min-width:80px;padding:8px 12px;">
         <div class="label">Done</div>
         <div class="value" style="font-size:20px;color:var(--green);">${completed.length}</div>
       </div>
@@ -5595,7 +5624,8 @@ async function renderExpirationAlertsTool() {
 async function renderStatusExportTool() {
   const body = document.getElementById('page-body');
   body.innerHTML = `
-    <div class="card">
+    <style>.sev2-card{border-radius:16px!important;overflow:hidden;}</style>
+    <div class="card sev2-card">
       <div class="card-header"><h3>Status Report Export</h3></div>
       <div class="card-body">
         <p style="margin-bottom:16px;color:var(--text-muted);font-size:13px;">
@@ -5633,7 +5663,8 @@ async function renderStateLookupTool() {
     : TELEHEALTH_POLICIES;
   const body = document.getElementById('page-body');
   body.innerHTML = `
-    <div class="card">
+    <style>.slv2-card{border-radius:16px!important;overflow:hidden;}.slv2-card table tr:hover{background:var(--gray-50,#f9fafb);}</style>
+    <div class="card slv2-card">
       <div class="card-header"><h3>State Licensing Lookup</h3>
         <input type="text" class="form-control" style="width:240px;" placeholder="Search state..." id="state-lookup-search"
           oninput="window.app.filterStateLookup()">
@@ -6081,11 +6112,12 @@ async function renderCaqhAttestationTab(providers, tracking) {
   }
 
   return `
+    <style>.caqhv2-card{border-radius:16px!important;overflow:hidden;}.caqhv2-card table tr:hover{background:var(--gray-50,#f9fafb);}</style>
     <div class="alert alert-info" style="margin-bottom:16px;">
       CAQH requires attestation every <strong>120 days</strong>. Providers with expired attestations
       will be deactivated and payers cannot pull their data for credentialing.
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap caqhv2-card">
       <table>
         <thead><tr><th>Provider</th><th>CAQH ID</th><th>Last Attested</th><th>Expires</th><th>Days Left</th><th>Status</th></tr></thead>
         <tbody>
@@ -6134,8 +6166,9 @@ async function renderCaqhPayerMap() {
       <strong>${caqhPayers.length} of ${PAYER_CATALOG.length} payers</strong> use CAQH ProView for credentialing.
       Keeping your CAQH profile current automatically satisfies credentialing data requirements for these payers.
     </div>
+    <style>.cpm-card{border-radius:16px!important;overflow:hidden;}</style>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-      <div class="card">
+      <div class="card cpm-card">
         <div class="card-header">
           <h3 style="color:var(--green);">&#10003; Uses CAQH ProView (${caqhPayers.length})</h3>
         </div>
@@ -6148,7 +6181,7 @@ async function renderCaqhPayerMap() {
           `).join('')}
         </div>
       </div>
-      <div class="card">
+      <div class="card cpm-card">
         <div class="card-header">
           <h3 style="color:var(--text-muted);">Direct Application Required (${nonCaqhPayers.length})</h3>
         </div>
@@ -11225,6 +11258,7 @@ async function renderBulkBar() {
   const bar = document.createElement('div');
   bar.id = 'bulk-bar';
   bar.className = 'bulk-bar';
+  bar.style.borderRadius = '16px';
   bar.innerHTML = `
     <span class="count">${ids.length} selected</span>
     <select class="form-control" id="bulk-status" style="width:auto;min-width:140px;">
@@ -11382,14 +11416,23 @@ async function renderDocumentTracker() {
   const needDocs = appData.filter(a => a.docPct < 100);
 
   body.innerHTML = `
+    <style>
+      .dtv2-stat{background:var(--surface-card,#fff);border-radius:16px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}
+      .dtv2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
+      .dtv2-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}
+      .dtv2-stat .value{font-size:28px;font-weight:800;line-height:1.1;}
+      .dtv2-stat .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;}
+      .dtv2-card{border-radius:16px!important;overflow:hidden;}
+      .dtv2-card table tr:hover{background:var(--gray-50,#f9fafb);}
+    </style>
     <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
-      <div class="stat-card"><div class="label">Overall Progress</div><div class="value" style="color:${overallPct === 100 ? 'var(--green)' : 'var(--teal)'};">${overallPct}%</div></div>
-      <div class="stat-card"><div class="label">Applications</div><div class="value">${apps.length}</div></div>
-      <div class="stat-card"><div class="label">Fully Complete</div><div class="value green">${fullyComplete}</div></div>
-      <div class="stat-card"><div class="label">Need Documents</div><div class="value ${needDocs.length > 0 ? 'amber' : 'green'}">${needDocs.length}</div></div>
+      <div class="stat-card dtv2-stat"><div class="label">Overall Progress</div><div class="value" style="color:${overallPct === 100 ? 'var(--green)' : 'var(--teal)'};">${overallPct}%</div></div>
+      <div class="stat-card dtv2-stat"><div class="label">Applications</div><div class="value">${apps.length}</div></div>
+      <div class="stat-card dtv2-stat"><div class="label">Fully Complete</div><div class="value green">${fullyComplete}</div></div>
+      <div class="stat-card dtv2-stat"><div class="label">Need Documents</div><div class="value ${needDocs.length > 0 ? 'amber' : 'green'}">${needDocs.length}</div></div>
     </div>
 
-    <div class="card">
+    <div class="card dtv2-card">
       <div class="card-header"><h3>Document Status by Application</h3></div>
       <div class="card-body" style="padding:0;">
         <table>
@@ -11417,7 +11460,7 @@ async function renderDocumentTracker() {
       </div>
     </div>
 
-    <div class="card" style="margin-top:16px;">
+    <div class="card dtv2-card" style="margin-top:16px;">
       <div class="card-header"><h3>Document Type Summary</h3></div>
       <div class="card-body" style="padding:0;">
         <table>
@@ -11766,20 +11809,29 @@ async function renderCredentialingRenewalSection(today) {
   });
 
   return `
+    <style>
+      .crv2-stat{background:var(--surface-card,#fff);border-radius:16px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}
+      .crv2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
+      .crv2-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}
+      .crv2-stat .value{font-size:28px;font-weight:800;line-height:1.1;}
+      .crv2-stat .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;}
+      .crv2-card{border-radius:16px!important;overflow:hidden;}
+      .crv2-card table tr:hover{background:var(--gray-50,#f9fafb);}
+    </style>
     <div style="margin-top:32px;margin-bottom:16px;">
       <h2 style="font-size:20px;color:var(--gray-900);margin:0;">Credentialing Renewals</h2>
       <p style="font-size:13px;color:var(--text-muted);margin:4px 0 0;">3-year cycle from effective date. ${estimated.length > 0 ? `<span style="color:var(--warning-500);">${estimated.length} estimated</span> (based on submitted date + avg cred days), ` : ''}${confirmed.length} confirmed.</p>
     </div>
 
     <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);">
-      <div class="stat-card"><div class="label">Total</div><div class="value">${renewals.length}</div></div>
-      <div class="stat-card"><div class="label">Overdue</div><div class="value ${overdue.length > 0 ? 'red' : ''}">${overdue.length}</div></div>
-      <div class="stat-card"><div class="label">Within 90 Days</div><div class="value ${within90.length > 0 ? 'red' : ''}">${within90.length}</div></div>
-      <div class="stat-card"><div class="label">Within 180 Days</div><div class="value ${within180.length > 0 ? 'amber' : ''}">${within180.length}</div></div>
-      <div class="stat-card"><div class="label">Beyond 180 Days</div><div class="value">${upcoming.length}</div></div>
+      <div class="stat-card crv2-stat"><div class="label">Total</div><div class="value">${renewals.length}</div></div>
+      <div class="stat-card crv2-stat"><div class="label">Overdue</div><div class="value ${overdue.length > 0 ? 'red' : ''}">${overdue.length}</div></div>
+      <div class="stat-card crv2-stat"><div class="label">Within 90 Days</div><div class="value ${within90.length > 0 ? 'red' : ''}">${within90.length}</div></div>
+      <div class="stat-card crv2-stat"><div class="label">Within 180 Days</div><div class="value ${within180.length > 0 ? 'amber' : ''}">${within180.length}</div></div>
+      <div class="stat-card crv2-stat"><div class="label">Beyond 180 Days</div><div class="value">${upcoming.length}</div></div>
     </div>
 
-    <div class="card">
+    <div class="card crv2-card">
       <div class="card-header"><h3>12-Month Credentialing Renewal Timeline</h3></div>
       <div class="card-body">
         <div class="cal-grid">
@@ -11800,7 +11852,7 @@ async function renderCredentialingRenewalSection(today) {
       </div>
     </div>
 
-    <div class="card" style="margin-top:16px;">
+    <div class="card crv2-card" style="margin-top:16px;">
       <div class="card-header"><h3>All Credentialing Renewals (${renewals.length})</h3></div>
       <div class="card-body" style="padding:0;">
         <table>
@@ -12608,8 +12660,17 @@ async function renderOrgDetailPage(orgId) {
   } catch { orgContacts = []; }
 
   body.innerHTML = `
+    <style>
+      .odv2-stat{background:var(--surface-card,#fff);border-radius:16px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}
+      .odv2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
+      .odv2-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}
+      .odv2-stat .value{font-size:28px;font-weight:800;line-height:1.1;}
+      .odv2-stat .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;}
+      .odv2-card{border-radius:16px!important;overflow:hidden;}
+      .odv2-card table tr:hover{background:var(--gray-50,#f9fafb);}
+    </style>
     <!-- Org Header -->
-    <div class="card" style="border-top:3px solid var(--brand-600);margin-bottom:20px;">
+    <div class="card odv2-card" style="border-top:3px solid var(--brand-600);margin-bottom:20px;">
       <div class="card-body">
         <div style="font-size:22px;font-weight:800;color:var(--gray-900);">${escHtml(o.name)} <span style="font-size:13px;font-weight:500;color:var(--gray-400);margin-left:10px;">#${toHexId(o.id)}</span></div>
         <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--gray-600);">
@@ -12628,11 +12689,11 @@ async function renderOrgDetailPage(orgId) {
 
     <!-- Stats -->
     <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:20px;">
-      <div class="stat-card"><div class="label">Providers</div><div class="value">${providers.length}</div></div>
-      <div class="stat-card"><div class="label">Licenses</div><div class="value" style="color:var(--brand-600);">${orgLicenses.length}</div></div>
-      <div class="stat-card"><div class="label">Licensed States</div><div class="value">${licensedStates.length}</div></div>
-      <div class="stat-card"><div class="label">Applications</div><div class="value">${orgApps.length}</div></div>
-      <div class="stat-card"><div class="label">Est. Monthly Rev</div><div class="value" style="color:var(--green);">$${estRevenue.toLocaleString()}</div></div>
+      <div class="stat-card odv2-stat"><div class="label">Providers</div><div class="value">${providers.length}</div></div>
+      <div class="stat-card odv2-stat"><div class="label">Licenses</div><div class="value" style="color:var(--brand-600);">${orgLicenses.length}</div></div>
+      <div class="stat-card odv2-stat"><div class="label">Licensed States</div><div class="value">${licensedStates.length}</div></div>
+      <div class="stat-card odv2-stat"><div class="label">Applications</div><div class="value">${orgApps.length}</div></div>
+      <div class="stat-card odv2-stat"><div class="label">Est. Monthly Rev</div><div class="value" style="color:var(--green);">$${estRevenue.toLocaleString()}</div></div>
     </div>
 
     <!-- Tabs -->
@@ -12865,12 +12926,21 @@ async function renderUsersStub() {
   const providerUsers = users.filter(u => u.role === 'provider');
 
   body.innerHTML = `
+    <style>
+      .usv2-stat{background:var(--surface-card,#fff);border-radius:16px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}
+      .usv2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
+      .usv2-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}
+      .usv2-stat .value{font-size:28px;font-weight:800;line-height:1.1;}
+      .usv2-stat .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;}
+      .usv2-card{border-radius:16px!important;overflow:hidden;}
+      .usv2-card table tr:hover{background:var(--gray-50,#f9fafb);}
+    </style>
     <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);">
-      <div class="stat-card"><div class="label">Total Users</div><div class="value">${users.length}</div></div>
-      <div class="stat-card"><div class="label">Agency</div><div class="value" style="color:var(--green);">${agencyUsers.length}</div></div>
-      <div class="stat-card"><div class="label">Staff</div><div class="value" style="color:var(--amber);">${staffUsers.length}</div></div>
-      <div class="stat-card"><div class="label">Organization</div><div class="value" style="color:var(--brand-600);">${orgUsers.length}</div></div>
-      <div class="stat-card"><div class="label">Provider</div><div class="value" style="color:var(--text-muted);">${providerUsers.length}</div></div>
+      <div class="stat-card usv2-stat"><div class="label">Total Users</div><div class="value">${users.length}</div></div>
+      <div class="stat-card usv2-stat"><div class="label">Agency</div><div class="value" style="color:var(--green);">${agencyUsers.length}</div></div>
+      <div class="stat-card usv2-stat"><div class="label">Staff</div><div class="value" style="color:var(--amber);">${staffUsers.length}</div></div>
+      <div class="stat-card usv2-stat"><div class="label">Organization</div><div class="value" style="color:var(--brand-600);">${orgUsers.length}</div></div>
+      <div class="stat-card usv2-stat"><div class="label">Provider</div><div class="value" style="color:var(--text-muted);">${providerUsers.length}</div></div>
     </div>
 
     <!-- Invite User Modal -->
@@ -12925,7 +12995,7 @@ async function renderUsersStub() {
       </div>
     </div>
 
-    <div class="card">
+    <div class="card usv2-card">
       <div class="card-header">
         <h3>Team Members</h3>
         <button class="btn btn-gold" onclick="window.app.inviteUser()">+ Invite User</button>
@@ -13027,11 +13097,20 @@ async function renderAuditTrail() {
   };
 
   body.innerHTML = `
+    <style>
+      .atv2-stat{background:var(--surface-card,#fff);border-radius:16px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}
+      .atv2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
+      .atv2-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}
+      .atv2-stat .value{font-size:28px;font-weight:800;line-height:1.1;}
+      .atv2-stat .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;}
+      .atv2-card{border-radius:16px!important;overflow:hidden;}
+      .atv2-card table tr:hover{background:var(--gray-50,#f9fafb);}
+    </style>
     <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">
-      <div class="stat-card"><div class="label">Total Events</div><div class="value">${entries.length}</div></div>
-      <div class="stat-card"><div class="label">Creates</div><div class="value green">${entries.filter(e => e.action === 'create').length}</div></div>
-      <div class="stat-card"><div class="label">Updates</div><div class="value blue">${entries.filter(e => e.action === 'update').length}</div></div>
-      <div class="stat-card"><div class="label">Deletes</div><div class="value red">${entries.filter(e => e.action === 'delete').length}</div></div>
+      <div class="stat-card atv2-stat"><div class="label">Total Events</div><div class="value">${entries.length}</div></div>
+      <div class="stat-card atv2-stat"><div class="label">Creates</div><div class="value green">${entries.filter(e => e.action === 'create').length}</div></div>
+      <div class="stat-card atv2-stat"><div class="label">Updates</div><div class="value blue">${entries.filter(e => e.action === 'update').length}</div></div>
+      <div class="stat-card atv2-stat"><div class="label">Deletes</div><div class="value red">${entries.filter(e => e.action === 'delete').length}</div></div>
     </div>
 
     <div class="filters-bar" style="margin-bottom:16px;">
@@ -13050,7 +13129,7 @@ async function renderAuditTrail() {
       <input type="text" class="form-control search-input" id="audit-search" placeholder="Search..." oninput="window.app.filterAuditTrail()">
     </div>
 
-    <div class="card">
+    <div class="card atv2-card">
       <div class="card-header">
         <h3>Activity Log</h3>
         <button class="btn btn-sm" onclick="window.app.exportAuditCSV()">Export CSV</button>
@@ -13163,6 +13242,15 @@ async function renderProviderDashboard(user) {
   actions.sort((a, b) => a.priority - b.priority);
 
   body.innerHTML = `
+    <style>
+      .pdv2-stat{background:var(--surface-card,#fff);border-radius:16px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}
+      .pdv2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
+      .pdv2-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}
+      .pdv2-stat .value{font-size:28px;font-weight:800;line-height:1.1;}
+      .pdv2-stat .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;}
+      .pdv2-card{border-radius:16px!important;overflow:hidden;}
+      .pdv2-card table tr:hover{background:var(--gray-50,#f9fafb);}
+    </style>
     <!-- Welcome Header with Compliance Score -->
     <div style="display:grid;grid-template-columns:1fr 180px;gap:20px;margin-bottom:20px;align-items:center;">
       <div>
@@ -13187,17 +13275,17 @@ async function renderProviderDashboard(user) {
 
     <!-- Stats -->
     <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:16px;">
-      <div class="stat-card"><div class="label">Active Licenses</div><div class="value" style="color:var(--green);">${activeLicenses.length}</div></div>
-      <div class="stat-card"><div class="label">Pending Apps</div><div class="value" style="color:var(--brand-600);">${pendingApps.length}</div></div>
-      <div class="stat-card"><div class="label">Credentialed</div><div class="value" style="color:var(--green);">${approvedApps.length}</div></div>
-      <div class="stat-card"><div class="label">Expiring</div><div class="value" style="color:${expiring90.length > 0 ? 'var(--red)' : 'var(--gray-400)'};">${expiring90.length}</div></div>
-      <div class="stat-card"><div class="label">Documents</div><div class="value">${verifiedDocs.length}/${documents.length}</div></div>
-      <div class="stat-card"><div class="label">Open Tasks</div><div class="value" style="color:${overdueTasks.length > 0 ? 'var(--red)' : ''}">${myTasks.length}</div></div>
+      <div class="stat-card pdv2-stat"><div class="label">Active Licenses</div><div class="value" style="color:var(--green);">${activeLicenses.length}</div></div>
+      <div class="stat-card pdv2-stat"><div class="label">Pending Apps</div><div class="value" style="color:var(--brand-600);">${pendingApps.length}</div></div>
+      <div class="stat-card pdv2-stat"><div class="label">Credentialed</div><div class="value" style="color:var(--green);">${approvedApps.length}</div></div>
+      <div class="stat-card pdv2-stat"><div class="label">Expiring</div><div class="value" style="color:${expiring90.length > 0 ? 'var(--red)' : 'var(--gray-400)'};">${expiring90.length}</div></div>
+      <div class="stat-card pdv2-stat"><div class="label">Documents</div><div class="value">${verifiedDocs.length}/${documents.length}</div></div>
+      <div class="stat-card pdv2-stat"><div class="label">Open Tasks</div><div class="value" style="color:${overdueTasks.length > 0 ? 'var(--red)' : ''}">${myTasks.length}</div></div>
     </div>
 
     <!-- Action Items -->
     ${actions.length > 0 ? `
-    <div class="card" style="margin-bottom:16px;border-left:3px solid ${actions[0].color};">
+    <div class="card pdv2-card" style="margin-bottom:16px;border-left:3px solid ${actions[0].color};">
       <div class="card-header"><h3>Action Items (${actions.length})</h3></div>
       <div class="card-body" style="padding:8px 16px;">
         ${actions.slice(0, 8).map(a => `
@@ -13208,7 +13296,7 @@ async function renderProviderDashboard(user) {
         `).join('')}
       </div>
     </div>` : `
-    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--green);">
+    <div class="card pdv2-card" style="margin-bottom:16px;border-left:3px solid var(--green);">
       <div class="card-body" style="padding:16px;display:flex;align-items:center;gap:12px;">
         <span style="font-size:20px;color:var(--green);">&#10003;</span>
         <div><strong style="color:var(--green);">All clear!</strong><div class="text-sm text-muted">No urgent action items. Your credentialing is in good standing.</div></div>
@@ -13217,7 +13305,7 @@ async function renderProviderDashboard(user) {
 
     <!-- Credential Progress Tracker -->
     ${apps.length > 0 ? `
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card pdv2-card" style="margin-bottom:16px;">
       <div class="card-header"><h3>Credentialing Progress</h3></div>
       <div class="card-body">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
@@ -13251,7 +13339,7 @@ async function renderProviderDashboard(user) {
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <!-- My Licenses -->
-      <div class="card">
+      <div class="card pdv2-card">
         <div class="card-header"><h3>My Licenses (${licenses.length})</h3></div>
         <div class="card-body" style="padding:0;">
           ${licenses.length > 0 ? `<table><thead><tr><th>State</th><th>Number</th><th>Status</th><th>Expires</th></tr></thead><tbody>
@@ -13278,7 +13366,7 @@ async function renderProviderDashboard(user) {
       </div>
 
       <!-- My Applications -->
-      <div class="card">
+      <div class="card pdv2-card">
         <div class="card-header"><h3>My Applications (${apps.length})</h3></div>
         <div class="card-body" style="padding:0;">
           ${apps.length > 0 ? `<table><thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th></tr></thead><tbody>
@@ -13293,7 +13381,7 @@ async function renderProviderDashboard(user) {
       </div>
 
       <!-- My Documents -->
-      <div class="card">
+      <div class="card pdv2-card">
         <div class="card-header"><h3>My Documents (${documents.length})</h3></div>
         <div class="card-body" style="padding:0;">
           ${documents.length > 0 ? `<table><thead><tr><th>Document</th><th>Type</th><th>Status</th></tr></thead><tbody>
@@ -13307,7 +13395,7 @@ async function renderProviderDashboard(user) {
       </div>
 
       <!-- Compliance Issues -->
-      <div class="card">
+      <div class="card pdv2-card">
         <div class="card-header"><h3>Compliance Status</h3></div>
         <div class="card-body">
           ${compIssues.length > 0 ? compIssues.map(i => `
@@ -14998,8 +15086,17 @@ async function renderInvoiceDetail(invoiceId) {
   `;
 
   body.innerHTML = `
+    <style>
+      .inv2-stat{background:var(--surface-card,#fff);border-radius:16px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}
+      .inv2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
+      .inv2-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}
+      .inv2-stat .value{font-size:28px;font-weight:800;line-height:1.1;}
+      .inv2-stat .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;}
+      .inv2-card{border-radius:16px!important;overflow:hidden;}
+      .inv2-card table tr:hover{background:var(--gray-50,#f9fafb);}
+    </style>
     <!-- Invoice Header -->
-    <div class="card" style="border-top:3px solid var(--brand-600);margin-bottom:20px;">
+    <div class="card inv2-card" style="border-top:3px solid var(--brand-600);margin-bottom:20px;">
       <div class="card-body">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
           <div>
@@ -15018,13 +15115,13 @@ async function renderInvoiceDetail(invoiceId) {
 
     <!-- Amount Summary -->
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
-      <div class="stat-card"><div class="label">Total Amount</div><div class="value">${_fmtMoney(total)}</div></div>
-      <div class="stat-card"><div class="label">Paid</div><div class="value" style="color:var(--green);">${_fmtMoney(paid)}</div></div>
-      <div class="stat-card"><div class="label">Balance Due</div><div class="value" style="color:${balance > 0 ? 'var(--red)' : 'var(--green)'};">${_fmtMoney(balance)}</div></div>
+      <div class="stat-card inv2-stat"><div class="label">Total Amount</div><div class="value">${_fmtMoney(total)}</div></div>
+      <div class="stat-card inv2-stat"><div class="label">Paid</div><div class="value" style="color:var(--green);">${_fmtMoney(paid)}</div></div>
+      <div class="stat-card inv2-stat"><div class="label">Balance Due</div><div class="value" style="color:${balance > 0 ? 'var(--red)' : 'var(--green)'};">${_fmtMoney(balance)}</div></div>
     </div>
 
     <!-- Line Items -->
-    <div class="card" style="margin-bottom:20px;">
+    <div class="card inv2-card" style="margin-bottom:20px;">
       <div class="card-header"><h3>Line Items</h3></div>
       <div class="card-body" style="padding:0;">
         ${Array.isArray(items) && items.length > 0 ? `
@@ -15053,7 +15150,7 @@ async function renderInvoiceDetail(invoiceId) {
     ${notes ? `<div class="card" style="margin-bottom:20px;"><div class="card-header"><h3>Notes / Payment Terms</h3></div><div class="card-body"><p style="white-space:pre-wrap;font-size:14px;color:var(--gray-700);margin:0;">${escHtml(notes)}</p></div></div>` : ''}
 
     <!-- Payment History -->
-    <div class="card">
+    <div class="card inv2-card">
       <div class="card-header">
         <h3>Payment History (${payments.length})</h3>
         ${status !== 'paid' && status !== 'void' ? `<button class="btn btn-sm btn-gold" onclick="window.app.openPaymentModal(${inv.id})">+ Record Payment</button>` : ''}
@@ -15312,6 +15409,10 @@ async function renderContractDetail(id) {
   const taxAmt = parseFloat(c.taxAmount || c.tax_amount || (subtotalVal * taxRate / 100));
 
   body.innerHTML = `
+    <style>
+      .ctv2-card{border-radius:16px!important;overflow:hidden;}
+      .ctv2-card table tr:hover{background:var(--gray-50,#f9fafb);}
+    </style>
     <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
       <button class="btn btn-sm" onclick="window.app.navigateTo('contracts')">&larr; Back to Contracts</button>
       <div style="display:flex;gap:8px;">
@@ -15324,7 +15425,7 @@ async function renderContractDetail(id) {
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:20px;">
+    <div class="card ctv2-card" style="margin-bottom:20px;">
       <div class="card-body" style="padding:24px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
           <div>
@@ -15351,7 +15452,7 @@ async function renderContractDetail(id) {
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:20px;">
+    <div class="card ctv2-card" style="margin-bottom:20px;">
       <div class="card-header"><h3>Services & Pricing</h3></div>
       <div class="card-body" style="padding:0;">
         <div class="table-wrap">
@@ -15378,7 +15479,7 @@ async function renderContractDetail(id) {
 
     ${notes ? `<div class="card" style="margin-bottom:20px;"><div class="card-header"><h3>Internal Notes</h3></div><div class="card-body"><div style="white-space:pre-wrap;font-size:13px;color:var(--gray-600);">${escHtml(notes)}</div></div></div>` : ''}
 
-    <div class="card">
+    <div class="card ctv2-card">
       <div class="card-header"><h3>Activity Timeline</h3></div>
       <div class="card-body" style="padding:20px;">
         <div style="font-size:13px;display:flex;flex-direction:column;gap:10px;">
@@ -15403,7 +15504,11 @@ async function renderImportPage() {
   if (!Array.isArray(importHistory)) importHistory = [];
 
   body.innerHTML = `
-    <div class="card" style="margin-bottom:20px;">
+    <style>
+      .impv2-card{border-radius:16px!important;overflow:hidden;}
+      .impv2-card table tr:hover{background:var(--gray-50,#f9fafb);}
+    </style>
+    <div class="card impv2-card" style="margin-bottom:20px;">
       <div class="card-header"><h3>Import Data from CSV</h3></div>
       <div class="card-body">
         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
@@ -15446,7 +15551,7 @@ async function renderImportPage() {
     </div>
 
     <!-- Import History -->
-    <div class="card">
+    <div class="card impv2-card">
       <div class="card-header"><h3>Import History</h3></div>
       <div class="card-body" style="padding:0;">
         <div class="table-wrap">
@@ -16085,7 +16190,7 @@ async function renderProviderPrintout(providerId) {
         .printout-page { box-shadow: none !important; border: none !important; margin: 0 !important; padding: 24px !important; }
         body { background: #fff !important; }
       }
-      .printout-page { max-width: 800px; margin: 0 auto; background: #fff; border: 1px solid var(--gray-200); border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.06); padding: 40px; }
+      .printout-page { max-width: 800px; margin: 0 auto; background: #fff; border: 1px solid var(--gray-200); border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.06); padding: 40px; }
       .printout-header { text-align: center; border-bottom: 2px solid var(--brand-600, #1e40af); padding-bottom: 20px; margin-bottom: 24px; }
       .printout-header h1 { font-size: 22px; font-weight: 700; color: var(--gray-900); margin: 0 0 4px; }
       .printout-header .subtitle { font-size: 14px; color: var(--gray-500); }
@@ -17388,6 +17493,10 @@ async function renderProviderPortableProfile(providerId) {
   approvedApps.forEach(a => { if (a.state) stateSet.add(a.state); });
 
   body.innerHTML = `
+    <style>
+      .ppv2-card{border-radius:16px!important;overflow:hidden;}
+      .ppv2-card table tr:hover{background:var(--gray-50,#f9fafb);}
+    </style>
     <div style="max-width:800px;margin:0 auto;">
       <div style="display:flex;gap:8px;margin-bottom:16px;justify-content:flex-end;" class="no-print">
         <button class="btn" onclick="window.app.copyProviderProfileLink(${providerId})">&#128279; Copy Link</button>
@@ -17395,7 +17504,7 @@ async function renderProviderPortableProfile(providerId) {
         <button class="btn" onclick="navigateTo('psv')">&#8592; Back to PSV</button>
       </div>
 
-      <div class="card" style="margin-bottom:20px;border-top:4px solid var(--brand-600);">
+      <div class="card ppv2-card" style="margin-bottom:20px;border-top:4px solid var(--brand-600);">
         <div class="card-body" style="padding:24px;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
             <div>
@@ -17420,7 +17529,7 @@ async function renderProviderPortableProfile(providerId) {
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:16px;">
+      <div class="card ppv2-card" style="margin-bottom:16px;">
         <div class="card-header"><h3>State Licenses (${licenses.length})</h3></div>
         <div class="card-body" style="padding:0;"><table><thead><tr><th>State</th><th>License #</th><th>Type</th><th>Issued</th><th>Expiration</th><th>Status</th></tr></thead><tbody>
           ${licenses.map(l => { const exp = l.expirationDate || l.expiration_date; const isExp = exp && new Date(exp) < now; const days = exp ? Math.round((new Date(exp) - now) / 86400000) : null;
@@ -17429,7 +17538,7 @@ async function renderProviderPortableProfile(providerId) {
         </tbody></table></div>
       </div>
 
-      <div class="card" style="margin-bottom:16px;">
+      <div class="card ppv2-card" style="margin-bottom:16px;">
         <div class="card-header"><h3>DEA Registrations (${deaReg.length})</h3></div>
         <div class="card-body" style="padding:0;"><table><thead><tr><th>DEA Number</th><th>State</th><th>Schedules</th><th>Expiration</th><th>Status</th></tr></thead><tbody>
           ${deaReg.map(d => { const exp = d.expirationDate || d.expiration_date; const isExp = exp && new Date(exp) < now;
@@ -17438,7 +17547,7 @@ async function renderProviderPortableProfile(providerId) {
         </tbody></table></div>
       </div>
 
-      <div class="card" style="margin-bottom:16px;">
+      <div class="card ppv2-card" style="margin-bottom:16px;">
         <div class="card-header"><h3>Payer Enrollments (${apps.length})</h3></div>
         <div class="card-body" style="padding:0;"><table><thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th><th>Effective</th></tr></thead><tbody>
           ${apps.map(a => { const sc = { approved: 'var(--green)', denied: 'var(--red)', in_review: 'var(--brand-600)', submitted: 'var(--blue)', pending_info: 'var(--gold)' }; const c = sc[a.status] || 'var(--gray-500)';
@@ -17447,7 +17556,7 @@ async function renderProviderPortableProfile(providerId) {
         </tbody></table></div>
       </div>
 
-      <div class="card" style="margin-bottom:16px;">
+      <div class="card ppv2-card" style="margin-bottom:16px;">
         <div class="card-header"><h3>Exclusion Screening</h3></div>
         <div class="card-body" style="padding:${exclusions.length ? '0' : '24px'};${!exclusions.length ? 'text-align:center;color:var(--gray-400);' : ''}">
           ${exclusions.length ? `<table><thead><tr><th>Source</th><th>Status</th><th>Screened</th><th>Details</th></tr></thead><tbody>
@@ -17473,13 +17582,14 @@ function mapSource(src) {
 }
 
 function fundingStatCard(label, value, icon, color = '#10b981') {
-  return `<div class="funding-stat-card">
+  return `<div class="funding-stat-card" style="border-radius:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 16px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='';this.style.boxShadow='0 1px 3px rgba(0,0,0,0.06)';">
+    <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,${color},${color}cc);"></div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
       <div style="width:32px;height:32px;border-radius:8px;background:${color}15;display:flex;align-items:center;justify-content:center;">
         ${icon}
       </div>
     </div>
-    <div class="funding-stat-value">${value}</div>
+    <div class="funding-stat-value" style="font-size:28px;font-weight:800;line-height:1.1;">${value}</div>
     <div class="funding-stat-label">${label}</div>
   </div>`;
 }
@@ -17490,7 +17600,7 @@ function fundingOppCard(opp) {
   const daysLeft = opp.deadline ? Math.ceil((new Date(opp.deadline) - new Date()) / 86400000) : null;
   const urgency = daysLeft !== null && daysLeft <= 14 ? 'color:var(--red);font-weight:700;' : '';
   const clickAction = opp.id ? `window.app.viewFundingDetail(${opp.id})` : (opp.url ? `window.open('${opp.url}','_blank')` : '');
-  return `<div class="funding-opp-card" onclick="${clickAction}" style="cursor:pointer;">
+  return `<div class="funding-opp-card" onclick="${clickAction}" style="cursor:pointer;border-radius:16px;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
       <span class="funding-source-badge funding-source-${opp.source}">${(opp.source || '').toUpperCase()}</span>
       ${opp.amount ? `<span style="font-weight:700;color:#10b981;font-size:14px;">${opp.amount}</span>` : ''}
@@ -17560,6 +17670,10 @@ async function renderFundingDashboard() {
     .slice(0, 4);
 
   body.innerHTML = `
+    <style>
+      .fundv2-card{border-radius:16px!important;overflow:hidden;}
+      .fundv2-card table tr:hover{background:var(--gray-50,#f9fafb);}
+    </style>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px;">
       ${fundingStatCard('Open Opportunities', stats.open, '<svg width="18" height="18" fill="none" stroke="#10b981" stroke-width="1.5"><circle cx="9" cy="9" r="7"/><path d="M9 5v4l3 2"/></svg>')}
       ${fundingStatCard('Applied', stats.applied, '<svg width="18" height="18" fill="none" stroke="#3b82f6" stroke-width="1.5"><path d="M4 9l3 3 7-7"/></svg>', '#3b82f6')}
@@ -17569,7 +17683,7 @@ async function renderFundingDashboard() {
 
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;">
       <div>
-        <div class="card">
+        <div class="card fundv2-card">
           <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
             <h3 style="margin:0;">Matching Opportunities</h3>
             <div style="display:flex;gap:6px;">
@@ -17587,7 +17701,7 @@ async function renderFundingDashboard() {
       </div>
 
       <div>
-        <div class="card" style="margin-bottom:16px;">
+        <div class="card fundv2-card" style="margin-bottom:16px;">
           <div class="card-header"><h3 style="margin:0;">Upcoming Deadlines</h3></div>
           <div class="card-body" style="padding:0;">
             ${urgentDeadlines.map(o => {
@@ -17607,7 +17721,7 @@ async function renderFundingDashboard() {
           </div>
         </div>
 
-        <div class="card">
+        <div class="card fundv2-card">
           <div class="card-header"><h3 style="margin:0;">By Source</h3></div>
           <div class="card-body" style="padding:16px;">
             ${['federal', 'state', 'foundation', 'va'].map(src => {
@@ -17655,7 +17769,8 @@ async function renderFundingFederal() {
   }
 
   body.innerHTML = `
-    <div class="card">
+    <style>.ffv2-card{border-radius:16px!important;overflow:hidden;}.ffv2-card table tr:hover{background:var(--gray-50,#f9fafb);}</style>
+    <div class="card ffv2-card">
       <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
         <h3 style="margin:0;">Federal Grant Opportunities</h3>
         <span style="font-size:12px;color:var(--gray-400);">Sources: SAMHSA, HRSA, NIH, DOJ, VA</span>
@@ -17700,7 +17815,8 @@ async function renderFundingState() {
   ];
 
   body.innerHTML = `
-    <div class="card">
+    <style>.fsv2-card{border-radius:16px!important;overflow:hidden;}.fsv2-card table tr:hover{background:var(--gray-50,#f9fafb);}</style>
+    <div class="card fsv2-card">
       <div class="card-header"><h3 style="margin:0;">State & Local Behavioral Health Funding</h3></div>
       <div class="card-body" style="padding:0;">
         <table>
@@ -17738,11 +17854,12 @@ async function renderFundingFoundations() {
   ];
 
   body.innerHTML = `
-    <div class="card">
+    <style>.ffnv2-card{border-radius:16px!important;overflow:hidden;}</style>
+    <div class="card ffnv2-card">
       <div class="card-header"><h3 style="margin:0;">Foundation & Private Funding</h3></div>
       <div class="card-body" style="padding:12px;">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;">
-          ${foundations.map(f => `<div class="funding-opp-card">
+          ${foundations.map(f => `<div class="funding-opp-card" style="border-radius:16px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
               <span class="funding-source-badge funding-source-foundation">FOUNDATION</span>
               <span style="font-weight:700;color:#10b981;font-size:13px;">${escHtml(f.amount)}</span>
@@ -17810,11 +17927,11 @@ async function renderFundingPipeline() {
   body.innerHTML = `
     <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:16px;">
       ${stages.map(stage => `<div style="min-width:240px;flex:1;">
-        <div style="padding:8px 12px;background:${stage.color}18;border-radius:8px 8px 0 0;border-bottom:2px solid ${stage.color};display:flex;justify-content:space-between;align-items:center;">
+        <div style="padding:8px 12px;background:${stage.color}18;border-radius:16px 16px 0 0;border-bottom:2px solid ${stage.color};display:flex;justify-content:space-between;align-items:center;">
           <span style="font-weight:600;font-size:13px;color:${stage.color};">${stage.name}</span>
           <span style="background:${stage.color}25;color:${stage.color};padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;">${stage.items.length}</span>
         </div>
-        <div style="background:var(--card-bg);border:1px solid var(--border-color);border-top:none;border-radius:0 0 8px 8px;padding:8px;">
+        <div style="background:var(--card-bg);border:1px solid var(--border-color);border-top:none;border-radius:0 0 16px 16px;padding:8px;">
           ${stage.items.map(item => `<div style="padding:10px;margin-bottom:6px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border-color);">
             <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">${escHtml(item.title)}</div>
             <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-500);">
@@ -17857,7 +17974,8 @@ async function renderFundingCalendar() {
   ];
 
   body.innerHTML = `
-    <div class="card">
+    <style>.fcv2-card{border-radius:16px!important;overflow:hidden;}</style>
+    <div class="card fcv2-card">
       <div class="card-header"><h3 style="margin:0;">Grant Deadline Calendar</h3></div>
       <div class="card-body" style="padding:16px;">
         ${months.map(m => {
@@ -17893,8 +18011,9 @@ async function renderFundingIntelligence() {
   } catch (e) { /* fallback to static */ }
 
   body.innerHTML = `
+    <style>.fiv2-card{border-radius:16px!important;overflow:hidden;}</style>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-      <div class="card">
+      <div class="card fiv2-card">
         <div class="card-header"><h3 style="margin:0;">Federal Funding Trends</h3></div>
         <div class="card-body" style="padding:16px;">
           <div style="margin-bottom:12px;">
@@ -17915,7 +18034,7 @@ async function renderFundingIntelligence() {
         </div>
       </div>
 
-      <div class="card">
+      <div class="card fiv2-card">
         <div class="card-header"><h3 style="margin:0;">Top Funders in Your State</h3></div>
         <div class="card-body" style="padding:16px;">
           ${[
@@ -17936,7 +18055,7 @@ async function renderFundingIntelligence() {
       </div>
     </div>
 
-    <div class="card">
+    <div class="card fiv2-card">
       <div class="card-header"><h3 style="margin:0;">Key Insights</h3></div>
       <div class="card-body" style="padding:16px;">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;">
@@ -17991,11 +18110,12 @@ async function renderFundingDetail(id) {
   const catLabels = { mental_health: 'Mental Health', substance_use: 'Substance Use', workforce: 'Workforce', crisis: 'Crisis Services', veterans: 'Veterans', youth: 'Youth', telehealth: 'Telehealth' };
 
   body.innerHTML = `
+    <style>.fdv2-card{border-radius:16px!important;overflow:hidden;}.fdv2-card table tr:hover{background:var(--gray-50,#f9fafb);}</style>
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;">
       <!-- Main Content -->
       <div>
         <!-- Header Card -->
-        <div class="card" style="margin-bottom:16px;">
+        <div class="card fdv2-card" style="margin-bottom:16px;">
           <div class="card-body" style="padding:20px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
               <div style="display:flex;gap:8px;align-items:center;">
@@ -18021,7 +18141,7 @@ async function renderFundingDetail(id) {
         </div>
 
         <!-- Description -->
-        <div class="card" style="margin-bottom:16px;">
+        <div class="card fdv2-card" style="margin-bottom:16px;">
           <div class="card-header"><h3 style="margin:0;">Description</h3></div>
           <div class="card-body" style="padding:20px;">
             <p style="margin:0;font-size:14px;line-height:1.7;color:var(--text-primary);">${escHtml(opp.description || 'No description available.')}</p>
@@ -18029,7 +18149,7 @@ async function renderFundingDetail(id) {
         </div>
 
         <!-- Grant Details -->
-        <div class="card" style="margin-bottom:16px;">
+        <div class="card fdv2-card" style="margin-bottom:16px;">
           <div class="card-header"><h3 style="margin:0;">Grant Details</h3></div>
           <div class="card-body" style="padding:0;">
             <table>
@@ -18047,7 +18167,7 @@ async function renderFundingDetail(id) {
         </div>
 
         <!-- Key Dates -->
-        <div class="card" style="margin-bottom:16px;">
+        <div class="card fdv2-card" style="margin-bottom:16px;">
           <div class="card-header"><h3 style="margin:0;">Key Dates</h3></div>
           <div class="card-body" style="padding:20px;">
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;">
@@ -18070,7 +18190,7 @@ async function renderFundingDetail(id) {
 
         <!-- Keywords -->
         ${(opp.keywords && opp.keywords.length) ? `
-        <div class="card" style="margin-bottom:16px;">
+        <div class="card fdv2-card" style="margin-bottom:16px;">
           <div class="card-header"><h3 style="margin:0;">Matched Keywords</h3></div>
           <div class="card-body" style="padding:16px;">
             <div style="display:flex;flex-wrap:wrap;gap:6px;">
@@ -18081,7 +18201,7 @@ async function renderFundingDetail(id) {
 
         <!-- Past Awards -->
         ${pastAwards.length ? `
-        <div class="card" style="margin-bottom:16px;">
+        <div class="card fdv2-card" style="margin-bottom:16px;">
           <div class="card-header"><h3 style="margin:0;">Past Awards (USASpending)</h3></div>
           <div class="card-body" style="padding:0;">
             <table>
@@ -18102,7 +18222,7 @@ async function renderFundingDetail(id) {
       <!-- Sidebar -->
       <div>
         <!-- Quick Actions -->
-        <div class="card" style="margin-bottom:16px;">
+        <div class="card fdv2-card" style="margin-bottom:16px;">
           <div class="card-header"><h3 style="margin:0;">Quick Actions</h3></div>
           <div class="card-body" style="padding:16px;">
             <button class="btn" style="width:100%;margin-bottom:8px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;padding:10px;" onclick="window.app.trackFundingOpp(${opp.id}, '${escHtml(opp.title).replace(/'/g, "\\'")}')">
@@ -18118,7 +18238,7 @@ async function renderFundingDetail(id) {
         </div>
 
         <!-- Agency Match Score -->
-        <div class="card" style="margin-bottom:16px;">
+        <div class="card fdv2-card" style="margin-bottom:16px;">
           <div class="card-header"><h3 style="margin:0;">Agency Match</h3></div>
           <div class="card-body" style="padding:16px;text-align:center;">
             <div style="width:80px;height:80px;border-radius:50%;border:4px solid #10b981;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
@@ -18136,7 +18256,7 @@ async function renderFundingDetail(id) {
 
         <!-- Related Opportunities -->
         ${related.length ? `
-        <div class="card">
+        <div class="card fdv2-card">
           <div class="card-header"><h3 style="margin:0;">Related Opportunities</h3></div>
           <div class="card-body" style="padding:0;">
             ${related.map(r => `<div style="padding:10px 16px;border-bottom:1px solid var(--border-color);cursor:pointer;" onclick="window.app.viewFundingDetail(${r.id})">
