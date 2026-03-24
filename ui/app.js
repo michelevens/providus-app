@@ -2413,17 +2413,42 @@ async function renderStatePolicies() {
     </div>
     ` : ''}
 
+    <style>
+      .sp2-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .sp2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .sp2-stat .sp2-accent{position:absolute;top:0;left:0;right:0;height:3px;}
+      .sp2-stat .sp2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .sp2-stat .sp2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .sp2-stat .sp2-sub{font-size:12px;color:var(--text-muted);margin-top:4px;}
+      .sp2-card{border-radius:16px;overflow:hidden;}
+      .sp2-card table tr:hover{background:var(--gray-50);}
+    </style>
     <!-- Summary Stats -->
-    <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);">
-      <div class="stat-card"><div class="label">Full Practice Authority</div><div class="value green">${fullPractice.length}</div><div class="sub">states</div></div>
-      <div class="stat-card"><div class="label">Reduced Practice</div><div class="value" style="color:var(--warning-500);">${reduced.length}</div><div class="sub">states</div></div>
-      <div class="stat-card"><div class="label">Restricted Practice</div><div class="value red">${restricted.length}</div><div class="sub">states</div></div>
-      <div class="stat-card"><div class="label">CS Telehealth OK</div><div class="value blue">${csAllowed.length}</div><div class="sub">states allow Sched II-V</div></div>
-      <div class="stat-card"><div class="label">Top Readiness (7+)</div><div class="value purple">${topStates.length}</div><div class="sub">states</div></div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:20px;">
+      <div class="sp2-stat">
+        <div class="sp2-accent" style="background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+        <div class="sp2-label">Full Practice Authority</div><div class="sp2-val" style="color:#16a34a;">${fullPractice.length}</div><div class="sp2-sub">states</div>
+      </div>
+      <div class="sp2-stat">
+        <div class="sp2-accent" style="background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div>
+        <div class="sp2-label">Reduced Practice</div><div class="sp2-val" style="color:#d97706;">${reduced.length}</div><div class="sp2-sub">states</div>
+      </div>
+      <div class="sp2-stat">
+        <div class="sp2-accent" style="background:linear-gradient(90deg,#ef4444,#f87171);"></div>
+        <div class="sp2-label">Restricted Practice</div><div class="sp2-val" style="color:#dc2626;">${restricted.length}</div><div class="sp2-sub">states</div>
+      </div>
+      <div class="sp2-stat">
+        <div class="sp2-accent" style="background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div>
+        <div class="sp2-label">CS Telehealth OK</div><div class="sp2-val" style="color:#2563eb;">${csAllowed.length}</div><div class="sp2-sub">states allow Sched II-V</div>
+      </div>
+      <div class="sp2-stat">
+        <div class="sp2-accent" style="background:linear-gradient(90deg,#a855f7,#c084fc);"></div>
+        <div class="sp2-label">Top Readiness (7+)</div><div class="sp2-val" style="color:#7c3aed;">${topStates.length}</div><div class="sp2-sub">states</div>
+      </div>
     </div>
 
     <!-- Expansion Readiness -->
-    <div class="card">
+    <div class="card sp2-card">
       <div class="card-header"><h3>Expansion Readiness — Your Licensed States</h3></div>
       <div class="card-body">
         ${licensedStates.length > 0 ? `
@@ -2434,11 +2459,12 @@ async function renderStatePolicies() {
             const appCount = apps.filter(a => a.state === sc).length;
             const scoreColor = pol.readinessScore >= 7 ? 'var(--green)' : pol.readinessScore >= 5 ? 'var(--gold)' : 'var(--red)';
             const authColor = pol.practiceAuthority === 'full' ? 'var(--green)' : pol.practiceAuthority === 'reduced' ? 'var(--gold)' : 'var(--red)';
-            return `<div class="stat-card" style="min-width:140px;flex:1;max-width:200px;border-left:4px solid ${authColor};">
-              <div class="label">${getStateName(sc)}</div>
-              <div class="value" style="font-size:24px;color:${scoreColor};">${pol.readinessScore}/10</div>
-              <div class="sub">${pol.practiceAuthority} practice</div>
-              <div class="sub">${appCount} application${appCount !== 1 ? 's' : ''}</div>
+            return `<div class="sp2-stat" style="min-width:140px;flex:1;max-width:200px;border-left:4px solid ${authColor};">
+              <div class="sp2-accent" style="background:linear-gradient(90deg,${scoreColor},${scoreColor}80);"></div>
+              <div class="sp2-label">${getStateName(sc)}</div>
+              <div class="sp2-val" style="font-size:24px;color:${scoreColor};">${pol.readinessScore}/10</div>
+              <div class="sp2-sub">${pol.practiceAuthority} practice</div>
+              <div class="sp2-sub">${appCount} application${appCount !== 1 ? 's' : ''}</div>
             </div>`;
           }).join('')}
         </div>
@@ -2468,7 +2494,7 @@ async function renderStatePolicies() {
     </div>
 
     <!-- Policy Table -->
-    <div class="card">
+    <div class="card sp2-card">
       <div class="card-header"><h3>Telehealth Policies (${filteredPolicies.length} states)</h3></div>
       <div class="card-body" style="padding:0;overflow-x:auto;">
         <table>
@@ -2516,7 +2542,7 @@ async function renderStatePolicies() {
     </div>
 
     <!-- Legend -->
-    <div class="card">
+    <div class="card sp2-card">
       <div class="card-header"><h3>Legend</h3></div>
       <div class="card-body">
         <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;">
@@ -2616,68 +2642,90 @@ async function renderRevenueForecast() {
   const catLabels = { national: 'National', bcbs_anthem: 'BCBS Anthem', bcbs_hcsc: 'BCBS HCSC', bcbs_highmark: 'BCBS Highmark', bcbs_independent: 'BCBS Indep.', regional: 'Regional', medicaid: 'Medicaid', other: 'Other' };
 
   body.innerHTML = `
+    <style>
+      .rv2-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:20px;}
+      .rv2-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .rv2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .rv2-stat .rv2-accent{position:absolute;top:0;left:0;right:0;height:3px;}
+      .rv2-stat .rv2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .rv2-stat .rv2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .rv2-stat .rv2-sub{font-size:12px;color:var(--text-muted);margin-top:4px;}
+      .rv2-card{border-radius:16px;overflow:hidden;}
+      .rv2-table-wrap{border-radius:16px;overflow:hidden;}
+      .rv2-table-wrap table tr:hover{background:var(--gray-50);}
+      @media(max-width:900px){.rv2-stats{grid-template-columns:repeat(2,1fr);}}
+    </style>
     <!-- Revenue Summary -->
-    <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);">
-      <div class="stat-card">
-        <div class="label">Current Monthly</div>
-        <div class="value green">$${currentMonthly.toLocaleString()}</div>
-        <div class="sub">${approved.length} approved apps</div>
+    <div class="rv2-stats">
+      <div class="rv2-stat">
+        <div class="rv2-accent" style="background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+        <div class="rv2-label">Current Monthly</div>
+        <div class="rv2-val" style="color:#16a34a;">$${currentMonthly.toLocaleString()}</div>
+        <div class="rv2-sub">${approved.length} approved apps</div>
       </div>
-      <div class="stat-card">
-        <div class="label">Pipeline Monthly</div>
-        <div class="value blue">$${pipelineMonthly.toLocaleString()}</div>
-        <div class="sub">${inProgress.length} in progress</div>
+      <div class="rv2-stat">
+        <div class="rv2-accent" style="background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div>
+        <div class="rv2-label">Pipeline Monthly</div>
+        <div class="rv2-val" style="color:#2563eb;">$${pipelineMonthly.toLocaleString()}</div>
+        <div class="rv2-sub">${inProgress.length} in progress</div>
       </div>
-      <div class="stat-card">
-        <div class="label">Planned Monthly</div>
-        <div class="value" style="color:var(--warning-500);">$${plannedMonthly.toLocaleString()}</div>
-        <div class="sub">${notStarted.length} not started</div>
+      <div class="rv2-stat">
+        <div class="rv2-accent" style="background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div>
+        <div class="rv2-label">Planned Monthly</div>
+        <div class="rv2-val" style="color:#d97706;">$${plannedMonthly.toLocaleString()}</div>
+        <div class="rv2-sub">${notStarted.length} not started</div>
       </div>
-      <div class="stat-card">
-        <div class="label">Current Annual</div>
-        <div class="value green">$${currentAnnual.toLocaleString()}</div>
-        <div class="sub">at current run rate</div>
+      <div class="rv2-stat">
+        <div class="rv2-accent" style="background:linear-gradient(90deg,#22c55e,#86efac);"></div>
+        <div class="rv2-label">Current Annual</div>
+        <div class="rv2-val" style="color:#16a34a;">$${currentAnnual.toLocaleString()}</div>
+        <div class="rv2-sub">at current run rate</div>
       </div>
-      <div class="stat-card">
-        <div class="label">Total Potential</div>
-        <div class="value purple">$${totalPotential.toLocaleString()}</div>
-        <div class="sub">/month if all approved</div>
+      <div class="rv2-stat">
+        <div class="rv2-accent" style="background:linear-gradient(90deg,#a855f7,#c084fc);"></div>
+        <div class="rv2-label">Total Potential</div>
+        <div class="rv2-val" style="color:#7c3aed;">$${totalPotential.toLocaleString()}</div>
+        <div class="rv2-sub">/month if all approved</div>
       </div>
     </div>
 
     <!-- Projection Assumptions -->
-    <div style="display:flex;gap:16px;margin-bottom:0;flex-wrap:wrap;">
-      <div class="stat-card" style="flex:1;min-width:140px;background:var(--gray-50);border:1px solid var(--border);">
-        <div class="label">Avg Cred Time</div>
-        <div class="value" style="font-size:20px;">${avgCredDays} days</div>
-        <div class="sub">based on ${approvedWithDates.length} approved</div>
+    <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
+      <div class="rv2-stat" style="flex:1;min-width:140px;background:var(--gray-50);">
+        <div class="rv2-accent" style="background:linear-gradient(90deg,var(--gray-300),var(--gray-400));"></div>
+        <div class="rv2-label">Avg Cred Time</div>
+        <div class="rv2-val" style="font-size:20px;">${avgCredDays} days</div>
+        <div class="rv2-sub">based on ${approvedWithDates.length} approved</div>
       </div>
-      <div class="stat-card" style="flex:1;min-width:140px;background:var(--gray-50);border:1px solid var(--border);">
-        <div class="label">Approval Rate</div>
-        <div class="value" style="font-size:20px;">${Math.round(approvalRate * 100)}%</div>
-        <div class="sub">historical</div>
+      <div class="rv2-stat" style="flex:1;min-width:140px;background:var(--gray-50);">
+        <div class="rv2-accent" style="background:linear-gradient(90deg,var(--gray-300),var(--gray-400));"></div>
+        <div class="rv2-label">Approval Rate</div>
+        <div class="rv2-val" style="font-size:20px;">${Math.round(approvalRate * 100)}%</div>
+        <div class="rv2-sub">historical</div>
       </div>
-      <div class="stat-card" style="flex:1;min-width:140px;background:var(--gray-50);border:1px solid var(--border);">
-        <div class="label">Projected Pipeline</div>
-        <div class="value" style="font-size:20px;">$${Math.round(projectedPipelineRev).toLocaleString()}</div>
-        <div class="sub">/month after approval</div>
+      <div class="rv2-stat" style="flex:1;min-width:140px;background:var(--gray-50);">
+        <div class="rv2-accent" style="background:linear-gradient(90deg,var(--gray-300),var(--gray-400));"></div>
+        <div class="rv2-label">Projected Pipeline</div>
+        <div class="rv2-val" style="font-size:20px;">$${Math.round(projectedPipelineRev).toLocaleString()}</div>
+        <div class="rv2-sub">/month after approval</div>
       </div>
-      <div class="stat-card" style="flex:1;min-width:140px;background:var(--gray-50);border:1px solid var(--border);">
-        <div class="label">12-Mo Target</div>
-        <div class="value" style="font-size:20px;">$${projectedMonths[11] ? projectedMonths[11].revenue.toLocaleString() : '0'}</div>
-        <div class="sub">/month by ${projectedMonths[11] ? projectedMonths[11].label : ''}</div>
+      <div class="rv2-stat" style="flex:1;min-width:140px;background:var(--gray-50);">
+        <div class="rv2-accent" style="background:linear-gradient(90deg,var(--gray-300),var(--gray-400));"></div>
+        <div class="rv2-label">12-Mo Target</div>
+        <div class="rv2-val" style="font-size:20px;">$${projectedMonths[11] ? projectedMonths[11].revenue.toLocaleString() : '0'}</div>
+        <div class="rv2-sub">/month by ${projectedMonths[11] ? projectedMonths[11].label : ''}</div>
       </div>
     </div>
 
     <!-- Charts Row -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div class="card">
+      <div class="card rv2-card">
         <div class="card-header"><h3>12-Month Revenue Projection</h3></div>
         <div class="card-body" style="position:relative;height:280px;">
           <canvas id="chart-forecast"></canvas>
         </div>
       </div>
-      <div class="card">
+      <div class="card rv2-card">
         <div class="card-header"><h3>Revenue by Payer Category</h3></div>
         <div class="card-body" style="position:relative;height:280px;">
           ${Object.keys(revenueByPayer).length > 0
@@ -2688,7 +2736,7 @@ async function renderRevenueForecast() {
     </div>
 
     <!-- Revenue by State Table -->
-    <div class="card">
+    <div class="card rv2-card rv2-table-wrap">
       <div class="card-header"><h3>Revenue by State</h3></div>
       <div class="card-body" style="padding:0;overflow-x:auto;">
         ${sortedStates.length > 0 ? `
@@ -2725,7 +2773,7 @@ async function renderRevenueForecast() {
 
     <!-- Provider Revenue Attribution -->
     ${providers.length > 0 ? `
-    <div class="card">
+    <div class="card rv2-card rv2-table-wrap">
       <div class="card-header"><h3>Provider Revenue Attribution</h3></div>
       <div class="card-body" style="padding:0;overflow-x:auto;">
         <table>
@@ -2786,7 +2834,7 @@ async function renderRevenueForecast() {
       });
       const sorted = Object.entries(payerData).sort((a, b) => b[1].revenue - a[1].revenue);
       return `
-    <div class="card">
+    <div class="card rv2-card rv2-table-wrap">
       <div class="card-header"><h3>Payer Profitability</h3></div>
       <div class="card-body" style="padding:0;overflow-x:auto;">
         <table>
@@ -3131,30 +3179,44 @@ async function renderCoverageMatrix() {
   const projectedPct = US_TOTAL_POP > 0 ? ((credentialedLives + projectedLives) / US_TOTAL_POP * 100) : 0;
 
   body.innerHTML = `
+    <style>
+      .cm2-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .cm2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .cm2-stat .cm2-accent{position:absolute;top:0;left:0;right:0;height:3px;}
+      .cm2-stat .cm2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .cm2-stat .cm2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .cm2-stat .cm2-sub{font-size:12px;color:var(--text-muted);margin-top:4px;}
+      .cm2-card{border-radius:16px;overflow:hidden;}
+      .cm2-table-wrap table tr:hover{background:var(--gray-50);}
+    </style>
     <!-- Population Coverage -->
-    <div class="card" style="margin-bottom:16px;border-left:4px solid var(--teal);">
+    <div class="card cm2-card" style="margin-bottom:16px;border-left:4px solid var(--teal);">
       <div class="card-header"><h3>Population Coverage Estimate</h3></div>
       <div class="card-body">
-        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;">
-          <div class="stat-card">
-            <div class="label">Licensed Reach</div>
-            <div class="value" style="color:var(--brand-600);">${licensedPct.toFixed(1)}%</div>
-            <div class="sub">${(licensedPop * 1000).toLocaleString()} people in ${licensedStates.length} states</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;">
+          <div class="cm2-stat">
+            <div class="cm2-accent" style="background:linear-gradient(90deg,var(--brand-600),var(--brand-400));"></div>
+            <div class="cm2-label">Licensed Reach</div>
+            <div class="cm2-val" style="color:var(--brand-600);">${licensedPct.toFixed(1)}%</div>
+            <div class="cm2-sub">${(licensedPop * 1000).toLocaleString()} people in ${licensedStates.length} states</div>
           </div>
-          <div class="stat-card">
-            <div class="label">Credentialed Lives</div>
-            <div class="value green">${credentialedPct.toFixed(1)}%</div>
-            <div class="sub">~${Math.round(credentialedLives * 1000).toLocaleString()} reachable via approved payers</div>
+          <div class="cm2-stat">
+            <div class="cm2-accent" style="background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+            <div class="cm2-label">Credentialed Lives</div>
+            <div class="cm2-val" style="color:#16a34a;">${credentialedPct.toFixed(1)}%</div>
+            <div class="cm2-sub">~${Math.round(credentialedLives * 1000).toLocaleString()} reachable via approved payers</div>
           </div>
-          <div class="stat-card">
-            <div class="label">Projected (incl. in-progress)</div>
-            <div class="value blue">${projectedPct.toFixed(1)}%</div>
-            <div class="sub">~${Math.round((credentialedLives + projectedLives) * 1000).toLocaleString()} once in-progress apps are approved</div>
+          <div class="cm2-stat">
+            <div class="cm2-accent" style="background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div>
+            <div class="cm2-label">Projected (incl. in-progress)</div>
+            <div class="cm2-val" style="color:#2563eb;">${projectedPct.toFixed(1)}%</div>
+            <div class="cm2-sub">~${Math.round((credentialedLives + projectedLives) * 1000).toLocaleString()} once in-progress apps are approved</div>
           </div>
-          <div class="stat-card">
-            <div class="label">US Population</div>
-            <div class="value">${(US_TOTAL_POP * 1000).toLocaleString()}</div>
-            <div class="sub">2025 Census estimate</div>
+          <div class="cm2-stat">
+            <div class="cm2-accent" style="background:linear-gradient(90deg,var(--gray-400),var(--gray-500));"></div>
+            <div class="cm2-label">US Population</div>
+            <div class="cm2-val">${(US_TOTAL_POP * 1000).toLocaleString()}</div>
+            <div class="cm2-sub">2025 Census estimate</div>
           </div>
         </div>
         <div style="position:relative;height:24px;background:var(--gray-200);border-radius:12px;overflow:hidden;margin-bottom:8px;">
@@ -3174,12 +3236,27 @@ async function renderCoverageMatrix() {
     </div>
 
     <!-- Summary Stats -->
-    <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);">
-      <div class="stat-card"><div class="label">Licensed States</div><div class="value">${licensedStates.length}</div></div>
-      <div class="stat-card"><div class="label">Payers Tracked</div><div class="value">${allMatrixPayers.length}</div></div>
-      <div class="stat-card"><div class="label">Credentialed</div><div class="value green">${approvedCells}</div><div class="sub">payer-state combos</div></div>
-      <div class="stat-card"><div class="label">In Progress</div><div class="value blue">${filledCells - approvedCells}</div></div>
-      <div class="stat-card"><div class="label">Gaps</div><div class="value ${gapCells > 0 ? 'red' : ''}">${gapCells}</div><div class="sub">of ${totalCells} possible</div></div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:20px;">
+      <div class="cm2-stat">
+        <div class="cm2-accent" style="background:linear-gradient(90deg,var(--brand-500),var(--brand-700));"></div>
+        <div class="cm2-label">Licensed States</div><div class="cm2-val">${licensedStates.length}</div>
+      </div>
+      <div class="cm2-stat">
+        <div class="cm2-accent" style="background:linear-gradient(90deg,#6366f1,#818cf8);"></div>
+        <div class="cm2-label">Payers Tracked</div><div class="cm2-val">${allMatrixPayers.length}</div>
+      </div>
+      <div class="cm2-stat">
+        <div class="cm2-accent" style="background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+        <div class="cm2-label">Credentialed</div><div class="cm2-val" style="color:#16a34a;">${approvedCells}</div><div class="cm2-sub">payer-state combos</div>
+      </div>
+      <div class="cm2-stat">
+        <div class="cm2-accent" style="background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div>
+        <div class="cm2-label">In Progress</div><div class="cm2-val" style="color:#2563eb;">${filledCells - approvedCells}</div>
+      </div>
+      <div class="cm2-stat">
+        <div class="cm2-accent" style="background:linear-gradient(90deg,#ef4444,#f87171);"></div>
+        <div class="cm2-label">Gaps</div><div class="cm2-val" style="color:${gapCells > 0 ? '#dc2626' : 'inherit'};">${gapCells}</div><div class="cm2-sub">of ${totalCells} possible</div>
+      </div>
     </div>
 
     ${licensedStates.length === 0 ? `
@@ -3189,7 +3266,7 @@ async function renderCoverageMatrix() {
     ` : `
 
     <!-- Coverage Heatmap -->
-    <div class="card">
+    <div class="card cm2-card">
       <div class="card-header"><h3>Payer × State Coverage</h3></div>
       <div class="card-body" style="padding:0;overflow-x:auto;">
         <table style="font-size:10px;border-collapse:collapse;min-width:${licensedStates.length * 28 + 160}px;">
@@ -3237,7 +3314,7 @@ async function renderCoverageMatrix() {
     </div>
 
     <!-- Legend -->
-    <div class="card">
+    <div class="card cm2-card">
       <div class="card-header"><h3>Legend</h3></div>
       <div class="card-body">
         <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:12px;">
@@ -3252,7 +3329,7 @@ async function renderCoverageMatrix() {
     </div>
 
     <!-- Gap Analysis -->
-    <div class="card">
+    <div class="card cm2-card">
       <div class="card-header"><h3>Top Gaps — Expansion Opportunities</h3></div>
       <div class="card-body">
         ${gapCells > 0 ? (() => {
@@ -3297,7 +3374,7 @@ async function renderBatchGenerator() {
   const licensedStates = licenses.map(l => l.state);
 
   body.innerHTML = `
-    <div class="card">
+    <div class="card" style="border-radius:16px;overflow:hidden;">
       <div class="card-header"><h3>Select Strategy Profile</h3></div>
       <div class="card-body">
         <div class="form-group">
@@ -3333,8 +3410,11 @@ async function renderEmailGenerator() {
   const emailUnlicensed = STATES.filter(s => !emailLicensedCodes.has(s.code));
 
   body.innerHTML = `
+    <style>
+      .em2-card{border-radius:16px;overflow:hidden;}
+    </style>
     <div class="form-row">
-      <div class="card">
+      <div class="card em2-card">
         <div class="card-header"><h3>Generate for Application</h3></div>
         <div class="card-body">
           <div class="form-group">
@@ -3363,7 +3443,7 @@ async function renderEmailGenerator() {
           </div>
         </div>
       </div>
-      <div class="card">
+      <div class="card em2-card">
         <div class="card-header"><h3>Expansion Outreach (Bulk)</h3></div>
         <div class="card-body">
           <div class="form-group">
@@ -4290,30 +4370,57 @@ async function renderSettings() {
   const agencySlug = agency.slug || 'your-slug';
 
   body.innerHTML = `
-    <div class="tabs">
-      <button class="tab active" onclick="window.app.settingsTab(this, 'settings-import')">Import / Export</button>
-      <button class="tab" onclick="window.app.settingsTab(this, 'settings-org')">Organization</button>
-      <button class="tab" onclick="window.app.settingsTab(this, 'settings-licenses')">Licenses (${licenses.length})</button>
-      <button class="tab" onclick="window.app.settingsTab(this, 'settings-groups')">Groups</button>
-      <button class="tab" onclick="window.app.settingsTab(this, 'settings-caqh')">CAQH API</button>
-      <button class="tab" onclick="window.app.settingsTab(this, 'settings-integrations')">Integrations</button>
-      <button class="tab" onclick="window.app.settingsTab(this, 'settings-security')">Security</button>
-      <button class="tab" onclick="window.app.settingsTab(this, 'settings-danger')">Danger Zone</button>
+    <style>
+      .stv2-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-bottom:20px; }
+      .stv2-stat { background:var(--surface-card,#fff); border-radius:16px; padding:18px 16px; position:relative; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.06); transition:transform 0.18s,box-shadow 0.18s; }
+      .stv2-stat:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,0.1); }
+      .stv2-stat::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+      .stv2-stat[data-accent="brand"]::before { background:linear-gradient(90deg,var(--brand-500),var(--brand-700)); }
+      .stv2-stat[data-accent="green"]::before { background:linear-gradient(90deg,#22c55e,#16a34a); }
+      .stv2-stat[data-accent="amber"]::before { background:linear-gradient(90deg,#f59e0b,#d97706); }
+      .stv2-stat[data-accent="blue"]::before { background:linear-gradient(90deg,#3b82f6,#2563eb); }
+      .stv2-stat .stv2-val { font-size:28px; font-weight:800; line-height:1.1; }
+      .stv2-stat .stv2-lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray-500); margin-top:4px; }
+      .stv2-tabs { display:flex; gap:0; border-bottom:2px solid var(--gray-200); margin-bottom:20px; }
+      .stv2-tabs .stv2-tab { background:none; border:none; padding:10px 18px; font-size:13px; font-weight:600; color:var(--gray-500); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; transition:color 0.15s,border-color 0.15s; }
+      .stv2-tabs .stv2-tab:hover { color:var(--gray-700); }
+      .stv2-tabs .stv2-tab.active { color:var(--brand-600); border-bottom-color:var(--brand-600); }
+      .stv2-section .card { border-radius:16px; overflow:hidden; }
+    </style>
+
+    <!-- V2 Stat Cards -->
+    <div class="stv2-stats">
+      <div class="stv2-stat" data-accent="brand"><div class="stv2-val" style="color:var(--brand-600);">${providers.length}</div><div class="stv2-lbl">Total Providers</div></div>
+      <div class="stv2-stat" data-accent="green"><div class="stv2-val" style="color:#16a34a;">${licenses.length}</div><div class="stv2-lbl">Licenses</div></div>
+      <div class="stv2-stat" data-accent="amber"><div class="stv2-val" style="color:#d97706;">${apps.length}</div><div class="stv2-lbl">Applications</div></div>
+      <div class="stv2-stat" data-accent="blue"><div class="stv2-val" style="color:#2563eb;">${orgs.length}</div><div class="stv2-lbl">Organizations</div></div>
     </div>
 
-    <div id="settings-import">
-      <div class="card">
+    <!-- V2 Tabs -->
+    <div class="stv2-tabs">
+      <button class="stv2-tab active" onclick="window.app.settingsTab(this, 'settings-import')">Import / Export</button>
+      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-org')">Organization</button>
+      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-licenses')">Licenses (${licenses.length})</button>
+      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-groups')">Groups</button>
+      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-caqh')">CAQH API</button>
+      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-integrations')">Integrations</button>
+      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-security')">Security</button>
+      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-danger')">Danger Zone</button>
+    </div>
+
+    <div id="settings-import" class="stv2-section">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Export Data</h3></div>
         <div class="card-body">
           <p class="text-sm text-muted mb-4">Export all your data as JSON for backup purposes.</p>
-          <div style="display:flex;gap:10px;">
-            <button class="btn btn-primary" onclick="window.app.exportData()">Download JSON Backup</button>
-            <span class="text-sm text-muted" style="align-self:center;">${apps.length} applications, ${licenses.length} licenses</span>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <button class="btn btn-primary" onclick="window.app.exportData()" style="border-radius:10px;">Download JSON Backup</button>
+            <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:var(--brand-100,#e0f2fe);color:var(--brand-700);">${apps.length} applications, ${licenses.length} licenses</span>
           </div>
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Import Data</h3></div>
         <div class="card-body">
           <p class="text-sm text-muted mb-4">Import data from a JSON backup file. Feature coming soon.</p>
@@ -4322,8 +4429,8 @@ async function renderSettings() {
       </div>
     </div>
 
-    <div id="settings-org" class="hidden">
-      <div class="card">
+    <div id="settings-org" class="hidden stv2-section">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Organization</h3></div>
         <div class="card-body">
           ${orgs.map(o => `
@@ -4338,7 +4445,7 @@ async function renderSettings() {
           `).join('')}
         </div>
       </div>
-      <div class="card">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Providers</h3></div>
         <div class="card-body">
           ${providers.map(p => `
@@ -4352,8 +4459,8 @@ async function renderSettings() {
       </div>
     </div>
 
-    <div id="settings-licenses" class="hidden">
-      <div class="card">
+    <div id="settings-licenses" class="hidden stv2-section">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header">
           <h3>State Licenses</h3>
         </div>
@@ -4365,7 +4472,7 @@ async function renderSettings() {
                 <tr>
                   <td><strong>${getStateName(l.state)}</strong> (${l.state})</td>
                   <td>${l.licenseType || '-'}</td>
-                  <td><span class="badge badge-${l.status}">${l.status}</span></td>
+                  <td><span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${l.status === 'active' ? 'rgba(34,197,94,0.12)' : l.status === 'expired' ? 'rgba(239,68,68,0.12)' : 'rgba(156,163,175,0.12)'};color:${l.status === 'active' ? 'var(--green)' : l.status === 'expired' ? 'var(--red)' : 'var(--gray-500)'};"><span style="width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;"></span>${l.status}</span></td>
                   <td>${formatDateDisplay(l.expirationDate)}</td>
                 </tr>
               `).join('')}
@@ -4375,8 +4482,8 @@ async function renderSettings() {
       </div>
     </div>
 
-    <div id="settings-groups" class="hidden">
-      <div class="card">
+    <div id="settings-groups" class="hidden stv2-section">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header">
           <h3>Application Groups</h3>
           <button class="btn btn-primary btn-sm" onclick="window.app.addGroup()">+ Add Group</button>
@@ -4398,7 +4505,7 @@ async function renderSettings() {
           </div>
         </div>
       </div>
-      <div class="card">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Preview</h3></div>
         <div class="card-body">
           <div style="display:flex;gap:12px;flex-wrap:wrap;" id="groups-preview">
@@ -4408,8 +4515,8 @@ async function renderSettings() {
       </div>
     </div>
 
-    <div id="settings-caqh" class="hidden">
-      <div class="card">
+    <div id="settings-caqh" class="hidden stv2-section">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>CAQH ProView API Configuration</h3></div>
         <div class="card-body">
           <p class="text-sm text-muted mb-4">
@@ -4447,7 +4554,7 @@ async function renderSettings() {
           <div id="caqh-test-result" style="margin-top:12px;"></div>
         </div>
       </div>
-      <div class="card">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Apps Script Setup</h3></div>
         <div class="card-body">
           <p class="text-sm text-muted mb-4">
@@ -4460,8 +4567,8 @@ async function renderSettings() {
       </div>
     </div>
 
-    <div id="settings-integrations" class="hidden">
-      <div class="card">
+    <div id="settings-integrations" class="hidden stv2-section">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Embed Widgets</h3></div>
         <div class="card-body">
           <p class="text-sm text-muted mb-4">
@@ -4496,7 +4603,7 @@ async function renderSettings() {
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Allowed Domains</h3></div>
         <div class="card-body">
           <p class="text-sm text-muted mb-4">
@@ -4508,7 +4615,7 @@ async function renderSettings() {
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Public Pages</h3></div>
         <div class="card-body">
           <p class="text-sm text-muted mb-4">
@@ -4538,8 +4645,8 @@ async function renderSettings() {
       </div>
     </div>
 
-    <div id="settings-security" class="hidden">
-      <div class="card">
+    <div id="settings-security" class="hidden stv2-section">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Two-Factor Authentication (2FA)</h3></div>
         <div class="card-body" id="2fa-section">
           <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
@@ -4555,7 +4662,7 @@ async function renderSettings() {
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Password</h3></div>
         <div class="card-body">
           <p class="text-sm text-muted mb-4">Change your password. You'll need your current password to set a new one.</p>
@@ -4567,7 +4674,7 @@ async function renderSettings() {
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Active Sessions</h3></div>
         <div class="card-body">
           <p class="text-sm text-muted">You are currently logged in. Sign out to end your session.</p>
@@ -4575,9 +4682,9 @@ async function renderSettings() {
       </div>
     </div>
 
-    <div id="settings-danger" class="hidden">
-      <div class="alert alert-danger">These actions are destructive and cannot be undone.</div>
-      <div class="card">
+    <div id="settings-danger" class="hidden stv2-section">
+      <div class="alert alert-danger" style="border-radius:12px;">These actions are destructive and cannot be undone.</div>
+      <div class="card" style="border-radius:16px;">
         <div class="card-body">
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
             <button class="btn btn-danger" onclick="window.app.clearApplications()">Clear All Applications</button>
@@ -5256,7 +5363,7 @@ async function renderDocChecklistTool() {
   const payers = PAYER_CATALOG;
   const body = document.getElementById('page-body');
   body.innerHTML = `
-    <div class="card">
+    <div class="card" style="border-radius:16px;overflow:hidden;">
       <div class="card-header"><h3>Document Checklist Generator</h3></div>
       <div class="card-body">
         <p style="margin-bottom:16px;color:var(--text-muted);font-size:13px;">
@@ -5306,7 +5413,12 @@ async function renderFeeScheduleTool() {
 
   const body = document.getElementById('page-body');
   body.innerHTML = `
-    <div class="card">
+    <style>
+      .fs2-card{border-radius:16px;overflow:hidden;}
+      .fs2-table{border-radius:16px;overflow:hidden;}
+      .fs2-table table tr:hover{background:var(--gray-50);}
+    </style>
+    <div class="card fs2-card">
       <div class="card-header"><h3>Fee Schedule Calculator</h3></div>
       <div class="card-body">
         <p style="margin-bottom:16px;color:var(--text-muted);font-size:13px;">
@@ -5327,7 +5439,7 @@ async function renderFeeScheduleTool() {
         </div>
       </div>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap fs2-table">
       <table>
         <thead>
           <tr><th>CPT Code</th><th>Description</th><th>Base Rate</th><th>Adjusted Rate</th><th>Monthly Est.</th></tr>
@@ -5346,7 +5458,7 @@ async function renderFeeScheduleTool() {
         </tbody>
       </table>
     </div>
-    <div id="fee-summary" style="margin-top:16px;padding:16px;background:var(--green-bg);border-radius:8px;font-size:14px;font-weight:600;color:#166534;">
+    <div id="fee-summary" style="margin-top:16px;padding:16px;background:var(--green-bg);border-radius:16px;font-size:14px;font-weight:600;color:#166534;">
       Total Monthly Estimate (all codes at avg mix): $${CPT_CODES.reduce((s, c) => s + c.avgRate, 0).toLocaleString()} per session &times; 40 sessions
     </div>
   `;
@@ -5358,7 +5470,7 @@ async function renderPayerPortalTool() {
   const payers = PAYER_CATALOG.filter(p => p.credentialingUrl);
   const body = document.getElementById('page-body');
   body.innerHTML = `
-    <div class="card">
+    <div class="card" style="border-radius:16px;overflow:hidden;">
       <div class="card-header"><h3>Payer Portal Directory</h3>
         <input type="text" class="form-control" style="width:240px;" placeholder="Search payers..." id="portal-search"
           oninput="window.app.filterPortals()">
@@ -5430,24 +5542,50 @@ async function renderExpirationAlertsTool() {
 
   const body = document.getElementById('page-body');
   body.innerHTML = `
-    <div class="stats-grid">
-      <div class="stat-card"><div class="label">Total Alerts</div><div class="value">${alerts.length}</div></div>
-      <div class="stat-card"><div class="label">Expired</div><div class="value red">${alerts.filter(a => a.severity === 'expired').length}</div></div>
-      <div class="stat-card"><div class="label">Critical (30d)</div><div class="value amber">${alerts.filter(a => a.severity === 'critical').length}</div></div>
-      <div class="stat-card"><div class="label">Warning (90d)</div><div class="value blue">${alerts.filter(a => a.severity === 'warning').length}</div></div>
+    <style>
+      .ea2-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .ea2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .ea2-stat .ea2-accent{position:absolute;top:0;left:0;right:0;height:3px;}
+      .ea2-stat .ea2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .ea2-stat .ea2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .ea2-table{border-radius:16px;overflow:hidden;}
+      .ea2-table table tr:hover{background:var(--gray-50);}
+      .ea2-sev{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+    </style>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;">
+      <div class="ea2-stat">
+        <div class="ea2-accent" style="background:linear-gradient(90deg,var(--brand-500),var(--brand-700));"></div>
+        <div class="ea2-label">Total Alerts</div><div class="ea2-val">${alerts.length}</div>
+      </div>
+      <div class="ea2-stat">
+        <div class="ea2-accent" style="background:linear-gradient(90deg,#ef4444,#f87171);"></div>
+        <div class="ea2-label">Expired</div><div class="ea2-val" style="color:#dc2626;">${alerts.filter(a => a.severity === 'expired').length}</div>
+      </div>
+      <div class="ea2-stat">
+        <div class="ea2-accent" style="background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div>
+        <div class="ea2-label">Critical (30d)</div><div class="ea2-val" style="color:#d97706;">${alerts.filter(a => a.severity === 'critical').length}</div>
+      </div>
+      <div class="ea2-stat">
+        <div class="ea2-accent" style="background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div>
+        <div class="ea2-label">Warning (90d)</div><div class="ea2-val" style="color:#2563eb;">${alerts.filter(a => a.severity === 'warning').length}</div>
+      </div>
     </div>
-    ${alerts.length === 0 ? '<div class="empty-state"><h3>No Upcoming Expirations</h3><p>All licenses and credentials are current for the next 6 months.</p></div>' : `
-    <div class="table-wrap">
+    ${alerts.length === 0 ? '<div class="empty-state" style="border-radius:16px;"><h3>No Upcoming Expirations</h3><p>All licenses and credentials are current for the next 6 months.</p></div>' : `
+    <div class="table-wrap ea2-table">
       <table>
         <thead><tr><th>Severity</th><th>Type</th><th>Item</th><th>Expires</th><th>Days Left</th></tr></thead>
         <tbody>
-          ${alerts.map(a => `<tr class="${a.severity === 'expired' ? 'overdue' : ''}">
-            <td><span class="badge badge-${a.severity === 'expired' || a.severity === 'critical' ? 'denied' : a.severity === 'warning' ? 'pending' : 'submitted'}">${sevLabel[a.severity]}</span></td>
+          ${alerts.map(a => {
+            const sevColors = { expired: { bg: 'rgba(239,68,68,0.12)', color: '#dc2626' }, critical: { bg: 'rgba(239,68,68,0.12)', color: '#dc2626' }, warning: { bg: 'rgba(245,158,11,0.12)', color: '#d97706' }, info: { bg: 'rgba(59,130,246,0.12)', color: '#2563eb' } };
+            const sc = sevColors[a.severity] || sevColors.info;
+            return `<tr class="${a.severity === 'expired' ? 'overdue' : ''}">
+            <td><span class="ea2-sev" style="background:${sc.bg};color:${sc.color};"><span style="width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;"></span>${sevLabel[a.severity]}</span></td>
             <td>${a.type}</td>
             <td>${a.item}</td>
             <td>${a.expires}</td>
             <td style="font-weight:700;color:var(--${sevColor[a.severity]});">${a.daysLeft <= 0 ? a.daysLeft + 'd overdue' : a.daysLeft + 'd'}</td>
-          </tr>`).join('')}
+          </tr>`;
+          }).join('')}
         </tbody>
       </table>
     </div>`}
@@ -5612,7 +5750,7 @@ async function renderLetterGeneratorTool() {
 
   const body = document.getElementById('page-body');
   body.innerHTML = `
-    <div class="card">
+    <div class="card" style="border-radius:16px;overflow:hidden;">
       <div class="card-header"><h3>Letter & Form Generator</h3></div>
       <div class="card-body">
         <p style="margin-bottom:16px;color:var(--text-muted);font-size:13px;">
@@ -5710,7 +5848,11 @@ async function renderTaxonomySearch() {
   const stateOpts = STATES.map(s => `<option value="${s.code}">${s.name}</option>`).join('');
 
   body.innerHTML = `
-    <div class="card" style="margin-bottom:20px;">
+    <style>
+      .tx2-card{border-radius:16px;overflow:hidden;}
+      .tx2-card table tr:hover{background:var(--gray-50);}
+    </style>
+    <div class="card tx2-card" style="margin-bottom:20px;">
       <div class="card-body">
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
           <div style="flex:2;min-width:200px;">
@@ -5747,7 +5889,7 @@ async function renderTaxonomySearch() {
         Use <strong>Taxonomy Codes</strong> to browse behavioral health taxonomy codes locally. Use <strong>NPI Lookup</strong> to look up any provider by their 10-digit NPI. Use <strong>Provider Name</strong> or <strong>By Specialty</strong> to search the live CMS NPPES database.
       </div>
 
-      <div class="card">
+      <div class="card tx2-card">
         <div class="card-header"><h3>Common Behavioral Health Taxonomy Codes</h3></div>
         <div class="card-body" style="padding:0;">
           <div class="table-wrap" style="box-shadow:none;border:none;">
@@ -5851,22 +5993,35 @@ async function renderCaqhManager() {
 
     <!-- Provider Roster Tab -->
     <div id="caqh-roster">
-      <div class="stats-grid" style="margin-bottom:20px;">
-        <div class="stat-card">
-          <div class="label">Total Providers</div>
-          <div class="value">${providers.length}</div>
+      <style>
+        .cq2-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+        .cq2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+        .cq2-stat .cq2-accent{position:absolute;top:0;left:0;right:0;height:3px;}
+        .cq2-stat .cq2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+        .cq2-stat .cq2-val{font-size:28px;font-weight:800;line-height:1.1;}
+        .cq2-card{border-radius:16px;overflow:hidden;}
+        .cq2-card table tr:hover{background:var(--gray-50);}
+      </style>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;">
+        <div class="cq2-stat">
+          <div class="cq2-accent" style="background:linear-gradient(90deg,var(--brand-500),var(--brand-700));"></div>
+          <div class="cq2-label">Total Providers</div>
+          <div class="cq2-val">${providers.length}</div>
         </div>
-        <div class="stat-card">
-          <div class="label">CAQH ID Assigned</div>
-          <div class="value blue">${providers.filter(p => p.caqhId).length}</div>
+        <div class="cq2-stat">
+          <div class="cq2-accent" style="background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div>
+          <div class="cq2-label">CAQH ID Assigned</div>
+          <div class="cq2-val" style="color:#2563eb;">${providers.filter(p => p.caqhId).length}</div>
         </div>
-        <div class="stat-card">
-          <div class="label">Profile Complete</div>
-          <div class="value green">${Object.values(tracking).filter(t => t.profileStatus === 'Initial Profile Complete' || t.profileStatus === 'Active').length}</div>
+        <div class="cq2-stat">
+          <div class="cq2-accent" style="background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+          <div class="cq2-label">Profile Complete</div>
+          <div class="cq2-val" style="color:#16a34a;">${Object.values(tracking).filter(t => t.profileStatus === 'Initial Profile Complete' || t.profileStatus === 'Active').length}</div>
         </div>
-        <div class="stat-card">
-          <div class="label">Attestation Due</div>
-          <div class="value amber">${Object.values(tracking).filter(t => {
+        <div class="cq2-stat">
+          <div class="cq2-accent" style="background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div>
+          <div class="cq2-label">Attestation Due</div>
+          <div class="cq2-val" style="color:#d97706;">${Object.values(tracking).filter(t => {
             if (!t.attestationExpires) return false;
             return Math.ceil((new Date(t.attestationExpires) - new Date()) / 86400000) <= 30;
           }).length}</div>
@@ -5878,7 +6033,7 @@ async function renderCaqhManager() {
         <button class="btn" onclick="window.app.manualCaqhEntry()">+ Manual Entry</button>
       </div>
 
-      <div class="table-wrap">
+      <div class="table-wrap cq2-card">
         <table>
           <thead>
             <tr>
@@ -7153,7 +7308,7 @@ window.app = {
 
   // Settings
   settingsTab(el, tabId) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab, .stv2-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
     ['settings-import', 'settings-org', 'settings-licenses', 'settings-groups', 'settings-caqh', 'settings-integrations', 'settings-security', 'settings-danger'].forEach(id => {
       const section = document.getElementById(id);
@@ -11329,7 +11484,11 @@ async function renderReimbursement() {
   });
 
   body.innerHTML = `
-    <div class="card" style="margin-bottom:16px;">
+    <style>
+      .rb2-card{border-radius:16px;overflow:hidden;}
+      .rb2-card table tr:hover{background:var(--gray-50);}
+    </style>
+    <div class="card rb2-card" style="margin-bottom:16px;">
       <div class="card-header"><h3>Revenue by Payer & State</h3></div>
       <div class="card-body" style="padding:0;overflow-x:auto;">
         ${payersInUse.length > 0 && statesInUse.length > 0 ? `
@@ -11369,7 +11528,7 @@ async function renderReimbursement() {
       </div>
     </div>
 
-    <div class="card">
+    <div class="card rb2-card">
       <div class="card-header"><h3>Credentialing Timeline by Payer</h3></div>
       <div class="card-body" style="padding:0;">
         <table>
@@ -11440,14 +11599,35 @@ async function renderRenewalCalendar() {
   const credRenewalHtml = await renderCredentialingRenewalSection(today);
 
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
-      <div class="stat-card"><div class="label">Expired</div><div class="value ${expired.length > 0 ? 'red' : ''}">${expired.length}</div></div>
-      <div class="stat-card"><div class="label">Within 30 Days</div><div class="value ${expiring30.length > 0 ? 'red' : ''}">${expiring30.length}</div></div>
-      <div class="stat-card"><div class="label">Within 60 Days</div><div class="value ${expiring60.length > 0 ? 'amber' : ''}">${expiring60.length}</div></div>
-      <div class="stat-card"><div class="label">Within 90 Days</div><div class="value ${expiring90.length > 0 ? 'amber' : ''}">${expiring90.length}</div></div>
+    <style>
+      .rn2-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .rn2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .rn2-stat .rn2-accent{position:absolute;top:0;left:0;right:0;height:3px;}
+      .rn2-stat .rn2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .rn2-stat .rn2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .rn2-card{border-radius:16px;overflow:hidden;}
+      .rn2-card table tr:hover{background:var(--gray-50);}
+    </style>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;">
+      <div class="rn2-stat">
+        <div class="rn2-accent" style="background:linear-gradient(90deg,#ef4444,#f87171);"></div>
+        <div class="rn2-label">Expired</div><div class="rn2-val" style="color:${expired.length > 0 ? '#dc2626' : 'inherit'};">${expired.length}</div>
+      </div>
+      <div class="rn2-stat">
+        <div class="rn2-accent" style="background:linear-gradient(90deg,#ef4444,#fca5a5);"></div>
+        <div class="rn2-label">Within 30 Days</div><div class="rn2-val" style="color:${expiring30.length > 0 ? '#dc2626' : 'inherit'};">${expiring30.length}</div>
+      </div>
+      <div class="rn2-stat">
+        <div class="rn2-accent" style="background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div>
+        <div class="rn2-label">Within 60 Days</div><div class="rn2-val" style="color:${expiring60.length > 0 ? '#d97706' : 'inherit'};">${expiring60.length}</div>
+      </div>
+      <div class="rn2-stat">
+        <div class="rn2-accent" style="background:linear-gradient(90deg,#f59e0b,#fde68a);"></div>
+        <div class="rn2-label">Within 90 Days</div><div class="rn2-val" style="color:${expiring90.length > 0 ? '#d97706' : 'inherit'};">${expiring90.length}</div>
+      </div>
     </div>
 
-    <div class="card">
+    <div class="card rn2-card">
       <div class="card-header"><h3>12-Month Renewal Timeline</h3></div>
       <div class="card-body">
         <div class="cal-grid">
@@ -11468,7 +11648,7 @@ async function renderRenewalCalendar() {
     </div>
 
     ${(expired.length > 0 || expiring30.length > 0 || expiring60.length > 0) ? `
-    <div class="card" style="margin-top:16px;">
+    <div class="card rn2-card" style="margin-top:16px;">
       <div class="card-header"><h3>Action Required</h3></div>
       <div class="card-body" style="padding:0;">
         <table>
@@ -11490,7 +11670,7 @@ async function renderRenewalCalendar() {
     </div>` : ''}
 
     ${expiring90.length > 0 ? `
-    <div class="card" style="margin-top:16px;">
+    <div class="card rn2-card" style="margin-top:16px;">
       <div class="card-header"><h3>Coming Up (60-90 Days)</h3></div>
       <div class="card-body" style="padding:0;">
         <table>
@@ -11824,17 +12004,38 @@ async function renderServiceLines() {
   const activeLines = active.length;
 
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
-      <div class="stat-card"><div class="label">Total Service Lines</div><div class="value">${totalLines}</div></div>
-      <div class="stat-card"><div class="label">Active</div><div class="value green">${activeLines}</div></div>
-      <div class="stat-card"><div class="label">Planned</div><div class="value blue">${planned.length}</div></div>
-      <div class="stat-card"><div class="label">Combined Revenue/Patient</div><div class="value" style="font-size:16px;color:var(--brand-600);">$12,000 - $21,000/yr</div><div class="sub">if patient uses all lines</div></div>
+    <style>
+      .sl2-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .sl2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .sl2-stat .sl2-accent{position:absolute;top:0;left:0;right:0;height:3px;}
+      .sl2-stat .sl2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .sl2-stat .sl2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .sl2-stat .sl2-sub{font-size:12px;color:var(--text-muted);margin-top:4px;}
+      .sl2-card{border-radius:16px;overflow:hidden;}
+    </style>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;">
+      <div class="sl2-stat">
+        <div class="sl2-accent" style="background:linear-gradient(90deg,var(--brand-500),var(--brand-700));"></div>
+        <div class="sl2-label">Total Service Lines</div><div class="sl2-val">${totalLines}</div>
+      </div>
+      <div class="sl2-stat">
+        <div class="sl2-accent" style="background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+        <div class="sl2-label">Active</div><div class="sl2-val" style="color:#16a34a;">${activeLines}</div>
+      </div>
+      <div class="sl2-stat">
+        <div class="sl2-accent" style="background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div>
+        <div class="sl2-label">Planned</div><div class="sl2-val" style="color:#2563eb;">${planned.length}</div>
+      </div>
+      <div class="sl2-stat">
+        <div class="sl2-accent" style="background:linear-gradient(90deg,#a855f7,#c084fc);"></div>
+        <div class="sl2-label">Combined Revenue/Patient</div><div class="sl2-val" style="font-size:16px;color:var(--brand-600);">$12,000 - $21,000/yr</div><div class="sl2-sub">if patient uses all lines</div>
+      </div>
     </div>
 
     <!-- Tabs -->
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
       ${SERVICE_LINES.map(s => `
-        <button class="btn ${s.status === 'active' ? 'btn-primary' : ''}" onclick="document.getElementById('sl-${s.id}').scrollIntoView({behavior:'smooth'})" style="border-left:3px solid ${s.color};">
+        <button class="btn ${s.status === 'active' ? 'btn-primary' : ''}" onclick="document.getElementById('sl-${s.id}').scrollIntoView({behavior:'smooth'})" style="border-left:3px solid ${s.color};border-radius:12px;">
           ${s.icon} ${s.name}
           <span style="font-size:10px;margin-left:4px;opacity:0.7;">${s.status === 'active' ? 'ACTIVE' : 'PLANNED'}</span>
         </button>
@@ -11842,7 +12043,7 @@ async function renderServiceLines() {
     </div>
 
     ${SERVICE_LINES.map(s => `
-    <div class="card" id="sl-${s.id}" style="margin-bottom:20px;border-left:4px solid ${s.color};">
+    <div class="card sl2-card" id="sl-${s.id}" style="margin-bottom:20px;border-left:4px solid ${s.color};">
       <div class="card-header" style="display:flex;align-items:center;gap:12px;">
         <span style="font-size:24px;">${s.icon}</span>
         <div style="flex:1;">
@@ -12289,36 +12490,72 @@ async function renderOrganizationsPage() {
   try { apps = await store.getAll('applications'); } catch {}
 
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
-      <div class="stat-card"><div class="label">Organizations</div><div class="value">${orgs.length}</div></div>
-      <div class="stat-card"><div class="label">Total Providers</div><div class="value" style="color:var(--brand-600);">${providers.length}</div></div>
-      <div class="stat-card"><div class="label">Total Licenses</div><div class="value">${licenses.length}</div></div>
-      <div class="stat-card"><div class="label">Total Applications</div><div class="value">${apps.length}</div></div>
+    <style>
+      .orgv2-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:20px; }
+      .orgv2-stat { background:var(--surface-card,#fff); border-radius:16px; padding:18px 16px; position:relative; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.06); transition:transform 0.18s,box-shadow 0.18s; }
+      .orgv2-stat:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,0.1); }
+      .orgv2-stat::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+      .orgv2-stat:nth-child(1)::before { background:linear-gradient(90deg,var(--brand-500),var(--brand-700)); }
+      .orgv2-stat:nth-child(2)::before { background:linear-gradient(90deg,#3b82f6,#2563eb); }
+      .orgv2-stat:nth-child(3)::before { background:linear-gradient(90deg,#22c55e,#16a34a); }
+      .orgv2-stat:nth-child(4)::before { background:linear-gradient(90deg,#f59e0b,#d97706); }
+      .orgv2-stat .orgv2-val { font-size:28px; font-weight:800; line-height:1.1; }
+      .orgv2-stat .orgv2-lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray-500); margin-top:4px; }
+      .orgv2-card { border-radius:16px; overflow:hidden; transition:transform 0.18s,box-shadow 0.18s; cursor:pointer; }
+      .orgv2-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.1); }
+      .orgv2-avatar { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:800; color:#fff; flex-shrink:0; }
+      .orgv2-pill { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+    </style>
+
+    <!-- V2 Stat Cards -->
+    <div class="orgv2-stats">
+      <div class="orgv2-stat"><div class="orgv2-val" style="color:var(--brand-600);">${orgs.length}</div><div class="orgv2-lbl">Organizations</div></div>
+      <div class="orgv2-stat"><div class="orgv2-val" style="color:#2563eb;">${providers.length}</div><div class="orgv2-lbl">Total Providers</div></div>
+      <div class="orgv2-stat"><div class="orgv2-val" style="color:#16a34a;">${licenses.length}</div><div class="orgv2-lbl">Total Licenses</div></div>
+      <div class="orgv2-stat"><div class="orgv2-val" style="color:#d97706;">${apps.length}</div><div class="orgv2-lbl">Total Applications</div></div>
     </div>
+
     ${orgs.map(o => {
       const orgProviders = providers.filter(p => (p.organizationId || p.orgId) == o.id);
       const orgLicenses = licenses.filter(l => orgProviders.some(p => p.id == (l.providerId || l.provider_id)));
       const orgApps = apps.filter(a => (a.organizationId || a.orgId) == o.id || orgProviders.some(p => p.id == (a.providerId || a.provider_id)));
+      const initial = (o.name || 'U').charAt(0).toUpperCase();
+      const hue = ((o.id || 0) * 137) % 360;
       return `
-        <div class="card" style="cursor:pointer;" onclick="window.app.viewOrg(${o.id})">
-          <div class="card-header">
-            <h3>${escHtml(o.name || 'Unnamed')} <span style="font-size:12px;font-weight:500;color:var(--gray-400);margin-left:8px;">#${toHexId(o.id)}</span></h3>
+        <div class="card orgv2-card" onclick="window.app.viewOrg(${o.id})">
+          <div class="card-header" style="padding:16px 20px;">
+            <div style="display:flex;align-items:center;gap:14px;">
+              <div class="orgv2-avatar" style="background:linear-gradient(135deg,hsl(${hue},65%,55%),hsl(${hue + 30},65%,40%));">${initial}</div>
+              <div>
+                <h3 style="margin:0;font-size:16px;">${escHtml(o.name || 'Unnamed')} <span style="font-size:12px;font-weight:500;color:var(--gray-400);margin-left:6px;">#${toHexId(o.id)}</span></h3>
+                <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+                  ${o.npi ? '<span class="orgv2-pill" style="background:var(--brand-100,#e0f2fe);color:var(--brand-700);">NPI ' + o.npi + '</span>' : ''}
+                  ${(o.taxId || o.tax_id) ? '<span class="orgv2-pill" style="background:rgba(139,92,246,0.1);color:#7c3aed;">Tax ID ' + (o.taxId || o.tax_id) + '</span>' : ''}
+                </div>
+              </div>
+            </div>
             <div style="display:flex;gap:8px;" onclick="event.stopPropagation();">
-              <button class="btn btn-sm" onclick="window.app.editOrg(${o.id})">Edit</button>
+              <button class="btn btn-sm" onclick="window.app.editOrg(${o.id})" style="border-radius:8px;">Edit</button>
             </div>
           </div>
-          <div class="card-body">
-            <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:12px;font-size:13px;color:var(--gray-600);">
-              <div>Org ID: <strong style="font-family:monospace;color:var(--brand-600);">${toHexId(o.id)}</strong></div>
-              <div>NPI: <strong>${o.npi || '—'}</strong></div>
-              <div>Tax ID: <strong>${o.taxId || o.tax_id || '—'}</strong></div>
+          <div class="card-body" style="padding:12px 20px 16px;">
+            <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;color:var(--gray-600);">
               <div>Phone: ${escHtml(o.phone) || '—'}</div>
               <div>Email: ${escHtml(o.email) || '—'}</div>
             </div>
-            <div style="display:flex;gap:16px;flex-wrap:wrap;">
-              <div class="stat-card" style="flex:1;min-width:100px;"><div class="label">Providers</div><div class="value">${orgProviders.length}</div></div>
-              <div class="stat-card" style="flex:1;min-width:100px;"><div class="label">Licenses</div><div class="value" style="color:var(--brand-600);">${orgLicenses.length}</div></div>
-              <div class="stat-card" style="flex:1;min-width:100px;"><div class="label">Applications</div><div class="value">${orgApps.length}</div></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+              <div style="background:var(--gray-50,#f9fafb);border-radius:12px;padding:12px;text-align:center;">
+                <div style="font-size:22px;font-weight:800;color:var(--brand-600);">${orgProviders.length}</div>
+                <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:2px;">Providers</div>
+              </div>
+              <div style="background:var(--gray-50,#f9fafb);border-radius:12px;padding:12px;text-align:center;">
+                <div style="font-size:22px;font-weight:800;color:#16a34a;">${orgLicenses.length}</div>
+                <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:2px;">Licenses</div>
+              </div>
+              <div style="background:var(--gray-50,#f9fafb);border-radius:12px;padding:12px;text-align:center;">
+                <div style="font-size:22px;font-weight:800;color:#d97706;">${orgApps.length}</div>
+                <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:2px;">Applications</div>
+              </div>
             </div>
           </div>
         </div>`;
@@ -13120,8 +13357,13 @@ async function renderCommunicationsPage() {
   providers.forEach(p => { providerMap[p.id] = `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim(); });
 
   body.innerHTML = `
+    <style>
+      .co2-card{border-radius:16px;overflow:hidden;}
+      .co2-card table tr:hover{background:var(--gray-50);}
+      .co2-ch{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+    </style>
     <!-- Filters -->
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card co2-card" style="margin-bottom:16px;">
       <div class="card-body" style="padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
         <select id="comm-filter-channel" class="form-control" style="width:auto;height:34px;font-size:13px;" onchange="window.app.filterComms()">
           <option value="">All Channels</option>
@@ -13141,7 +13383,7 @@ async function renderCommunicationsPage() {
     </div>
 
     <!-- Logs Table -->
-    <div class="card">
+    <div class="card co2-card">
       <div class="card-body" style="padding:0;">
         <div class="table-wrap">
           <table>
@@ -13741,8 +13983,11 @@ async function renderCalendarPage() {
   }
 
   body.innerHTML = `
+    <style>
+      .cal2-card{border-radius:16px;overflow:hidden;}
+    </style>
     <!-- Filter Toggles -->
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card cal2-card" style="margin-bottom:16px;">
       <div class="card-body" style="padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
         ${[
           { key: 'licenses', label: 'Licenses', color: '#ef4444' },
@@ -13758,7 +14003,7 @@ async function renderCalendarPage() {
     </div>
 
     <!-- Calendar Header -->
-    <div class="card">
+    <div class="card cal2-card">
       <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="btn btn-sm" onclick="window.app.calPrev()">&larr;</button>
@@ -13861,7 +14106,11 @@ async function renderOnboardingStub() {
   const baseUrl = location.origin + location.pathname;
 
   body.innerHTML = `
-    <div class="card" style="margin-bottom:1.5rem;">
+    <style>
+      .ob2-card{border-radius:16px;overflow:hidden;}
+      .ob2-card table tr:hover{background:var(--gray-50);}
+    </style>
+    <div class="card ob2-card" style="margin-bottom:1.5rem;">
       <div class="card-header">
         <h3>Create Onboarding Invite</h3>
       </div>
@@ -13883,13 +14132,13 @@ async function renderOnboardingStub() {
           </div>
           <button class="btn btn-gold" onclick="window.app.createOnboardToken()" style="height:38px;">Create & Copy Link</button>
         </div>
-        <div id="onboard-invite-result" style="display:none;margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;">
-          <div style="font-size:12px;color:#10b981;margin-bottom:4px;">Invite link created — copied to clipboard!</div>
+        <div id="onboard-invite-result" style="display:none;margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:16px;">
+          <div style="font-size:12px;color:#10b981;margin-bottom:4px;">Invite link created -- copied to clipboard!</div>
           <code id="onboard-invite-link" style="font-size:12px;word-break:break-all;color:#f1f5f9;"></code>
         </div>
       </div>
     </div>
-    <div class="card">
+    <div class="card ob2-card">
       <div class="card-header">
         <h3>Onboarding Tokens</h3>
       </div>
@@ -13957,22 +14206,44 @@ async function renderExclusionsPage() {
     return `<span class="badge badge-${colors[status] || 'inactive'}">${escHtml(status || 'Not Screened')}</span>`;
   };
 
+  const exclStatusDot = (status) => {
+    const m = { clear: { bg: 'rgba(34,197,94,0.12)', color: '#16a34a', text: 'Clear' }, excluded: { bg: 'rgba(239,68,68,0.12)', color: '#dc2626', text: 'Excluded' }, pending: { bg: 'rgba(245,158,11,0.12)', color: '#d97706', text: 'Pending' }, not_screened: { bg: 'rgba(156,163,175,0.12)', color: '#6b7280', text: 'Not Screened' } };
+    const s = m[status] || m.not_screened;
+    return '<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:' + s.bg + ';color:' + s.color + ';"><span style="width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;"></span>' + s.text + '</span>';
+  };
+
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
-      <div class="stat-card"><div class="label">Total Providers</div><div class="value">${summary.totalProviders || providers.length}</div></div>
-      <div class="stat-card"><div class="label">Screened</div><div class="value" style="color:var(--brand-600);">${summary.screened || 0}</div></div>
-      <div class="stat-card"><div class="label">Clear</div><div class="value" style="color:var(--green);">${summary.clear || 0}</div></div>
-      <div class="stat-card"><div class="label">Excluded</div><div class="value" style="color:var(--red);">${summary.excluded || 0}</div></div>
-      <div class="stat-card"><div class="label">Needs Recheck</div><div class="value" style="color:var(--amber);">${summary.needsRecheck || 0}</div></div>
-      <div class="stat-card"><div class="label">Never Screened</div><div class="value" style="color:var(--gray-500);">${summary.neverScreened || 0}</div></div>
+    <style>
+      .exclv2-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-bottom:20px; }
+      .exclv2-stat { background:var(--surface-card,#fff); border-radius:16px; padding:18px 16px; position:relative; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.06); transition:transform 0.18s,box-shadow 0.18s; }
+      .exclv2-stat:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,0.1); }
+      .exclv2-stat::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+      .exclv2-stat:nth-child(1)::before { background:linear-gradient(90deg,var(--brand-500),var(--brand-700)); }
+      .exclv2-stat:nth-child(2)::before { background:linear-gradient(90deg,#3b82f6,#2563eb); }
+      .exclv2-stat:nth-child(3)::before { background:linear-gradient(90deg,#22c55e,#16a34a); }
+      .exclv2-stat:nth-child(4)::before { background:linear-gradient(90deg,#ef4444,#dc2626); }
+      .exclv2-stat:nth-child(5)::before { background:linear-gradient(90deg,#f59e0b,#d97706); }
+      .exclv2-stat:nth-child(6)::before { background:linear-gradient(90deg,#6b7280,#4b5563); }
+      .exclv2-stat .exclv2-val { font-size:28px; font-weight:800; line-height:1.1; }
+      .exclv2-stat .exclv2-lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray-500); margin-top:4px; }
+    </style>
+
+    <!-- V2 Stat Cards -->
+    <div class="exclv2-stats">
+      <div class="exclv2-stat"><div class="exclv2-val" style="color:var(--brand-600);">${summary.totalProviders || providers.length}</div><div class="exclv2-lbl">Total Screened</div></div>
+      <div class="exclv2-stat"><div class="exclv2-val" style="color:#2563eb;">${summary.screened || 0}</div><div class="exclv2-lbl">Screened</div></div>
+      <div class="exclv2-stat"><div class="exclv2-val" style="color:#16a34a;">${summary.clear || 0}</div><div class="exclv2-lbl">Clear</div></div>
+      <div class="exclv2-stat"><div class="exclv2-val" style="color:#dc2626;">${summary.excluded || 0}</div><div class="exclv2-lbl">Flagged</div></div>
+      <div class="exclv2-stat"><div class="exclv2-val" style="color:#d97706;">${summary.needsRecheck || 0}</div><div class="exclv2-lbl">Needs Recheck</div></div>
+      <div class="exclv2-stat"><div class="exclv2-val" style="color:#6b7280;">${summary.neverScreened || 0}</div><div class="exclv2-lbl">Never Screened</div></div>
     </div>
 
-    <div class="card">
+    <div class="card" style="border-radius:16px;overflow:hidden;">
       <div class="card-header">
         <h3>Provider Screening Status</h3>
         <div style="display:flex;gap:8px;align-items:center;">
-          <input type="text" id="excl-search" placeholder="Search providers..." class="form-control" style="width:220px;height:34px;font-size:13px;" oninput="window.app.filterExclusions()">
-          <select id="excl-status-filter" class="form-control" style="width:140px;height:34px;font-size:13px;" onchange="window.app.filterExclusions()">
+          <input type="text" id="excl-search" placeholder="Search providers..." class="form-control" style="width:220px;height:34px;font-size:13px;border-radius:10px;" oninput="window.app.filterExclusions()">
+          <select id="excl-status-filter" class="form-control" style="width:140px;height:34px;font-size:13px;border-radius:10px;" onchange="window.app.filterExclusions()">
             <option value="">All Statuses</option>
             <option value="clear">Clear</option>
             <option value="excluded">Excluded</option>
@@ -14005,7 +14276,7 @@ async function renderExclusionsPage() {
                 <tr class="excl-row" data-name="${name.toLowerCase()}" data-status="${status}">
                   <td><strong>${name}</strong>${p.specialty ? '<br><span class="text-sm text-muted">' + escHtml(p.specialty) + '</span>' : ''}</td>
                   <td><code>${escHtml(p.npi || '—')}</code></td>
-                  <td>${statusBadge(status)}</td>
+                  <td>${exclStatusDot(status)}</td>
                   <td>${lastScreened ? formatDateDisplay(lastScreened) : '<span class="text-muted">Never</span>'}</td>
                   <td class="text-sm text-muted">${escHtml(source)}</td>
                   <td>
@@ -14033,11 +14304,36 @@ async function renderFacilitiesPage() {
   try { facilities = await store.getFacilities(); } catch (e) { console.error('Facilities error:', e); }
   if (!Array.isArray(facilities)) facilities = [];
 
+  const facActive = facilities.filter(f => f.status === 'active' || f.isActive).length;
+  const facStates = new Set(facilities.map(f => f.state).filter(Boolean));
+
   body.innerHTML = `
-    <div class="card">
+    <style>
+      .facv2-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:20px; }
+      .facv2-stat { background:var(--surface-card,#fff); border-radius:16px; padding:18px 16px; position:relative; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.06); transition:transform 0.18s,box-shadow 0.18s; }
+      .facv2-stat:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,0.1); }
+      .facv2-stat::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+      .facv2-stat:nth-child(1)::before { background:linear-gradient(90deg,var(--brand-500),var(--brand-700)); }
+      .facv2-stat:nth-child(2)::before { background:linear-gradient(90deg,#22c55e,#16a34a); }
+      .facv2-stat:nth-child(3)::before { background:linear-gradient(90deg,#8b5cf6,#6d28d9); }
+      .facv2-stat .facv2-val { font-size:28px; font-weight:800; line-height:1.1; }
+      .facv2-stat .facv2-lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray-500); margin-top:4px; }
+      .facv2-pill { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+      .facv2-type-badge { display:inline-flex; padding:3px 10px; border-radius:20px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; background:rgba(139,92,246,0.1); color:#7c3aed; }
+      .facv2-status-dot { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+    </style>
+
+    <!-- V2 Stat Cards -->
+    <div class="facv2-stats">
+      <div class="facv2-stat"><div class="facv2-val" style="color:var(--brand-600);">${facilities.length}</div><div class="facv2-lbl">Total Facilities</div></div>
+      <div class="facv2-stat"><div class="facv2-val" style="color:#16a34a;">${facActive}</div><div class="facv2-lbl">Active</div></div>
+      <div class="facv2-stat"><div class="facv2-val" style="color:#7c3aed;">${facStates.size}</div><div class="facv2-lbl">States</div></div>
+    </div>
+
+    <div class="card" style="border-radius:16px;overflow:hidden;">
       <div class="card-header">
         <h3>All Facilities (${facilities.length})</h3>
-        <input type="text" id="facility-search" placeholder="Search facilities..." class="form-control" style="width:240px;height:34px;font-size:13px;" oninput="window.app.filterFacilities()">
+        <input type="text" id="facility-search" placeholder="Search facilities..." class="form-control" style="width:240px;height:34px;font-size:13px;border-radius:10px;" oninput="window.app.filterFacilities()">
       </div>
       <div class="card-body" style="padding:0;">
         <div class="table-wrap">
@@ -14047,16 +14343,17 @@ async function renderFacilitiesPage() {
             </thead>
             <tbody id="facility-table-body">
               ${facilities.map(f => {
-                const statusClass = (f.status === 'active' || f.isActive) ? 'approved' : 'inactive';
-                const statusLabel = (f.status === 'active' || f.isActive) ? 'Active' : (f.status || 'Inactive');
+                const isActive = f.status === 'active' || f.isActive;
+                const statusLabel = isActive ? 'Active' : (f.status || 'Inactive');
+                const addr = [f.city, f.state].filter(Boolean).join(', ');
                 return `
                 <tr class="facility-row" data-name="${escHtml((f.name || '').toLowerCase())}">
-                  <td><strong>${escHtml(f.name || '—')}</strong></td>
-                  <td><code>${escHtml(f.npi || '—')}</code></td>
-                  <td>${escHtml(f.facilityType || f.type || '—')}</td>
-                  <td>${escHtml(f.city || '')}${f.state ? ', ' + escHtml(f.state) : ''}</td>
+                  <td><strong>${escHtml(f.name || '—')}</strong>${f.address || f.street ? '<br><span style="font-size:11px;color:var(--gray-500);">' + escHtml(f.address || f.street || '') + '</span>' : ''}</td>
+                  <td>${f.npi ? '<span class="facv2-pill" style="background:var(--brand-100,#e0f2fe);color:var(--brand-700);font-family:monospace;">' + escHtml(f.npi) + '</span>' : '<span style="color:var(--gray-400);">—</span>'}</td>
+                  <td>${(f.facilityType || f.type) ? '<span class="facv2-type-badge">' + escHtml(f.facilityType || f.type) + '</span>' : '—'}</td>
+                  <td>${escHtml(addr) || '—'}</td>
                   <td>${escHtml(f.phone || '—')}</td>
-                  <td><span class="badge badge-${statusClass}">${statusLabel}</span></td>
+                  <td><span class="facv2-status-dot" style="background:${isActive ? 'rgba(34,197,94,0.12)' : 'rgba(156,163,175,0.12)'};color:${isActive ? 'var(--green)' : 'var(--gray-500)'};"><span style="width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;"></span>${statusLabel}</span></td>
                   <td>
                     ${editButton('Edit', `window.app.editFacility(${f.id})`)}
                     ${deleteButton('Delete', `window.app.deleteFacility(${f.id})`)}
@@ -14338,19 +14635,48 @@ async function renderBillingPage() {
   const maxMonthly = Math.max(...Object.values(monthlyRev), 1);
 
   body.innerHTML = `
+    <style>
+      .bl2-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .bl2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .bl2-stat .bl2-accent{position:absolute;top:0;left:0;right:0;height:3px;}
+      .bl2-stat .bl2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .bl2-stat .bl2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .bl2-stat .bl2-sub{font-size:12px;color:var(--text-muted);margin-top:4px;}
+      .bl2-card{border-radius:16px;overflow:hidden;}
+      .bl2-dot{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+      .bl2-table table tr:hover{background:var(--gray-50);}
+    </style>
     <!-- Stats Row -->
-    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
-      <div class="stat-card"><div class="label">Total Revenue</div><div class="value" style="color:var(--green);">${_fmtMoney(stats.totalRevenue || stats.total_revenue)}</div></div>
-      <div class="stat-card"><div class="label">Outstanding</div><div class="value" style="color:var(--brand-600);">${_fmtMoney(stats.outstanding)}</div></div>
-      <div class="stat-card"><div class="label">Overdue</div><div class="value" style="color:var(--red);">${_fmtMoney(stats.overdue)}</div></div>
-      <div class="stat-card"><div class="label">Collected</div><div class="value" style="color:var(--green);">${_fmtMoney(stats.collected || stats.totalPaid || stats.total_paid)}</div></div>
-      <div class="stat-card"><div class="label">Drafts</div><div class="value" style="color:var(--gray-500);">${stats.drafts || 0}</div></div>
-      <div class="stat-card"><div class="label">Estimates</div><div class="value" style="color:var(--brand-600);">${estimates.length}</div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;margin-bottom:20px;">
+      <div class="bl2-stat">
+        <div class="bl2-accent" style="background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+        <div class="bl2-label">Total Revenue</div><div class="bl2-val" style="color:#16a34a;">${_fmtMoney(stats.totalRevenue || stats.total_revenue)}</div>
+      </div>
+      <div class="bl2-stat">
+        <div class="bl2-accent" style="background:linear-gradient(90deg,var(--brand-500),var(--brand-700));"></div>
+        <div class="bl2-label">Outstanding</div><div class="bl2-val" style="color:var(--brand-600);">${_fmtMoney(stats.outstanding)}</div>
+      </div>
+      <div class="bl2-stat">
+        <div class="bl2-accent" style="background:linear-gradient(90deg,#ef4444,#f87171);"></div>
+        <div class="bl2-label">Overdue</div><div class="bl2-val" style="color:#dc2626;">${_fmtMoney(stats.overdue)}</div>
+      </div>
+      <div class="bl2-stat">
+        <div class="bl2-accent" style="background:linear-gradient(90deg,#22c55e,#86efac);"></div>
+        <div class="bl2-label">Collected</div><div class="bl2-val" style="color:#16a34a;">${_fmtMoney(stats.collected || stats.totalPaid || stats.total_paid)}</div>
+      </div>
+      <div class="bl2-stat">
+        <div class="bl2-accent" style="background:linear-gradient(90deg,#6b7280,#9ca3af);"></div>
+        <div class="bl2-label">Drafts</div><div class="bl2-val" style="color:var(--gray-500);">${stats.drafts || 0}</div>
+      </div>
+      <div class="bl2-stat">
+        <div class="bl2-accent" style="background:linear-gradient(90deg,var(--brand-400),var(--brand-600));"></div>
+        <div class="bl2-label">Estimates</div><div class="bl2-val" style="color:var(--brand-600);">${estimates.length}</div>
+      </div>
     </div>
 
     <!-- Revenue Chart & Aging -->
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px;">
-      <div class="card">
+      <div class="card bl2-card">
         <div class="card-header"><h3>Monthly Revenue (Last 6 Months)</h3></div>
         <div class="card-body" style="padding:16px;">
           <div style="display:flex;align-items:flex-end;gap:8px;height:140px;">
@@ -14364,7 +14690,7 @@ async function renderBillingPage() {
           </div>
         </div>
       </div>
-      <div class="card">
+      <div class="card bl2-card">
         <div class="card-header"><h3>Aging Analysis</h3></div>
         <div class="card-body" style="padding:16px;">
           <div style="display:flex;flex-direction:column;gap:10px;">
@@ -14388,7 +14714,7 @@ async function renderBillingPage() {
 
     <!-- Invoices Tab -->
     <div id="billing-invoices" class="${_billingTab !== 'invoices' ? 'hidden' : ''}">
-      <div class="card">
+      <div class="card bl2-card bl2-table">
         <div class="card-header">
           <h3>Invoices</h3>
           <div style="display:flex;gap:8px;">
@@ -14833,15 +15159,39 @@ async function renderContractsPage() {
   };
 
   body.innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
-      <div class="stat-card"><div class="label">Active</div><div class="value" style="color:var(--green);">${stats.active||0}</div></div>
-      <div class="stat-card"><div class="label">Drafts</div><div class="value" style="color:var(--gray-500);">${stats.draft||0}</div></div>
-      <div class="stat-card"><div class="label">Sent</div><div class="value" style="color:var(--brand-600);">${stats.sent||0}</div></div>
-      <div class="stat-card"><div class="label">Expiring Soon</div><div class="value" style="color:var(--gold);">${stats.expiring_soon||stats.expiringSoon||0}</div></div>
-      <div class="stat-card"><div class="label">Total Value</div><div class="value" style="color:var(--green);">${_fmtMoney(stats.total_value||stats.totalValue)}</div></div>
+    <style>
+      .ct2-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .ct2-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .ct2-stat .ct2-accent{position:absolute;top:0;left:0;right:0;height:3px;}
+      .ct2-stat .ct2-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:6px;}
+      .ct2-stat .ct2-val{font-size:28px;font-weight:800;line-height:1.1;}
+      .ct2-card{border-radius:16px;overflow:hidden;}
+      .ct2-table table tr:hover{background:var(--gray-50);}
+    </style>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:20px;">
+      <div class="ct2-stat">
+        <div class="ct2-accent" style="background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+        <div class="ct2-label">Active</div><div class="ct2-val" style="color:#16a34a;">${stats.active||0}</div>
+      </div>
+      <div class="ct2-stat">
+        <div class="ct2-accent" style="background:linear-gradient(90deg,#6b7280,#9ca3af);"></div>
+        <div class="ct2-label">Drafts</div><div class="ct2-val" style="color:var(--gray-500);">${stats.draft||0}</div>
+      </div>
+      <div class="ct2-stat">
+        <div class="ct2-accent" style="background:linear-gradient(90deg,var(--brand-500),var(--brand-700));"></div>
+        <div class="ct2-label">Sent</div><div class="ct2-val" style="color:var(--brand-600);">${stats.sent||0}</div>
+      </div>
+      <div class="ct2-stat">
+        <div class="ct2-accent" style="background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div>
+        <div class="ct2-label">Expiring Soon</div><div class="ct2-val" style="color:#d97706;">${stats.expiring_soon||stats.expiringSoon||0}</div>
+      </div>
+      <div class="ct2-stat">
+        <div class="ct2-accent" style="background:linear-gradient(90deg,#22c55e,#86efac);"></div>
+        <div class="ct2-label">Total Value</div><div class="ct2-val" style="color:#16a34a;">${_fmtMoney(stats.total_value||stats.totalValue)}</div>
+      </div>
     </div>
 
-    <div class="card">
+    <div class="card ct2-card ct2-table">
       <div class="card-header"><h3>All Contracts</h3></div>
       <div class="card-body" style="padding:0;">
         <div class="table-wrap">
@@ -15328,11 +15678,31 @@ async function renderCompliancePage() {
   const cellColor = s => s === 'good' ? 'rgba(34,197,94,0.2)' : s === 'warning' ? 'rgba(245,158,11,0.25)' : s === 'critical' ? 'rgba(239,68,68,0.25)' : 'rgba(148,163,184,0.15)';
   const cellIcon = s => s === 'good' ? '<span style="color:var(--green);">&#10003;</span>' : s === 'warning' ? '<span style="color:var(--warning-500);">&#9888;</span>' : s === 'critical' ? '<span style="color:var(--red);">&#10007;</span>' : '<span style="color:var(--gray-400);">—</span>';
 
+  const compPct = providers.length > 0 ? Math.round((healthyProviders.length / providers.length) * 100) : 0;
+
   body.innerHTML = `
-    <!-- Compliance Score Overview -->
-    <div style="display:grid;grid-template-columns:280px 1fr;gap:16px;margin-bottom:16px;">
-      <div class="card" style="text-align:center;">
-        <div class="card-body" style="padding:24px;">
+    <style>
+      .compv2-hero { background:var(--surface-card,#fff); border-radius:16px; position:relative; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.06); margin-bottom:20px; }
+      .compv2-hero::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,${scoreColor(avgScore)},${avgScore >= 85 ? '#16a34a' : avgScore >= 60 ? '#d97706' : '#dc2626'}); }
+      .compv2-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:14px; }
+      .compv2-stat { background:var(--surface-card,#fff); border-radius:16px; padding:16px; position:relative; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.06); transition:transform 0.18s,box-shadow 0.18s; }
+      .compv2-stat:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,0.1); }
+      .compv2-stat::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+      .compv2-stat .compv2-val { font-size:28px; font-weight:800; line-height:1.1; }
+      .compv2-stat .compv2-lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray-500); margin-top:4px; }
+      .compv2-stat .compv2-sub { font-size:10px; color:var(--gray-400); margin-top:2px; }
+      .compv2-dot { display:inline-flex; align-items:center; gap:5px; }
+      .compv2-dot::before { content:''; width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+      .compv2-dot.green::before { background:#22c55e; }
+      .compv2-dot.red::before { background:#ef4444; }
+      .compv2-dot.amber::before { background:#f59e0b; }
+      .compv2-dot.gray::before { background:#9ca3af; }
+    </style>
+
+    <!-- V2 Compliance Hero Card -->
+    <div class="compv2-hero">
+      <div style="display:grid;grid-template-columns:280px 1fr;gap:0;">
+        <div style="text-align:center;padding:28px 24px;border-right:1px solid var(--gray-200,#e5e7eb);">
           <div style="position:relative;width:140px;height:140px;margin:0 auto 12px;">
             <svg viewBox="0 0 120 120" style="transform:rotate(-90deg);">
               <circle cx="60" cy="60" r="52" fill="none" stroke="var(--gray-200)" stroke-width="10"/>
@@ -15341,29 +15711,38 @@ async function renderCompliancePage() {
                 stroke-linecap="round" style="transition:stroke-dasharray 0.6s;"/>
             </svg>
             <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-              <div style="font-size:36px;font-weight:800;color:${scoreColor(avgScore)};line-height:1;">${avgScore}</div>
+              <div style="font-size:40px;font-weight:800;color:${scoreColor(avgScore)};line-height:1;">${avgScore}</div>
               <div style="font-size:11px;color:var(--gray-500);font-weight:500;">/ 100</div>
             </div>
           </div>
-          <div style="font-size:14px;font-weight:700;color:${scoreColor(avgScore)};">${scoreLabel(avgScore)}</div>
-          <div style="font-size:11px;color:var(--gray-500);margin-top:2px;">Organization Compliance Score</div>
+          <div style="font-size:15px;font-weight:700;color:${scoreColor(avgScore)};">${scoreLabel(avgScore)}</div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:2px;">Organization Compliance</div>
+          <!-- Progress bar -->
+          <div style="margin-top:16px;padding:0 16px;">
+            <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">
+              <span>Completion</span><span>${compPct}%</span>
+            </div>
+            <div style="background:var(--gray-200);border-radius:6px;height:8px;overflow:hidden;">
+              <div style="background:${scoreColor(avgScore)};height:100%;width:${compPct}%;border-radius:6px;transition:width 0.6s;"></div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));align-content:start;">
-        <div class="stat-card" style="border-left:3px solid var(--red);"><div class="label">Critical Providers</div><div class="value" style="color:var(--red);">${criticalProviders.length}</div><div class="sub">Score &lt; 60</div></div>
-        <div class="stat-card" style="border-left:3px solid var(--warning-500);"><div class="label">At Risk</div><div class="value" style="color:var(--warning-500);">${warningProviders.length}</div><div class="sub">Score 60-84</div></div>
-        <div class="stat-card" style="border-left:3px solid var(--green);"><div class="label">Healthy</div><div class="value" style="color:var(--green);">${healthyProviders.length}</div><div class="sub">Score 85+</div></div>
-        <div class="stat-card"><div class="label">Expired Licenses</div><div class="value" style="color:var(--red);">${expiredLicenses.length}</div></div>
-        <div class="stat-card"><div class="label">Expiring (30d)</div><div class="value" style="color:var(--amber);">${expiringLicenses30.length}</div></div>
-        <div class="stat-card"><div class="label">Expiring (90d)</div><div class="value" style="color:var(--brand-600);">${expiringLicenses90.length}</div></div>
-        <div class="stat-card"><div class="label">Exclusion Flags</div><div class="value" style="color:var(--red);">${exclusionSummary.excluded || 0}</div></div>
-        <div class="stat-card"><div class="label">Never Screened</div><div class="value" style="color:var(--gray-500);">${exclusionSummary.neverScreened || neverScreened.length || 0}</div></div>
+        <div style="padding:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;align-content:start;">
+          <div class="compv2-stat" style="border-left:3px solid #ef4444;"><div class="compv2-val" style="color:#ef4444;">${criticalProviders.length}</div><div class="compv2-lbl">Critical</div><div class="compv2-sub">Score &lt; 60</div></div>
+          <div class="compv2-stat" style="border-left:3px solid #f59e0b;"><div class="compv2-val" style="color:#f59e0b;">${warningProviders.length}</div><div class="compv2-lbl">At Risk</div><div class="compv2-sub">Score 60-84</div></div>
+          <div class="compv2-stat" style="border-left:3px solid #22c55e;"><div class="compv2-val" style="color:#22c55e;">${healthyProviders.length}</div><div class="compv2-lbl">Healthy</div><div class="compv2-sub">Score 85+</div></div>
+          <div class="compv2-stat" style="border-left:3px solid #ef4444;"><div class="compv2-val" style="color:#ef4444;">${expiredLicenses.length}</div><div class="compv2-lbl">Expired Licenses</div></div>
+          <div class="compv2-stat" style="border-left:3px solid #f59e0b;"><div class="compv2-val" style="color:#f59e0b;">${expiringLicenses30.length}</div><div class="compv2-lbl">Expiring (30d)</div></div>
+          <div class="compv2-stat" style="border-left:3px solid var(--brand-600);"><div class="compv2-val" style="color:var(--brand-600);">${expiringLicenses90.length}</div><div class="compv2-lbl">Expiring (90d)</div></div>
+          <div class="compv2-stat" style="border-left:3px solid #ef4444;"><div class="compv2-val" style="color:#ef4444;">${exclusionSummary.excluded || 0}</div><div class="compv2-lbl">Exclusion Flags</div></div>
+          <div class="compv2-stat" style="border-left:3px solid #9ca3af;"><div class="compv2-val" style="color:var(--gray-500);">${exclusionSummary.neverScreened || neverScreened.length || 0}</div><div class="compv2-lbl">Never Screened</div></div>
+        </div>
       </div>
     </div>
 
     <!-- Provider Compliance Scores -->
     ${providerScores.length > 0 ? `
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card" style="margin-bottom:16px;border-radius:16px;overflow:hidden;">
       <div class="card-header">
         <h3>Provider Compliance Scores</h3>
         <span class="text-sm text-muted">${providers.length} provider(s)</span>
@@ -15400,7 +15779,7 @@ async function renderCompliancePage() {
 
     <!-- Risk Matrix Heatmap -->
     ${riskMatrix.length > 0 ? `
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card" style="margin-bottom:16px;border-radius:16px;overflow:hidden;">
       <div class="card-header">
         <h3>Credential Risk Matrix</h3>
         <div style="display:flex;gap:12px;font-size:11px;align-items:center;">
@@ -15550,18 +15929,21 @@ async function renderFaqPage() {
   const categories = ['all', 'general', 'credentialing', 'billing', 'compliance'];
 
   body.innerHTML = `
+    <style>
+      .fq2-card{border-radius:16px;overflow:hidden;}
+    </style>
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:center;">
-      <input type="text" id="faq-search" placeholder="Search knowledge base..." class="form-control" style="flex:1;min-width:250px;height:40px;font-size:14px;" oninput="window.app.filterFaqs()">
+      <input type="text" id="faq-search" placeholder="Search knowledge base..." class="form-control" style="flex:1;min-width:250px;height:40px;font-size:14px;border-radius:12px;" oninput="window.app.filterFaqs()">
       <div style="display:flex;gap:4px;" id="faq-category-tabs">
         ${categories.map(c => `
-          <button class="btn btn-sm ${c === 'all' ? 'btn-primary' : ''}" data-cat="${escAttr(c)}" onclick="window.app.filterFaqCategory('${escAttr(c)}')" style="text-transform:capitalize;">${escHtml(c)}</button>
+          <button class="btn btn-sm ${c === 'all' ? 'btn-primary' : ''}" data-cat="${escAttr(c)}" onclick="window.app.filterFaqCategory('${escAttr(c)}')" style="text-transform:capitalize;border-radius:12px;">${escHtml(c)}</button>
         `).join('')}
       </div>
     </div>
 
     <div id="faq-list">
       ${faqs.length > 0 ? faqs.map((faq, idx) => `
-        <div class="card faq-item" data-category="${(faq.category || 'general').toLowerCase()}" data-search="${escHtml((faq.question || '').toLowerCase() + ' ' + (faq.answer || '').toLowerCase())}" style="margin-bottom:12px;">
+        <div class="card faq-item fq2-card" data-category="${(faq.category || 'general').toLowerCase()}" data-search="${escHtml((faq.question || '').toLowerCase() + ' ' + (faq.answer || '').toLowerCase())}" style="margin-bottom:12px;">
           <div class="card-header" style="cursor:pointer;padding:16px 20px;" onclick="
             const b = document.getElementById('faq-body-${idx}');
             const a = document.getElementById('faq-arrow-${idx}');
@@ -16722,32 +17104,31 @@ async function renderPSVPage() {
   };
 
   body.innerHTML = `
-    <!-- PSV Stats -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
-      <div class="card"><div class="card-body" style="text-align:center;padding:16px;">
-        <div style="font-size:28px;font-weight:800;color:var(--brand-600);">${totalProviders}</div>
-        <div style="font-size:12px;color:var(--gray-500);">Total Providers</div>
-      </div></div>
-      <div class="card"><div class="card-body" style="text-align:center;padding:16px;">
-        <div style="font-size:28px;font-weight:800;color:var(--green);">${fullyVerified}</div>
-        <div style="font-size:12px;color:var(--gray-500);">Fully Verified</div>
-      </div></div>
-      <div class="card"><div class="card-body" style="text-align:center;padding:16px;">
-        <div style="font-size:28px;font-weight:800;color:var(--gold);">${partiallyVerified}</div>
-        <div style="font-size:12px;color:var(--gray-500);">Partially Verified</div>
-      </div></div>
-      <div class="card"><div class="card-body" style="text-align:center;padding:16px;">
-        <div style="font-size:28px;font-weight:800;color:var(--red);">${needsAction}</div>
-        <div style="font-size:12px;color:var(--gray-500);">Action Needed</div>
-      </div></div>
-      <div class="card"><div class="card-body" style="text-align:center;padding:16px;">
-        <div style="font-size:14px;font-weight:700;color:var(--gray-700);">${lastScanDate ? formatDateDisplay(lastScanDate) : 'Never'}</div>
-        <div style="font-size:12px;color:var(--gray-500);">Last PSV Scan</div>
-      </div></div>
+    <style>
+      .psvv2-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:20px; }
+      .psvv2-stat { background:var(--surface-card,#fff); border-radius:16px; padding:18px 16px; position:relative; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.06); text-align:center; transition:transform 0.18s,box-shadow 0.18s; }
+      .psvv2-stat:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,0.1); }
+      .psvv2-stat::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+      .psvv2-stat:nth-child(1)::before { background:linear-gradient(90deg,var(--brand-500),var(--brand-700)); }
+      .psvv2-stat:nth-child(2)::before { background:linear-gradient(90deg,#22c55e,#16a34a); }
+      .psvv2-stat:nth-child(3)::before { background:linear-gradient(90deg,#f59e0b,#d97706); }
+      .psvv2-stat:nth-child(4)::before { background:linear-gradient(90deg,#ef4444,#dc2626); }
+      .psvv2-stat:nth-child(5)::before { background:linear-gradient(90deg,#6b7280,#4b5563); }
+      .psvv2-stat .psvv2-val { font-size:28px; font-weight:800; line-height:1.1; }
+      .psvv2-stat .psvv2-lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray-500); margin-top:4px; }
+    </style>
+
+    <!-- V2 PSV Stats -->
+    <div class="psvv2-stats">
+      <div class="psvv2-stat"><div class="psvv2-val" style="color:var(--brand-600);">${totalProviders}</div><div class="psvv2-lbl">Total Providers</div></div>
+      <div class="psvv2-stat"><div class="psvv2-val" style="color:#16a34a;">${fullyVerified}</div><div class="psvv2-lbl">Fully Verified</div></div>
+      <div class="psvv2-stat"><div class="psvv2-val" style="color:#d97706;">${partiallyVerified}</div><div class="psvv2-lbl">Pending Verification</div></div>
+      <div class="psvv2-stat"><div class="psvv2-val" style="color:#dc2626;">${needsAction}</div><div class="psvv2-lbl">Issues Found</div></div>
+      <div class="psvv2-stat"><div class="psvv2-val" style="font-size:14px;font-weight:700;color:var(--gray-700);padding-top:6px;">${lastScanDate ? formatDateDisplay(lastScanDate) : 'Never'}</div><div class="psvv2-lbl">Last PSV Scan</div></div>
     </div>
 
     <!-- Verification Sources -->
-    <div class="card" style="margin-bottom:20px;">
+    <div class="card" style="margin-bottom:20px;border-radius:16px;overflow:hidden;">
       <div class="card-header"><h3>Verification Sources</h3></div>
       <div class="card-body" style="padding:12px;">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
@@ -16773,7 +17154,7 @@ async function renderPSVPage() {
     </div>
 
     <!-- Provider Verification Table -->
-    <div class="card">
+    <div class="card" style="border-radius:16px;overflow:hidden;">
       <div class="card-header">
         <h3>Provider Verification Status</h3>
         <input type="text" class="form-control" placeholder="Search providers..." style="width:220px;height:34px;font-size:13px;" oninput="document.querySelectorAll('#psv-table-body tr').forEach(r=>{r.style.display=r.dataset.name.includes(this.value.toLowerCase())?'':'none'})">
@@ -16902,16 +17283,30 @@ async function renderMonitoringPage() {
     return dates.length ? formatDateDisplay(dates.sort().reverse()[0]) : '—';
   }
 
+  const sevBorderColor = { critical: '#dc2626', urgent: '#f97316', warning: '#eab308', info: '#6b7280' };
+
   body.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
-      <div class="card" style="border-left:4px solid #dc2626;"><div class="card-body" style="text-align:center;padding:16px;"><div style="font-size:28px;font-weight:800;color:#dc2626;">${critical}</div><div style="font-size:12px;color:var(--gray-500);">Critical</div></div></div>
-      <div class="card" style="border-left:4px solid #f97316;"><div class="card-body" style="text-align:center;padding:16px;"><div style="font-size:28px;font-weight:800;color:#f97316;">${urgent}</div><div style="font-size:12px;color:var(--gray-500);">Urgent</div></div></div>
-      <div class="card" style="border-left:4px solid #eab308;"><div class="card-body" style="text-align:center;padding:16px;"><div style="font-size:28px;font-weight:800;color:#eab308;">${warnings}</div><div style="font-size:12px;color:var(--gray-500);">Warnings</div></div></div>
-      <div class="card" style="border-left:4px solid #6b7280;"><div class="card-body" style="text-align:center;padding:16px;"><div style="font-size:28px;font-weight:800;color:#6b7280;">${info}</div><div style="font-size:12px;color:var(--gray-500);">Info</div></div></div>
-      <div class="card" style="border-left:4px solid var(--brand-600);"><div class="card-body" style="text-align:center;padding:16px;"><div style="font-size:28px;font-weight:800;color:var(--brand-600);">${providers.length}</div><div style="font-size:12px;color:var(--gray-500);">Monitored</div></div></div>
+    <style>
+      .monv2-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:14px; margin-bottom:20px; }
+      .monv2-stat { background:var(--surface-card,#fff); border-radius:16px; padding:18px 16px; position:relative; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.06); text-align:center; transition:transform 0.18s,box-shadow 0.18s; }
+      .monv2-stat:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,0.1); }
+      .monv2-stat::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+      .monv2-stat .monv2-val { font-size:28px; font-weight:800; line-height:1.1; }
+      .monv2-stat .monv2-lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray-500); margin-top:4px; }
+      .monv2-alert-row { transition:background 0.15s; }
+      .monv2-alert-row:hover { background:var(--gray-50,#f9fafb); }
+    </style>
+
+    <!-- V2 Stat Cards -->
+    <div class="monv2-stats">
+      <div class="monv2-stat" style="border-left:4px solid #dc2626;"><div class="monv2-stat" style="padding:0;box-shadow:none;"><div class="monv2-val" style="color:#dc2626;">${critical}</div><div class="monv2-lbl">Critical</div></div></div>
+      <div class="monv2-stat" style="border-left:4px solid #f97316;"><div class="monv2-stat" style="padding:0;box-shadow:none;"><div class="monv2-val" style="color:#f97316;">${urgent}</div><div class="monv2-lbl">Urgent</div></div></div>
+      <div class="monv2-stat" style="border-left:4px solid #eab308;"><div class="monv2-stat" style="padding:0;box-shadow:none;"><div class="monv2-val" style="color:#eab308;">${warnings}</div><div class="monv2-lbl">Warnings</div></div></div>
+      <div class="monv2-stat" style="border-left:4px solid #6b7280;"><div class="monv2-stat" style="padding:0;box-shadow:none;"><div class="monv2-val" style="color:#6b7280;">${info}</div><div class="monv2-lbl">Info</div></div></div>
+      <div class="monv2-stat" style="border-left:4px solid var(--brand-600);"><div class="monv2-stat" style="padding:0;box-shadow:none;"><div class="monv2-val" style="color:var(--brand-600);">${providers.length}</div><div class="monv2-lbl">Monitored</div></div></div>
     </div>
 
-    <div class="card" style="margin-bottom:20px;">
+    <div class="card" style="margin-bottom:20px;border-radius:16px;overflow:hidden;">
       <div class="card-header"><h3>Monitoring Schedule</h3></div>
       <div class="card-body" style="padding:0;">
         <table><thead><tr><th>Check</th><th>Frequency</th><th>Source</th><th>Last Run</th><th>Status</th></tr></thead><tbody>
@@ -16923,19 +17318,19 @@ async function renderMonitoringPage() {
             { check: 'NPDB Query', freq: 'Quarterly', source: 'Nat. Practitioner Data Bank', last: '—', st: 'planned' },
             { check: 'Board Certification', freq: 'Quarterly', source: 'ABMS / Specialty Boards', last: '—', st: 'planned' },
             { check: 'Malpractice Coverage', freq: 'Annually', source: 'Insurance Carriers', last: '—', st: 'planned' },
-          ].map(s => `<tr><td><strong>${s.check}</strong></td><td>${s.freq}</td><td style="font-size:12px;color:var(--gray-600);">${s.source}</td><td style="font-size:12px;">${s.last}</td><td><span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:${s.st === 'active' ? 'rgba(34,197,94,0.12)' : 'rgba(156,163,175,0.12)'};color:${s.st === 'active' ? 'var(--green)' : 'var(--gray-500)'};">${s.st === 'active' ? 'Active' : 'Planned'}</span></td></tr>`).join('')}
+          ].map(s => `<tr><td><strong>${s.check}</strong></td><td>${s.freq}</td><td style="font-size:12px;color:var(--gray-600);">${s.source}</td><td style="font-size:12px;">${s.last}</td><td><span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:600;background:${s.st === 'active' ? 'rgba(34,197,94,0.12)' : 'rgba(156,163,175,0.12)'};color:${s.st === 'active' ? 'var(--green)' : 'var(--gray-500)'};"><span style="width:6px;height:6px;border-radius:50%;background:currentColor;"></span>${s.st === 'active' ? 'Active' : 'Planned'}</span></td></tr>`).join('')}
         </tbody></table>
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" style="border-radius:16px;overflow:hidden;">
       <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <h3>Alert Feed (${alerts.length})</h3>
         <div style="display:flex;gap:8px;">
-          <select class="form-control" style="width:140px;height:32px;font-size:12px;" onchange="document.querySelectorAll('#monitoring-alerts-body tr').forEach(r=>{r.style.display=!this.value||r.dataset.severity===this.value?'':'none'})">
+          <select class="form-control" style="width:140px;height:32px;font-size:12px;border-radius:10px;" onchange="document.querySelectorAll('#monitoring-alerts-body tr').forEach(r=>{r.style.display=!this.value||r.dataset.severity===this.value?'':'none'})">
             <option value="">All Severities</option><option value="critical">Critical</option><option value="urgent">Urgent</option><option value="warning">Warning</option><option value="info">Info</option>
           </select>
-          <select class="form-control" style="width:140px;height:32px;font-size:12px;" onchange="document.querySelectorAll('#monitoring-alerts-body tr').forEach(r=>{r.style.display=!this.value||r.dataset.category===this.value?'':'none'})">
+          <select class="form-control" style="width:140px;height:32px;font-size:12px;border-radius:10px;" onchange="document.querySelectorAll('#monitoring-alerts-body tr').forEach(r=>{r.style.display=!this.value||r.dataset.category===this.value?'':'none'})">
             <option value="">All Categories</option><option value="license">License</option><option value="dea">DEA</option><option value="exclusion">Exclusion</option><option value="verification">Verification</option><option value="task">Task</option><option value="application">Application</option>
           </select>
         </div>
@@ -16943,7 +17338,7 @@ async function renderMonitoringPage() {
       <div class="card-body" style="padding:0;">
         <div class="table-wrap"><table><thead><tr><th>Severity</th><th>Provider</th><th>Alert</th><th>Details</th><th>Date</th></tr></thead>
           <tbody id="monitoring-alerts-body">
-            ${alerts.map(a => `<tr data-severity="${a.severity}" data-category="${a.category}">
+            ${alerts.map(a => `<tr class="monv2-alert-row" data-severity="${a.severity}" data-category="${a.category}" style="border-left:4px solid ${sevBorderColor[a.severity] || '#6b7280'};">
               <td>${sevBadge(a.severity)}</td><td><strong>${escHtml(a.provider)}</strong></td><td style="font-weight:600;">${escHtml(a.alert)}</td>
               <td style="font-size:12px;color:var(--gray-600);max-width:300px;">${escHtml(a.detail)}</td><td style="font-size:12px;">${a.date ? formatDateDisplay(a.date) : '—'}</td>
             </tr>`).join('')}
