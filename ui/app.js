@@ -13,7 +13,8 @@ import batchGenerator from '../core/batch-generator.js';
 import emailGenerator from '../core/email-generator.js';
 import caqhApi from '../core/caqh-api.js';
 import taxonomyApi from '../core/taxonomy-api.js';
-import { SUPPLEMENTAL_PAYERS } from '../data/missing-payers-catalog.js';
+// Lazy-loaded to avoid blocking initial render (53KB file)
+let SUPPLEMENTAL_PAYERS = [];
 
 // ─── Google Places Autocomplete ───
 
@@ -293,13 +294,21 @@ const PAYER_TAG_MAP = {
   'BCBS of Minnesota':    ['caqh_accepts','behavioral_health','telehealth_friendly'],
 };
 
-function enrichPayerTags() {
+async function enrichPayerTags() {
   // Tag existing payers from API
   PAYER_CATALOG.forEach(p => {
     if (!p.tags || p.tags.length === 0) {
       p.tags = PAYER_TAG_MAP[p.name] || [];
     }
   });
+
+  // Lazy-load supplemental payers (don't block initial render)
+  if (SUPPLEMENTAL_PAYERS.length === 0) {
+    try {
+      const module = await import('../data/missing-payers-catalog.js');
+      SUPPLEMENTAL_PAYERS = module.SUPPLEMENTAL_PAYERS || [];
+    } catch (e) { console.warn('[Credentik] Could not load supplemental payers:', e); }
+  }
 
   // Merge supplemental payers not yet in the API catalog
   const existingNames = new Set(PAYER_CATALOG.map(p => p.name.toLowerCase()));
@@ -445,8 +454,8 @@ export async function initApp() {
   try { DEFAULT_STRATEGIES = await store.getAll('strategies') || []; } catch (e) { console.error('Failed to load strategies:', e); }
   US_TOTAL_POP = STATES.reduce((sum, s) => sum + (s.population || 0), 0);
 
-  // Enrich existing payers with strategic tags (client-side until API supports tags natively)
-  enrichPayerTags();
+  // Enrich existing payers with strategic tags (lazy-load supplemental payers in background)
+  enrichPayerTags(); // async — doesn't block init
 
   // Load custom group definitions from agency config
   try {

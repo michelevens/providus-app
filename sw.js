@@ -1,4 +1,4 @@
-const CACHE_NAME = 'credentik-v4';
+const CACHE_NAME = 'credentik-v5';
 const API_CACHE = 'credentik-api-v1';
 const API_TTL = 60 * 60 * 1000; // 60 minutes
 const API_MAX_ENTRIES = 100;
@@ -16,6 +16,7 @@ const SHELL_FILES = [
   './core/email-generator.js',
   './core/caqh-api.js',
   './core/taxonomy-api.js',
+  './data/missing-payers-catalog.js',
   './manifest.json',
 ];
 
