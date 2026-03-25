@@ -10788,7 +10788,7 @@ window.saveApplication = async function() {
     state: document.getElementById('field-state').value,
     payerId,
     payerName: payer ? payer.name : '',
-    wave: parseInt(document.getElementById('field-wave').value) || null,
+    wave: document.getElementById('field-wave').value || '',
     status: document.getElementById('field-status').value,
     type: document.getElementById('field-type').value,
     submittedDate: document.getElementById('field-submitted').value,
