@@ -949,6 +949,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openFacilityModal()">+ Add Location</button> <button class="btn" onclick="window.app.openNpiFacilityModal()">+ Add from NPI</button>' + printBtn;
       await renderFacilitiesPage();
       break;
+    case 'facility-detail':
+      pageTitle.textContent = 'Location Detail';
+      pageSubtitle.textContent = '';
+      pageActions.innerHTML = '<button class="btn" onclick="window.app.navigateTo(\'facilities\')">← All Locations</button>' + printBtn;
+      await renderFacilityDetailPage(window._selectedFacilityId);
+      break;
     case 'billing':
       pageTitle.textContent = 'Billing & Invoicing';
       pageSubtitle.textContent = 'Manage invoices, services, and payments';
@@ -8654,6 +8660,10 @@ function handleNppesProxy(payload) {
   },
 
   // ── Facilities ──
+  viewFacility(id) {
+    window._selectedFacilityId = id;
+    navigateTo('facility-detail');
+  },
   openFacilityModal(id) {
     const modal = document.getElementById('facility-modal');
     const title = document.getElementById('facility-modal-title');
@@ -8714,7 +8724,11 @@ function handleNppesProxy(payload) {
         showToast('Facility created');
       }
       document.getElementById('facility-modal').classList.remove('active');
-      await renderFacilitiesPage();
+      if (currentPage === 'facility-detail') {
+        await renderFacilityDetailPage(window._selectedFacilityId);
+      } else {
+        await renderFacilitiesPage();
+      }
     } catch (e) { showToast('Error saving facility: ' + e.message); }
   },
   async deleteFacility(id) {
@@ -14623,7 +14637,7 @@ async function renderFacilitiesPage() {
                 const addr = [f.city, f.state].filter(Boolean).join(', ');
                 return `
                 <tr class="facility-row" data-name="${escHtml((f.name || '').toLowerCase())}">
-                  <td><strong>${escHtml(f.name || '—')}</strong>${f.npi ? '<br><span style="font-size:10px;color:var(--gray-400);font-family:monospace;">NPI: ' + escHtml(f.npi) + '</span>' : ''}</td>
+                  <td><strong style="color:var(--brand-600);cursor:pointer;" onclick="window.app.viewFacility('${f.id}')">${escHtml(f.name || '—')}</strong>${f.npi ? '<br><span style="font-size:10px;color:var(--gray-400);font-family:monospace;">NPI: ' + escHtml(f.npi) + '</span>' : ''}</td>
                   <td>${(f.facilityType || f.type) ? '<span class="facv2-type-badge">' + escHtml((f.facilityType || f.type).replace(/_/g, ' ')) + '</span>' : '—'}</td>
                   <td>${f.address || f.street ? '<div style="font-size:12px;">' + escHtml(f.address || f.street || '') + '</div>' : ''}${escHtml(addr) || '—'}</td>
                   <td>${escHtml(f.phone || '—')}</td>
@@ -14725,6 +14739,206 @@ async function renderFacilitiesPage() {
         <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
           <button class="btn" onclick="document.getElementById('npi-facility-modal').classList.remove('active')">Cancel</button>
           <button class="btn btn-primary" onclick="window.app.createFacilityFromNpiLookup()">Create from NPI</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Facility Detail Page ───
+async function renderFacilityDetailPage(facilityId) {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  if (!facilityId) { body.innerHTML = '<div style="padding:3rem;text-align:center;color:var(--gray-500);">No facility selected.</div>'; return; }
+
+  let facilities = [];
+  try { facilities = await store.getFacilities(); } catch (e) { console.error(e); }
+  if (!Array.isArray(facilities)) facilities = [];
+  const fac = facilities.find(f => f.id === facilityId || String(f.id) === String(facilityId));
+  if (!fac) { body.innerHTML = '<div style="padding:3rem;text-align:center;color:var(--gray-500);">Facility not found.</div>'; return; }
+
+  // Linked providers — find via applications
+  const allApps = await store.getAll('applications').catch(() => []);
+  const appArr = Array.isArray(allApps) ? allApps : [];
+  const facApps = appArr.filter(a => (a.facilityId && String(a.facilityId) === String(fac.id)) || (!a.facilityId && a.state && a.state === fac.state));
+
+  // Get provider details for linked apps
+  const allProviders = await store.getAll('providers').catch(() => []);
+  const provArr = Array.isArray(allProviders) ? allProviders : [];
+  const linkedProviderIds = [...new Set(facApps.map(a => a.providerId || a.provider_id).filter(Boolean))];
+  const linkedProviders = linkedProviderIds.map(pid => {
+    const p = provArr.find(pr => String(pr.id) === String(pid));
+    const pApps = facApps.filter(a => String(a.providerId || a.provider_id) === String(pid));
+    return p ? { ...p, apps: pApps } : null;
+  }).filter(Boolean);
+
+  // Organization
+  const orgs = await store.getAll('organizations').catch(() => []);
+  const org = (Array.isArray(orgs) ? orgs : []).find(o => String(o.id) === String(fac.organizationId || fac.organization_id));
+
+  const isActive = fac.status === 'active' || fac.isActive;
+  const statusLabel = isActive ? 'Active' : (fac.status || 'Inactive');
+  const facType = (fac.facilityType || fac.type || fac.facility_type || '').replace(/_/g, ' ');
+  const fullAddr = [fac.street || fac.address, fac.city, fac.state, fac.zip].filter(Boolean).join(', ');
+
+  body.innerHTML = `
+    <style>
+      .fac-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px; }
+      .fac-detail-hero { background:var(--surface-card,#fff); border-radius:16px; padding:28px; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+      .fac-detail-hero h2 { font-size:22px; font-weight:800; margin:0 0 4px; }
+      .fac-detail-meta { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 0; }
+      .fac-meta-pill { display:inline-flex; align-items:center; gap:5px; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600; }
+      .fac-detail-section { background:var(--surface-card,#fff); border-radius:16px; padding:24px; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+      .fac-info-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+      .fac-info-item { }
+      .fac-info-item .fac-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray-400); margin-bottom:3px; }
+      .fac-info-item .fac-value { font-size:14px; font-weight:500; color:var(--gray-800); }
+      .fac-map-placeholder { background:var(--gray-100); border-radius:12px; height:180px; display:flex; align-items:center; justify-content:center; color:var(--gray-400); font-size:13px; margin-top:16px; }
+      @media (max-width:768px) { .fac-detail-grid { grid-template-columns:1fr; } .fac-info-grid { grid-template-columns:1fr; } }
+    </style>
+
+    <div class="fac-detail-grid">
+      <!-- Left: Hero + Info -->
+      <div>
+        <div class="fac-detail-hero">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div>
+              <h2>${escHtml(fac.name || 'Unnamed Location')}</h2>
+              ${org ? '<div style="font-size:13px;color:var(--gray-500);margin-top:2px;">' + escHtml(org.name) + '</div>' : ''}
+            </div>
+            <div style="display:flex;gap:8px;">
+              ${editButton('Edit', `window.app.editFacility(${fac.id})`)}
+            </div>
+          </div>
+          <div class="fac-detail-meta">
+            <span class="fac-meta-pill" style="background:${isActive ? 'rgba(34,197,94,0.12)' : 'rgba(156,163,175,0.12)'};color:${isActive ? 'var(--green)' : 'var(--gray-500)'};">
+              <span style="width:7px;height:7px;border-radius:50%;background:currentColor;"></span>${statusLabel}
+            </span>
+            ${facType ? '<span class="fac-meta-pill" style="background:rgba(139,92,246,0.1);color:#7c3aed;text-transform:uppercase;font-size:10px;letter-spacing:0.5px;">' + escHtml(facType) + '</span>' : ''}
+            ${fac.npi ? '<span class="fac-meta-pill" style="background:var(--gray-100);color:var(--gray-600);font-family:monospace;font-size:11px;">NPI: ' + escHtml(fac.npi) + '</span>' : ''}
+          </div>
+        </div>
+
+        <!-- Location Info Card -->
+        <div class="fac-detail-section" style="margin-top:20px;">
+          <h3 style="margin:0 0 16px;font-size:15px;font-weight:700;">Location Information</h3>
+          <div class="fac-info-grid">
+            <div class="fac-info-item"><div class="fac-label">Address</div><div class="fac-value">${escHtml(fullAddr || '—')}</div></div>
+            <div class="fac-info-item"><div class="fac-label">Phone</div><div class="fac-value">${escHtml(fac.phone || '—')}</div></div>
+            <div class="fac-info-item"><div class="fac-label">Fax</div><div class="fac-value">${escHtml(fac.fax || '—')}</div></div>
+            <div class="fac-info-item"><div class="fac-label">State</div><div class="fac-value">${escHtml(fac.state || '—')}</div></div>
+            <div class="fac-info-item"><div class="fac-label">ZIP</div><div class="fac-value">${escHtml(fac.zip || fac.zipCode || '—')}</div></div>
+            <div class="fac-info-item"><div class="fac-label">Organization</div><div class="fac-value">${org ? escHtml(org.name) : '—'}</div></div>
+          </div>
+          ${fullAddr ? '<div class="fac-map-placeholder"><span>&#x1f4cd; ' + escHtml(fullAddr) + '</span></div>' : ''}
+        </div>
+      </div>
+
+      <!-- Right: Linked Providers + Applications -->
+      <div>
+        <div class="fac-detail-section">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="margin:0;font-size:15px;font-weight:700;">Linked Providers (${linkedProviders.length})</h3>
+          </div>
+          ${linkedProviders.length > 0 ? `
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              ${linkedProviders.map(p => {
+                const pName = ((p.firstName || p.first_name || '') + ' ' + (p.lastName || p.last_name || '')).trim() || 'Unknown';
+                const cred = p.credentials || p.credential || '';
+                const spec = p.specialty || '';
+                return `<div style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;background:var(--gray-50);cursor:pointer;transition:background 0.15s;" onclick="window._selectedProviderId=${p.id};window.app.navigateTo('provider-profile');" onmouseover="this.style.background='var(--gray-100)'" onmouseout="this.style.background='var(--gray-50)'">
+                  <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--brand-500),var(--brand-700));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex-shrink:0;">${escHtml((p.firstName || p.first_name || '?')[0])}${escHtml((p.lastName || p.last_name || '?')[0])}</div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-weight:600;font-size:13px;">${escHtml(pName)}${cred ? ', ' + escHtml(cred) : ''}</div>
+                    ${spec ? '<div style="font-size:11px;color:var(--gray-500);">' + escHtml(spec) + '</div>' : ''}
+                  </div>
+                  <div style="text-align:right;">
+                    <span class="badge badge-approved" style="font-size:10px;">${p.apps.length} app${p.apps.length !== 1 ? 's' : ''}</span>
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+          ` : '<div style="text-align:center;padding:24px;color:var(--gray-400);font-size:13px;">No providers linked to this location.</div>'}
+        </div>
+
+        <!-- Applications at this location -->
+        <div class="fac-detail-section" style="margin-top:20px;">
+          <h3 style="margin:0 0 16px;font-size:15px;font-weight:700;">Applications (${facApps.length})</h3>
+          ${facApps.length > 0 ? `
+            <div class="table-wrap"><table>
+              <thead><tr><th>Provider</th><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th></tr></thead>
+              <tbody>
+                ${facApps.slice(0, 25).map(a => {
+                  const prov = provArr.find(pr => String(pr.id) === String(a.providerId || a.provider_id));
+                  const provLabel = prov ? ((prov.firstName || prov.first_name || '') + ' ' + (prov.lastName || prov.last_name || '')).trim() : (a.providerName || '—');
+                  const statusColor = a.status === 'approved' ? 'approved' : a.status === 'denied' ? 'denied' : 'pending';
+                  return `<tr>
+                    <td style="font-size:12px;">${escHtml(provLabel)}</td>
+                    <td style="font-size:12px;">${escHtml(a.payerName || a.payer_name || a.payer || '—')}</td>
+                    <td>${escHtml(a.state || '—')}</td>
+                    <td><span class="badge badge-${statusColor}">${escHtml(a.status || 'pending')}</span></td>
+                    <td style="font-size:11px;">${a.submittedDate || a.submitted_date ? formatDateDisplay(a.submittedDate || a.submitted_date) : '—'}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table></div>
+            ${facApps.length > 25 ? '<div style="text-align:center;padding:8px;font-size:12px;color:var(--gray-400);">Showing 25 of ' + facApps.length + ' applications</div>' : ''}
+          ` : '<div style="text-align:center;padding:24px;color:var(--gray-400);font-size:13px;">No applications at this location.</div>'}
+        </div>
+      </div>
+    </div>
+
+    <!-- Facility Edit Modal (shared) -->
+    <div class="modal-overlay" id="facility-modal">
+      <div class="modal" style="max-width:560px;">
+        <div class="modal-header">
+          <h3 id="facility-modal-title">Edit Facility</h3>
+          <button class="modal-close" onclick="document.getElementById('facility-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body" id="facility-modal-body">
+          <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Organization *</label>
+              <select id="fac-org" class="form-control">
+                <option value="">Select Organization...</option>
+                ${(Array.isArray(orgs) ? orgs : []).map(o => `<option value="${o.id}" ${String(o.id) === String(fac.organizationId || fac.organization_id) ? 'selected' : ''}>${escHtml(o.name)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Location Name *</label><input type="text" id="fac-name" class="form-control" placeholder="e.g. Main Office"></div>
+            <div class="auth-field" style="margin:0;"><label>Location NPI</label><input type="text" id="fac-npi" class="form-control" maxlength="10" placeholder="10-digit NPI" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,10)"></div>
+            <div class="auth-field" style="margin:0;"><label>Location Type</label>
+              <select id="fac-type" class="form-control">
+                <option value="">Select Type</option>
+                <option value="primary_office">Primary Office</option><option value="satellite_office">Satellite Office</option>
+                <option value="telehealth">Telehealth Only (Virtual)</option><option value="clinic">Outpatient Clinic</option>
+                <option value="cmhc">Community Mental Health Center</option><option value="residential">Residential Treatment Facility</option>
+                <option value="hospital_outpatient">Hospital — Outpatient</option><option value="hospital_inpatient">Hospital — Inpatient Psych</option>
+                <option value="fqhc">FQHC (Federally Qualified Health Center)</option><option value="school_based">School-Based Health Center</option>
+                <option value="crisis_center">Crisis Stabilization Unit</option><option value="substance_abuse">Substance Abuse Treatment Center</option>
+                <option value="group_home">Group Home / Assisted Living</option><option value="correctional">Correctional Facility</option>
+                <option value="va">VA Medical Center</option><option value="home_based">Home-Based Services</option><option value="other">Other</option>
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Phone</label><input type="tel" id="fac-phone" class="form-control" placeholder="(555) 555-5555" maxlength="14" oninput="this.value=this.value.replace(/\\D/g,'').replace(/(\\d{3})(\\d{3})(\\d{4}).*/,'($1) $2-$3')"></div>
+            <div class="auth-field" style="margin:0;"><label>Fax</label><input type="tel" id="fac-fax" class="form-control" placeholder="(555) 555-5555" maxlength="14" oninput="this.value=this.value.replace(/\\D/g,'').replace(/(\\d{3})(\\d{3})(\\d{4}).*/,'($1) $2-$3')"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Street Address</label><input type="text" id="fac-address" class="form-control" placeholder="123 Main St, Suite 100"></div>
+            <div class="auth-field" style="margin:0;"><label>City</label><input type="text" id="fac-city" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>State</label>
+              <select id="fac-state" class="form-control">
+                <option value="">Select State...</option>
+                ${STATES.map(s => `<option value="${s.code}">${s.name} (${s.code})</option>`).join('')}
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>ZIP Code</label><input type="text" id="fac-zip" class="form-control" placeholder="12345" maxlength="10"></div>
+            <div class="auth-field" style="margin:0;"><label>Status</label>
+              <select id="fac-status" class="form-control"><option value="active">Active</option><option value="inactive">Inactive</option></select>
+            </div>
+          </div>
+          <input type="hidden" id="fac-edit-id" value="">
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('facility-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveFacility()">Save Location</button>
         </div>
       </div>
     </div>

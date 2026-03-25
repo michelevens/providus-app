@@ -268,7 +268,7 @@ async function renderProviderDashboard(user) {
           <div class="card-body" style="padding:0;">
             ${provLocations.length > 0 ? `<table><thead><tr><th>Location</th><th>City / State</th><th>Type</th><th>Applications</th></tr></thead><tbody>
               ${provLocations.map(pl => `<tr>
-                <td><strong>${escHtml(pl.facility.name || '—')}</strong></td>
+                <td><strong style="color:var(--brand-600);cursor:pointer;" onclick="window.app.viewFacility('${pl.facility.id}')">${escHtml(pl.facility.name || '—')}</strong></td>
                 <td>${escHtml([pl.facility.city, pl.facility.state].filter(Boolean).join(', ') || '—')}</td>
                 <td>${escHtml((pl.facility.facilityType || pl.facility.type || '—').replace(/_/g, ' '))}</td>
                 <td><span class="badge badge-approved" style="font-size:10px;">${pl.apps.length} app${pl.apps.length !== 1 ? 's' : ''}</span></td>
@@ -379,16 +379,16 @@ async function renderProviderPrintout(providerId) {
   if (!Array.isArray(education)) education = [];
   if (!Array.isArray(boards)) boards = [];
 
-  const provName = `${provider.firstName || ''} ${provider.lastName || ''}`.trim() || 'Unknown Provider';
+  const provName = `${provider.firstName || provider.first_name || ''} ${provider.lastName || provider.last_name || ''}`.trim() || 'Unknown Provider';
   const credential = provider.credentials || provider.credential || '';
   const npi = provider.npi || '';
-  const taxonomy = provider.taxonomy || '';
-  const specialty = provider.specialty || '';
+  const taxonomy = provider.taxonomy || provider.taxonomy_code || provider.taxonomyCode || '';
+  const specialty = provider.specialty || provider.taxonomy_desc || provider.taxonomyDesc || '';
   const email = provider.email || '';
   const phone = provider.phone || '';
-  const caqhId = provider.caqhId || '';
-  const orgName = provider.organization?.name || provider.organizationName || '';
-  const agencyName = agency?.name || agency?.agencyName || '';
+  const caqhId = provider.caqhId || provider.caqh_id || '';
+  const orgName = provider.organization?.name || provider.organizationName || provider.organization_name || '';
+  const agencyName = agency?.name || agency?.agencyName || agency?.agency_name || '';
   const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   // Active licenses sorted by state
@@ -770,10 +770,10 @@ async function renderProviderProfilePage(providerId) {
         </div>
         <div class="cp-meta-row">
           <span>NPI: <code>${escHtml(provider.npi || '---')}</code></span>
-          <span>${escHtml(provider.specialty || provider.taxonomyDesc || '---')}</span>
+          <span>${escHtml(provider.specialty || provider.taxonomyDesc || provider.taxonomy_desc || provider.taxonomy_description || '---')}</span>
         </div>
         <div class="cp-meta-row">
-          <span>Taxonomy: <code>${escHtml(provider.taxonomyCode || provider.taxonomy_code || '---')}</code></span>
+          <span>Taxonomy: <code>${escHtml(provider.taxonomyCode || provider.taxonomy_code || provider.taxonomy || '---')}</code></span>
         </div>
         <a class="cp-edit-link" onclick="window.app.switchProfileTab('overview')">Edit Profile</a>
       </div>
@@ -844,8 +844,8 @@ async function renderProviderProfilePage(providerId) {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
             <div><span class="text-sm text-muted">Full Name</span><div style="font-weight:600;margin-top:2px;">${escHtml(provName)}${credential ? ', ' + escHtml(credential) : ''}</div></div>
             <div><span class="text-sm text-muted">NPI</span><div style="font-weight:600;margin-top:2px;"><code>${escHtml(provider.npi || '—')}</code></div></div>
-            <div><span class="text-sm text-muted">Specialty</span><div style="margin-top:2px;">${escHtml(provider.specialty || provider.taxonomyDesc || '—')}</div></div>
-            <div><span class="text-sm text-muted">Taxonomy Code</span><div style="margin-top:2px;"><code>${escHtml(provider.taxonomyCode || provider.taxonomy_code || '—')}</code></div></div>
+            <div><span class="text-sm text-muted">Specialty</span><div style="margin-top:2px;">${escHtml(provider.specialty || provider.taxonomyDesc || provider.taxonomy_desc || provider.taxonomy_description || '—')}</div></div>
+            <div><span class="text-sm text-muted">Taxonomy Code</span><div style="margin-top:2px;"><code>${escHtml(provider.taxonomyCode || provider.taxonomy_code || provider.taxonomy || '—')}</code></div></div>
             <div><span class="text-sm text-muted">Phone</span><div style="margin-top:2px;">${escHtml(provider.phone || '—')}</div></div>
             <div><span class="text-sm text-muted">Email</span><div style="margin-top:2px;">${escHtml(provider.email || '—')}</div></div>
             <div><span class="text-sm text-muted">State</span><div style="margin-top:2px;">${escHtml(provider.state || '—')}</div></div>
@@ -888,11 +888,11 @@ async function renderProviderProfilePage(providerId) {
             <thead><tr><th>Institution</th><th>Degree</th><th>Field</th><th>Start</th><th>End</th><th></th></tr></thead>
             <tbody>
               ${education.map(e => `<tr>
-                <td><strong>${escHtml(e.institutionName || e.institution || e.schoolName || '—')}</strong></td>
-                <td>${escHtml(e.degree || e.degreeType || '—')}</td>
-                <td>${escHtml(e.fieldOfStudy || e.field || e.specialty || '—')}</td>
+                <td><strong>${escHtml(e.institutionName || e.institution_name || e.institution || e.schoolName || e.school_name || '—')}</strong></td>
+                <td>${escHtml(e.degree || e.degreeType || e.degree_type || '—')}</td>
+                <td>${escHtml(e.fieldOfStudy || e.field_of_study || e.field || e.specialty || '—')}</td>
                 <td>${formatDateDisplay(e.startDate || e.start_date)}</td>
-                <td>${formatDateDisplay(e.endDate || e.end_date || e.graduationDate)}</td>
+                <td>${formatDateDisplay(e.endDate || e.end_date || e.graduationDate || e.graduation_date)}</td>
                 <td>${deleteButton('Delete', `window.app.deleteEducation(${providerId}, ${e.id})`)}</td>
               </tr>`).join('')}
             </tbody>
@@ -937,11 +937,11 @@ async function renderProviderProfilePage(providerId) {
             <thead><tr><th>Board</th><th>Specialty</th><th>Certificate #</th><th>Issued</th><th>Expires</th><th>Status</th></tr></thead>
             <tbody>
               ${boards.map(b => {
-                const isExpired = b.expirationDate && new Date(b.expirationDate) < new Date();
+                const isExpired = (b.expirationDate || b.expiration_date) && new Date(b.expirationDate || b.expiration_date) < new Date();
                 return `<tr>
-                  <td><strong>${escHtml(b.boardName || b.board_name || '—')}</strong></td>
-                  <td>${escHtml(b.specialty || '—')}</td>
-                  <td><code>${escHtml(b.certificateNumber || b.certificate_number || '—')}</code></td>
+                  <td><strong>${escHtml(b.boardName || b.board_name || b.board || b.certifying_board || '—')}</strong></td>
+                  <td>${escHtml(b.specialty || b.board_specialty || '—')}</td>
+                  <td><code>${escHtml(b.certificateNumber || b.certificate_number || b.certNumber || b.cert_number || '—')}</code></td>
                   <td>${formatDateDisplay(b.issueDate || b.issue_date)}</td>
                   <td style="${isExpired ? 'color:var(--red);' : ''}">${formatDateDisplay(b.expirationDate || b.expiration_date)}</td>
                   <td><span class="badge badge-${isExpired ? 'denied' : 'approved'}">${isExpired ? 'Expired' : 'Active'}</span></td>
@@ -997,9 +997,9 @@ async function renderProviderProfilePage(providerId) {
               ${malpractice.map(m => {
                 const isExpired = (m.expirationDate || m.expiration_date) && new Date(m.expirationDate || m.expiration_date) < new Date();
                 return `<tr>
-                  <td><strong>${escHtml(m.carrier || m.insuranceCarrier || m.insurance_carrier || '—')}</strong></td>
+                  <td><strong>${escHtml(m.carrier || m.insuranceCarrier || m.insurance_carrier || m.carrier_name || '—')}</strong></td>
                   <td><code>${escHtml(m.policyNumber || m.policy_number || '—')}</code></td>
-                  <td>${escHtml(m.coverageAmount || m.coverage_amount || m.coverage || '—')}</td>
+                  <td>${escHtml(m.coverageAmount || m.coverage_amount || m.coverage || m.coverage_type || '—')}</td>
                   <td>${formatDateDisplay(m.effectiveDate || m.effective_date)}</td>
                   <td style="${isExpired ? 'color:var(--red);' : ''}">${formatDateDisplay(m.expirationDate || m.expiration_date)}</td>
                   <td><span class="badge badge-${isExpired ? 'denied' : 'approved'}">${isExpired ? 'Expired' : 'Active'}</span></td>
@@ -1047,8 +1047,8 @@ async function renderProviderProfilePage(providerId) {
             <thead><tr><th>Employer</th><th>Position</th><th>Start</th><th>End</th><th>Reason for Leaving</th></tr></thead>
             <tbody>
               ${workHistory.map(w => `<tr>
-                <td><strong>${escHtml(w.employer || w.organization || '—')}</strong></td>
-                <td>${escHtml(w.position || w.title || '—')}</td>
+                <td><strong>${escHtml(w.employerName || w.employer_name || w.employer || w.organization || '—')}</strong></td>
+                <td>${escHtml(w.position || w.title || w.job_title || w.position_title || '—')}</td>
                 <td>${formatDateDisplay(w.startDate || w.start_date)}</td>
                 <td>${w.endDate || w.end_date ? formatDateDisplay(w.endDate || w.end_date) : '<span class="badge badge-approved">Current</span>'}</td>
                 <td class="text-sm text-muted">${escHtml(w.reasonForLeaving || w.reason_for_leaving || '—')}</td>
@@ -1097,9 +1097,9 @@ async function renderProviderProfilePage(providerId) {
             <tbody>
               ${cme.map(c => `<tr>
                 <td><strong>${escHtml(c.title || c.courseName || c.course_name || '—')}</strong></td>
-                <td>${escHtml(c.provider || c.accreditingBody || '—')}</td>
-                <td>${c.credits || c.hours || '—'}</td>
-                <td>${formatDateDisplay(c.completionDate || c.completion_date || c.date)}</td>
+                <td>${escHtml(c.provider || c.accreditingBody || c.accrediting_body || c.cme_provider || '—')}</td>
+                <td>${c.credits || c.hours || c.credit_hours || '—'}</td>
+                <td>${formatDateDisplay(c.completionDate || c.completion_date || c.date || c.completed_at)}</td>
               </tr>`).join('')}
             </tbody>
           </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No CME records on file.</div>'}
@@ -1152,12 +1152,12 @@ async function renderProviderProfilePage(providerId) {
             <thead><tr><th>Name</th><th>Title / Position</th><th>Organization</th><th>Phone</th><th>Email</th><th>Relationship</th></tr></thead>
             <tbody>
               ${references.map(r => `<tr>
-                <td><strong>${escHtml(r.name || ((r.firstName || '') + ' ' + (r.lastName || '')).trim() || '—')}</strong></td>
-                <td>${escHtml(r.title || r.position || '—')}</td>
-                <td>${escHtml(r.organization || '—')}</td>
-                <td>${escHtml(r.phone || '—')}</td>
-                <td>${escHtml(r.email || '—')}</td>
-                <td class="text-sm text-muted">${escHtml(r.relationship || '—')}</td>
+                <td><strong>${escHtml(r.referenceName || r.reference_name || r.name || ((r.firstName || r.first_name || '') + ' ' + (r.lastName || r.last_name || '')).trim() || '—')}</strong></td>
+                <td>${escHtml(r.title || r.position || r.jobTitle || r.job_title || '—')}</td>
+                <td>${escHtml(r.organization || r.company || r.employer || '—')}</td>
+                <td>${escHtml(r.phone || r.phoneNumber || r.phone_number || '—')}</td>
+                <td>${escHtml(r.email || r.emailAddress || r.email_address || '—')}</td>
+                <td class="text-sm text-muted">${escHtml(r.relationship || r.referenceType || r.reference_type || '—')}</td>
               </tr>`).join('')}
             </tbody>
           </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No references on file.</div>'}
@@ -1217,7 +1217,7 @@ async function renderProviderProfilePage(providerId) {
               ${provLocations.map(f => {
                 const isActive = f.status === 'active' || f.isActive;
                 return `<tr>
-                  <td><strong>${escHtml(f.name || '—')}</strong>${f.npi ? '<br><span style="font-size:10px;color:var(--gray-400);font-family:monospace;">NPI: ' + escHtml(f.npi) + '</span>' : ''}</td>
+                  <td><strong style="color:var(--brand-600);cursor:pointer;" onclick="window.app.viewFacility('${f.id}')">${escHtml(f.name || '—')}</strong>${f.npi ? '<br><span style="font-size:10px;color:var(--gray-400);font-family:monospace;">NPI: ' + escHtml(f.npi) + '</span>' : ''}</td>
                   <td>${(f.facilityType || f.type || f.facility_type) ? '<span style="display:inline-flex;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;background:rgba(139,92,246,0.1);color:#7c3aed;">' + escHtml((f.facilityType || f.type || f.facility_type || '').replace(/_/g, ' ')) + '</span>' : '—'}</td>
                   <td style="font-size:12px;">${escHtml(f.street || f.address || '—')}</td>
                   <td>${escHtml([f.city, f.state].filter(Boolean).join(', ') || '—')} ${f.zip ? '<span style="color:var(--gray-400);font-size:11px;">' + escHtml(f.zip) + '</span>' : ''}</td>

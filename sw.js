@@ -1,4 +1,4 @@
-const CACHE_NAME = 'credentik-v6';
+const CACHE_NAME = 'credentik-v7';
 const API_CACHE = 'credentik-api-v1';
 const API_TTL = 60 * 60 * 1000; // 60 minutes
 const API_MAX_ENTRIES = 100;
@@ -113,7 +113,17 @@ self.addEventListener('fetch', e => {
   // Skip non-cacheable API calls
   if (request.url.includes('/api/')) return;
 
-  // Cache-first for shell assets
+  // Network-first for JS/CSS (always get latest), cache-first for other assets
+  if (request.url.endsWith('.js') || request.url.endsWith('.css')) {
+    e.respondWith(
+      fetch(request).then(r => {
+        const clone = r.clone();
+        caches.open(CACHE_NAME).then(c => c.put(request, clone));
+        return r;
+      }).catch(() => caches.match(request))
+    );
+    return;
+  }
   e.respondWith(
     caches.match(request).then(r => r || fetch(request))
   );
