@@ -2096,6 +2096,7 @@ async function renderApplications() {
     const p = getPayerById(a.payerId);
     return p ? p.name : (a.payerName || '');
   }).filter(Boolean))].sort();
+  const appStaffUsers = await store.getAgencyUsers().catch(() => []);
 
   // View toggle state
   if (typeof window._appViewMode === 'undefined') window._appViewMode = 'list';
@@ -2230,6 +2231,12 @@ async function renderApplications() {
       <select class="form-control" id="filter-wave" onchange="window.app.applyFilters()">
         ${groupOptions(filters.wave, true)}
       </select>
+      <select class="form-control" id="filter-assigned" onchange="window.app.applyFilters()">
+        <option value="">All Assignees</option>
+        <option value="__unassigned" ${filters.assigned === '__unassigned' ? 'selected' : ''}>Unassigned</option>
+        <option value="__mine" ${filters.assigned === '__mine' ? 'selected' : ''}>Assigned to Me</option>
+        ${appStaffUsers.map(u => `<option value="${u.id}" ${filters.assigned === String(u.id) ? 'selected' : ''}>${escHtml((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''))}</option>`).join('')}
+      </select>
       <input type="text" class="form-control search-input" placeholder="Search..." value="${filters.search}" oninput="window.app.filters.search=this.value;window.app.renderAppTable()">
     </div>
 
@@ -2245,6 +2252,7 @@ async function renderApplications() {
               <th onclick="window.app.sortBy('payerName')">Payer / Status ${sortArrow('payerName')}</th>
               <th onclick="window.app.sortBy('submittedDate')">Dates ${sortArrow('submittedDate')}</th>
               <th onclick="window.app.sortBy('estMonthlyRevenue')">Revenue ${sortArrow('estMonthlyRevenue')}</th>
+              <th>Assigned</th>
               <th>Notes</th>
               <th style="width:60px;">Actions</th>
             </tr>
@@ -2271,8 +2279,11 @@ async function renderAppTable(prefetchedApps = null) {
   const apps = prefetchedApps || await store.getAll('applications');
   const allProviders = await store.getAll('providers').catch(() => []);
   const allFacilities = await store.getFacilities().catch(() => []);
+  const allStaff = await store.getAgencyUsers().catch(() => []);
   const facMap = {};
   (Array.isArray(allFacilities) ? allFacilities : []).forEach(f => { facMap[f.id] = f; });
+  const staffMap = {};
+  (Array.isArray(allStaff) ? allStaff : []).forEach(u => { staffMap[u.id] = (u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''); });
   const tbody = document.getElementById('app-table-body');
   const empty = document.getElementById('app-empty');
   if (!tbody && !document.getElementById('app-card-view')) return;
@@ -2285,6 +2296,11 @@ async function renderAppTable(prefetchedApps = null) {
       const payer = getPayerById(a.payerId);
       const name = payer ? payer.name : (a.payerName || '');
       if (name !== filters.payer) return false;
+    }
+    if (filters.assigned) {
+      if (filters.assigned === '__unassigned' && a.assignedTo) return false;
+      if (filters.assigned === '__mine' && a.assignedTo !== auth.getUser()?.id) return false;
+      if (filters.assigned !== '__unassigned' && filters.assigned !== '__mine' && String(a.assignedTo) !== filters.assigned) return false;
     }
     if (filters.search) {
       const q = filters.search.toLowerCase();
@@ -2425,6 +2441,7 @@ async function renderAppTable(prefetchedApps = null) {
           ${!a.submittedDate && !a.effectiveDate ? '—' : ''}
         </td>
         <td style="font-weight:600;">$${(Number(a.estMonthlyRevenue) || 0).toLocaleString()}</td>
+        <td class="text-sm">${a.assignedTo ? `<span style="background:var(--brand-50);color:var(--brand-600);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;">${escHtml(staffMap[a.assignedTo] || 'Unknown')}</span>` : '<span style="color:var(--gray-300);font-size:11px;">—</span>'}</td>
         <td class="truncate text-sm" style="max-width:150px;" title="${escAttr(a.notes || '')}">${a.notes || '-'}</td>
         <td onclick="event.stopPropagation();">
           <div style="position:relative;" class="app-action-menu">
@@ -2472,6 +2489,7 @@ async function renderAppTable(prefetchedApps = null) {
             <span class="v2-apps-pill" style="background:var(--gray-50);color:var(--text-muted);">${typeLabel}</span>
             ${a.wave ? `<span class="v2-apps-pill" style="background:var(--brand-50);color:var(--brand-600);">G${a.wave}</span>` : ''}
             ${cardFacObj ? `<span class="v2-apps-pill loc-card-pill" style="background:rgba(139,92,246,0.08);color:#7c3aed;">&#128205; ${escHtml(cardFacObj.name || '')}</span>` : ''}
+            ${a.assignedTo ? `<span class="v2-apps-pill" style="background:var(--brand-50);color:var(--brand-600);">${escHtml(staffMap[a.assignedTo] || 'Unknown')}</span>` : ''}
           </div>
           <div class="v2-apps-card-stats">
             <div><div class="cs-label">Days in Status</div><div class="cs-val" style="color:${daysIn > 60 ? 'var(--red)' : daysIn > 30 ? 'var(--warning-500)' : 'var(--text-primary)'};">${daysIn !== null ? daysIn : '-'}</div></div>
@@ -5418,8 +5436,11 @@ async function renderTasksPage() {
   const body = document.getElementById('page-body');
   const tasks = store.filterByScope(await store.getAll('tasks'));
   const allApps = store.filterByScope(await store.getAll('applications'));
+  const taskStaff = await store.getAgencyUsers().catch(() => []);
   const appsMap = {};
   allApps.forEach(a => { appsMap[a.id] = a; });
+  const taskStaffMap = {};
+  (Array.isArray(taskStaff) ? taskStaff : []).forEach(u => { taskStaffMap[u.id] = (u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''); });
   const today = new Date().toISOString().split('T')[0];
 
   const pending = tasks.filter(t => !t.isCompleted && !t.completed).sort((a, b) => {
@@ -5441,10 +5462,15 @@ async function renderTasksPage() {
   // Filter state
   const filterCat = document.getElementById('task-filter-cat')?.value || '';
   const filterPri = document.getElementById('task-filter-pri')?.value || '';
+  const filterAssigned = document.getElementById('task-filter-assigned')?.value || '';
 
   const applyFilters = (list) => list.filter(t =>
     (!filterCat || t.category === filterCat) &&
-    (!filterPri || t.priority === filterPri)
+    (!filterPri || t.priority === filterPri) &&
+    (!filterAssigned ||
+      (filterAssigned === '__unassigned' && !t.assignedTo) ||
+      (filterAssigned === '__mine' && t.assignedTo === auth.getUser()?.id) ||
+      (filterAssigned !== '__unassigned' && filterAssigned !== '__mine' && String(t.assignedTo) === filterAssigned))
   );
 
   const fOverdue = applyFilters(overdue);
@@ -5541,6 +5567,11 @@ async function renderTasksPage() {
           <option value="monthly">Monthly</option>
           <option value="quarterly">Quarterly</option>
         </select>
+        <select id="task-page-assigned" class="form-control">
+          <option value="">Unassigned</option>
+          <option value="${auth.getUser()?.id || ''}">Assign to Myself</option>
+          ${(await store.getAgencyUsers().catch(() => [])).filter(u => u.id !== auth.getUser()?.id).map(u => `<option value="${u.id}">${escHtml((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''))}</option>`).join('')}
+        </select>
       </div>
       <textarea id="task-page-notes" class="form-control" rows="2" placeholder="Notes (optional)" style="margin-bottom:10px;"></textarea>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -5558,12 +5589,18 @@ async function renderTasksPage() {
         <option value="">All Priorities</option>
         ${TASK_PRIORITIES.map(p => `<option value="${p.id}" ${filterPri === p.id ? 'selected' : ''}>${p.label}</option>`).join('')}
       </select>
+      <select id="task-filter-assigned" class="form-control" style="width:auto;min-width:150px;" onchange="window.app.refreshTasksPage()">
+        <option value="">All Assignees</option>
+        <option value="__unassigned">Unassigned</option>
+        <option value="__mine">Assigned to Me</option>
+        ${taskStaff.map(u => `<option value="${u.id}">${escHtml((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''))}</option>`).join('')}
+      </select>
       <span style="color:var(--text-muted);font-size:13px;">${pending.length} pending, ${completed.length} completed</span>
     </div>
 
-    ${fOverdue.length > 0 ? renderTaskSection('Overdue', fOverdue, today, 'var(--red)', appsMap) : ''}
-    ${fDueToday.length > 0 ? renderTaskSection('Due Today', fDueToday, today, 'var(--warning-600)', appsMap) : ''}
-    ${fUpcoming.length > 0 ? renderTaskSection('Upcoming', fUpcoming, today, 'var(--teal)', appsMap) : ''}
+    ${fOverdue.length > 0 ? renderTaskSection('Overdue', fOverdue, today, 'var(--red)', appsMap, taskStaffMap) : ''}
+    ${fDueToday.length > 0 ? renderTaskSection('Due Today', fDueToday, today, 'var(--warning-600)', appsMap, taskStaffMap) : ''}
+    ${fUpcoming.length > 0 ? renderTaskSection('Upcoming', fUpcoming, today, 'var(--teal)', appsMap, taskStaffMap) : ''}
     ${pending.length === 0 ? '<div class="card" style="text-align:center;padding:40px;color:var(--text-muted);"><h3>No pending tasks</h3><p>Click "+ Add Task" to create one.</p></div>' : ''}
     ${fCompleted.length > 0 ? `
       <div class="card" style="margin-top:16px;">
@@ -5572,9 +5609,9 @@ async function renderTasksPage() {
         </div>
         <div class="card-body" style="padding:0;display:none;">
           <table>
-            <thead><tr><th style="width:40px;"></th><th>Task</th><th>Category</th><th>Priority</th><th>Completed</th><th style="width:60px;"></th></tr></thead>
+            <thead><tr><th style="width:40px;"></th><th>Task</th><th>Category</th><th>Priority</th><th>Assigned</th><th>Completed</th><th style="width:60px;"></th></tr></thead>
             <tbody>
-              ${fCompleted.slice(0, 50).map(t => renderTaskPageRow(t, today, appsMap)).join('')}
+              ${fCompleted.slice(0, 50).map(t => renderTaskPageRow(t, today, appsMap, taskStaffMap)).join('')}
             </tbody>
           </table>
         </div>
@@ -5583,15 +5620,15 @@ async function renderTasksPage() {
   `;
 }
 
-function renderTaskSection(title, tasks, today, color, appsMap) {
+function renderTaskSection(title, tasks, today, color, appsMap, staffMap) {
   return `
     <div class="card" style="margin-bottom:12px;border-radius:16px;overflow:hidden;border-left:4px solid ${color};">
       <div class="card-header"><h3 style="color:${color};">${title} (${tasks.length})</h3></div>
       <div class="card-body" style="padding:0;">
         <table>
-          <thead><tr><th style="width:40px;"></th><th>Task</th><th>Category</th><th>Priority</th><th>Due Date</th><th>Linked App</th><th style="width:60px;"></th></tr></thead>
+          <thead><tr><th style="width:40px;"></th><th>Task</th><th>Category</th><th>Priority</th><th>Due Date</th><th>Assigned</th><th>Linked App</th><th style="width:60px;"></th></tr></thead>
           <tbody>
-            ${tasks.map(t => renderTaskPageRow(t, today, appsMap)).join('')}
+            ${tasks.map(t => renderTaskPageRow(t, today, appsMap, staffMap)).join('')}
           </tbody>
         </table>
       </div>
@@ -5599,11 +5636,12 @@ function renderTaskSection(title, tasks, today, color, appsMap) {
   `;
 }
 
-function renderTaskPageRow(task, today, appsMap) {
+function renderTaskPageRow(task, today, appsMap, staffMap) {
   const cat = TASK_CATEGORIES.find(c => c.id === task.category) || TASK_CATEGORIES[TASK_CATEGORIES.length - 1];
   const pri = TASK_PRIORITIES.find(p => p.id === task.priority) || TASK_PRIORITIES[2];
   const isOverdue = !task.isCompleted && !task.completed && task.dueDate && task.dueDate < today;
   const linkedLabel = _getLinkedLabel(task, appsMap);
+  const assigneeName = task.assignedTo && staffMap ? staffMap[task.assignedTo] : '';
 
   const isDone = task.isCompleted || task.completed;
   return `<tr class="${isOverdue ? 'overdue' : ''}" style="${isDone ? 'opacity:0.6;' : ''}">
@@ -5614,6 +5652,7 @@ function renderTaskPageRow(task, today, appsMap) {
     <td><span style="font-size:12px;">${cat.icon} ${cat.label}</span></td>
     <td><span class="v2-tasks-pri-dot" style="background:${pri.color};"></span><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${pri.color}15;color:${pri.color};font-weight:600;">${pri.label}</span></td>
     <td style="white-space:nowrap;${isOverdue ? 'color:var(--red);font-weight:600;' : ''}">${task.dueDate ? formatDateDisplay(task.dueDate) : '-'}</td>
+    <td>${assigneeName ? `<span style="background:var(--brand-50);color:var(--brand-600);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;">${escHtml(assigneeName)}</span>` : '<span style="color:var(--gray-300);font-size:11px;">—</span>'}</td>
     <td>${linkedLabel || '-'}</td>
     <td style="white-space:nowrap;">
       <button onclick="window.app.editTaskPage('${task.id}')" style="background:none;border:none;color:var(--brand-600);cursor:pointer;font-size:13px;" title="Edit">&#9998;</button>
@@ -5926,6 +5965,7 @@ window.app = {
         linkableId: pgLinkId || '',
         linkedApplicationId: pgLinkType === 'application' ? pgLinkId : '',
         recurrence: document.getElementById('task-page-recurrence')?.value || '',
+        assignedTo: document.getElementById('task-page-assigned')?.value || '',
         notes: document.getElementById('task-page-notes')?.value?.trim() || '',
         isCompleted: false,
         completedAt: '',
@@ -6592,6 +6632,7 @@ window.app = {
     filters.payer = document.getElementById('filter-payer')?.value || '';
     filters.status = document.getElementById('filter-status')?.value || '';
     filters.wave = document.getElementById('filter-wave')?.value || '';
+    filters.assigned = document.getElementById('filter-assigned')?.value || '';
     syncFiltersToURL();
     await renderAppTable();
   },
@@ -10606,6 +10647,8 @@ async function openApplicationModal(id) {
   const licensedStates = (await store.getAll('licenses')).map(l => l.state);
   const providers = await store.getAll('providers');
   const facilities = await store.getFacilities().catch(() => []);
+  const staffUsers = await store.getAgencyUsers().catch(() => []);
+  const currentUser = auth.getUser();
 
   // Normalize IDs for comparison (API may return string or number)
   const existProviderId = existing?.providerId || existing?.provider_id || '';
@@ -10674,6 +10717,14 @@ async function openApplicationModal(id) {
       </div>
     </div>
     <div class="form-row">
+      <div class="form-group">
+        <label>Assigned To</label>
+        <select class="form-control" id="field-assigned-to">
+          <option value="">Unassigned</option>
+          <option value="${currentUser?.id || ''}" ${(existing?.assignedTo || existing?.assignedToId) == currentUser?.id ? 'selected' : ''}>Myself (${escHtml((currentUser?.firstName || currentUser?.first_name || '') + ' ' + (currentUser?.lastName || currentUser?.last_name || ''))})</option>
+          ${staffUsers.filter(u => u.id !== currentUser?.id).map(u => `<option value="${u.id}" ${String(existing?.assignedTo || existing?.assignedToId) == String(u.id) ? 'selected' : ''}>${escHtml((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''))}</option>`).join('')}
+        </select>
+      </div>
       <div class="form-group"><label>Submitted Date</label><input type="date" class="form-control" id="field-submitted" value="${existing?.submittedDate || ''}"></div>
       <div class="form-group"><label>Effective Date</label><input type="date" class="form-control" id="field-effective" value="${existing?.effectiveDate || ''}"></div>
     </div>
@@ -10721,6 +10772,7 @@ window.saveApplication = async function() {
     notes: document.getElementById('field-notes').value,
     providerId: document.getElementById('field-provider').value || '',
     facilityId: document.getElementById('field-facility')?.value || '',
+    assignedTo: document.getElementById('field-assigned-to')?.value || '',
     organizationId: '',
   };
 
@@ -12738,9 +12790,19 @@ async function openTaskEditModal(id) {
         </select>
       </div>
     </div>
-    <div class="form-group" style="margin-bottom:12px;">
-      <label>Linked To</label>
-      ${_renderLinkedToSelector('edit-task', task.linkableType || task.linkable_type || (task.linkedApplicationId || task.linkedAppId ? 'application' : ''), task.linkableId || task.linkable_id || task.linkedApplicationId || task.linkedAppId || '')}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+      <div class="form-group">
+        <label>Linked To</label>
+        ${_renderLinkedToSelector('edit-task', task.linkableType || task.linkable_type || (task.linkedApplicationId || task.linkedAppId ? 'application' : ''), task.linkableId || task.linkable_id || task.linkedApplicationId || task.linkedAppId || '')}
+      </div>
+      <div class="form-group">
+        <label>Assigned To</label>
+        <select id="edit-task-assigned" class="form-control">
+          <option value="">Unassigned</option>
+          <option value="${auth.getUser()?.id || ''}" ${(task.assignedTo || task.assignedToId) == auth.getUser()?.id ? 'selected' : ''}>Myself</option>
+          ${(await store.getAgencyUsers().catch(() => [])).filter(u => u.id !== auth.getUser()?.id).map(u => `<option value="${u.id}" ${String(task.assignedTo || task.assignedToId) == String(u.id) ? 'selected' : ''}>${escHtml((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''))}</option>`).join('')}
+        </select>
+      </div>
     </div>
     <div class="form-group">
       <label>Notes</label>
@@ -12772,6 +12834,7 @@ async function saveTaskEdit() {
     linkableType: linkType,
     linkableId: linkId || null,
     linkedApplicationId: linkType === 'application' ? linkId : '',
+    assignedTo: document.getElementById('edit-task-assigned')?.value || '',
     notes: document.getElementById('edit-task-notes').value || '',
   });
   closeTaskEditModal();
