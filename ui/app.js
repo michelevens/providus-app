@@ -2143,40 +2143,40 @@ async function renderApplications() {
       @media(max-width:768px){.v2-apps-grid{grid-template-columns:repeat(2,1fr);}.v2-apps-card-grid{grid-template-columns:1fr;}}
     </style>
 
-    <!-- V2 Summary Cards -->
-    <div class="v2-apps-grid">
+    <!-- V2 Summary Cards (updated by renderAppTable on filter) -->
+    <div class="v2-apps-grid" id="app-summary-cards">
       <div class="v2-apps-stat" style="cursor:pointer;" onclick="document.getElementById('filter-status').value='';window.app.applyFilters();">
         <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--brand-600),var(--brand-400));"></div>
         <div class="v2-label">Total Applications</div>
-        <div class="v2-val" style="color:var(--brand-600);">${total}</div>
-        <div class="v2-sub">${uniqueStates} state${uniqueStates !== 1 ? 's' : ''} &middot; ${uniquePayers} payer${uniquePayers !== 1 ? 's' : ''}</div>
+        <div class="v2-val" style="color:var(--brand-600);" id="app-stat-total">${total}</div>
+        <div class="v2-sub" id="app-stat-total-sub">${uniqueStates} state${uniqueStates !== 1 ? 's' : ''} &middot; ${uniquePayers} payer${uniquePayers !== 1 ? 's' : ''}</div>
       </div>
       <div class="v2-apps-stat" style="cursor:pointer;" onclick="document.getElementById('filter-status').value='approved';window.app.applyFilters();">
         <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
         <div class="v2-label">Credentialed / Approved</div>
-        <div class="v2-val" style="color:#16a34a;">${credentialed}</div>
-        <div class="v2-sub">${total > 0 ? Math.round(credentialed / total * 100) : 0}% of total</div>
+        <div class="v2-val" style="color:#16a34a;" id="app-stat-approved">${credentialed}</div>
+        <div class="v2-sub" id="app-stat-approved-sub">${total > 0 ? Math.round(credentialed / total * 100) : 0}% of total</div>
       </div>
       <div class="v2-apps-stat" style="cursor:pointer;" onclick="document.getElementById('filter-status').value='in_review';window.app.applyFilters();">
         <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div>
         <div class="v2-label">In Progress</div>
-        <div class="v2-val" style="color:#2563eb;">${inProgress}</div>
-        <div class="v2-sub">${total > 0 ? Math.round(inProgress / total * 100) : 0}% of total</div>
+        <div class="v2-val" style="color:#2563eb;" id="app-stat-progress">${inProgress}</div>
+        <div class="v2-sub" id="app-stat-progress-sub">${total > 0 ? Math.round(inProgress / total * 100) : 0}% of total</div>
       </div>
       <div class="v2-apps-stat">
         <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#a855f7,#c084fc);"></div>
         <div class="v2-label">Est. Monthly Revenue</div>
-        <div class="v2-val" style="color:var(--brand-600);">$${totalRevenue.toLocaleString()}</div>
-        <div class="v2-sub">${denied > 0 ? `${denied} denied` : ''}${denied > 0 && onHold > 0 ? ' &middot; ' : ''}${onHold > 0 ? `${onHold} on hold/withdrawn` : ''}${denied === 0 && onHold === 0 ? 'from approved applications' : ''}</div>
+        <div class="v2-val" style="color:var(--brand-600);" id="app-stat-revenue">$${totalRevenue.toLocaleString()}</div>
+        <div class="v2-sub" id="app-stat-revenue-sub">${denied > 0 ? `${denied} denied` : ''}${denied > 0 && onHold > 0 ? ' &middot; ' : ''}${onHold > 0 ? `${onHold} on hold/withdrawn` : ''}${denied === 0 && onHold === 0 ? 'from approved applications' : ''}</div>
       </div>
     </div>
 
     <!-- V2 Status Pipeline Bar -->
     ${total > 0 ? `
-    <div class="v2-apps-pipeline">
+    <div class="v2-apps-pipeline" id="app-pipeline-section">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);">Status Pipeline</span>
-        <span style="font-size:11px;color:var(--text-muted);">${total} total</span>
+        <span style="font-size:11px;color:var(--text-muted);" id="app-pipeline-total">${total} total</span>
       </div>
       <div class="v2-apps-pipeline-bar">
         ${APPLICATION_STATUSES.map(s => {
@@ -2330,6 +2330,45 @@ async function renderAppTable(prefetchedApps = null) {
   // Show/hide views
   if (listView) listView.style.display = viewMode === 'list' ? 'block' : 'none';
   if (cardView) cardView.style.display = viewMode === 'cards' ? 'grid' : 'none';
+
+  // Update summary cards + pipeline to reflect filtered results
+  const fTotal = filtered.length;
+  const fApproved = filtered.filter(a => a.status === 'credentialed' || a.status === 'approved').length;
+  const fInProgress = filtered.filter(a => ['submitted', 'in_review', 'pending_info', 'gathering_docs', 'new'].includes(a.status)).length;
+  const fRevenue = filtered.reduce((sum, a) => sum + (Number(a.estMonthlyRevenue) || 0), 0);
+  const fDenied = filtered.filter(a => a.status === 'denied').length;
+  const fOnHold = filtered.filter(a => a.status === 'on_hold' || a.status === 'withdrawn').length;
+  const fStates = new Set(filtered.map(a => a.state).filter(Boolean)).size;
+  const fPayers = new Set(filtered.map(a => a.payerId || a.payerName).filter(Boolean)).size;
+
+  const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+  el('app-stat-total', fTotal);
+  el('app-stat-total-sub', `${fStates} state${fStates !== 1 ? 's' : ''} · ${fPayers} payer${fPayers !== 1 ? 's' : ''}`);
+  el('app-stat-approved', fApproved);
+  el('app-stat-approved-sub', `${fTotal > 0 ? Math.round(fApproved / fTotal * 100) : 0}% of total`);
+  el('app-stat-progress', fInProgress);
+  el('app-stat-progress-sub', `${fTotal > 0 ? Math.round(fInProgress / fTotal * 100) : 0}% of total`);
+  el('app-stat-revenue', `$${fRevenue.toLocaleString()}`);
+  el('app-stat-revenue-sub', fDenied > 0 || fOnHold > 0 ? `${fDenied > 0 ? fDenied + ' denied' : ''}${fDenied > 0 && fOnHold > 0 ? ' · ' : ''}${fOnHold > 0 ? fOnHold + ' on hold' : ''}` : 'from approved applications');
+  el('app-pipeline-total', `${fTotal} total`);
+
+  // Update pipeline bar
+  const pipelineBar = document.querySelector('.v2-apps-pipeline-bar');
+  if (pipelineBar) {
+    pipelineBar.innerHTML = APPLICATION_STATUSES.map(s => {
+      const count = filtered.filter(a => a.status === s.value).length;
+      if (count === 0) return '';
+      return `<div style="flex:${count};background:${s.color};border-radius:3px;" title="${s.label}: ${count}"></div>`;
+    }).join('');
+  }
+  const pipelineLabels = document.querySelector('.v2-apps-pipeline-labels');
+  if (pipelineLabels) {
+    pipelineLabels.innerHTML = APPLICATION_STATUSES.map(s => {
+      const count = filtered.filter(a => a.status === s.value).length;
+      if (count === 0) return '';
+      return `<span onclick="document.getElementById('filter-status').value='${s.value}';window.app.applyFilters();"><span class="v2-apps-pipeline-dot" style="background:${s.color};"></span>${s.label} ${count}</span>`;
+    }).join('');
+  }
 
   // Inject V2 hover style if not already present
   if (!document.getElementById('appv2-style')) {
