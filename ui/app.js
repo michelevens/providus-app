@@ -1071,6 +1071,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openAutomationRuleModal()">+ Create Rule</button>' + printBtn;
       await renderAutomationsPage();
       break;
+    case 'api-docs':
+      pageTitle.textContent = 'API Documentation';
+      pageSubtitle.textContent = 'Interactive API reference for all Credentik endpoints';
+      pageActions.innerHTML = printBtn;
+      renderApiDocsPage();
+      break;
     default:
       pageBody.innerHTML = '<div class="empty-state"><h3>Page not found</h3></div>';
   }
@@ -4627,6 +4633,7 @@ async function renderSettings() {
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-groups')">Groups</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-caqh')">CAQH API</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-integrations')">Integrations</button>
+      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-webhooks')">Webhooks</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-security')">Security</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-danger')">Danger Zone</button>
     </div>
@@ -4927,6 +4934,24 @@ async function renderSettings() {
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-webhooks" class="hidden stv2-section">
+      <div class="card" style="border-radius:16px;">
+        <div class="card-header">
+          <h3>Webhook Endpoints</h3>
+          <button class="btn btn-primary btn-sm" onclick="window.app.addWebhook()" style="border-radius:10px;">+ Add Webhook</button>
+        </div>
+        <div class="card-body" id="webhook-list-container">
+          ${renderWebhookList()}
+        </div>
+      </div>
+      <div class="card" style="border-radius:16px;margin-top:16px;">
+        <div class="card-header"><h3>Recent Deliveries</h3></div>
+        <div class="card-body" id="webhook-deliveries-container">
+          ${renderWebhookDeliveries()}
         </div>
       </div>
     </div>
@@ -6902,7 +6927,7 @@ window.app = {
         <div style="width:90%;max-width:640px;background:var(--surface-raised);border-radius:12px;box-shadow:var(--shadow-2xl);overflow:hidden;border:1px solid var(--border-color);">
           <div style="padding:16px;border-bottom:1px solid var(--border-color);display:flex;align-items:center;gap:12px;">
             <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--text-quaternary)" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
-            <input type="text" id="global-search-input" placeholder="Search or type a command..." style="flex:1;border:none;outline:none;font-size:16px;background:none;color:var(--text-primary);" autocomplete="off" aria-label="Search or command">
+            <input type="text" id="global-search-input" placeholder="Search or type a command...  (Ctrl+K)" style="flex:1;border:none;outline:none;font-size:16px;background:none;color:var(--text-primary);" autocomplete="off" aria-label="Search or command">
             <kbd style="font-size:11px;padding:2px 6px;border:1px solid var(--border-color-strong);border-radius:4px;color:var(--text-tertiary);background:var(--surface-card);">ESC</kbd>
           </div>
           <div id="global-search-results" style="max-height:60vh;overflow-y:auto;padding:8px;"></div>
@@ -6921,10 +6946,16 @@ window.app = {
       });
 
       // Search on input
+      // Focus handler: show recent searches when empty
+      document.getElementById('global-search-input').addEventListener('focus', () => {
+        const q = document.getElementById('global-search-input').value.trim();
+        if (q.length < 2) { _showSearchEmptyState(); }
+      });
+
       document.getElementById('global-search-input').addEventListener('input', async (e) => {
         const q = e.target.value.trim().toLowerCase();
         const resultsDiv = document.getElementById('global-search-results');
-        if (q.length < 2) { resultsDiv.innerHTML = '<p style="text-align:center;padding:24px;color:var(--gray-400);font-size:13px;">Type at least 2 characters to search...</p>'; return; }
+        if (q.length < 2) { _showSearchEmptyState(); return; }
 
         // Debounce
         clearTimeout(window._searchDebounce);
@@ -6998,12 +7029,23 @@ window.app = {
               }
             });
 
+            // Track recent search
+            _trackRecentSearch(q);
+
             if (!results.length) {
               resultsDiv.innerHTML = '<p style="text-align:center;padding:24px;color:var(--gray-400);font-size:13px;">No results found</p>';
               return;
             }
 
-            resultsDiv.innerHTML = results.slice(0, 20).map(r => `
+            // Scope pills + counts
+            const scopes = {};
+            results.forEach(r => { scopes[r.type] = (scopes[r.type] || 0) + 1; });
+            const scopePills = `<div style="display:flex;gap:6px;padding:8px 12px;flex-wrap:wrap;border-bottom:1px solid var(--border-color,#e5e7eb);margin-bottom:4px;">
+              <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;background:var(--brand-100,#cffafe);color:var(--brand-700,#0e7490);cursor:default;">All (${results.length})</span>
+              ${Object.entries(scopes).map(([type, count]) => `<span style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;background:var(--surface-card);color:var(--text-tertiary);cursor:default;">${type} (${count})</span>`).join('')}
+            </div>`;
+
+            resultsDiv.innerHTML = scopePills + results.slice(0, 20).map(r => `
               <div onclick="${r.action};document.getElementById('global-search-overlay').style.display='none';" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .1s;" onmouseenter="this.style.background='var(--table-row-hover)'" onmouseleave="this.style.background='none'">
                 <div style="width:32px;height:32px;border-radius:8px;background:${r.color}15;color:${r.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${r.icon}</div>
                 <div style="flex:1;min-width:0;">
@@ -7021,28 +7063,7 @@ window.app = {
     overlay.style.display = 'flex';
     const input = document.getElementById('global-search-input');
     input.value = '';
-    // Show quick commands when empty
-    const quickCmds = [
-      { icon: '📊', label: 'Go to Dashboard', sub: 'Overview & analytics', action: "navigateTo('dashboard')" },
-      { icon: '📋', label: 'Go to Applications', sub: 'Credentialing apps', action: "navigateTo('applications')" },
-      { icon: '👤', label: 'Go to Providers', sub: 'Provider directory', action: "navigateTo('providers')" },
-      { icon: '🪪', label: 'Go to Licenses', sub: 'License tracking', action: "navigateTo('licenses')" },
-      { icon: '➕', label: 'Add Application', sub: 'New credentialing app', action: "window.app.quickAddApp()" },
-      { icon: '✅', label: 'Add Task', sub: 'New task or reminder', action: "window.app.showQuickTask()" },
-      { icon: '🔔', label: 'Notifications', sub: 'View notifications', action: "window.app.toggleNotifications()" },
-      { icon: '⚙️', label: 'Settings', sub: 'Account & data', action: "navigateTo('settings')" },
-    ];
-    document.getElementById('global-search-results').innerHTML =
-      `<div style="padding:4px 8px 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-quaternary);">Quick Actions</div>` +
-      quickCmds.map(c => `
-        <div onclick="${c.action};document.getElementById('global-search-overlay').style.display='none';" style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:8px;cursor:pointer;transition:background .1s;" onmouseenter="this.style.background='var(--table-row-hover)'" onmouseleave="this.style.background='none'">
-          <div style="width:32px;height:32px;border-radius:8px;background:var(--surface-card);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;">${c.icon}</div>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${c.label}</div>
-            <div style="font-size:11px;color:var(--text-quaternary);">${c.sub}</div>
-          </div>
-        </div>
-      `).join('');
+    _showSearchEmptyState();
     setTimeout(() => input.focus(), 50);
   },
 
@@ -7604,7 +7625,7 @@ window.app = {
   settingsTab(el, tabId) {
     document.querySelectorAll('.tab, .stv2-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    ['settings-agency', 'settings-import', 'settings-org', 'settings-licenses', 'settings-groups', 'settings-caqh', 'settings-integrations', 'settings-security', 'settings-danger'].forEach(id => {
+    ['settings-agency', 'settings-import', 'settings-org', 'settings-licenses', 'settings-groups', 'settings-caqh', 'settings-integrations', 'settings-webhooks', 'settings-security', 'settings-danger'].forEach(id => {
       const section = document.getElementById(id);
       if (section) section.classList.toggle('hidden', id !== tabId);
     });
@@ -10994,6 +11015,86 @@ function handleNppesProxy(payload) {
   deleteAutomationRule(id) { deleteAutomationRule(id); },
   toggleAutomationRule(id) { toggleAutomationRule(id); },
   closeAutomationModal() { document.getElementById('automation-rule-modal')?.classList.remove('active'); },
+
+  // ─── Feature 1: In-App Comments ───
+  async addComment(appId) {
+    const textarea = document.getElementById(`comment-input-${appId}`);
+    if (!textarea) return;
+    const message = textarea.value.trim();
+    if (!message) { showToast('Enter a comment first'); return; }
+    const user = auth.getUser() || {};
+    const fullName = `${user.first_name || user.firstName || ''} ${user.last_name || user.lastName || ''}`.trim() || 'Unknown';
+    try {
+      await store.createActivityLog({
+        application_id: appId,
+        type: 'comment',
+        outcome: message,
+        contact_name: fullName,
+        user_role: user.ui_role || user.role || 'staff',
+        date: new Date().toISOString().split('T')[0],
+      });
+      showToast('Comment added');
+      textarea.value = '';
+      await renderApplicationTimeline(appId);
+    } catch (e) {
+      showToast('Failed to add comment: ' + e.message, 'error');
+    }
+  },
+  handleCommentMention(textarea, appId) {
+    const val = textarea.value;
+    const cursorPos = textarea.selectionStart;
+    const textBeforeCursor = val.slice(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@(\w*)$/);
+    const dropdown = document.getElementById(`comment-mentions-${appId}`);
+    if (!dropdown) return;
+    if (!atMatch) { dropdown.style.display = 'none'; return; }
+    const query = atMatch[1].toLowerCase();
+    store.getAll('providers').then(providers => {
+      const matches = providers.filter(p => {
+        const name = `${p.firstName || ''} ${p.lastName || ''}`.toLowerCase();
+        return name.includes(query);
+      }).slice(0, 6);
+      if (!matches.length) { dropdown.style.display = 'none'; return; }
+      dropdown.style.display = 'block';
+      dropdown.innerHTML = matches.map(p => `
+        <div class="comment-mention-item" onclick="window.app.insertMention('${appId}', '${escHtml((p.firstName || '') + ' ' + (p.lastName || ''))}')">
+          <strong>${escHtml(p.firstName || '')} ${escHtml(p.lastName || '')}</strong>
+          <span style="font-size:11px;color:var(--text-quaternary);margin-left:6px;">${escHtml(p.credentials || '')}</span>
+        </div>
+      `).join('');
+    });
+  },
+  insertMention(appId, name) {
+    const textarea = document.getElementById(`comment-input-${appId}`);
+    if (!textarea) return;
+    const cursorPos = textarea.selectionStart;
+    const textBefore = textarea.value.slice(0, cursorPos);
+    const textAfter = textarea.value.slice(cursorPos);
+    const newBefore = textBefore.replace(/@(\w*)$/, `@${name} `);
+    textarea.value = newBefore + textAfter;
+    textarea.focus();
+    textarea.selectionStart = textarea.selectionEnd = newBefore.length;
+    const dropdown = document.getElementById(`comment-mentions-${appId}`);
+    if (dropdown) dropdown.style.display = 'none';
+  },
+
+  // ─── Feature 3: Webhooks ───
+  addWebhook() { openWebhookModal(); },
+  deleteWebhook(id) { deleteWebhookById(id); },
+  testWebhook(id) { testWebhookById(id); },
+  toggleWebhook(id) { toggleWebhookById(id); },
+  saveWebhookForm() { saveWebhookForm(); },
+  closeWebhookModal() { document.getElementById('webhook-modal')?.classList.remove('active'); },
+
+  // ─── Feature 4: Enhanced Search helpers ───
+  clearRecentSearches() {
+    localStorage.removeItem('credentik_recent_searches');
+    _showSearchEmptyState();
+  },
+  runRecentSearch(query) {
+    const input = document.getElementById('global-search-input');
+    if (input) { input.value = query; input.dispatchEvent(new Event('input')); }
+  },
 };
 
 // ─── Application Modal ───
@@ -11783,9 +11884,78 @@ async function renderApplicationTimeline(appId) {
         </div>
       `).join('')}
     </div>`}
+
+    <!-- Comment Thread -->
+    ${renderCommentThread(appId, logs)}
   `;
 
   modal.classList.add('active');
+}
+
+// ─── Comment Thread for Application Timeline ───
+
+function renderCommentThread(appId, allLogs) {
+  const comments = (allLogs || []).filter(l => l.type === 'comment' || l.type === 'note');
+  const user = auth.getUser() || {};
+  const currentInitials = ((user.first_name || user.firstName || '?')[0] + (user.last_name || user.lastName || '?')[0]).toUpperCase();
+
+  return `
+    <style>
+      .comment-section { margin-top:24px; border-top:1px solid var(--border-color,#e5e7eb); padding-top:20px; }
+      .comment-header { font-size:15px; font-weight:700; color:var(--text-primary); margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+      .comment-count { font-size:12px; font-weight:600; padding:2px 8px; border-radius:10px; background:var(--brand-100,#cffafe); color:var(--brand-700,#0e7490); }
+      .comment-card { display:flex; gap:12px; padding:14px; border-radius:16px; background:var(--surface-card,#f9fafb); margin-bottom:10px; transition:transform 0.15s,box-shadow 0.15s; }
+      .comment-card:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.06); }
+      .comment-avatar { width:36px; height:36px; border-radius:12px; background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
+      .comment-body { flex:1; min-width:0; }
+      .comment-meta { display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap; }
+      .comment-author { font-size:13px; font-weight:700; color:var(--text-primary); }
+      .comment-role-badge { font-size:10px; font-weight:600; padding:2px 6px; border-radius:6px; background:var(--brand-100,#cffafe); color:var(--brand-700,#0e7490); text-transform:uppercase; letter-spacing:0.3px; }
+      .comment-time { font-size:11px; color:var(--text-quaternary); }
+      .comment-text { font-size:13px; color:var(--text-secondary); line-height:1.5; }
+      .comment-compose { display:flex; gap:12px; padding:14px; border-radius:16px; background:var(--surface-card,#f9fafb); border:1px dashed var(--border-color,#e5e7eb); margin-top:12px; }
+      .comment-input { flex:1; border:1px solid var(--border-color,#e5e7eb); border-radius:12px; padding:10px 14px; font-size:13px; font-family:inherit; resize:vertical; min-height:60px; background:var(--bg-primary,#fff); color:var(--text-primary); outline:none; transition:border-color 0.15s; }
+      .comment-input:focus { border-color:var(--brand-500); }
+      .comment-input::placeholder { color:var(--text-quaternary); }
+      .comment-submit { align-self:flex-end; padding:8px 18px; border-radius:10px; background:linear-gradient(135deg,var(--brand-500),var(--brand-700)); color:#fff; border:none; font-size:13px; font-weight:600; cursor:pointer; transition:transform 0.15s,box-shadow 0.15s; }
+      .comment-submit:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(8,145,178,0.3); }
+      .comment-mention-dropdown { position:absolute; background:var(--surface-raised,#fff); border:1px solid var(--border-color); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.12); max-height:180px; overflow-y:auto; z-index:1000; padding:4px; min-width:200px; }
+      .comment-mention-item { padding:8px 12px; border-radius:8px; cursor:pointer; font-size:13px; transition:background 0.1s; }
+      .comment-mention-item:hover { background:var(--table-row-hover); }
+    </style>
+    <div class="comment-section">
+      <div class="comment-header">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3.5a1 1 0 011-1h12a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 2.5V3.5z"/></svg>
+        Comments
+        <span class="comment-count">${comments.length}</span>
+      </div>
+      ${comments.length === 0 ? '<div style="text-align:center;padding:16px;color:var(--text-quaternary);font-size:13px;">No comments yet. Be the first to add a note.</div>' : ''}
+      ${comments.map(c => {
+        const cName = c.contactName || c.userName || 'Unknown User';
+        const cInitials = cName.split(' ').map(w => w[0] || '').join('').toUpperCase().slice(0, 2);
+        return `
+        <div class="comment-card">
+          <div class="comment-avatar">${cInitials}</div>
+          <div class="comment-body">
+            <div class="comment-meta">
+              <span class="comment-author">${escHtml(cName)}</span>
+              <span class="comment-role-badge">${escHtml(c.userRole || 'Staff')}</span>
+              <span class="comment-time">${formatDateDisplay(c.date)}</span>
+            </div>
+            <div class="comment-text">${escHtml(c.outcome || c.message || '')}</div>
+          </div>
+        </div>`;
+      }).join('')}
+      <div class="comment-compose">
+        <div class="comment-avatar" style="background:linear-gradient(135deg,#10b981,#059669);">${currentInitials}</div>
+        <div style="flex:1;position:relative;">
+          <textarea id="comment-input-${appId}" class="comment-input" placeholder="Add a comment... (use @ to mention)" oninput="window.app.handleCommentMention(this, '${appId}')"></textarea>
+          <div id="comment-mentions-${appId}" class="comment-mention-dropdown" style="display:none;"></div>
+        </div>
+        <button class="comment-submit" onclick="window.app.addComment('${appId}')">Submit</button>
+      </div>
+    </div>
+  `;
 }
 
 // ─── Recurring Tasks (#5) ───
@@ -19753,4 +19923,477 @@ window._helpTip = helpTip;
 
 function openFundingApplicationModal() {
   showToast('Application tracking coming soon — track your grant applications from draft to award.', 'info');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FEATURE 2: API Documentation Page
+// ═══════════════════════════════════════════════════════════════════════════
+
+function renderApiDocsPage() {
+  const body = document.getElementById('page-body');
+  const baseUrl = CONFIG.API_URL;
+
+  const endpointGroups = [
+    {
+      name: 'Authentication',
+      icon: '&#128274;',
+      endpoints: [
+        { method: 'POST', path: '/auth/login', desc: 'Authenticate user and obtain JWT token', body: '{ "email": "string", "password": "string" }', response: '{ "token": "string", "user": { ... } }' },
+        { method: 'POST', path: '/auth/register', desc: 'Register a new agency account', body: '{ "email": "string", "password": "string", "first_name": "string", "last_name": "string", "agency_name": "string" }', response: '{ "token": "string", "user": { ... } }' },
+        { method: 'POST', path: '/auth/logout', desc: 'Invalidate the current session token', body: 'None', response: '{ "message": "Logged out" }' },
+        { method: 'GET', path: '/auth/me', desc: 'Get currently authenticated user profile', body: 'N/A', response: '{ "id": "number", "email": "string", "role": "string", ... }' },
+      ],
+    },
+    {
+      name: 'Providers',
+      icon: '&#128100;',
+      endpoints: [
+        { method: 'GET', path: '/providers', desc: 'List all providers for the agency', body: 'N/A', response: '{ "data": [{ "id", "firstName", "lastName", "npi", ... }] }' },
+        { method: 'POST', path: '/providers', desc: 'Create a new provider', body: '{ "firstName": "string", "lastName": "string", "npi": "string", "credentials": "string", ... }', response: '{ "data": { "id", ... } }' },
+        { method: 'GET', path: '/providers/:id', desc: 'Get a single provider by ID', body: 'N/A', response: '{ "data": { ... } }' },
+        { method: 'PUT', path: '/providers/:id', desc: 'Update a provider', body: '{ "firstName": "string", ... }', response: '{ "data": { ... } }' },
+        { method: 'DELETE', path: '/providers/:id', desc: 'Delete a provider', body: 'N/A', response: '{ "message": "Deleted" }' },
+        { method: 'GET', path: '/providers/:id/education', desc: 'Get provider education records', body: 'N/A', response: '{ "data": [{ ... }] }' },
+        { method: 'GET', path: '/providers/:id/boards', desc: 'Get provider board certifications', body: 'N/A', response: '{ "data": [{ ... }] }' },
+        { method: 'GET', path: '/providers/:id/malpractice', desc: 'Get provider malpractice history', body: 'N/A', response: '{ "data": [{ ... }] }' },
+        { method: 'GET', path: '/providers/:id/work-history', desc: 'Get provider work history', body: 'N/A', response: '{ "data": [{ ... }] }' },
+        { method: 'GET', path: '/providers/:id/cme', desc: 'Get provider CME credits', body: 'N/A', response: '{ "data": [{ ... }] }' },
+        { method: 'GET', path: '/providers/:id/references', desc: 'Get provider professional references', body: 'N/A', response: '{ "data": [{ ... }] }' },
+      ],
+    },
+    {
+      name: 'Organizations',
+      icon: '&#127963;',
+      endpoints: [
+        { method: 'GET', path: '/organizations', desc: 'List all organizations', body: 'N/A', response: '{ "data": [{ "id", "name", ... }] }' },
+        { method: 'POST', path: '/organizations', desc: 'Create a new organization', body: '{ "name": "string", "npi": "string", ... }', response: '{ "data": { ... } }' },
+        { method: 'GET', path: '/organizations/:id', desc: 'Get organization by ID', body: 'N/A', response: '{ "data": { ... } }' },
+        { method: 'PUT', path: '/organizations/:id', desc: 'Update an organization', body: '{ "name": "string", ... }', response: '{ "data": { ... } }' },
+        { method: 'DELETE', path: '/organizations/:id', desc: 'Delete an organization', body: 'N/A', response: '{ "message": "Deleted" }' },
+      ],
+    },
+    {
+      name: 'Applications',
+      icon: '&#128203;',
+      endpoints: [
+        { method: 'GET', path: '/applications', desc: 'List all credentialing applications', body: 'N/A', response: '{ "data": [{ "id", "providerId", "payerId", "status", ... }] }' },
+        { method: 'POST', path: '/applications', desc: 'Create a new application', body: '{ "providerId": "number", "payerId": "number", "state": "string", "status": "string", ... }', response: '{ "data": { ... } }' },
+        { method: 'GET', path: '/applications/:id', desc: 'Get application by ID', body: 'N/A', response: '{ "data": { ... } }' },
+        { method: 'PUT', path: '/applications/:id', desc: 'Update an application', body: '{ "status": "string", ... }', response: '{ "data": { ... } }' },
+        { method: 'DELETE', path: '/applications/:id', desc: 'Delete an application', body: 'N/A', response: '{ "message": "Deleted" }' },
+        { method: 'POST', path: '/applications/:id/transition', desc: 'Transition application status via workflow', body: '{ "to_status": "string", "notes": "string" }', response: '{ "data": { ... } }' },
+        { method: 'GET', path: '/applications/stats', desc: 'Get aggregated application statistics', body: 'N/A', response: '{ "total": "number", "by_status": { ... }, "by_state": { ... } }' },
+      ],
+    },
+    {
+      name: 'Licenses',
+      icon: '&#128196;',
+      endpoints: [
+        { method: 'GET', path: '/licenses', desc: 'List all licenses', body: 'N/A', response: '{ "data": [{ "id", "state", "licenseNumber", ... }] }' },
+        { method: 'POST', path: '/licenses', desc: 'Create a new license', body: '{ "providerId": "number", "state": "string", "licenseNumber": "string", "expirationDate": "string", ... }', response: '{ "data": { ... } }' },
+        { method: 'GET', path: '/licenses/:id', desc: 'Get license by ID', body: 'N/A', response: '{ "data": { ... } }' },
+        { method: 'PUT', path: '/licenses/:id', desc: 'Update a license', body: '{ ... }', response: '{ "data": { ... } }' },
+        { method: 'DELETE', path: '/licenses/:id', desc: 'Delete a license', body: 'N/A', response: '{ "message": "Deleted" }' },
+        { method: 'POST', path: '/licenses/:id/verify', desc: 'Run primary source verification on a license', body: 'N/A', response: '{ "verified": "boolean", "source": "string", "date": "string" }' },
+      ],
+    },
+    {
+      name: 'Payers & Plans',
+      icon: '&#128179;',
+      endpoints: [
+        { method: 'GET', path: '/reference/payers', desc: 'Get reference list of all payers', body: 'N/A', response: '{ "data": [{ "id", "name", "states", ... }] }' },
+        { method: 'GET', path: '/payer-plans', desc: 'Get payer plans for the agency', body: 'N/A', response: '{ "data": [{ ... }] }' },
+      ],
+    },
+    {
+      name: 'Follow-ups',
+      icon: '&#9201;',
+      endpoints: [
+        { method: 'GET', path: '/followups', desc: 'List all follow-ups', body: 'N/A', response: '{ "data": [{ ... }] }' },
+        { method: 'POST', path: '/followups', desc: 'Create a follow-up', body: '{ "applicationId": "number", "type": "string", "dueDate": "string", ... }', response: '{ "data": { ... } }' },
+        { method: 'PUT', path: '/followups/:id', desc: 'Update a follow-up', body: '{ ... }', response: '{ "data": { ... } }' },
+        { method: 'DELETE', path: '/followups/:id', desc: 'Delete a follow-up', body: 'N/A', response: '{ "message": "Deleted" }' },
+      ],
+    },
+    {
+      name: 'Tasks',
+      icon: '&#9745;',
+      endpoints: [
+        { method: 'GET', path: '/tasks', desc: 'List all tasks', body: 'N/A', response: '{ "data": [{ ... }] }' },
+        { method: 'POST', path: '/tasks', desc: 'Create a task', body: '{ "title": "string", "category": "string", "priority": "string", "dueDate": "string", ... }', response: '{ "data": { ... } }' },
+        { method: 'PUT', path: '/tasks/:id', desc: 'Update a task', body: '{ ... }', response: '{ "data": { ... } }' },
+        { method: 'DELETE', path: '/tasks/:id', desc: 'Delete a task', body: 'N/A', response: '{ "message": "Deleted" }' },
+      ],
+    },
+    {
+      name: 'Activity Logs',
+      icon: '&#128221;',
+      endpoints: [
+        { method: 'GET', path: '/activity-logs', desc: 'List activity logs (optionally filter by application_id)', body: 'N/A', response: '{ "data": [{ ... }] }' },
+        { method: 'POST', path: '/activity-logs', desc: 'Create an activity log entry', body: '{ "application_id": "number", "type": "string", "outcome": "string", ... }', response: '{ "data": { ... } }' },
+      ],
+    },
+    {
+      name: 'Reference Data',
+      icon: '&#128218;',
+      endpoints: [
+        { method: 'GET', path: '/reference/states', desc: 'List all US states with codes', body: 'N/A', response: '[{ "code": "string", "name": "string" }]' },
+        { method: 'GET', path: '/reference/payers', desc: 'List all known payer catalog entries', body: 'N/A', response: '[{ "id", "name", "caqh": "boolean", ... }]' },
+        { method: 'GET', path: '/reference/telehealth-policies', desc: 'Telehealth policies by state', body: 'N/A', response: '[{ "state", "policy", ... }]' },
+        { method: 'GET', path: '/reference/taxonomy-codes', desc: 'Healthcare taxonomy codes lookup', body: 'N/A', response: '[{ "code", "classification", "specialization" }]' },
+      ],
+    },
+    {
+      name: 'Proxy Services',
+      icon: '&#128279;',
+      endpoints: [
+        { method: 'GET', path: '/proxy/nppes/lookup?npi=...', desc: 'Look up a provider by NPI via NPPES', body: 'N/A', response: '{ "results": [{ ... }] }' },
+        { method: 'GET', path: '/proxy/nppes/search?name=...', desc: 'Search NPPES by name', body: 'N/A', response: '{ "results": [{ ... }] }' },
+        { method: 'POST', path: '/proxy/stedi/eligibility', desc: 'Run insurance eligibility check via Stedi', body: '{ "memberId": "string", "payerId": "string", ... }', response: '{ "eligible": "boolean", ... }' },
+        { method: 'POST', path: '/proxy/caqh', desc: 'CAQH ProView API proxy', body: '{ "action": "string", ... }', response: '{ ... }' },
+      ],
+    },
+  ];
+
+  const methodColors = { GET: '#10b981', POST: '#3b82f6', PUT: '#f59e0b', DELETE: '#ef4444', PATCH: '#8b5cf6' };
+
+  body.innerHTML = `
+    <style>
+      .apidoc-container { max-width:960px; }
+      .apidoc-group { margin-bottom:20px; border-radius:16px; overflow:hidden; border:1px solid var(--border-color,#e5e7eb); background:var(--surface-card,#fff); transition:box-shadow 0.18s; }
+      .apidoc-group:hover { box-shadow:0 4px 16px rgba(0,0,0,0.06); }
+      .apidoc-group-header { display:flex; align-items:center; gap:12px; padding:16px 20px; cursor:pointer; user-select:none; background:var(--surface-card,#fff); transition:background 0.15s; }
+      .apidoc-group-header:hover { background:var(--table-row-hover); }
+      .apidoc-group-icon { font-size:20px; }
+      .apidoc-group-name { font-size:16px; font-weight:700; color:var(--text-primary); flex:1; }
+      .apidoc-group-count { font-size:11px; font-weight:600; padding:2px 8px; border-radius:8px; background:var(--brand-100,#cffafe); color:var(--brand-700,#0e7490); }
+      .apidoc-group-chevron { transition:transform 0.2s; color:var(--text-quaternary); }
+      .apidoc-group.collapsed .apidoc-group-chevron { transform:rotate(-90deg); }
+      .apidoc-group.collapsed .apidoc-endpoints { display:none; }
+      .apidoc-endpoints { border-top:1px solid var(--border-color,#e5e7eb); }
+      .apidoc-endpoint { padding:14px 20px; border-bottom:1px solid var(--border-color-light,#f3f4f6); transition:background 0.1s; }
+      .apidoc-endpoint:last-child { border-bottom:none; }
+      .apidoc-endpoint:hover { background:var(--table-row-hover); }
+      .apidoc-endpoint-header { display:flex; align-items:center; gap:10px; cursor:pointer; }
+      .apidoc-method { font-size:11px; font-weight:800; padding:3px 8px; border-radius:6px; color:#fff; min-width:52px; text-align:center; letter-spacing:0.3px; }
+      .apidoc-path { font-size:13px; font-weight:600; font-family:'Courier New',monospace; color:var(--text-primary); flex:1; }
+      .apidoc-desc { font-size:12px; color:var(--text-tertiary); }
+      .apidoc-details { margin-top:12px; padding:12px 14px; background:var(--surface-card,#f9fafb); border-radius:12px; border:1px solid var(--border-color-light,#f3f4f6); display:none; }
+      .apidoc-details.open { display:block; }
+      .apidoc-detail-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-quaternary); margin-bottom:4px; margin-top:10px; }
+      .apidoc-detail-label:first-child { margin-top:0; }
+      .apidoc-detail-code { font-size:12px; font-family:'Courier New',monospace; background:#1f2937; color:#e5e7eb; padding:10px 12px; border-radius:8px; overflow-x:auto; white-space:pre-wrap; word-break:break-all; }
+      .apidoc-try-btn { font-size:11px; font-weight:600; padding:4px 12px; border-radius:8px; background:var(--surface-card); border:1px solid var(--border-color); color:var(--text-secondary); cursor:pointer; transition:all 0.15s; }
+      .apidoc-try-btn:hover { background:var(--brand-100,#cffafe); color:var(--brand-700); border-color:var(--brand-300); }
+      .apidoc-base-url { font-size:13px; font-family:'Courier New',monospace; background:#1f2937; color:#e5e7eb; padding:12px 16px; border-radius:12px; margin-bottom:20px; display:flex; align-items:center; gap:10px; }
+    </style>
+    <div class="apidoc-container">
+      <div class="apidoc-base-url">
+        <span style="font-size:11px;font-weight:600;color:#9ca3af;">BASE URL</span>
+        <span style="color:#67e8f9;">${escHtml(baseUrl)}</span>
+      </div>
+      ${endpointGroups.map((g, gi) => `
+        <div class="apidoc-group" id="apidoc-group-${gi}">
+          <div class="apidoc-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
+            <span class="apidoc-group-icon">${g.icon}</span>
+            <span class="apidoc-group-name">${escHtml(g.name)}</span>
+            <span class="apidoc-group-count">${g.endpoints.length} endpoints</span>
+            <svg class="apidoc-group-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg>
+          </div>
+          <div class="apidoc-endpoints">
+            ${g.endpoints.map((ep, ei) => {
+              const detailId = `apidoc-detail-${gi}-${ei}`;
+              const curlCmd = `curl -X ${ep.method} '${baseUrl}${ep.path.split('?')[0]}' -H 'Authorization: Bearer YOUR_TOKEN' -H 'Content-Type: application/json'${ep.method !== 'GET' && ep.body !== 'N/A' && ep.body !== 'None' ? " -d '" + ep.body + "'" : ''}`;
+              return `
+              <div class="apidoc-endpoint">
+                <div class="apidoc-endpoint-header" onclick="document.getElementById('${detailId}').classList.toggle('open')">
+                  <span class="apidoc-method" style="background:${methodColors[ep.method] || '#6b7280'}">${ep.method}</span>
+                  <span class="apidoc-path">${escHtml(ep.path)}</span>
+                  <span class="apidoc-desc">${escHtml(ep.desc)}</span>
+                </div>
+                <div class="apidoc-details" id="${detailId}">
+                  <div class="apidoc-detail-label">Request Body</div>
+                  <div class="apidoc-detail-code">${escHtml(ep.body)}</div>
+                  <div class="apidoc-detail-label">Response</div>
+                  <div class="apidoc-detail-code">${escHtml(ep.response)}</div>
+                  <div style="margin-top:10px;display:flex;gap:8px;">
+                    <button class="apidoc-try-btn" onclick="navigator.clipboard.writeText(this.dataset.curl);showToast('curl command copied to clipboard');" data-curl="${escAttr(curlCmd)}">Copy curl</button>
+                  </div>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FEATURE 3: Webhook Event System
+// ═══════════════════════════════════════════════════════════════════════════
+
+const WEBHOOK_EVENTS = [
+  { value: 'application.created', label: 'Application Created' },
+  { value: 'application.updated', label: 'Application Updated' },
+  { value: 'application.status_changed', label: 'Application Status Changed' },
+  { value: 'license.created', label: 'License Created' },
+  { value: 'license.expiring', label: 'License Expiring (30 days)' },
+  { value: 'license.expired', label: 'License Expired' },
+  { value: 'provider.created', label: 'Provider Created' },
+  { value: 'provider.updated', label: 'Provider Updated' },
+  { value: 'task.created', label: 'Task Created' },
+  { value: 'task.completed', label: 'Task Completed' },
+  { value: 'document.uploaded', label: 'Document Uploaded' },
+];
+
+function _getWebhooks() {
+  try { return JSON.parse(localStorage.getItem('credentik_webhooks') || '[]'); } catch { return []; }
+}
+
+function _saveWebhooks(hooks) {
+  localStorage.setItem('credentik_webhooks', JSON.stringify(hooks));
+}
+
+function _getWebhookDeliveries() {
+  try { return JSON.parse(localStorage.getItem('credentik_webhook_deliveries') || '[]'); } catch { return []; }
+}
+
+function _saveWebhookDeliveries(deliveries) {
+  localStorage.setItem('credentik_webhook_deliveries', JSON.stringify(deliveries.slice(0, 50)));
+}
+
+function renderWebhookList() {
+  const hooks = _getWebhooks();
+  if (!hooks.length) {
+    return `
+      <div style="text-align:center;padding:32px;color:var(--text-quaternary);">
+        <svg width="40" height="40" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" style="margin:0 auto 12px;display:block;opacity:0.4;"><path d="M1 8h3l2-5 2 10 2-5h5"/></svg>
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px;">No webhooks configured</div>
+        <div style="font-size:12px;">Add a webhook endpoint to receive real-time event notifications.</div>
+      </div>`;
+  }
+  return hooks.map(h => `
+    <div class="webhook-card" style="padding:16px;border-radius:16px;border:1px solid var(--border-color,#e5e7eb);margin-bottom:12px;background:var(--surface-card,#f9fafb);transition:transform 0.15s,box-shadow 0.15s;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:${h.active ? '#10b981' : '#9ca3af'};flex-shrink:0;"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:700;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(h.url)}</div>
+          <div style="font-size:11px;color:var(--text-quaternary);margin-top:2px;">${h.events.length} events subscribed &middot; ${h.active ? 'Active' : 'Paused'}${h.lastTriggered ? ' &middot; Last: ' + formatDateDisplay(h.lastTriggered) : ''}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="btn btn-sm" onclick="window.app.testWebhook('${h.id}')" title="Send test">Test</button>
+          <button class="btn btn-sm" onclick="window.app.toggleWebhook('${h.id}')" title="${h.active ? 'Pause' : 'Activate'}">${h.active ? 'Pause' : 'Activate'}</button>
+          <button class="btn btn-sm btn-danger" onclick="window.app.deleteWebhook('${h.id}')" title="Delete">Delete</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        ${h.events.map(ev => `<span style="font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px;background:var(--brand-100,#cffafe);color:var(--brand-700,#0e7490);">${ev}</span>`).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderWebhookDeliveries() {
+  const deliveries = _getWebhookDeliveries();
+  if (!deliveries.length) {
+    return '<div style="text-align:center;padding:24px;color:var(--text-quaternary);font-size:13px;">No deliveries yet.</div>';
+  }
+  return `<div style="overflow-x:auto;">
+    <table style="width:100%;font-size:12px;">
+      <thead><tr><th style="text-align:left;padding:8px;">Time</th><th style="text-align:left;padding:8px;">URL</th><th style="text-align:left;padding:8px;">Event</th><th style="text-align:left;padding:8px;">Status</th></tr></thead>
+      <tbody>
+        ${deliveries.slice(0, 10).map(d => `
+          <tr>
+            <td style="padding:8px;white-space:nowrap;">${d.time}</td>
+            <td style="padding:8px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(d.url)}</td>
+            <td style="padding:8px;"><span style="font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px;background:var(--brand-100,#cffafe);color:var(--brand-700);">${d.event}</span></td>
+            <td style="padding:8px;"><span style="font-weight:700;color:${d.status === 200 ? '#10b981' : '#ef4444'};">${d.status}</span></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function openWebhookModal() {
+  let modal = document.getElementById('webhook-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'webhook-modal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:540px;border-radius:16px;">
+        <div class="modal-header">
+          <h2 id="webhook-modal-title">Add Webhook</h2>
+          <button class="modal-close" onclick="window.app.closeWebhookModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="webhook-modal-body"></div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('webhook-modal-body').innerHTML = `
+    <div class="form-group">
+      <label style="font-weight:600;">Endpoint URL *</label>
+      <input type="url" class="form-control" id="webhook-url" placeholder="https://your-server.com/webhook" style="border-radius:10px;">
+    </div>
+    <div class="form-group">
+      <label style="font-weight:600;">Events to Subscribe</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
+        ${WEBHOOK_EVENTS.map(ev => `
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:6px 8px;border-radius:8px;transition:background 0.1s;" onmouseenter="this.style.background='var(--table-row-hover)'" onmouseleave="this.style.background='none'">
+            <input type="checkbox" class="webhook-event-cb" value="${ev.value}"> ${ev.label}
+          </label>
+        `).join('')}
+      </div>
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+      <label style="font-weight:600;margin:0;">Active</label>
+      <input type="checkbox" id="webhook-active" checked>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn" onclick="window.app.closeWebhookModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="window.app.saveWebhookForm()" style="border-radius:10px;">Save Webhook</button>
+    </div>
+  `;
+  modal.classList.add('active');
+}
+
+function saveWebhookForm() {
+  const url = document.getElementById('webhook-url')?.value?.trim();
+  if (!url) { showToast('Enter a webhook URL'); return; }
+  const events = [...document.querySelectorAll('.webhook-event-cb:checked')].map(cb => cb.value);
+  if (!events.length) { showToast('Select at least one event'); return; }
+  const active = document.getElementById('webhook-active')?.checked !== false;
+  const hooks = _getWebhooks();
+  hooks.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), url, events, active, lastTriggered: null, createdAt: new Date().toISOString() });
+  _saveWebhooks(hooks);
+  showToast('Webhook added');
+  document.getElementById('webhook-modal')?.classList.remove('active');
+  const container = document.getElementById('webhook-list-container');
+  if (container) container.innerHTML = renderWebhookList();
+}
+
+function deleteWebhookById(id) {
+  const hooks = _getWebhooks().filter(h => h.id !== id);
+  _saveWebhooks(hooks);
+  showToast('Webhook deleted');
+  const container = document.getElementById('webhook-list-container');
+  if (container) container.innerHTML = renderWebhookList();
+}
+
+function toggleWebhookById(id) {
+  const hooks = _getWebhooks();
+  const hook = hooks.find(h => h.id === id);
+  if (hook) { hook.active = !hook.active; _saveWebhooks(hooks); showToast(hook.active ? 'Webhook activated' : 'Webhook paused'); }
+  const container = document.getElementById('webhook-list-container');
+  if (container) container.innerHTML = renderWebhookList();
+}
+
+function testWebhookById(id) {
+  const hooks = _getWebhooks();
+  const hook = hooks.find(h => h.id === id);
+  if (!hook) return;
+  // Simulate a test delivery
+  const deliveries = _getWebhookDeliveries();
+  const now = new Date();
+  deliveries.unshift({
+    time: now.toISOString().replace('T', ' ').slice(0, 19),
+    url: hook.url,
+    event: 'test.ping',
+    status: 200,
+    payload: '{"event":"test.ping","timestamp":"' + now.toISOString() + '"}',
+  });
+  hook.lastTriggered = now.toISOString().split('T')[0];
+  _saveWebhooks(hooks);
+  _saveWebhookDeliveries(deliveries);
+  showToast('Test webhook sent (simulated 200 OK)');
+  const listContainer = document.getElementById('webhook-list-container');
+  if (listContainer) listContainer.innerHTML = renderWebhookList();
+  const delContainer = document.getElementById('webhook-deliveries-container');
+  if (delContainer) delContainer.innerHTML = renderWebhookDeliveries();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FEATURE 4: Enhanced Global Search — Recent Searches & Suggestions
+// ═══════════════════════════════════════════════════════════════════════════
+
+function _getRecentSearches() {
+  try { return JSON.parse(localStorage.getItem('credentik_recent_searches') || '[]'); } catch { return []; }
+}
+
+function _trackRecentSearch(query) {
+  if (!query || query.length < 2) return;
+  let recent = _getRecentSearches();
+  recent = recent.filter(s => s !== query);
+  recent.unshift(query);
+  recent = recent.slice(0, 5);
+  localStorage.setItem('credentik_recent_searches', JSON.stringify(recent));
+}
+
+function _showSearchEmptyState() {
+  const resultsDiv = document.getElementById('global-search-results');
+  if (!resultsDiv) return;
+
+  const recentSearches = _getRecentSearches();
+  const quickCmds = [
+    { icon: '\u{1F4CA}', label: 'Go to Dashboard', sub: 'Overview & analytics', action: "navigateTo('dashboard')" },
+    { icon: '\u{1F4CB}', label: 'Go to Applications', sub: 'Credentialing apps', action: "navigateTo('applications')" },
+    { icon: '\u{1F464}', label: 'Go to Providers', sub: 'Provider directory', action: "navigateTo('providers')" },
+    { icon: '\u{1FAAA}', label: 'Go to Licenses', sub: 'License tracking', action: "navigateTo('licenses')" },
+    { icon: '\u{2795}', label: 'Add Application', sub: 'New credentialing app', action: "window.app.quickAddApp()" },
+    { icon: '\u{2705}', label: 'Add Task', sub: 'New task or reminder', action: "window.app.showQuickTask()" },
+    { icon: '\u{1F514}', label: 'Notifications', sub: 'View notifications', action: "window.app.toggleNotifications()" },
+    { icon: '\u{2699}\u{FE0F}', label: 'Settings', sub: 'Account & data', action: "navigateTo('settings')" },
+  ];
+
+  let html = '';
+
+  // Recent searches section
+  if (recentSearches.length > 0) {
+    html += `<div style="padding:8px 12px 4px;display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-quaternary);">Recent Searches</span>
+      <button onclick="window.app.clearRecentSearches();event.stopPropagation();" style="font-size:11px;color:var(--brand-600);background:none;border:none;cursor:pointer;font-weight:600;">Clear</button>
+    </div>`;
+    html += recentSearches.map(s => `
+      <div onclick="window.app.runRecentSearch('${escHtml(s)}');event.stopPropagation();" style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:8px;cursor:pointer;transition:background .1s;" onmouseenter="this.style.background='var(--table-row-hover)'" onmouseleave="this.style.background='none'">
+        <div style="width:32px;height:32px;border-radius:8px;background:var(--surface-card);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text-quaternary);">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l2.5 1.5"/></svg>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:500;color:var(--text-primary);">${escHtml(s)}</div>
+        </div>
+      </div>
+    `).join('');
+    html += '<div style="height:8px;border-bottom:1px solid var(--border-color,#e5e7eb);margin:0 12px;"></div>';
+  }
+
+  // Quick actions
+  html += `<div style="padding:8px 8px 4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-quaternary);">Quick Actions</div>`;
+  html += quickCmds.map(c => `
+    <div onclick="${c.action};document.getElementById('global-search-overlay').style.display='none';" style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:8px;cursor:pointer;transition:background .1s;" onmouseenter="this.style.background='var(--table-row-hover)'" onmouseleave="this.style.background='none'">
+      <div style="width:32px;height:32px;border-radius:8px;background:var(--surface-card);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;">${c.icon}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${c.label}</div>
+        <div style="font-size:11px;color:var(--text-quaternary);">${c.sub}</div>
+      </div>
+    </div>
+  `).join('');
+
+  // Search scope indicators
+  html += `<div style="padding:12px 12px 8px;border-top:1px solid var(--border-color,#e5e7eb);margin-top:4px;">
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-quaternary);margin-bottom:6px;">Search Scope</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <span style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;background:var(--brand-100,#cffafe);color:var(--brand-700,#0e7490);">Applications</span>
+      <span style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;background:#dbeafe;color:#1d4ed8;">Providers</span>
+      <span style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;background:#dcfce7;color:#166534;">Licenses</span>
+      <span style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;background:#fef3c7;color:#92400e;">Tasks</span>
+      <span style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;background:#f3e8ff;color:#6b21a8;">Facilities</span>
+      <span style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;background:#fef9c3;color:#854d0e;">Organizations</span>
+    </div>
+  </div>`;
+
+  resultsDiv.innerHTML = html;
 }
