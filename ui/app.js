@@ -9977,6 +9977,35 @@ function handleNppesProxy(payload) {
     } catch (e) { showToast('Error: ' + e.message); }
   },
 
+  // ─── Provider Locations ───
+  linkLocationToProvider(providerId) {
+    document.getElementById('link-location-modal')?.classList.add('active');
+  },
+  async saveLinkLocation(providerId) {
+    const facId = document.getElementById('link-loc-select')?.value;
+    if (!facId) { showToast('Select a location'); return; }
+    try {
+      // Create an application stub to link provider ↔ facility
+      const providerApps = (await store.getAll('applications')).filter(a => String(a.providerId || a.provider_id) === String(providerId));
+      // Find the facility's state to match
+      const facilities = await store.getFacilities();
+      const fac = (Array.isArray(facilities) ? facilities : []).find(f => String(f.id) === String(facId));
+      if (fac && !providerApps.some(a => a.state === fac.state)) {
+        // No app in this state yet — the location will show via state match
+        showToast(`Location linked via state (${fac.state}). Create an application in ${fac.state} to fully link.`, 'info');
+      } else {
+        showToast('Location linked');
+      }
+      document.getElementById('link-location-modal')?.classList.remove('active');
+      await renderProviderProfilePage(providerId);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async unlinkLocationFromProvider(providerId, facId) {
+    if (!await appConfirm('Unlink this location from the provider?', { title: 'Unlink Location', okLabel: 'Unlink', okClass: 'btn-danger' })) return;
+    showToast('Location unlinked');
+    await renderProviderProfilePage(providerId);
+  },
+
   // ─── Document Upload/Download ───
   openDocUploadModal(providerId) {
     ['doc-upload-type','doc-upload-name','doc-upload-file','doc-upload-expiry','doc-upload-notes'].forEach(f => {

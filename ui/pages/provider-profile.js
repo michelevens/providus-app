@@ -643,8 +643,19 @@ async function renderProviderProfilePage(providerId) {
     { id: 'work-history', label: 'Work History' },
     { id: 'cme', label: 'CME' },
     { id: 'references', label: 'References' },
+    { id: 'locations', label: 'Locations' },
     { id: 'documents', label: 'Documents' },
   ];
+
+  // Load facilities for the Locations tab
+  const allFacilities = await store.getFacilities().catch(() => []);
+  const facilityArr = Array.isArray(allFacilities) ? allFacilities : [];
+  // Get apps to find which locations this provider is linked to
+  const provApps = (await store.getAll('applications').catch(() => [])).filter(a => String(a.providerId || a.provider_id) === String(providerId));
+  const provFacIds = new Set(provApps.map(a => a.facilityId).filter(Boolean));
+  // Also match by state
+  const provStates = new Set(providerLicenses.map(l => l.state).filter(Boolean));
+  const provLocations = facilityArr.filter(f => provFacIds.has(f.id) || provFacIds.has(String(f.id)) || provStates.has(f.state));
 
   const pageSubtitle = document.getElementById('page-subtitle');
   if (pageSubtitle) pageSubtitle.textContent = provName + (credential ? ', ' + credential : '') + ` | ID: ${toHexId(providerId)}`;
@@ -1186,6 +1197,64 @@ async function renderProviderProfilePage(providerId) {
         <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
           <button class="btn" onclick="document.getElementById('reference-modal').classList.remove('active')">Cancel</button>
           <button class="btn btn-primary" onclick="window.app.saveReference(${providerId})">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Locations Tab -->
+    <div class="profile-tab-content" id="tab-locations" style="display:none;">
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+          <h3>Practice Locations (${provLocations.length})</h3>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm btn-primary" onclick="window.app.linkLocationToProvider(${providerId})">+ Link Location</button>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${provLocations.length > 0 ? `<table>
+            <thead><tr><th>Location</th><th>Type</th><th>Address</th><th>City / State</th><th>Phone</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${provLocations.map(f => {
+                const isActive = f.status === 'active' || f.isActive;
+                return `<tr>
+                  <td><strong>${escHtml(f.name || '—')}</strong>${f.npi ? '<br><span style="font-size:10px;color:var(--gray-400);font-family:monospace;">NPI: ' + escHtml(f.npi) + '</span>' : ''}</td>
+                  <td>${(f.facilityType || f.type || f.facility_type) ? '<span style="display:inline-flex;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;background:rgba(139,92,246,0.1);color:#7c3aed;">' + escHtml((f.facilityType || f.type || f.facility_type || '').replace(/_/g, ' ')) + '</span>' : '—'}</td>
+                  <td style="font-size:12px;">${escHtml(f.street || f.address || '—')}</td>
+                  <td>${escHtml([f.city, f.state].filter(Boolean).join(', ') || '—')} ${f.zip ? '<span style="color:var(--gray-400);font-size:11px;">' + escHtml(f.zip) + '</span>' : ''}</td>
+                  <td>${escHtml(f.phone || '—')}</td>
+                  <td><span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${isActive ? 'rgba(34,197,94,0.12)' : 'rgba(156,163,175,0.12)'};color:${isActive ? 'var(--green)' : 'var(--gray-500)'};"><span style="width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;"></span>${isActive ? 'Active' : (f.status || 'Inactive')}</span></td>
+                  <td><button class="btn btn-sm" onclick="window.app.unlinkLocationFromProvider(${providerId}, ${f.id})" title="Unlink" style="color:var(--gray-400);">&times;</button></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>` : `<div style="padding:2rem;text-align:center;color:var(--gray-500);">
+            <p>No practice locations linked to this provider.</p>
+            <p style="font-size:12px;">Click "+ Link Location" to associate existing locations, or go to Practice Locations to create new ones.</p>
+          </div>`}
+        </div>
+      </div>
+
+      <!-- Link Location Modal -->
+      <div class="modal-overlay" id="link-location-modal">
+        <div class="modal" style="max-width:520px;">
+          <div class="modal-header">
+            <h3>Link Practice Location</h3>
+            <button class="modal-close" onclick="document.getElementById('link-location-modal').classList.remove('active')">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">Select a practice location to associate with this provider.</p>
+            <div class="form-group">
+              <label>Location</label>
+              <select class="form-control" id="link-loc-select">
+                <option value="">Select location...</option>
+                ${facilityArr.filter(f => !provLocations.some(pl => pl.id === f.id)).map(f => `<option value="${f.id}">${escHtml(f.name || '')} — ${escHtml([f.city, f.state].filter(Boolean).join(', '))}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+            <button class="btn" onclick="document.getElementById('link-location-modal').classList.remove('active')">Cancel</button>
+            <button class="btn btn-primary" onclick="window.app.saveLinkLocation(${providerId})">Link Location</button>
+          </div>
         </div>
       </div>
     </div>
