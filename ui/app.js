@@ -1065,6 +1065,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderProviderOnboardingWizard();
       break;
+    case 'automations':
+      pageTitle.textContent = 'Workflow Automations';
+      pageSubtitle.textContent = 'Rule-based automation for credentialing workflows';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openAutomationRuleModal()">+ Create Rule</button>' + printBtn;
+      await renderAutomationsPage();
+      break;
     default:
       pageBody.innerHTML = '<div class="empty-state"><h3>Page not found</h3></div>';
   }
@@ -10959,6 +10965,35 @@ function handleNppesProxy(payload) {
 
   // ─── Help Tooltips ───
   toggleHelpTip(id) { toggleHelpTip(id); },
+
+  // ─── Enhanced Notifications (V2) ───
+  markNotificationRead(nid) {
+    const readIds = _getReadNotifications();
+    if (!readIds.includes(nid)) {
+      readIds.push(nid);
+      _setReadNotifications(readIds);
+    }
+    updateNotificationBell();
+  },
+  async markAllNotificationsRead() {
+    const alerts = await getAlerts();
+    const readIds = alerts.map(a => _notifId(a));
+    _setReadNotifications(readIds);
+    await renderNotifications();
+    updateNotificationBell();
+    showToast('All notifications marked as read');
+  },
+  async filterNotifications(filter) {
+    _notifFilter = filter;
+    await renderNotifications();
+  },
+
+  // ─── Workflow Automations ───
+  openAutomationRuleModal(editId) { openAutomationRuleModal(editId); },
+  saveAutomationRule() { saveAutomationRule(); },
+  deleteAutomationRule(id) { deleteAutomationRule(id); },
+  toggleAutomationRule(id) { toggleAutomationRule(id); },
+  closeAutomationModal() { document.getElementById('automation-rule-modal')?.classList.remove('active'); },
 };
 
 // ─── Application Modal ───
@@ -11570,35 +11605,89 @@ async function getAlerts() {
   return alerts.sort((a, b) => a.priority - b.priority);
 }
 
+let _notifFilter = 'all';
+
+function _getReadNotifications() {
+  try { return JSON.parse(localStorage.getItem('credentik_read_notifications') || '[]'); } catch { return []; }
+}
+function _setReadNotifications(ids) {
+  localStorage.setItem('credentik_read_notifications', JSON.stringify(ids));
+}
+function _notifId(a) {
+  return `${a.type}_${a.title}`.replace(/\s+/g, '_').substring(0, 80);
+}
+function _notifIconSvg(a) {
+  const page = a.page || '';
+  if (page === 'licenses' || page === 'renewal-calendar') return { cls: 'license', svg: '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5C5 1.5 2.5 3 2.5 3v5.5c0 3 5.5 6 5.5 6s5.5-3 5.5-6V3s-2.5-1.5-5.5-1.5z"/><path d="M6 8l1.5 1.5L10 6"/></svg>' };
+  if (page === 'applications') return { cls: 'app', svg: '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 1.5h5l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1v-12a1 1 0 011-1z"/><path d="M9 1.5v4h4"/></svg>' };
+  if (page === 'tasks') return { cls: 'task', svg: '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8l2 2 4-4"/></svg>' };
+  if (page === 'followups') return { cls: 'alert', svg: '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2L1.5 13h13L8 2z"/><path d="M8 7v3"/><circle cx="8" cy="11.5" r="0.5" fill="currentColor"/></svg>' };
+  return { cls: 'info', svg: '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5.5v0"/><path d="M8 7.5v4"/></svg>' };
+}
+function _timeAgo(priority) {
+  // Approximate time-ago from priority (lower = more urgent = more recent)
+  const labels = ['Just now', '5m ago', '30m ago', '1h ago', '3h ago', 'Today'];
+  return labels[Math.min(priority, labels.length - 1)] || 'Today';
+}
+
 async function updateNotificationBell() {
   const alerts = await getAlerts();
-  const count = alerts.filter(a => a.type === 'red').length;
+  const readIds = _getReadNotifications();
+  const unreadCount = alerts.filter(a => !readIds.includes(_notifId(a))).length;
   const countEl = document.getElementById('notification-count');
   if (countEl) {
-    countEl.textContent = count;
-    countEl.style.display = count > 0 ? 'flex' : 'none';
+    countEl.textContent = unreadCount;
+    countEl.style.display = unreadCount > 0 ? 'flex' : 'none';
   }
 }
 
 async function renderNotifications() {
   const alerts = await getAlerts();
   const body = document.getElementById('notification-body');
+  const footer = document.getElementById('notif-v2-footer');
   if (!body) return;
 
-  if (alerts.length === 0) {
-    body.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-muted);">All clear — no alerts right now.</div>';
+  const readIds = _getReadNotifications();
+
+  // Apply filter
+  let filtered = alerts;
+  if (_notifFilter === 'urgent') {
+    filtered = alerts.filter(a => a.type === 'red' || a.priority <= 1);
+  } else if (_notifFilter === 'info') {
+    filtered = alerts.filter(a => a.type === 'blue' || a.type === 'amber' || a.priority >= 2);
+  }
+
+  // Update tab active states
+  document.querySelectorAll('.notif-v2-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.filter === _notifFilter);
+  });
+
+  if (filtered.length === 0) {
+    body.innerHTML = `<div class="notif-v2-empty">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><circle cx="9" cy="10" r="0.5" fill="currentColor"/><circle cx="15" cy="10" r="0.5" fill="currentColor"/></svg>
+      <p>All caught up!</p>
+      <span>No notifications.</span>
+    </div>`;
+    if (footer) footer.style.display = 'none';
     return;
   }
 
-  body.innerHTML = alerts.map(a => `
-    <div class="notif-item" onclick="window.app.navigateTo('${a.page}');window.app.toggleNotifications();">
-      <div class="notif-icon ${a.type}">${a.icon}</div>
-      <div class="notif-text">
-        <div class="title">${a.title}</div>
-        <div class="desc">${a.desc}</div>
+  if (footer) footer.style.display = filtered.length > 5 ? '' : 'none';
+
+  body.innerHTML = filtered.map(a => {
+    const nid = _notifId(a);
+    const isRead = readIds.includes(nid);
+    const icon = _notifIconSvg(a);
+    return `<div class="notif-v2-item ${isRead ? '' : 'unread'}" onclick="window.app.markNotificationRead('${nid}');window.app.navigateTo('${a.page}');window.app.toggleNotifications();">
+      <div class="notif-v2-dot ${isRead ? 'read' : ''}"></div>
+      <div class="notif-v2-icon ${icon.cls}">${icon.svg}</div>
+      <div class="notif-v2-content">
+        <div class="notif-v2-title">${a.title}</div>
+        <div class="notif-v2-desc">${a.desc}</div>
       </div>
-    </div>
-  `).join('');
+      <div class="notif-v2-time">${_timeAgo(a.priority)}</div>
+    </div>`;
+  }).join('');
 }
 
 // ─── Bulk Actions on Applications (#3) ───
@@ -16142,8 +16231,116 @@ async function renderCompliancePage() {
 
   const compPct = providers.length > 0 ? Math.round((healthyProviders.length / providers.length) * 100) : 0;
 
+  // ─── Compliance Command Center — Weighted Score Engine ───
+  function computeWeightedOrgScore() {
+    // Weights: Licenses 30%, Malpractice 20%, Board Certs 15%, Background 15%, Docs 10%, Training 10%
+    let licScore = 100, malScore = 100, boardScore = 100, bgScore = 100, docScore = 100, trainScore = 100;
+    const totalLic = licenses.length;
+    if (totalLic > 0) {
+      const expCount = expiredLicenses.length;
+      const exp30Count = expiringLicenses30.length;
+      const exp90Count = expiringLicenses90.length;
+      const goodLic = totalLic - expCount - exp30Count - exp90Count;
+      licScore = Math.max(0, Math.round((goodLic / totalLic) * 100 - (expCount * 15) - (exp30Count * 8) - (exp90Count * 3)));
+    } else { licScore = 0; }
+
+    if (expiringMalpractice.length > 0) { malScore = Math.max(0, 100 - expiringMalpractice.length * 25); }
+    if (expiringBoards.length > 0) { boardScore = Math.max(0, 100 - expiringBoards.length * 20); }
+
+    const exclFlags = exclusionSummary.excluded || 0;
+    const neverScr = neverScreened.length || 0;
+    if (exclFlags > 0) bgScore = Math.max(0, 100 - exclFlags * 40);
+    else if (neverScr > 0 && providers.length > 0) bgScore = Math.max(0, 100 - Math.round((neverScr / providers.length) * 50));
+
+    // Docs: average doc completion across apps
+    let totalDocs = 0, completedDocs = 0;
+    apps.forEach(a => {
+      const docs = a.documentChecklist || {};
+      const CRED_DOCS_LEN = typeof CRED_DOCUMENTS !== 'undefined' ? CRED_DOCUMENTS.length : 0;
+      totalDocs += CRED_DOCS_LEN;
+      if (CRED_DOCS_LEN > 0) completedDocs += (typeof CRED_DOCUMENTS !== 'undefined' ? CRED_DOCUMENTS.filter(d => docs[d.id]?.completed).length : 0);
+    });
+    if (totalDocs > 0) docScore = Math.round((completedDocs / totalDocs) * 100);
+    else docScore = providers.length > 0 ? 50 : 0;
+
+    // Training/CME placeholder — 100 if no issues flagged
+    trainScore = 100;
+
+    const weighted = Math.round(
+      licScore * 0.30 + malScore * 0.20 + boardScore * 0.15 + bgScore * 0.15 + docScore * 0.10 + trainScore * 0.10
+    );
+    return {
+      overall: Math.max(0, Math.min(100, weighted)),
+      breakdown: [
+        { label: 'Licenses Current', weight: '30%', score: Math.max(0, licScore) },
+        { label: 'Malpractice Current', weight: '20%', score: Math.max(0, malScore) },
+        { label: 'Board Certifications', weight: '15%', score: Math.max(0, boardScore) },
+        { label: 'Background Checks', weight: '15%', score: Math.max(0, bgScore) },
+        { label: 'Documents Complete', weight: '10%', score: Math.max(0, docScore) },
+        { label: 'Training / CME', weight: '10%', score: Math.max(0, trainScore) },
+      ]
+    };
+  }
+
+  const cmdScore = computeWeightedOrgScore();
+
+  // Store score history for trending
+  const historyKey = 'credentik_compliance_history';
+  let scoreHistory = [];
+  try { scoreHistory = JSON.parse(localStorage.getItem(historyKey) || '[]'); } catch {}
+  const todayKey = new Date().toISOString().split('T')[0];
+  if (!scoreHistory.find(h => h.date === todayKey)) {
+    scoreHistory.push({ date: todayKey, score: cmdScore.overall });
+    if (scoreHistory.length > 90) scoreHistory = scoreHistory.slice(-90);
+    localStorage.setItem(historyKey, JSON.stringify(scoreHistory));
+  }
+  const prevMonth = scoreHistory.filter(h => {
+    const d = new Date(h.date);
+    const ago = new Date(); ago.setDate(ago.getDate() - 30);
+    return d <= ago;
+  });
+  const trendDelta = prevMonth.length > 0 ? cmdScore.overall - prevMonth[prevMonth.length - 1].score : 0;
+  const trendStr = trendDelta > 0 ? `&#8593; ${trendDelta}% from last month` : trendDelta < 0 ? `&#8595; ${Math.abs(trendDelta)}% from last month` : 'No change from last month';
+  const trendColor = trendDelta > 0 ? '#10b981' : trendDelta < 0 ? '#ef4444' : 'var(--gray-500)';
+
+  // Risk items sorted by impact
+  const riskItems = [];
+  if (expiredLicenses.length > 0) riskItems.push({ text: `${expiredLicenses.length} expired license(s)`, impact: expiredLicenses.length * 8, color: '#ef4444' });
+  if (expiringLicenses30.length > 0) riskItems.push({ text: `${expiringLicenses30.length} license(s) expiring in < 30 days`, impact: expiringLicenses30.length * 5, color: '#f59e0b' });
+  if (expiringMalpractice.length > 0) riskItems.push({ text: `${expiringMalpractice.length} provider(s) with expiring malpractice`, impact: expiringMalpractice.length * 5, color: '#f59e0b' });
+  if (expiringBoards.length > 0) riskItems.push({ text: `${expiringBoards.length} provider(s) with expiring board cert`, impact: expiringBoards.length * 4, color: '#f59e0b' });
+  if ((exclusionSummary.excluded || 0) > 0) riskItems.push({ text: `${exclusionSummary.excluded} exclusion flag(s)`, impact: exclusionSummary.excluded * 10, color: '#ef4444' });
+  if (neverScreened.length > 0) riskItems.push({ text: `${neverScreened.length} provider(s) never screened`, impact: neverScreened.length * 3, color: '#9ca3af' });
+  riskItems.sort((a, b) => b.impact - a.impact);
+
+  const cmdScoreColor = cmdScore.overall >= 85 ? '#22c55e' : cmdScore.overall >= 60 ? '#f59e0b' : '#ef4444';
+
   body.innerHTML = `
     <style>
+      .comp-cmd-hero{background:var(--surface-card,#fff);border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);margin-bottom:24px;position:relative;}
+      .comp-cmd-hero::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,${cmdScoreColor},${cmdScore.overall>=85?'#16a34a':cmdScore.overall>=60?'#d97706':'#dc2626'});}
+      .comp-cmd-grid{display:grid;grid-template-columns:220px 1fr 280px;gap:0;min-height:260px;}
+      @media(max-width:900px){.comp-cmd-grid{grid-template-columns:1fr;}}
+      .comp-cmd-ring{text-align:center;padding:28px 20px;border-right:1px solid var(--gray-200,#e5e7eb);display:flex;flex-direction:column;align-items:center;justify-content:center;}
+      .comp-cmd-center{padding:24px;border-right:1px solid var(--gray-200,#e5e7eb);}
+      .comp-cmd-right{padding:24px;overflow-y:auto;max-height:320px;}
+      .comp-cmd-breakdown{margin-top:8px;}
+      .comp-cmd-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+      .comp-cmd-bar-label{font-size:11px;font-weight:600;color:var(--gray-600);width:130px;flex-shrink:0;}
+      .comp-cmd-bar-track{flex:1;height:8px;background:var(--gray-200,#e5e7eb);border-radius:4px;overflow:hidden;}
+      .comp-cmd-bar-fill{height:100%;border-radius:4px;transition:width 0.5s;}
+      .comp-cmd-bar-val{font-size:11px;font-weight:700;width:36px;text-align:right;flex-shrink:0;}
+      .comp-cmd-risk{list-style:none;padding:0;margin:0;}
+      .comp-cmd-risk li{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--gray-100,#f3f4f6);font-size:12px;color:var(--gray-700);}
+      .comp-cmd-risk li:last-child{border-bottom:none;}
+      .comp-cmd-risk-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+      .comp-cmd-risk-impact{font-size:10px;font-weight:700;flex-shrink:0;padding:2px 6px;border-radius:6px;background:rgba(239,68,68,0.1);color:#ef4444;}
+      .comp-cmd-providers{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:16px;}
+      .comp-cmd-prov-card{background:var(--gray-50,#f9fafb);border-radius:12px;padding:12px;text-align:center;transition:transform 0.15s,box-shadow 0.15s;cursor:pointer;}
+      .comp-cmd-prov-card:hover{transform:translateY(-2px);box-shadow:0 4px 10px rgba(0,0,0,0.08);}
+      .comp-cmd-prov-score{font-size:22px;font-weight:800;line-height:1;}
+      .comp-cmd-prov-name{font-size:10px;font-weight:600;color:var(--gray-500);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+      .comp-cmd-section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-bottom:12px;}
       .compv2-hero { background:var(--surface-card,#fff); border-radius:16px; position:relative; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.06); margin-bottom:20px; }
       .compv2-hero::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,${scoreColor(avgScore)},${avgScore >= 85 ? '#16a34a' : avgScore >= 60 ? '#d97706' : '#dc2626'}); }
       .compv2-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:14px; }
@@ -16160,6 +16357,65 @@ async function renderCompliancePage() {
       .compv2-dot.amber::before { background:#f59e0b; }
       .compv2-dot.gray::before { background:#9ca3af; }
     </style>
+
+    <!-- Compliance Command Center -->
+    <div class="comp-cmd-hero">
+      <div class="comp-cmd-grid">
+        <div class="comp-cmd-ring">
+          <div style="position:relative;width:160px;height:160px;margin:0 auto 12px;">
+            <svg viewBox="0 0 120 120" style="transform:rotate(-90deg);">
+              <circle cx="60" cy="60" r="52" fill="none" stroke="var(--gray-200)" stroke-width="10"/>
+              <circle cx="60" cy="60" r="52" fill="none" stroke="${cmdScoreColor}" stroke-width="10"
+                stroke-dasharray="${Math.round(cmdScore.overall * 3.267)} 326.7"
+                stroke-linecap="round" style="transition:stroke-dasharray 0.8s;"/>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+              <div style="font-size:44px;font-weight:800;color:${cmdScoreColor};line-height:1;">${cmdScore.overall}</div>
+              <div style="font-size:11px;color:var(--gray-500);font-weight:500;">/ 100</div>
+            </div>
+          </div>
+          <div style="font-size:15px;font-weight:700;color:${cmdScoreColor};">${cmdScore.overall >= 85 ? 'Excellent' : cmdScore.overall >= 70 ? 'Good' : cmdScore.overall >= 60 ? 'Needs Attention' : 'Critical'}</div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:2px;">Weighted Compliance Score</div>
+          <div style="margin-top:8px;font-size:12px;font-weight:600;color:${trendColor};">${trendStr}</div>
+        </div>
+        <div class="comp-cmd-center">
+          <div class="comp-cmd-section-title">Score Breakdown</div>
+          <div class="comp-cmd-breakdown">
+            ${cmdScore.breakdown.map(b => {
+              const bColor = b.score >= 85 ? '#22c55e' : b.score >= 60 ? '#f59e0b' : '#ef4444';
+              return `<div class="comp-cmd-bar-row">
+                <div class="comp-cmd-bar-label">${b.label} <span style="color:var(--gray-400);font-size:9px;">(${b.weight})</span></div>
+                <div class="comp-cmd-bar-track"><div class="comp-cmd-bar-fill" style="width:${b.score}%;background:${bColor};"></div></div>
+                <div class="comp-cmd-bar-val" style="color:${bColor};">${b.score}%</div>
+              </div>`;
+            }).join('')}
+          </div>
+          ${providerScores.length > 0 ? `
+          <div class="comp-cmd-section-title" style="margin-top:20px;">Score by Provider</div>
+          <div class="comp-cmd-providers">
+            ${providerScores.slice(0, 8).map(ps => {
+              const p = ps.provider;
+              const provName = ((p.firstName || p.first_name || '') + ' ' + (p.lastName || p.last_name || '')).trim();
+              const pColor = ps.score >= 85 ? '#22c55e' : ps.score >= 60 ? '#f59e0b' : '#ef4444';
+              return `<div class="comp-cmd-prov-card" onclick="window.app.openProviderProfile('${p.id}')">
+                <div class="comp-cmd-prov-score" style="color:${pColor};">${ps.score}</div>
+                <div class="comp-cmd-prov-name">${escHtml(provName)}</div>
+              </div>`;
+            }).join('')}
+          </div>` : ''}
+        </div>
+        <div class="comp-cmd-right">
+          <div class="comp-cmd-section-title">Risk Items</div>
+          ${riskItems.length > 0 ? `<ul class="comp-cmd-risk">
+            ${riskItems.map(r => `<li>
+              <div class="comp-cmd-risk-dot" style="background:${r.color};"></div>
+              <span style="flex:1;">${r.text}</span>
+              <span class="comp-cmd-risk-impact">-${r.impact}%</span>
+            </li>`).join('')}
+          </ul>` : '<div style="text-align:center;padding:24px;color:var(--gray-400);font-size:13px;">No risk items detected. Great job!</div>'}
+        </div>
+      </div>
+    </div>
 
     <!-- V2 Compliance Hero Card -->
     <div class="compv2-hero">
@@ -16376,6 +16632,288 @@ async function renderCompliancePage() {
         </table>` : '<div style="padding:1rem;text-align:center;color:var(--gray-500);">All providers have been screened, or navigate to Exclusion Screening for details.</div>'
     )}
   `;
+}
+
+// ─── Workflow Automations Page ───
+
+const DEFAULT_AUTOMATION_RULES = [
+  { id: 'default_1', name: 'License Expiring — Create Renewal Task', trigger: 'license_expiring', triggerValue: '90', condition: '', conditionValue: '', action: 'create_task', actionValue: 'Renew license before expiration', enabled: true, isDefault: true, triggeredCount: 0 },
+  { id: 'default_2', name: 'Application Denied — Create Re-submission Task', trigger: 'app_status_change', triggerValue: 'denied', condition: '', conditionValue: '', action: 'create_task', actionValue: 'Re-submit denied application with corrections', enabled: true, isDefault: true, triggeredCount: 0 },
+  { id: 'default_3', name: 'Follow-up Overdue 7 Days — Send Email Alert', trigger: 'followup_overdue', triggerValue: '7', condition: '', conditionValue: '', action: 'send_email', actionValue: 'Follow-up overdue alert', enabled: false, isDefault: true, triggeredCount: 0 },
+  { id: 'default_4', name: 'All Documents Complete — Change to Ready for Review', trigger: 'document_uploaded', triggerValue: '', condition: '', conditionValue: '', action: 'change_status', actionValue: 'ready_for_review', enabled: false, isDefault: true, triggeredCount: 0 },
+  { id: 'default_5', name: 'New Provider Added — Create Onboarding Checklist', trigger: 'new_provider', triggerValue: '', condition: '', conditionValue: '', action: 'create_task', actionValue: 'Complete provider onboarding checklist', enabled: true, isDefault: true, triggeredCount: 0 },
+];
+
+function _getAutomationRules() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('credentik_automation_rules') || 'null');
+    if (stored && Array.isArray(stored)) return stored;
+  } catch {}
+  // Initialize with defaults
+  localStorage.setItem('credentik_automation_rules', JSON.stringify(DEFAULT_AUTOMATION_RULES));
+  return [...DEFAULT_AUTOMATION_RULES];
+}
+function _saveAutomationRules(rules) {
+  localStorage.setItem('credentik_automation_rules', JSON.stringify(rules));
+}
+
+const AUTO_TRIGGERS = [
+  { value: 'license_expiring', label: 'License expires in X days', hasInput: true, inputLabel: 'Days before expiration' },
+  { value: 'app_status_change', label: 'Application status changes to', hasInput: true, inputLabel: 'Status (e.g. denied, approved)' },
+  { value: 'document_uploaded', label: 'Document uploaded / All docs complete', hasInput: false },
+  { value: 'task_overdue', label: 'Task overdue by X days', hasInput: true, inputLabel: 'Days overdue' },
+  { value: 'new_provider', label: 'New provider added', hasInput: false },
+  { value: 'followup_overdue', label: 'Follow-up overdue by X days', hasInput: true, inputLabel: 'Days overdue' },
+];
+const AUTO_CONDITIONS = [
+  { value: '', label: '(No condition)' },
+  { value: 'state_is', label: 'State is' },
+  { value: 'payer_is', label: 'Payer is' },
+  { value: 'provider_is', label: 'Provider is' },
+  { value: 'priority_is', label: 'Priority is' },
+];
+const AUTO_ACTIONS = [
+  { value: 'create_task', label: 'Create task with title' },
+  { value: 'send_email', label: 'Send email notification' },
+  { value: 'change_status', label: 'Change status to' },
+  { value: 'create_followup', label: 'Create follow-up' },
+  { value: 'show_alert', label: 'Show alert notification' },
+];
+
+function _triggerLabel(v) { return (AUTO_TRIGGERS.find(t => t.value === v) || {}).label || v; }
+function _actionLabel(v) { return (AUTO_ACTIONS.find(a => a.value === v) || {}).label || v; }
+
+async function renderAutomationsPage() {
+  const body = document.getElementById('page-body');
+  const rules = _getAutomationRules();
+  const activeRules = rules.filter(r => r.enabled);
+  const triggeredThisWeek = rules.reduce((s, r) => s + (r.triggeredCount || 0), 0);
+
+  body.innerHTML = `
+    <style>
+      .auto-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px;}
+      .auto-stat{background:var(--surface-card,#fff);border-radius:16px;padding:20px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}
+      .auto-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
+      .auto-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+      .auto-stat-val{font-size:32px;font-weight:800;line-height:1;}
+      .auto-stat-lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:6px;}
+      .auto-card{background:var(--surface-card,#fff);border-radius:16px;padding:20px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;display:flex;align-items:center;gap:16px;}
+      .auto-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.08);}
+      .auto-card-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;}
+      .auto-card-body{flex:1;min-width:0;}
+      .auto-card-name{font-size:14px;font-weight:700;color:var(--gray-800);margin-bottom:4px;}
+      .auto-card-desc{font-size:12px;color:var(--gray-500);line-height:1.4;}
+      .auto-card-desc span{font-weight:600;color:var(--gray-700);}
+      .auto-card-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+      .auto-toggle{position:relative;width:40px;height:22px;cursor:pointer;}
+      .auto-toggle input{opacity:0;width:0;height:0;}
+      .auto-toggle .slider{position:absolute;inset:0;background:var(--gray-300);border-radius:11px;transition:0.2s;}
+      .auto-toggle .slider::before{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;left:3px;top:3px;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);}
+      .auto-toggle input:checked+.slider{background:var(--brand-600,#0891b2);}
+      .auto-toggle input:checked+.slider::before{transform:translateX(18px);}
+      .auto-badge{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;}
+      .auto-badge.on{background:rgba(16,185,129,0.12);color:#10b981;}
+      .auto-badge.off{background:rgba(148,163,184,0.15);color:var(--gray-500);}
+      .auto-empty{text-align:center;padding:48px;color:var(--gray-400);}
+    </style>
+
+    <div class="auto-stats">
+      <div class="auto-stat" style="--top-color:var(--brand-600);"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#0891b2,#06b6d4);"></div><div class="auto-stat-val" style="color:var(--brand-600);">${rules.length}</div><div class="auto-stat-lbl">Total Rules</div></div>
+      <div class="auto-stat"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#10b981,#34d399);"></div><div class="auto-stat-val" style="color:#10b981;">${activeRules.length}</div><div class="auto-stat-lbl">Active</div></div>
+      <div class="auto-stat"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#8b5cf6,#a78bfa);"></div><div class="auto-stat-val" style="color:#8b5cf6;">${triggeredThisWeek}</div><div class="auto-stat-lbl">Triggered (this week)</div></div>
+    </div>
+
+    <div id="auto-rules-list">
+      ${rules.length === 0 ? '<div class="auto-empty"><p>No automation rules yet. Click <strong>+ Create Rule</strong> to get started.</p></div>' : rules.map(r => {
+        const triggerInfo = _triggerLabel(r.trigger);
+        const actionInfo = _actionLabel(r.action);
+        const iconBg = r.enabled ? 'rgba(8,145,178,0.1)' : 'rgba(148,163,184,0.1)';
+        const iconColor = r.enabled ? '#0891b2' : '#9ca3af';
+        return `<div class="auto-card">
+          <div class="auto-card-icon" style="background:${iconBg};color:${iconColor};">
+            <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9.5 1.5L4 9h4l-1.5 5.5L13 7H9l.5-5.5z"/></svg>
+          </div>
+          <div class="auto-card-body">
+            <div class="auto-card-name">${escHtml(r.name)} <span class="auto-badge ${r.enabled ? 'on' : 'off'}">${r.enabled ? 'Active' : 'Inactive'}</span></div>
+            <div class="auto-card-desc">
+              <span>When</span> ${escHtml(triggerInfo)}${r.triggerValue ? ' (' + escHtml(r.triggerValue) + ')' : ''}
+              ${r.condition ? ' <span>and</span> ' + escHtml(r.condition.replace(/_/g, ' ')) + ' = ' + escHtml(r.conditionValue || '...') : ''}
+              &rarr; <span>Then</span> ${escHtml(actionInfo)}${r.actionValue ? ': ' + escHtml(r.actionValue) : ''}
+            </div>
+          </div>
+          <div class="auto-card-actions">
+            <label class="auto-toggle" title="${r.enabled ? 'Disable' : 'Enable'}">
+              <input type="checkbox" ${r.enabled ? 'checked' : ''} onchange="window.app.toggleAutomationRule('${escAttr(r.id)}')">
+              <span class="slider"></span>
+            </label>
+            <button class="btn btn-sm" onclick="window.app.openAutomationRuleModal('${escAttr(r.id)}')" title="Edit">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
+            </button>
+            <button class="btn btn-sm" onclick="window.app.deleteAutomationRule('${escAttr(r.id)}')" title="Delete" style="color:var(--red);">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h10M6 4V2.5h4V4M5 4v8.5a1 1 0 001 1h4a1 1 0 001-1V4"/></svg>
+            </button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Automation Rule Modal -->
+    <div class="modal-overlay" id="automation-rule-modal">
+      <div class="modal" style="max-width:560px;border-radius:16px;">
+        <div class="modal-header">
+          <h2 id="auto-modal-title">Create Automation Rule</h2>
+          <button class="modal-close" onclick="window.app.closeAutomationModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="auto-edit-id" value="">
+          <div class="form-group">
+            <label class="form-label">Rule Name *</label>
+            <input type="text" id="auto-rule-name" class="form-control" placeholder="e.g. License renewal reminder">
+          </div>
+          <div style="background:var(--gray-50,#f9fafb);border-radius:12px;padding:16px;margin-bottom:16px;">
+            <div style="font-size:12px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Trigger — When this happens</div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <select id="auto-trigger" class="form-control" onchange="document.getElementById('auto-trigger-val-row').style.display=this.selectedOptions[0]?.dataset.hasInput==='true'?'':'none';">
+                ${AUTO_TRIGGERS.map(t => `<option value="${t.value}" data-has-input="${t.hasInput}">${t.label}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group" id="auto-trigger-val-row">
+              <input type="text" id="auto-trigger-value" class="form-control" placeholder="Value (e.g. 90 days)">
+            </div>
+          </div>
+          <div style="background:var(--gray-50,#f9fafb);border-radius:12px;padding:16px;margin-bottom:16px;">
+            <div style="font-size:12px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Condition (optional) — And this is true</div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <select id="auto-condition" class="form-control" onchange="document.getElementById('auto-condition-val-row').style.display=this.value?'':'none';">
+                ${AUTO_CONDITIONS.map(c => `<option value="${c.value}">${c.label}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group" id="auto-condition-val-row" style="display:none;">
+              <input type="text" id="auto-condition-value" class="form-control" placeholder="Value (e.g. FL, Aetna)">
+            </div>
+          </div>
+          <div style="background:var(--gray-50,#f9fafb);border-radius:12px;padding:16px;">
+            <div style="font-size:12px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Action — Then do this</div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <select id="auto-action" class="form-control">
+                ${AUTO_ACTIONS.map(a => `<option value="${a.value}">${a.label}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <input type="text" id="auto-action-value" class="form-control" placeholder="Action detail (e.g. task title, status name)">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="window.app.closeAutomationModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveAutomationRule()">Save Rule</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function openAutomationRuleModal(editId) {
+  const rules = _getAutomationRules();
+  const modal = document.getElementById('automation-rule-modal');
+  if (!modal) { renderAutomationsPage().then(() => openAutomationRuleModal(editId)); return; }
+
+  const title = document.getElementById('auto-modal-title');
+  const nameEl = document.getElementById('auto-rule-name');
+  const triggerEl = document.getElementById('auto-trigger');
+  const triggerValEl = document.getElementById('auto-trigger-value');
+  const condEl = document.getElementById('auto-condition');
+  const condValEl = document.getElementById('auto-condition-value');
+  const actionEl = document.getElementById('auto-action');
+  const actionValEl = document.getElementById('auto-action-value');
+  const editIdEl = document.getElementById('auto-edit-id');
+
+  if (editId) {
+    const rule = rules.find(r => r.id === editId);
+    if (rule) {
+      title.textContent = 'Edit Automation Rule';
+      editIdEl.value = editId;
+      nameEl.value = rule.name || '';
+      triggerEl.value = rule.trigger || '';
+      triggerValEl.value = rule.triggerValue || '';
+      condEl.value = rule.condition || '';
+      condValEl.value = rule.conditionValue || '';
+      actionEl.value = rule.action || '';
+      actionValEl.value = rule.actionValue || '';
+      // Show/hide conditional fields
+      const trigOpt = triggerEl.selectedOptions[0];
+      document.getElementById('auto-trigger-val-row').style.display = trigOpt?.dataset.hasInput === 'true' ? '' : 'none';
+      document.getElementById('auto-condition-val-row').style.display = rule.condition ? '' : 'none';
+    }
+  } else {
+    title.textContent = 'Create Automation Rule';
+    editIdEl.value = '';
+    nameEl.value = '';
+    triggerEl.selectedIndex = 0;
+    triggerValEl.value = '';
+    condEl.selectedIndex = 0;
+    condValEl.value = '';
+    actionEl.selectedIndex = 0;
+    actionValEl.value = '';
+    document.getElementById('auto-trigger-val-row').style.display = '';
+    document.getElementById('auto-condition-val-row').style.display = 'none';
+  }
+  modal.classList.add('active');
+}
+
+function saveAutomationRule() {
+  const name = document.getElementById('auto-rule-name')?.value?.trim();
+  if (!name) { showToast('Rule name is required'); return; }
+
+  const editId = document.getElementById('auto-edit-id')?.value;
+  const rules = _getAutomationRules();
+  const ruleData = {
+    id: editId || 'rule_' + Date.now(),
+    name,
+    trigger: document.getElementById('auto-trigger')?.value || '',
+    triggerValue: document.getElementById('auto-trigger-value')?.value?.trim() || '',
+    condition: document.getElementById('auto-condition')?.value || '',
+    conditionValue: document.getElementById('auto-condition-value')?.value?.trim() || '',
+    action: document.getElementById('auto-action')?.value || '',
+    actionValue: document.getElementById('auto-action-value')?.value?.trim() || '',
+    enabled: true,
+    triggeredCount: 0,
+  };
+
+  if (editId) {
+    const idx = rules.findIndex(r => r.id === editId);
+    if (idx >= 0) {
+      ruleData.enabled = rules[idx].enabled;
+      ruleData.triggeredCount = rules[idx].triggeredCount || 0;
+      rules[idx] = ruleData;
+    }
+  } else {
+    rules.push(ruleData);
+  }
+
+  _saveAutomationRules(rules);
+  document.getElementById('automation-rule-modal')?.classList.remove('active');
+  showToast(editId ? 'Rule updated' : 'Rule created');
+  renderAutomationsPage();
+}
+
+async function deleteAutomationRule(id) {
+  if (!await appConfirm('Delete this automation rule?', { title: 'Delete Rule', okLabel: 'Delete', okClass: 'btn-danger' })) return;
+  const rules = _getAutomationRules().filter(r => r.id !== id);
+  _saveAutomationRules(rules);
+  showToast('Rule deleted');
+  renderAutomationsPage();
+}
+
+function toggleAutomationRule(id) {
+  const rules = _getAutomationRules();
+  const rule = rules.find(r => r.id === id);
+  if (rule) {
+    rule.enabled = !rule.enabled;
+    _saveAutomationRules(rules);
+    showToast(rule.enabled ? 'Rule enabled' : 'Rule disabled');
+    renderAutomationsPage();
+  }
 }
 
 // ─── FAQ / Knowledge Base Page ───
@@ -18650,6 +19188,7 @@ const CMD_PALETTE_COMMANDS = [
   { id: 'nav-settings', label: 'Settings', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('settings'); } },
   { id: 'nav-account', label: 'My Account', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('my-account'); } },
   { id: 'nav-audit', label: 'Audit Trail', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('audit-trail'); } },
+  { id: 'nav-automations', label: 'Automations', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('automations'); } },
   // Actions
   { id: 'act-add-app', label: 'Add Application', category: 'Actions', action: () => { closeCommandPalette(); navigateTo('applications').then(() => { if (window.app.openAddModal) window.app.openAddModal(); }); } },
   { id: 'act-add-prov', label: 'Add Provider', category: 'Actions', action: () => { closeCommandPalette(); navigateTo('providers').then(() => { if (window.app.openProviderModal) window.app.openProviderModal(); }); } },

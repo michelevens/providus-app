@@ -407,6 +407,11 @@
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V2"/><path d="M4.5 5.5L8 2l3.5 3.5"/><path d="M2.5 10v3a1 1 0 001 1h9a1 1 0 001-1v-3"/></svg>
           </span> Bulk Import
         </button>
+        <button class="nav-item" data-page="automations" data-min-role="agency">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5L4 9h4l-1.5 5.5L13 7H9l.5-5.5z"/></svg>
+          </span> Automations
+        </button>
         <button class="nav-item" data-page="faq">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h12a1 1 0 011 1v9a1 1 0 01-1 1H2a1 1 0 01-1-1v-9a1 1 0 011-1z"/><path d="M4 5.5h8"/><path d="M4 8h8"/><path d="M4 10.5h5"/></svg>
@@ -740,13 +745,58 @@
     </div>
   </div>
 
-  <!-- Notification Panel -->
+  <!-- Notification Panel (V2 Enhanced) -->
   <div class="notification-panel" id="notification-panel" style="display:none;">
-    <div class="notification-header">
+    <style>
+      .notif-v2-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;border-bottom:1px solid var(--gray-200,#e5e7eb);}
+      .notif-v2-header h3{margin:0;font-size:16px;font-weight:700;color:var(--gray-800);}
+      .notif-v2-header-actions{display:flex;align-items:center;gap:8px;}
+      .notif-v2-mark-all{font-size:11px;color:var(--brand-600,#0891b2);cursor:pointer;border:none;background:none;font-weight:600;padding:4px 8px;border-radius:8px;transition:background 0.15s;}
+      .notif-v2-mark-all:hover{background:var(--brand-50,rgba(8,145,178,0.08));}
+      .notif-v2-tabs{display:flex;gap:0;padding:8px 20px 0;border-bottom:1px solid var(--gray-200,#e5e7eb);}
+      .notif-v2-tab{padding:6px 14px 10px;font-size:12px;font-weight:600;color:var(--gray-500);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;}
+      .notif-v2-tab.active{color:var(--brand-600,#0891b2);border-bottom-color:var(--brand-600,#0891b2);}
+      .notif-v2-tab:hover{color:var(--gray-700);}
+      .notif-v2-body{max-height:400px;overflow-y:auto;padding:8px 0;}
+      .notif-v2-item{display:flex;align-items:flex-start;gap:12px;padding:12px 20px;cursor:pointer;transition:background 0.15s;position:relative;}
+      .notif-v2-item:hover{background:var(--gray-50,#f9fafb);}
+      .notif-v2-item.unread{background:var(--brand-50,rgba(8,145,178,0.04));}
+      .notif-v2-dot{width:8px;height:8px;border-radius:50%;background:var(--brand-600,#0891b2);flex-shrink:0;margin-top:6px;}
+      .notif-v2-dot.read{background:transparent;}
+      .notif-v2-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;}
+      .notif-v2-icon.license{background:rgba(239,68,68,0.1);color:#ef4444;}
+      .notif-v2-icon.app{background:rgba(59,130,246,0.1);color:#3b82f6;}
+      .notif-v2-icon.task{background:rgba(16,185,129,0.1);color:#10b981;}
+      .notif-v2-icon.alert{background:rgba(245,158,11,0.1);color:#f59e0b;}
+      .notif-v2-icon.info{background:rgba(99,102,241,0.1);color:#6366f1;}
+      .notif-v2-content{flex:1;min-width:0;}
+      .notif-v2-title{font-size:13px;font-weight:600;color:var(--gray-800);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      .notif-v2-desc{font-size:12px;color:var(--gray-500);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+      .notif-v2-time{font-size:10px;color:var(--gray-400);flex-shrink:0;margin-top:2px;}
+      .notif-v2-footer{padding:12px 20px;border-top:1px solid var(--gray-200,#e5e7eb);text-align:center;}
+      .notif-v2-footer a{font-size:12px;font-weight:600;color:var(--brand-600,#0891b2);text-decoration:none;}
+      .notif-v2-footer a:hover{text-decoration:underline;}
+      .notif-v2-empty{text-align:center;padding:48px 20px;color:var(--gray-400);}
+      .notif-v2-empty svg{margin-bottom:12px;opacity:0.4;}
+      .notif-v2-empty p{font-size:14px;font-weight:600;margin:0 0 4px;}
+      .notif-v2-empty span{font-size:12px;}
+    </style>
+    <div class="notif-v2-header">
       <h3>Notifications</h3>
-      <button class="modal-close" onclick="window.app.toggleNotifications()">&times;</button>
+      <div class="notif-v2-header-actions">
+        <button class="notif-v2-mark-all" onclick="window.app.markAllNotificationsRead()">Mark all read</button>
+        <button class="modal-close" onclick="window.app.toggleNotifications()" style="position:static;font-size:18px;">&times;</button>
+      </div>
     </div>
-    <div class="notification-body" id="notification-body"></div>
+    <div class="notif-v2-tabs" id="notif-v2-tabs">
+      <button class="notif-v2-tab active" data-filter="all" onclick="window.app.filterNotifications('all')">All</button>
+      <button class="notif-v2-tab" data-filter="urgent" onclick="window.app.filterNotifications('urgent')">Urgent</button>
+      <button class="notif-v2-tab" data-filter="info" onclick="window.app.filterNotifications('info')">Info</button>
+    </div>
+    <div class="notif-v2-body" id="notification-body"></div>
+    <div class="notif-v2-footer" id="notif-v2-footer" style="display:none;">
+      <a href="#" onclick="event.preventDefault();window.app.toggleNotifications();">View all notifications</a>
+    </div>
   </div>
   <div class="notification-overlay" id="notification-overlay" style="display:none;" onclick="window.app.toggleNotifications()"></div>
 
