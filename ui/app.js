@@ -10931,7 +10931,7 @@ window.submitLocationAddition = async function(parentAppId) {
       const newFac = await store.createFacility({
         name: newName,
         facilityType: document.getElementById('loc-new-type')?.value || '',
-        address: document.getElementById('loc-new-address')?.value?.trim() || '',
+        street: document.getElementById('loc-new-address')?.value?.trim() || '',
         city: document.getElementById('loc-new-city')?.value?.trim() || '',
         state: document.getElementById('loc-new-state')?.value?.trim().toUpperCase() || '',
         zip: document.getElementById('loc-new-zip')?.value?.trim() || '',
@@ -10952,36 +10952,26 @@ window.submitLocationAddition = async function(parentAppId) {
       add_telehealth_location: 'Add Telehealth Location',
     };
 
-    // Create new application linked to the parent
-    const data = {
-      providerId: parentApp.providerId || '',
-      payerId: parentApp.payerId || '',
-      payerName: parentApp.payerName || '',
-      state: parentApp.state || '',
-      status: 'submitted',
-      type: 'location_addition',
+    // Update the existing application with the selected location
+    const existingNotes = parentApp.notes || '';
+    const addNote = `[Location Addition] ${requestTypeLabels[requestType] || requestType}${notes ? ' — ' + notes : ''}`;
+    await store.update('applications', parentAppId, {
       facilityId,
-      parentApplicationId: parentAppId,
-      wave: parentApp.wave || null,
-      notes: `[Location Addition] ${requestTypeLabels[requestType] || requestType}${notes ? ' — ' + notes : ''}`,
-      submittedDate: new Date().toISOString().split('T')[0],
-      organizationId: parentApp.organizationId || '',
-    };
+      notes: existingNotes ? existingNotes + '\n' + addNote : addNote,
+    });
 
-    const created = await store.create('applications', data);
-    if (created && created.id) {
-      try {
-        await store.create('activity_logs', {
-          applicationId: created.id,
-          type: 'note',
-          loggedDate: new Date().toISOString().split('T')[0],
-          outcome: `Location addition request created (linked to ${parentAppId}). Type: ${requestTypeLabels[requestType] || requestType}`,
-        });
-      } catch (e) { console.error('Failed to log location addition:', e); }
-    }
+    // Log activity
+    try {
+      await store.create('activity_logs', {
+        applicationId: parentAppId,
+        type: 'note',
+        loggedDate: new Date().toISOString().split('T')[0],
+        outcome: addNote,
+      });
+    } catch (e) { console.error('Failed to log location addition:', e); }
 
     document.getElementById('loc-add-modal')?.remove();
-    showToast('Location addition request created');
+    showToast('Location added to application');
     await navigateTo('applications');
   } catch (e) {
     showToast('Error: ' + e.message);
