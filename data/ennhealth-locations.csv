@@ -1,0 +1,12 @@
+name,street,city,state,zip,facility_type,status
+EnnHealth Phoenix (Virtual),"101 North First Avenue 1078, Suite 2325",Phoenix,AZ,85003,telehealth,active
+EnnHealth Denver (Virtual),"1905 Sherman Street 1169, Ste 200",Denver,CO,80203,telehealth,active
+EnnHealth Topeka (Virtual),"800 SW Jackson St #1036, Suite 618",Topeka,KS,66612,telehealth,active
+EnnHealth Towson (Virtual),"200 Washington Avenue PMB 1074, Floor 5",Towson,MD,21204,telehealth,active
+EnnHealth Las Vegas (Virtual),"1050 E Flamingo Road PMB 2042, s107",Las Vegas,NV,89119,telehealth,active
+EnnHealth Albuquerque (Virtual),"500 4th St NW #2306, Suite 102",Albuquerque,NM,87102,telehealth,active
+EnnHealth New York (Virtual),800 Third Avenue FRNT A #1366,New York,NY,10022,telehealth,active
+EnnHealth Hillsboro (Virtual),"9620 NE Tanasbourne Dr Suite 300 #1007",Hillsboro,OR,97124,telehealth,active
+EnnHealth Dallas (Virtual),,Dallas,TX,,telehealth,active
+EnnHealth Richmond (Virtual),"701 E Franklin Street 1641, Suite 105",Richmond,VA,23219,telehealth,active
+EnnHealth Seattle (Virtual),300 Lenora St. #954,Seattle,WA,98121,telehealth,active
