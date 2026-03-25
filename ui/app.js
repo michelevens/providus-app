@@ -690,6 +690,12 @@ async function navigateTo(page) {
   const printBtn = '<button class="btn btn-sm no-print" onclick="window.app.printPage()" title="Print this page"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11H2.5A1 1 0 011.5 10V6.5A1 1 0 012.5 5.5h11a1 1 0 011 1V10a1 1 0 01-1 1H12"/><path d="M4 5.5V1.5h8v4"/><rect x="4" y="9" width="8" height="5.5" rx="0.5"/></svg> Print</button>';
 
   switch (page) {
+    case 'my-account':
+      pageTitle.textContent = 'My Account';
+      pageSubtitle.textContent = 'Profile, security & preferences';
+      pageActions.innerHTML = printBtn;
+      await renderMyAccount();
+      break;
     case 'dashboard':
       pageTitle.textContent = 'Dashboard';
       pageSubtitle.textContent = 'Licensing & credentialing overview';
@@ -1047,6 +1053,174 @@ async function navigateTo(page) {
       break;
     default:
       pageBody.innerHTML = '<div class="empty-state"><h3>Page not found</h3></div>';
+  }
+}
+
+// ─── My Account ───
+
+async function renderMyAccount() {
+  const body = document.getElementById('page-body');
+  const user = auth.getUser();
+  if (!user) { body.innerHTML = '<div class="alert alert-danger">Not logged in.</div>'; return; }
+
+  const roleLabels = { superadmin: 'Super Admin', agency: 'Agency Admin', staff: 'Staff (Credentialing Coordinator)', organization: 'Organization', provider: 'Provider' };
+  const roleBadgeClass = { superadmin: 'approved', agency: 'approved', staff: 'in_review', organization: 'submitted', provider: 'pending' };
+  const role = user.ui_role || user.role || 'provider';
+  const initials = ((user.first_name || user.firstName || '?')[0] + (user.last_name || user.lastName || '?')[0]).toUpperCase();
+  const fullName = `${user.first_name || user.firstName || ''} ${user.last_name || user.lastName || ''}`.trim();
+  const agencyName = user.agency?.name || '';
+
+  body.innerHTML = `
+    <style>
+      .myacc-hero{display:flex;gap:24px;align-items:center;padding:28px;background:#fff;border-radius:16px;border:1px solid var(--gray-200);margin-bottom:20px;}
+      .myacc-avatar{width:80px;height:80px;border-radius:20px;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:28px;flex-shrink:0;}
+      .myacc-name{font-size:22px;font-weight:700;color:var(--gray-900);}
+      .myacc-meta{font-size:13px;color:var(--gray-500);margin-top:4px;}
+      .myacc-tabs{display:flex;gap:0;border-bottom:2px solid var(--gray-200);margin-bottom:20px;}
+      .myacc-tab{background:none;border:none;padding:10px 18px;font-size:13px;font-weight:600;color:var(--gray-500);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s,border-color .15s;}
+      .myacc-tab:hover{color:var(--gray-700);}
+      .myacc-tab.active{color:var(--brand-600);border-bottom-color:var(--brand-600);}
+      .myacc-section .card{border-radius:16px;}
+      @media(max-width:768px){.myacc-hero{flex-direction:column;text-align:center;} .myacc-avatar{width:64px;height:64px;font-size:22px;}}
+    </style>
+
+    <!-- Hero -->
+    <div class="myacc-hero">
+      <div class="myacc-avatar">${initials}</div>
+      <div style="flex:1;">
+        <div class="myacc-name">${escHtml(fullName)}</div>
+        <div class="myacc-meta">${escHtml(user.email || '')} &middot; <span class="badge badge-${roleBadgeClass[role] || 'pending'}">${roleLabels[role] || role}</span></div>
+        ${agencyName ? `<div class="myacc-meta">${escHtml(agencyName)}</div>` : ''}
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.5px;">Last login</div>
+        <div style="font-size:13px;color:var(--gray-600);margin-top:2px;">${user.last_login_at || user.lastLoginAt ? new Date(user.last_login_at || user.lastLoginAt).toLocaleDateString() : 'Unknown'}</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="myacc-tabs">
+      <button class="myacc-tab active" onclick="window.app.myAccountTab(this,'myacc-profile')">Profile</button>
+      <button class="myacc-tab" onclick="window.app.myAccountTab(this,'myacc-security')">Security & MFA</button>
+      <button class="myacc-tab" onclick="window.app.myAccountTab(this,'myacc-notifications')">Notifications</button>
+    </div>
+
+    <!-- Profile Tab -->
+    <div id="myacc-profile" class="myacc-section">
+      <div class="card">
+        <div class="card-header">
+          <h3>Personal Information</h3>
+          <button class="btn btn-primary btn-sm" onclick="window.app.saveMyProfile()" style="border-radius:10px;">Save Changes</button>
+        </div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="form-group"><label>First Name *</label><input type="text" class="form-control" id="myacc-first" value="${escAttr(user.first_name || user.firstName || '')}"></div>
+            <div class="form-group"><label>Last Name *</label><input type="text" class="form-control" id="myacc-last" value="${escAttr(user.last_name || user.lastName || '')}"></div>
+            <div class="form-group"><label>Email</label><input type="email" class="form-control" value="${escAttr(user.email || '')}" disabled style="opacity:0.6;"><div style="font-size:11px;color:var(--gray-400);margin-top:4px;">Contact your admin to change email</div></div>
+            <div class="form-group"><label>Role</label><input type="text" class="form-control" value="${roleLabels[role] || role}" disabled style="opacity:0.6;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Change Password</h3></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+            <div class="form-group"><label>Current Password *</label><input type="password" class="form-control" id="myacc-current-pw" placeholder="Current password"></div>
+            <div class="form-group"><label>New Password *</label><input type="password" class="form-control" id="myacc-new-pw" placeholder="New password (min 8 chars)"></div>
+            <div class="form-group"><label>Confirm New Password *</label><input type="password" class="form-control" id="myacc-confirm-pw" placeholder="Confirm new password"></div>
+          </div>
+          <button class="btn btn-primary" onclick="window.app.changeMyPassword()" style="margin-top:12px;border-radius:10px;">Update Password</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security & MFA Tab -->
+    <div id="myacc-security" class="hidden myacc-section">
+      <div class="card">
+        <div class="card-header"><h3>Two-Factor Authentication (MFA)</h3></div>
+        <div class="card-body">
+          <p class="text-sm text-muted" style="margin-bottom:16px;">Add an extra layer of security to your account by enabling two-factor authentication with an authenticator app (Google Authenticator, Authy, 1Password, etc.).</p>
+          <div id="myacc-2fa-area">
+            <div style="text-align:center;padding:20px;color:var(--gray-400);"><div class="spinner"></div> Loading MFA status...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Active Sessions</h3></div>
+        <div class="card-body">
+          <p class="text-sm text-muted">You are currently logged in from this device. To log out all other sessions, click below.</p>
+          <button class="btn" onclick="showToast('Session management coming soon')" style="margin-top:12px;border-radius:10px;">Log Out All Other Sessions</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notifications Tab -->
+    <div id="myacc-notifications" class="hidden myacc-section">
+      <div class="card">
+        <div class="card-header"><h3>Notification Preferences</h3></div>
+        <div class="card-body">
+          <div style="display:flex;flex-direction:column;gap:16px;">
+            <label style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--gray-50);border-radius:10px;cursor:pointer;">
+              <input type="checkbox" checked> <div><strong>Email notifications</strong><div class="text-sm text-muted">Receive email alerts for application status changes, license expirations, and follow-up reminders</div></div>
+            </label>
+            <label style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--gray-50);border-radius:10px;cursor:pointer;">
+              <input type="checkbox" checked> <div><strong>License expiration alerts</strong><div class="text-sm text-muted">Get notified 90, 60, and 30 days before licenses expire</div></div>
+            </label>
+            <label style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--gray-50);border-radius:10px;cursor:pointer;">
+              <input type="checkbox" checked> <div><strong>Follow-up reminders</strong><div class="text-sm text-muted">Daily digest of overdue and upcoming follow-ups</div></div>
+            </label>
+            <label style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--gray-50);border-radius:10px;cursor:pointer;">
+              <input type="checkbox"> <div><strong>Weekly summary report</strong><div class="text-sm text-muted">Receive a weekly email summarizing credentialing activity</div></div>
+            </label>
+          </div>
+          <button class="btn btn-primary" onclick="showToast('Notification preferences saved')" style="margin-top:16px;border-radius:10px;">Save Preferences</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Load 2FA status into the My Account page
+  const area2fa = document.getElementById('myacc-2fa-area');
+  if (area2fa) {
+    try {
+      const res = await fetch(`${CONFIG.API_URL}/2fa/status`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem(CONFIG.TOKEN_KEY)}`, 'Accept': 'application/json' },
+      });
+      const data = await res.json();
+      const enabled = data.data?.enabled;
+      if (enabled) {
+        area2fa.innerHTML = `
+          <div style="display:flex;align-items:center;gap:12px;padding:16px;background:#f0fdf4;border:1px solid #dcfce7;border-radius:12px;margin-bottom:16px;">
+            <span style="font-size:24px;">✅</span>
+            <div>
+              <div style="font-weight:700;color:#15803d;font-size:15px;">MFA is enabled</div>
+              <div class="text-sm text-muted">Your account is protected with two-factor authentication.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button class="btn" onclick="window.app.show2FARecoveryCodes()" style="border-radius:10px;">View Recovery Codes</button>
+            <button class="btn btn-danger" onclick="window.app.disable2FA()" style="border-radius:10px;">Disable MFA</button>
+          </div>`;
+      } else {
+        area2fa.innerHTML = `
+          <div style="display:flex;align-items:center;gap:12px;padding:16px;background:#fffbeb;border:1px solid #fef3c7;border-radius:12px;margin-bottom:16px;">
+            <span style="font-size:24px;">⚠️</span>
+            <div>
+              <div style="font-weight:700;color:#b45309;font-size:15px;">MFA is not enabled</div>
+              <div class="text-sm text-muted">Your account relies on password only. We strongly recommend enabling MFA.</div>
+            </div>
+          </div>
+          <div class="form-group" style="max-width:320px;">
+            <label>Enter your password to enable MFA</label>
+            <input type="password" class="form-control" id="2fa-password" placeholder="Your current password">
+          </div>
+          <button class="btn btn-primary" onclick="window.app.enable2FA()" style="border-radius:10px;">Enable Two-Factor Authentication</button>`;
+      }
+    } catch (e) {
+      area2fa.innerHTML = '<p class="text-muted">Unable to load MFA status. Try refreshing the page.</p>';
+    }
   }
 }
 
@@ -7955,6 +8129,58 @@ window.app = {
   },
 
   showToast,
+
+  // My Account
+  myAccountTab(el, tabId) {
+    document.querySelectorAll('.myacc-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    ['myacc-profile', 'myacc-security', 'myacc-notifications'].forEach(id => {
+      const section = document.getElementById(id);
+      if (section) section.classList.toggle('hidden', id !== tabId);
+    });
+  },
+  async saveMyProfile() {
+    const firstName = document.getElementById('myacc-first')?.value?.trim();
+    const lastName = document.getElementById('myacc-last')?.value?.trim();
+    if (!firstName || !lastName) { showToast('First and last name are required'); return; }
+    try {
+      const res = await fetch(`${CONFIG.API_URL}/auth/me`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem(CONFIG.TOKEN_KEY)}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ first_name: firstName, last_name: lastName }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); showToast('Error: ' + (err.message || 'Failed to update')); return; }
+      const data = await res.json();
+      // Update local user cache
+      const user = auth.getUser();
+      if (user) {
+        user.first_name = firstName;
+        user.firstName = firstName;
+        user.last_name = lastName;
+        user.lastName = lastName;
+        localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(user));
+      }
+      showToast('Profile updated successfully');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async changeMyPassword() {
+    const current = document.getElementById('myacc-current-pw')?.value;
+    const newPw = document.getElementById('myacc-new-pw')?.value;
+    const confirm = document.getElementById('myacc-confirm-pw')?.value;
+    if (!current || !newPw || !confirm) { showToast('All password fields are required'); return; }
+    if (newPw !== confirm) { showToast('New passwords do not match'); return; }
+    if (newPw.length < 8) { showToast('Password must be at least 8 characters'); return; }
+    try {
+      const res = await fetch(`${CONFIG.API_URL}/auth/change-password`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem(CONFIG.TOKEN_KEY)}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ current_password: current, password: newPw, password_confirmation: confirm }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); showToast('Error: ' + (err.message || 'Failed to change password')); return; }
+      showToast('Password changed successfully');
+      ['myacc-current-pw', 'myacc-new-pw', 'myacc-confirm-pw'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
 
   // Audit trail
   async filterAuditTrail() {
