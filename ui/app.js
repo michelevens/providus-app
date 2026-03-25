@@ -8606,12 +8606,16 @@ function handleNppesProxy(payload) {
     const btnText = btn?.textContent;
     if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
     try {
+      // Backend only accepts: agency, organization, provider
+      // Staff maps to agency with a ui_role metadata field for frontend access control
+      const apiRole = role === 'staff' ? 'agency' : role;
       await store.inviteUser({
         first_name: firstName,
         last_name: lastName,
         email,
         password,
-        role,
+        role: apiRole,
+        ui_role: role,
         organization_id: organizationId ? parseInt(organizationId) : null,
         provider_id: providerId ? parseInt(providerId) : null,
       });
@@ -8653,7 +8657,8 @@ function handleNppesProxy(payload) {
     if (!selected) { showToast('Please select a role'); return; }
 
     try {
-      const data = { role: selected };
+      const apiRole = selected === 'staff' ? 'agency' : selected;
+      const data = { role: apiRole, ui_role: selected };
       if (selected === 'organization') {
         const orgs = await store.getAll('organizations');
         const orgHtml = orgs.map(o =>
