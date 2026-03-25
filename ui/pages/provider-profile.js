@@ -726,12 +726,12 @@ async function renderProviderProfilePage(providerId) {
 
   body.innerHTML = `
     <style>
-      .cp-hero{display:grid;grid-template-columns:260px 1fr 220px;gap:24px;background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 50%,#f5f3ff 100%);border:1px solid var(--gray-200,#e2e8f0);border-radius:16px;padding:28px 32px;margin-bottom:24px;align-items:start;}
+      .cp-hero{display:grid;grid-template-columns:1fr 220px;gap:24px;background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 50%,#f5f3ff 100%);border:1px solid var(--gray-200,#e2e8f0);border-radius:16px;padding:28px 32px;margin-bottom:24px;align-items:start;}
       .cp-identity{display:flex;flex-direction:column;gap:10px;}
       .cp-avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 12px rgba(99,102,241,.3);flex-shrink:0;}
       .cp-identity-top{display:flex;align-items:center;gap:16px;}
       .cp-identity h2{font-size:24px;font-weight:700;margin:0;color:var(--gray-900,#111827);line-height:1.2;}
-      .cp-identity .cp-cred{color:var(--gray-500,#6b7280);font-size:14px;margin-top:2px;}
+      .cp-identity .cp-cred{color:var(--gray-500,#6b7280);font-size:16px;font-weight:400;}
       .cp-meta-row{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13px;color:var(--gray-600,#4b5563);}
       .cp-meta-row code{background:var(--gray-100,#f3f4f6);padding:1px 6px;border-radius:4px;font-size:12px;}
       .cp-edit-link{font-size:12px;color:var(--brand-600,#4f46e5);text-decoration:none;cursor:pointer;margin-top:4px;}
@@ -763,8 +763,7 @@ async function renderProviderProfilePage(providerId) {
         <div class="cp-identity-top">
           <div class="cp-avatar">${escHtml(cpProviderInitials)}</div>
           <div>
-            <h2>${escHtml(provName)}</h2>
-            ${credential ? `<div class="cp-cred">${escHtml(credential)}</div>` : ''}
+            <h2>${escHtml(provName)}${credential ? '<span class="cp-cred">, ' + escHtml(credential) + '</span>' : ''}</h2>
             <span class="badge badge-${cpStatusBadgeClass}" style="margin-top:4px;display:inline-block;">${escHtml(cpProviderStatus)}</span>
           </div>
         </div>
