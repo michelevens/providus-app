@@ -1365,6 +1365,7 @@ async function renderDashboard() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const firstName = currentUser?.first_name || 'there';
+  const userRoleLabel = { superadmin: 'Super Admin', agency: 'Agency Admin', staff: 'Credentialing Coordinator', organization: 'Organization', provider: 'Provider' }[currentUser?.ui_role || currentUser?.uiRole || currentUser?.role] || '';
 
   // Pipeline progress
   const pipelineApproved = apps.filter(a => a.status === 'approved' || a.status === 'credentialed').length;
@@ -1659,7 +1660,7 @@ async function renderDashboard() {
     <div class="mc-welcome">
       <div>
         <h2>${greeting}, ${escHtml(firstName)}</h2>
-        <div class="mc-welcome-sub">${escHtml(org.name || 'Your Organization')} &middot; ${providers.length} provider${providers.length !== 1 ? 's' : ''}</div>
+        <div class="mc-welcome-sub">${escHtml(org.name || 'Your Organization')} &middot; ${providers.length} provider${providers.length !== 1 ? 's' : ''}${userRoleLabel ? ` &middot; ${escHtml(userRoleLabel)}` : ''}</div>
       </div>
       <div class="mc-welcome-right">
         <div style="font-size:13px;font-weight:600;">${today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</div>
