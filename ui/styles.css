@@ -3256,3 +3256,390 @@ a, button, [role="button"], .nav-item, .btn, .tab,
     animation: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   DARK MODE — Comprehensive Component Overrides
+   Covers all hardcoded colors, hover states, and raw --gray-* usage
+   ═══════════════════════════════════════════════════════════════ */
+
+/* --- Gray palette inversion for dark mode --- */
+[data-theme="dark"] {
+  --gray-50: #1e293b;
+  --gray-100: #1e293b;
+  --gray-200: #334155;
+  --gray-300: #475569;
+  --gray-400: #94a3b8;
+  --gray-500: #94a3b8;
+  --gray-600: #cbd5e1;
+  --gray-700: #e2e8f0;
+  --gray-800: #f1f5f9;
+  --gray-900: #f8fafc;
+  --gray-950: #ffffff;
+
+  /* Keep sidebar dark regardless */
+  --sidebar-bg: #0f172a;
+  --sidebar-border: rgba(255,255,255,0.06);
+}
+
+/* Duplicate gray overrides for system-preference dark mode */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --gray-50: #1e293b;
+    --gray-100: #1e293b;
+    --gray-200: #334155;
+    --gray-300: #475569;
+    --gray-400: #94a3b8;
+    --gray-500: #94a3b8;
+    --gray-600: #cbd5e1;
+    --gray-700: #e2e8f0;
+    --gray-800: #f1f5f9;
+    --gray-900: #f8fafc;
+    --gray-950: #ffffff;
+    --sidebar-bg: #0f172a;
+    --sidebar-border: rgba(255,255,255,0.06);
+  }
+}
+
+/* --- Scrollbar --- */
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: var(--border-color-strong); }
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+/* --- Selection --- */
+[data-theme="dark"] ::selection {
+  background: var(--brand-800);
+  color: var(--brand-200);
+}
+
+/* --- Header icon button hover / notification ring --- */
+[data-theme="dark"] .header-icon-btn .notification-count {
+  box-shadow: 0 0 0 2px var(--surface-card);
+}
+
+/* --- Tools dropdown --- */
+[data-theme="dark"] .tools-dropdown-header {
+  border-bottom-color: var(--border-color);
+}
+
+/* --- Card footer / Modal footer --- */
+[data-theme="dark"] .card-footer {
+  border-top-color: var(--border-color);
+}
+[data-theme="dark"] .modal-footer {
+  border-top-color: var(--border-color);
+}
+
+/* --- Notification panel --- */
+[data-theme="dark"] .notification-header {
+  border-bottom-color: var(--border-color);
+}
+[data-theme="dark"] .notification-header h3 {
+  color: var(--text-primary);
+}
+[data-theme="dark"] .notif-item {
+  border-bottom-color: var(--border-color);
+}
+[data-theme="dark"] .notif-text .title {
+  color: var(--text-primary);
+}
+
+/* --- Tabs --- */
+[data-theme="dark"] .tabs {
+  border-bottom-color: var(--border-color);
+}
+[data-theme="dark"] .tab.active {
+  color: var(--brand-400);
+}
+
+/* --- Activity timeline --- */
+[data-theme="dark"] .activity-entry {
+  border-bottom-color: var(--border-color);
+}
+
+/* --- Email preview --- */
+[data-theme="dark"] .email-preview {
+  background: var(--surface-card);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+[data-theme="dark"] .email-preview .subject-line {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-color);
+}
+
+/* --- Spinner --- */
+[data-theme="dark"] .spinner {
+  border-color: var(--border-color);
+  border-top-color: var(--brand-400);
+}
+
+/* --- Empty state --- */
+[data-theme="dark"] .empty-state h3 {
+  color: var(--text-secondary);
+}
+
+/* --- Skeleton loading --- */
+[data-theme="dark"] .skeleton {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+}
+
+/* --- Contract terms content --- */
+[data-theme="dark"] .contract-terms-content h2 {
+  color: var(--text-primary);
+}
+[data-theme="dark"] .contract-terms-content h3 {
+  color: var(--text-secondary);
+}
+
+/* --- Quill editor --- */
+[data-theme="dark"] .modal .ql-toolbar {
+  border-color: var(--border-color);
+  background: var(--surface-card);
+}
+[data-theme="dark"] .modal .ql-container {
+  border-color: var(--border-color);
+  background: var(--surface-input);
+  color: var(--text-primary);
+}
+[data-theme="dark"] .ql-toolbar button,
+[data-theme="dark"] .ql-toolbar .ql-picker {
+  color: var(--text-secondary);
+}
+[data-theme="dark"] .ql-toolbar button:hover,
+[data-theme="dark"] .ql-toolbar .ql-picker:hover {
+  color: var(--text-primary);
+}
+[data-theme="dark"] .ql-editor.ql-blank::before {
+  color: var(--text-quaternary);
+}
+
+/* --- PWA install banner button --- */
+[data-theme="dark"] .pwa-install-banner .pwa-btn {
+  background: var(--surface-card);
+  color: var(--brand-400);
+}
+
+/* --- Policy row hover --- */
+[data-theme="dark"] .policy-row:hover {
+  background: rgba(6, 182, 212, 0.08) !important;
+}
+
+/* --- Inline styles in app.js-rendered content ---
+     These handle common patterns where JS uses hardcoded white/light backgrounds */
+
+/* v2-apps-card and similar dynamically-styled elements */
+[data-theme="dark"] [style*="background:white"],
+[data-theme="dark"] [style*="background: white"],
+[data-theme="dark"] [style*="background:#fff"],
+[data-theme="dark"] [style*="background: #fff"] {
+  background: var(--surface-card) !important;
+}
+
+[data-theme="dark"] [style*="color:#1e293b"],
+[data-theme="dark"] [style*="color: #1e293b"] {
+  color: var(--text-primary) !important;
+}
+[data-theme="dark"] [style*="color:#334155"],
+[data-theme="dark"] [style*="color: #334155"] {
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] [style*="color:#475569"],
+[data-theme="dark"] [style*="color: #475569"] {
+  color: var(--text-tertiary) !important;
+}
+[data-theme="dark"] [style*="color:#64748b"],
+[data-theme="dark"] [style*="color: #64748b"] {
+  color: var(--text-tertiary) !important;
+}
+
+/* Border overrides for inline styles */
+[data-theme="dark"] [style*="border-color:#e2e8f0"],
+[data-theme="dark"] [style*="border-color: #e2e8f0"],
+[data-theme="dark"] [style*="border:1px solid #e2e8f0"],
+[data-theme="dark"] [style*="border: 1px solid #e2e8f0"] {
+  border-color: var(--border-color) !important;
+}
+
+/* Background gray overrides for inline styles */
+[data-theme="dark"] [style*="background:#f8fafc"],
+[data-theme="dark"] [style*="background: #f8fafc"],
+[data-theme="dark"] [style*="background:#f1f5f9"],
+[data-theme="dark"] [style*="background: #f1f5f9"] {
+  background: var(--surface-card) !important;
+}
+
+/* --- Sidebar stays dark (re-assert original values) --- */
+[data-theme="dark"] .sidebar {
+  background: #0f172a;
+  color: white;
+}
+[data-theme="dark"] .sidebar-header h1 {
+  color: #fff;
+}
+[data-theme="dark"] .sidebar-header .version {
+  color: var(--brand-400);
+}
+[data-theme="dark"] .nav-section {
+  color: #64748b;
+}
+[data-theme="dark"] .nav-item {
+  color: #94a3b8;
+}
+[data-theme="dark"] .nav-item:hover {
+  background: rgba(255,255,255,0.05);
+  color: #e2e8f0;
+}
+[data-theme="dark"] .nav-item.active {
+  background: rgba(6,182,212,0.1);
+  color: #67e8f9;
+}
+[data-theme="dark"] .nav-item .badge {
+  color: white;
+}
+[data-theme="dark"] .sidebar-footer a {
+  color: #64748b;
+}
+[data-theme="dark"] .sidebar-footer a:hover {
+  color: #cbd5e1;
+}
+[data-theme="dark"] .btn-logout {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.08);
+  color: #94a3b8;
+}
+[data-theme="dark"] .btn-logout:hover {
+  color: #e2e8f0;
+  border-color: rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.08);
+}
+
+/* --- Badges: ensure text contrast in dark mode --- */
+[data-theme="dark"] .badge-not_started { background: #334155; color: #cbd5e1; }
+[data-theme="dark"] .badge-withdrawn { background: #334155; color: #94a3b8; }
+[data-theme="dark"] .badge-inactive { background: #334155; color: #94a3b8; }
+[data-theme="dark"] .badge-submitted { color: #93c5fd; }
+[data-theme="dark"] .badge-in_review { color: #fcd34d; }
+[data-theme="dark"] .badge-pending_info { color: #c4b5fd; }
+[data-theme="dark"] .badge-approved { color: #86efac; }
+[data-theme="dark"] .badge-denied { color: #fca5a5; }
+[data-theme="dark"] .badge-active { color: #86efac; }
+[data-theme="dark"] .badge-pending { color: #fcd34d; }
+[data-theme="dark"] .badge-expired { color: #fca5a5; }
+
+/* Wave badges */
+[data-theme="dark"] .wave-1 { background: rgba(6,182,212,0.15); color: var(--brand-300); }
+[data-theme="dark"] .wave-2 { background: rgba(59,130,246,0.15); color: #93c5fd; }
+[data-theme="dark"] .wave-3 { background: #334155; color: #cbd5e1; }
+
+/* --- Stat card top bar in dark mode --- */
+[data-theme="dark"] .stat-card::before {
+  background: var(--border-color);
+}
+
+/* --- Mobile touch active states in dark mode --- */
+@media (hover: none) and (pointer: coarse) {
+  [data-theme="dark"] .nav-item:active {
+    background: rgba(6, 182, 212, 0.15);
+  }
+  [data-theme="dark"] tbody tr:active {
+    background: rgba(6, 182, 212, 0.08) !important;
+  }
+  [data-theme="dark"] .tab:active {
+    background: var(--surface-card);
+  }
+}
+
+/* --- Scope selector button --- */
+[data-theme="dark"] #scope-btn {
+  border-color: var(--border-color) !important;
+  color: var(--text-secondary) !important;
+  background: var(--surface-card) !important;
+}
+
+/* --- Global search & command palette overrides --- */
+[data-theme="dark"] .search-overlay,
+[data-theme="dark"] .cmd-palette-overlay {
+  background: rgba(0, 0, 0, 0.7);
+}
+[data-theme="dark"] .search-modal,
+[data-theme="dark"] .cmd-palette {
+  background: var(--surface-card);
+  border-color: var(--border-color);
+}
+[data-theme="dark"] .search-result-item:hover,
+[data-theme="dark"] .cmd-item:hover {
+  background: var(--surface-card-hover);
+}
+
+/* --- Table header hover in dark mode --- */
+[data-theme="dark"] thead th:hover {
+  background: var(--surface-card-hover);
+  color: var(--text-primary);
+}
+
+/* --- Confirm modal / prompt dialog --- */
+[data-theme="dark"] .confirm-modal,
+[data-theme="dark"] .prompt-dialog {
+  background: var(--surface-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+/* --- V2 page components (inline <style> in app.js uses background:white) --- */
+[data-theme="dark"] .v2-apps-stat,
+[data-theme="dark"] .v2-apps-pipeline,
+[data-theme="dark"] .v2-apps-card,
+[data-theme="dark"] .v2-fu-stat,
+[data-theme="dark"] .v2-fu-cal,
+[data-theme="dark"] .sp2-stat,
+[data-theme="dark"] .rv2-stat,
+[data-theme="dark"] .cm2-stat,
+[data-theme="dark"] .v2-prov-stat,
+[data-theme="dark"] .v2-prov-card,
+[data-theme="dark"] .v2-lic-stat,
+[data-theme="dark"] .v2-lic-map,
+[data-theme="dark"] .v2-lic-timeline,
+[data-theme="dark"] .v2-payers-stat,
+[data-theme="dark"] .v2-payers-filter,
+[data-theme="dark"] .v2-tasks-stat,
+[data-theme="dark"] .v2-tasks-progress {
+  background: var(--surface-card) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* V2 view toggle buttons */
+[data-theme="dark"] .v2-apps-view-toggle button {
+  background: var(--surface-card) !important;
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] .v2-apps-view-toggle button.active {
+  background: var(--brand-600) !important;
+  color: white !important;
+}
+
+/* V2 card hover */
+[data-theme="dark"] .v2-apps-card:hover,
+[data-theme="dark"] .v2-prov-card:hover {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3) !important;
+}
+
+/* --- Bottom nav shadow in dark mode --- */
+[data-theme="dark"] .bottom-nav {
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.3);
+}
+
+/* --- All inline-style background:white catchall --- */
+[data-theme="dark"] [style*="background:white"],
+[data-theme="dark"] [style*="background: white"],
+[data-theme="dark"] [style*="background:#ffffff"],
+[data-theme="dark"] [style*="background: #ffffff"] {
+  background: var(--surface-card) !important;
+}
+
+/* --- Inline color:#000 or color:black text --- */
+[data-theme="dark"] [style*="color:#000"],
+[data-theme="dark"] [style*="color: #000"],
+[data-theme="dark"] [style*="color:black"],
+[data-theme="dark"] [style*="color: black"] {
+  color: var(--text-primary) !important;
+}

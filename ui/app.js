@@ -500,6 +500,14 @@ export async function initApp() {
     } catch {}
   }
 
+  // Cmd+K / Ctrl+K command palette shortcut
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      window.app.openCommandPalette();
+    }
+  });
+
   // Listen for data changes
   store.on('created', async () => {
     if (currentPage === 'dashboard') await renderDashboard();
@@ -723,7 +731,7 @@ async function navigateTo(page) {
     case 'providers':
       pageTitle.textContent = 'Providers';
       pageSubtitle.textContent = 'Manage provider profiles';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openProviderModal()">+ Add Provider</button>' + printBtn;
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openProviderModal()">+ Add Provider</button> <button class="btn" onclick="window.app.navigateTo(\'provider-onboard\')">Guided Setup</button>' + printBtn;
       await renderProviders();
       break;
     case 'licenses':
@@ -1050,6 +1058,12 @@ async function navigateTo(page) {
       pageSubtitle.textContent = '';
       pageActions.innerHTML = '<button class="btn" onclick="window.app.navigateTo(\'funding\')">← Back to Dashboard</button>' + printBtn;
       await renderFundingDetail(window._fundingDetailId);
+      break;
+    case 'provider-onboard':
+      pageTitle.textContent = 'Provider Onboarding Wizard';
+      pageSubtitle.textContent = 'Step-by-step guided provider setup';
+      pageActions.innerHTML = printBtn;
+      await renderProviderOnboardingWizard();
       break;
     default:
       pageBody.innerHTML = '<div class="empty-state"><h3>Page not found</h3></div>';
@@ -1660,7 +1674,7 @@ async function renderDashboard() {
       <!-- Compliance Score -->
       <div class="mc-hero-card" onclick="window.app.navigateTo('licenses')" title="View license compliance">
         <div class="mc-hero-accent" style="background:${complianceGrad};"></div>
-        <div class="mc-hero-label">Compliance Score</div>
+        <div class="mc-hero-label">Compliance Score ${helpTip('The compliance score measures the percentage of your active licenses that are current (not expired or expiring within 90 days). A higher score means your providers are fully credentialed and up to date.')}</div>
         <div style="display:flex;align-items:center;gap:16px;">
           <svg class="mc-progress-ring" width="${ringSize}" height="${ringSize}" viewBox="0 0 ${ringSize} ${ringSize}">
             <circle class="mc-ring-bg" cx="${ringSize/2}" cy="${ringSize/2}" r="${ringRadius}" stroke-width="${ringStroke}"/>
@@ -2171,10 +2185,13 @@ async function renderApplications() {
         <option value="">All Payers</option>
         ${payers.map(p => `<option value="${p}" ${filters.payer === p ? 'selected' : ''}>${p}</option>`).join('')}
       </select>
-      <select class="form-control" id="filter-status" onchange="window.app.applyFilters()">
-        <option value="">All Statuses</option>
-        ${APPLICATION_STATUSES.map(s => `<option value="${s.value}" ${filters.status === s.value ? 'selected' : ''}>${s.label}</option>`).join('')}
-      </select>
+      <span style="display:inline-flex;align-items:center;">
+        <select class="form-control" id="filter-status" onchange="window.app.applyFilters()">
+          <option value="">All Statuses</option>
+          ${APPLICATION_STATUSES.map(s => `<option value="${s.value}" ${filters.status === s.value ? 'selected' : ''}>${s.label}</option>`).join('')}
+        </select>
+        ${helpTip('Statuses track each application through the credentialing pipeline: New (just created), Gathering Docs (collecting paperwork), Submitted (sent to payer), In Review (payer reviewing), Pending Info (payer needs more info), Approved/Credentialed (done!), Denied, On Hold, or Withdrawn.')}
+      </span>
       <select class="form-control" id="filter-wave" onchange="window.app.applyFilters()">
         ${groupOptions(filters.wave, true)}
       </select>
@@ -3990,7 +4007,7 @@ async function renderLicenses() {
         </div>
         <div class="v2-lic-stat">
           <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
-          <div class="v2-label">Active</div>
+          <div class="v2-label">Active ${helpTip('A license counts as Active when its status is set to Active and it has not passed its expiration date. Licenses expiring within 90 days are flagged separately.')}</div>
           <div class="v2-val" style="color:#16a34a;">${active.length}</div>
         </div>
         <div class="v2-lic-stat">
@@ -4399,7 +4416,7 @@ async function renderPayers() {
     <!-- V2 Tag Filter Bar with Group Headers -->
     <div class="v2-payers-filter">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);">Filter by Tags</span>
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);">Filter by Tags ${helpTip('Strategic tags categorize payers by clinical focus (e.g. Behavioral Health), access model (e.g. Telehealth), business factors (e.g. High Reimbursement), and credentialing process details. Click tags to filter the catalog.')}</span>
         ${_payerTagFilters.size > 0 ? `<span style="font-size:11px;color:var(--brand-600);font-weight:600;">${_payerTagFilters.size} active</span><button class="btn btn-sm" onclick="window.app.clearPayerTagFilters()" style="font-size:10px;padding:2px 8px;margin-left:4px;">Clear all</button>` : ''}
       </div>
       ${Object.entries(tagGroups).map(([groupKey, grp]) => {
@@ -10926,6 +10943,22 @@ function handleNppesProxy(payload) {
       showToast('Could not add to pipeline', 'error');
     }
   },
+
+  // ─── Command Palette ───
+  openCommandPalette() { openCommandPalette(); },
+  closeCommandPalette() { closeCommandPalette(); },
+
+  // ─── Provider Onboarding Wizard ───
+  async wizardNext() { await wizardNav(1); },
+  async wizardBack() { await wizardNav(-1); },
+  async wizardCreate() { await wizardCreate(); },
+  wizardAddLicense() { wizardAddLicense(); },
+  wizardRemoveLicense(idx) { wizardRemoveLicense(idx); },
+  wizardAddEducation() { wizardAddEducation(); },
+  wizardRemoveEducation(idx) { wizardRemoveEducation(idx); },
+
+  // ─── Help Tooltips ───
+  toggleHelpTip(id) { toggleHelpTip(id); },
 };
 
 // ─── Application Modal ───
@@ -14212,6 +14245,7 @@ function _kbSummaryStrip(totalApps, totalRevenue, filtered, columns) {
 // ── Kanban: Filters Bar ──
 function _kbFilters(kb, uniqueStates, uniquePayers, uniqueProviderIds, providerMap, uniqueGroups) {
   return `<div class="kb-filters">
+    ${helpTip('Drag cards between columns to change their status. Each column represents a stage in the credentialing pipeline. Cards show payer, provider, state, and days in current status.')}
     <select onchange="window.app._kbFilter('filterState',this.value)" title="Filter by State">
       <option value="">All States</option>
       ${uniqueStates.map(s => `<option value="${escHtml(s)}"${kb.filterState === s ? ' selected' : ''}>${escHtml(s)}</option>`).join('')}
@@ -18595,6 +18629,588 @@ async function renderFundingDetail(id) {
     </div>
   `;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FEATURE 1: Cmd+K Command Palette
+// ═══════════════════════════════════════════════════════════════════════════
+
+let _cmdPaletteStyled = false;
+let _cmdSelectedIndex = 0;
+
+const CMD_PALETTE_COMMANDS = [
+  // Navigation
+  { id: 'nav-dashboard', label: 'Dashboard', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('dashboard'); } },
+  { id: 'nav-applications', label: 'Applications', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('applications'); } },
+  { id: 'nav-kanban', label: 'Kanban Board', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('kanban'); } },
+  { id: 'nav-followups', label: 'Follow-ups', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('followups'); } },
+  { id: 'nav-tasks', label: 'Tasks', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('tasks'); } },
+  { id: 'nav-providers', label: 'Providers', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('providers'); } },
+  { id: 'nav-licenses', label: 'Licenses', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('licenses'); } },
+  { id: 'nav-payers', label: 'Payers', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('payers'); } },
+  { id: 'nav-settings', label: 'Settings', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('settings'); } },
+  { id: 'nav-account', label: 'My Account', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('my-account'); } },
+  { id: 'nav-audit', label: 'Audit Trail', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('audit-trail'); } },
+  // Actions
+  { id: 'act-add-app', label: 'Add Application', category: 'Actions', action: () => { closeCommandPalette(); navigateTo('applications').then(() => { if (window.app.openAddModal) window.app.openAddModal(); }); } },
+  { id: 'act-add-prov', label: 'Add Provider', category: 'Actions', action: () => { closeCommandPalette(); navigateTo('providers').then(() => { if (window.app.openProviderModal) window.app.openProviderModal(); }); } },
+  { id: 'act-add-lic', label: 'Add License', category: 'Actions', action: () => { closeCommandPalette(); navigateTo('licenses').then(() => { if (window.app.openLicenseModal) window.app.openLicenseModal(); }); } },
+  { id: 'act-add-task', label: 'Add Task', category: 'Actions', action: () => { closeCommandPalette(); navigateTo('tasks').then(() => { if (window.app.showAddTaskForm) window.app.showAddTaskForm(); }); } },
+  { id: 'act-search-app', label: 'Search Applications', category: 'Actions', action: () => { closeCommandPalette(); navigateTo('applications'); } },
+  { id: 'act-search-prov', label: 'Search Providers', category: 'Actions', action: () => { closeCommandPalette(); navigateTo('providers'); } },
+  { id: 'act-export', label: 'Export Data', category: 'Actions', action: () => { closeCommandPalette(); navigateTo('settings'); } },
+  { id: 'act-print', label: 'Print Page', category: 'Actions', action: () => { closeCommandPalette(); window.print(); } },
+  // Quick Toggles
+  { id: 'tog-dark', label: 'Toggle Dark Mode', category: 'Quick Toggles', action: () => { closeCommandPalette(); document.body.classList.toggle('dark-mode'); localStorage.setItem('credentik_dark', document.body.classList.contains('dark-mode')); } },
+  { id: 'tog-sidebar', label: 'Toggle Sidebar', category: 'Quick Toggles', action: () => { closeCommandPalette(); const sb = document.querySelector('.sidebar'); if (sb) sb.classList.toggle('collapsed'); } },
+];
+
+function _injectCmdPaletteStyles() {
+  if (_cmdPaletteStyled) return;
+  _cmdPaletteStyled = true;
+  const style = document.createElement('style');
+  style.textContent = `
+    .cmd-overlay{position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.45);backdrop-filter:blur(6px);display:flex;justify-content:center;align-items:flex-start;padding-top:20vh;animation:cmd-fadeIn 0.15s ease;}
+    @keyframes cmd-fadeIn{from{opacity:0}to{opacity:1}}
+    .cmd-container{width:100%;max-width:600px;background:var(--bg-primary,#fff);border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,0.25);overflow:hidden;animation:cmd-slideDown 0.15s ease;}
+    @keyframes cmd-slideDown{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:translateY(0)}}
+    .cmd-search-wrap{display:flex;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border-color,#e5e7eb);gap:12px;}
+    .cmd-search-icon{color:var(--gray-400,#9ca3af);flex-shrink:0;}
+    .cmd-search-input{flex:1;border:none;outline:none;font-size:16px;background:transparent;color:var(--text-primary,#111);font-family:inherit;}
+    .cmd-search-input::placeholder{color:var(--gray-400,#9ca3af);}
+    .cmd-kbd{font-size:11px;padding:2px 6px;border-radius:4px;background:var(--gray-100,#f3f4f6);color:var(--gray-500,#6b7280);border:1px solid var(--gray-200,#e5e7eb);font-family:monospace;}
+    .cmd-results{max-height:360px;overflow-y:auto;padding:8px 0;}
+    .cmd-group-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--gray-400,#9ca3af);padding:8px 20px 4px;}
+    .cmd-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;transition:background 0.1s;color:var(--text-primary,#111);font-size:14px;}
+    .cmd-item:hover,.cmd-item.cmd-active{background:var(--brand-50,#eff6ff);color:var(--brand-700,#1d4ed8);}
+    .cmd-item-icon{width:20px;text-align:center;color:var(--gray-400,#9ca3af);font-size:13px;}
+    .cmd-empty{padding:32px 20px;text-align:center;color:var(--gray-400,#9ca3af);font-size:14px;}
+    .cmd-footer{display:flex;gap:16px;padding:10px 20px;border-top:1px solid var(--border-color,#e5e7eb);font-size:11px;color:var(--gray-400,#9ca3af);}
+  `;
+  document.head.appendChild(style);
+}
+
+function _getCmdCategoryIcon(cat) {
+  if (cat === 'Navigation') return '&#x2192;';
+  if (cat === 'Actions') return '&#x26A1;';
+  if (cat === 'Quick Toggles') return '&#x2699;';
+  return '&#x2022;';
+}
+
+function openCommandPalette() {
+  if (document.getElementById('cmd-palette-overlay')) { closeCommandPalette(); return; }
+  _injectCmdPaletteStyles();
+  _cmdSelectedIndex = 0;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'cmd-palette-overlay';
+  overlay.className = 'cmd-overlay';
+  overlay.onclick = (e) => { if (e.target === overlay) closeCommandPalette(); };
+  overlay.innerHTML = `
+    <div class="cmd-container">
+      <div class="cmd-search-wrap">
+        <span class="cmd-search-icon"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg></span>
+        <input class="cmd-search-input" id="cmd-search" type="text" placeholder="Type a command..." autofocus autocomplete="off" />
+        <span class="cmd-kbd">Esc</span>
+      </div>
+      <div class="cmd-results" id="cmd-results"></div>
+      <div class="cmd-footer">
+        <span><span class="cmd-kbd">&uarr;&darr;</span> Navigate</span>
+        <span><span class="cmd-kbd">Enter</span> Select</span>
+        <span><span class="cmd-kbd">Esc</span> Close</span>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const input = document.getElementById('cmd-search');
+  _renderCmdResults('');
+  input.addEventListener('input', () => { _cmdSelectedIndex = 0; _renderCmdResults(input.value); });
+  input.addEventListener('keydown', (e) => {
+    const items = document.querySelectorAll('.cmd-item');
+    if (e.key === 'ArrowDown') { e.preventDefault(); _cmdSelectedIndex = Math.min(_cmdSelectedIndex + 1, items.length - 1); _highlightCmdItem(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); _cmdSelectedIndex = Math.max(_cmdSelectedIndex - 1, 0); _highlightCmdItem(); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (items[_cmdSelectedIndex]) items[_cmdSelectedIndex].click(); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeCommandPalette(); }
+  });
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeCommandPalette() {
+  const el = document.getElementById('cmd-palette-overlay');
+  if (el) el.remove();
+}
+
+function _renderCmdResults(query) {
+  const container = document.getElementById('cmd-results');
+  if (!container) return;
+  const q = query.toLowerCase().trim();
+  const filtered = q ? CMD_PALETTE_COMMANDS.filter(c => c.label.toLowerCase().includes(q) || c.category.toLowerCase().includes(q)) : CMD_PALETTE_COMMANDS;
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="cmd-empty">No commands found</div>';
+    return;
+  }
+
+  // Group by category
+  const groups = {};
+  filtered.forEach(c => { if (!groups[c.category]) groups[c.category] = []; groups[c.category].push(c); });
+
+  let html = '';
+  let idx = 0;
+  for (const [cat, cmds] of Object.entries(groups)) {
+    html += `<div class="cmd-group-label">${_getCmdCategoryIcon(cat)} ${cat}</div>`;
+    for (const cmd of cmds) {
+      html += `<div class="cmd-item${idx === _cmdSelectedIndex ? ' cmd-active' : ''}" data-cmd-idx="${idx}" onclick="(CMD_PALETTE_COMMANDS.find(c=>c.id==='${cmd.id}')||{action:()=>{}}).action()">${cmd.label}</div>`;
+      idx++;
+    }
+  }
+  container.innerHTML = html;
+
+  // Bind hover to update selection
+  container.querySelectorAll('.cmd-item').forEach((el) => {
+    el.addEventListener('mouseenter', () => { _cmdSelectedIndex = parseInt(el.dataset.cmdIdx); _highlightCmdItem(); });
+  });
+}
+
+function _highlightCmdItem() {
+  document.querySelectorAll('.cmd-item').forEach((el, i) => {
+    el.classList.toggle('cmd-active', i === _cmdSelectedIndex);
+  });
+  const active = document.querySelector('.cmd-item.cmd-active');
+  if (active) active.scrollIntoView({ block: 'nearest' });
+}
+
+// Make CMD_PALETTE_COMMANDS accessible from onclick handlers
+window.CMD_PALETTE_COMMANDS = CMD_PALETTE_COMMANDS;
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FEATURE 2: Provider Onboarding Wizard
+// ═══════════════════════════════════════════════════════════════════════════
+
+let _wizardState = null;
+
+function _initWizardState() {
+  _wizardState = {
+    step: 1,
+    totalSteps: 5,
+    basic: { firstName: '', lastName: '', npi: '', credentials: '', specialty: '', taxonomy: '' },
+    contact: { email: '', phone: '', address: '', city: '', state: '', zip: '' },
+    licenses: [],
+    education: [],
+  };
+}
+
+async function renderProviderOnboardingWizard() {
+  if (!_wizardState) _initWizardState();
+  const body = document.getElementById('page-body');
+  const s = _wizardState;
+
+  // Inject wizard styles once
+  const stepLabels = ['Basic Info', 'Contact', 'Licenses', 'Education', 'Review'];
+
+  body.innerHTML = `
+    <style>
+      .wizard-container{max-width:720px;margin:0 auto;}
+      .wizard-progress{display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:32px;padding:0 20px;}
+      .wizard-step-indicator{display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;z-index:1;}
+      .wizard-step-circle{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;border:2px solid var(--gray-300,#d1d5db);color:var(--gray-400,#9ca3af);background:var(--bg-primary,#fff);transition:all 0.2s;}
+      .wizard-step-circle.wizard-active{border-color:var(--brand-600,#2563eb);color:#fff;background:var(--brand-600,#2563eb);}
+      .wizard-step-circle.wizard-done{border-color:#22c55e;color:#fff;background:#22c55e;}
+      .wizard-step-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-400,#9ca3af);white-space:nowrap;}
+      .wizard-step-label.wizard-active-label{color:var(--brand-600,#2563eb);font-weight:700;}
+      .wizard-step-line{flex:1;height:2px;background:var(--gray-200,#e5e7eb);min-width:40px;margin:0 -4px;margin-bottom:18px;}
+      .wizard-step-line.wizard-done-line{background:#22c55e;}
+      .wizard-card{background:var(--bg-primary,#fff);border-radius:16px;border:1px solid var(--border-color,#e5e7eb);box-shadow:0 1px 3px rgba(0,0,0,0.06);padding:28px 32px;}
+      .wizard-card h3{margin:0 0 20px;font-size:18px;font-weight:700;color:var(--text-primary,#111);}
+      .wizard-field{margin-bottom:16px;}
+      .wizard-field label{display:block;font-size:12px;font-weight:600;color:var(--gray-600,#4b5563);margin-bottom:4px;}
+      .wizard-field input,.wizard-field select{width:100%;padding:10px 12px;border:1px solid var(--gray-300,#d1d5db);border-radius:8px;font-size:14px;background:var(--bg-primary,#fff);color:var(--text-primary,#111);font-family:inherit;box-sizing:border-box;}
+      .wizard-field input:focus,.wizard-field select:focus{outline:none;border-color:var(--brand-600,#2563eb);box-shadow:0 0 0 3px rgba(37,99,235,0.1);}
+      .wizard-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+      .wizard-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+      .wizard-actions{display:flex;justify-content:space-between;align-items:center;margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200,#e5e7eb);}
+      .wizard-btn{padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;border:none;cursor:pointer;transition:all 0.15s;}
+      .wizard-btn-primary{background:var(--brand-600,#2563eb);color:#fff;}
+      .wizard-btn-primary:hover{background:var(--brand-700,#1d4ed8);}
+      .wizard-btn-secondary{background:var(--gray-100,#f3f4f6);color:var(--gray-700,#374151);}
+      .wizard-btn-secondary:hover{background:var(--gray-200,#e5e7eb);}
+      .wizard-btn-success{background:#22c55e;color:#fff;}
+      .wizard-btn-success:hover{background:#16a34a;}
+      .wizard-sub-card{background:var(--gray-50,#f9fafb);border:1px solid var(--gray-200,#e5e7eb);border-radius:10px;padding:16px;margin-bottom:12px;position:relative;}
+      .wizard-remove-btn{position:absolute;top:8px;right:8px;background:none;border:none;color:var(--gray-400,#9ca3af);cursor:pointer;font-size:18px;line-height:1;}
+      .wizard-remove-btn:hover{color:#ef4444;}
+      .wizard-review-section{margin-bottom:20px;}
+      .wizard-review-section h4{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500,#6b7280);margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid var(--gray-200,#e5e7eb);}
+      .wizard-review-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;}
+      .wizard-review-label{color:var(--gray-500,#6b7280);}
+      .wizard-review-value{font-weight:600;color:var(--text-primary,#111);}
+      .wizard-error{color:#ef4444;font-size:12px;margin-top:4px;}
+      @media(max-width:600px){.wizard-row,.wizard-row-3{grid-template-columns:1fr;}.wizard-card{padding:20px 16px;}}
+    </style>
+
+    <div class="wizard-container">
+      <!-- Progress Bar -->
+      <div class="wizard-progress">
+        ${stepLabels.map((lbl, i) => {
+          const num = i + 1;
+          const isDone = num < s.step;
+          const isActive = num === s.step;
+          return (i > 0 ? `<div class="wizard-step-line${isDone ? ' wizard-done-line' : ''}"></div>` : '') +
+            `<div class="wizard-step-indicator">
+              <div class="wizard-step-circle${isActive ? ' wizard-active' : ''}${isDone ? ' wizard-done' : ''}">${isDone ? '&#10003;' : num}</div>
+              <div class="wizard-step-label${isActive ? ' wizard-active-label' : ''}">${lbl}</div>
+            </div>`;
+        }).join('')}
+      </div>
+
+      <!-- Step Content -->
+      <div class="wizard-card">
+        ${_wizardStepContent(s)}
+      </div>
+
+      <!-- Actions -->
+      <div class="wizard-actions">
+        ${s.step > 1 ? '<button class="wizard-btn wizard-btn-secondary" onclick="window.app.wizardBack()">&#8592; Back</button>' : '<div></div>'}
+        ${s.step < s.totalSteps
+          ? '<button class="wizard-btn wizard-btn-primary" onclick="window.app.wizardNext()">Next &#8594;</button>'
+          : '<button class="wizard-btn wizard-btn-success" onclick="window.app.wizardCreate()">&#10003; Create Provider</button>'
+        }
+      </div>
+    </div>`;
+}
+
+function _wizardStepContent(s) {
+  const stateOptions = STATES.map(st => `<option value="${st.code || st.abbreviation}" ${s.contact.state === (st.code || st.abbreviation) ? 'selected' : ''}>${st.name || st.code}</option>`).join('');
+
+  switch (s.step) {
+    case 1: return `
+      <h3>Step 1: Basic Information</h3>
+      <div class="wizard-row">
+        <div class="wizard-field"><label>First Name *</label><input id="wiz-firstName" value="${escHtml(s.basic.firstName)}" placeholder="First name" /></div>
+        <div class="wizard-field"><label>Last Name *</label><input id="wiz-lastName" value="${escHtml(s.basic.lastName)}" placeholder="Last name" /></div>
+      </div>
+      <div class="wizard-row">
+        <div class="wizard-field"><label>NPI *</label><input id="wiz-npi" value="${escHtml(s.basic.npi)}" placeholder="10-digit NPI" maxlength="10" /></div>
+        <div class="wizard-field"><label>Credentials</label><input id="wiz-credentials" value="${escHtml(s.basic.credentials)}" placeholder="e.g. MD, DO, PMHNP" /></div>
+      </div>
+      <div class="wizard-row">
+        <div class="wizard-field"><label>Specialty</label><input id="wiz-specialty" value="${escHtml(s.basic.specialty)}" placeholder="e.g. Psychiatry" /></div>
+        <div class="wizard-field"><label>Taxonomy Code</label><input id="wiz-taxonomy" value="${escHtml(s.basic.taxonomy)}" placeholder="e.g. 2084P0800X" /></div>
+      </div>`;
+
+    case 2: return `
+      <h3>Step 2: Contact Information</h3>
+      <div class="wizard-row">
+        <div class="wizard-field"><label>Email</label><input id="wiz-email" type="email" value="${escHtml(s.contact.email)}" placeholder="provider@example.com" /></div>
+        <div class="wizard-field"><label>Phone</label><input id="wiz-phone" value="${escHtml(s.contact.phone)}" placeholder="(555) 555-5555" /></div>
+      </div>
+      <div class="wizard-field"><label>Address</label><input id="wiz-address" value="${escHtml(s.contact.address)}" placeholder="Street address" /></div>
+      <div class="wizard-row-3">
+        <div class="wizard-field"><label>City</label><input id="wiz-city" value="${escHtml(s.contact.city)}" placeholder="City" /></div>
+        <div class="wizard-field"><label>State</label><select id="wiz-state"><option value="">Select...</option>${stateOptions}</select></div>
+        <div class="wizard-field"><label>ZIP</label><input id="wiz-zip" value="${escHtml(s.contact.zip)}" placeholder="ZIP code" maxlength="10" /></div>
+      </div>`;
+
+    case 3: return `
+      <h3>Step 3: State Licenses</h3>
+      <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">Add one or more state licenses for this provider.</p>
+      <div id="wiz-licenses-list">
+        ${s.licenses.map((lic, i) => `
+          <div class="wizard-sub-card">
+            <button class="wizard-remove-btn" onclick="window.app.wizardRemoveLicense(${i})" title="Remove">&times;</button>
+            <div class="wizard-row">
+              <div class="wizard-field"><label>State *</label><select id="wiz-lic-state-${i}"><option value="">Select...</option>${stateOptions.replace(`value="${lic.state}" `, `value="${lic.state}" selected `)}</select></div>
+              <div class="wizard-field"><label>License # *</label><input id="wiz-lic-num-${i}" value="${escHtml(lic.number)}" placeholder="License number" /></div>
+            </div>
+            <div class="wizard-row">
+              <div class="wizard-field"><label>Type</label><input id="wiz-lic-type-${i}" value="${escHtml(lic.type)}" placeholder="e.g. LCSW, MD, RN" /></div>
+              <div class="wizard-field"><label>Expiration</label><input id="wiz-lic-exp-${i}" type="date" value="${escHtml(lic.expiration)}" /></div>
+            </div>
+          </div>`).join('')}
+      </div>
+      <button class="wizard-btn wizard-btn-secondary" onclick="window.app.wizardAddLicense()" style="margin-top:8px;">+ Add License</button>`;
+
+    case 4: return `
+      <h3>Step 4: Education</h3>
+      <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">Add education and training records.</p>
+      <div id="wiz-education-list">
+        ${s.education.map((edu, i) => `
+          <div class="wizard-sub-card">
+            <button class="wizard-remove-btn" onclick="window.app.wizardRemoveEducation(${i})" title="Remove">&times;</button>
+            <div class="wizard-row">
+              <div class="wizard-field"><label>Institution *</label>
+                <select id="wiz-edu-inst-${i}" onchange="if(this.value==='__other__'){document.getElementById('wiz-edu-inst-custom-${i}').style.display='';this.style.display='none';}">
+                  <option value="">Select...</option>
+                  ${PRESET_INSTITUTIONS.map(inst => `<option value="${escHtml(inst)}" ${edu.institution === inst ? 'selected' : ''}>${escHtml(inst)}</option>`).join('')}
+                  <option value="__other__">Other...</option>
+                </select>
+                <input id="wiz-edu-inst-custom-${i}" value="${PRESET_INSTITUTIONS.includes(edu.institution) ? '' : escHtml(edu.institution)}" placeholder="Type institution name" style="display:${PRESET_INSTITUTIONS.includes(edu.institution) || !edu.institution ? 'none' : ''};margin-top:4px;" />
+              </div>
+              <div class="wizard-field"><label>Degree *</label>
+                <select id="wiz-edu-degree-${i}">
+                  <option value="">Select...</option>
+                  ${PRESET_DEGREES.map(d => `<option value="${escHtml(d)}" ${edu.degree === d ? 'selected' : ''}>${escHtml(d)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div class="wizard-row">
+              <div class="wizard-field"><label>Field of Study</label>
+                <select id="wiz-edu-field-${i}">
+                  <option value="">Select...</option>
+                  ${PRESET_FIELDS_OF_STUDY.map(f => `<option value="${escHtml(f)}" ${edu.field === f ? 'selected' : ''}>${escHtml(f)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="wizard-field"><label>Year Completed</label><input id="wiz-edu-year-${i}" value="${escHtml(edu.year)}" placeholder="e.g. 2020" maxlength="4" /></div>
+            </div>
+          </div>`).join('')}
+      </div>
+      <button class="wizard-btn wizard-btn-secondary" onclick="window.app.wizardAddEducation()" style="margin-top:8px;">+ Add Education</button>`;
+
+    case 5:
+      return `
+      <h3>Step 5: Review & Create</h3>
+      <p style="font-size:13px;color:var(--gray-500);margin-bottom:20px;">Review the information below, then click "Create Provider" to save.</p>
+      <div class="wizard-review-section">
+        <h4>Basic Information</h4>
+        <div class="wizard-review-row"><span class="wizard-review-label">Name</span><span class="wizard-review-value">${escHtml(s.basic.firstName)} ${escHtml(s.basic.lastName)}</span></div>
+        <div class="wizard-review-row"><span class="wizard-review-label">NPI</span><span class="wizard-review-value">${escHtml(s.basic.npi) || '—'}</span></div>
+        <div class="wizard-review-row"><span class="wizard-review-label">Credentials</span><span class="wizard-review-value">${escHtml(s.basic.credentials) || '—'}</span></div>
+        <div class="wizard-review-row"><span class="wizard-review-label">Specialty</span><span class="wizard-review-value">${escHtml(s.basic.specialty) || '—'}</span></div>
+        <div class="wizard-review-row"><span class="wizard-review-label">Taxonomy</span><span class="wizard-review-value">${escHtml(s.basic.taxonomy) || '—'}</span></div>
+      </div>
+      <div class="wizard-review-section">
+        <h4>Contact</h4>
+        <div class="wizard-review-row"><span class="wizard-review-label">Email</span><span class="wizard-review-value">${escHtml(s.contact.email) || '—'}</span></div>
+        <div class="wizard-review-row"><span class="wizard-review-label">Phone</span><span class="wizard-review-value">${escHtml(s.contact.phone) || '—'}</span></div>
+        <div class="wizard-review-row"><span class="wizard-review-label">Address</span><span class="wizard-review-value">${[s.contact.address, s.contact.city, s.contact.state, s.contact.zip].filter(Boolean).join(', ') || '—'}</span></div>
+      </div>
+      ${s.licenses.length > 0 ? `<div class="wizard-review-section">
+        <h4>Licenses (${s.licenses.length})</h4>
+        ${s.licenses.map(l => `<div class="wizard-review-row"><span class="wizard-review-label">${escHtml(l.state)} — ${escHtml(l.type || 'License')}</span><span class="wizard-review-value">#${escHtml(l.number)}${l.expiration ? ' (exp ' + l.expiration + ')' : ''}</span></div>`).join('')}
+      </div>` : ''}
+      ${s.education.length > 0 ? `<div class="wizard-review-section">
+        <h4>Education (${s.education.length})</h4>
+        ${s.education.map(e => `<div class="wizard-review-row"><span class="wizard-review-label">${escHtml(e.degree || '—')} — ${escHtml(e.field || '—')}</span><span class="wizard-review-value">${escHtml(e.institution || '—')}${e.year ? ' (' + e.year + ')' : ''}</span></div>`).join('')}
+      </div>` : ''}`;
+
+    default: return '';
+  }
+}
+
+function _saveWizardStepData() {
+  const s = _wizardState;
+  const val = (id) => document.getElementById(id)?.value?.trim() || '';
+
+  switch (s.step) {
+    case 1:
+      s.basic.firstName = val('wiz-firstName');
+      s.basic.lastName = val('wiz-lastName');
+      s.basic.npi = val('wiz-npi');
+      s.basic.credentials = val('wiz-credentials');
+      s.basic.specialty = val('wiz-specialty');
+      s.basic.taxonomy = val('wiz-taxonomy');
+      break;
+    case 2:
+      s.contact.email = val('wiz-email');
+      s.contact.phone = val('wiz-phone');
+      s.contact.address = val('wiz-address');
+      s.contact.city = val('wiz-city');
+      s.contact.state = val('wiz-state');
+      s.contact.zip = val('wiz-zip');
+      break;
+    case 3:
+      s.licenses = s.licenses.map((lic, i) => ({
+        state: val(`wiz-lic-state-${i}`),
+        number: val(`wiz-lic-num-${i}`),
+        type: val(`wiz-lic-type-${i}`),
+        expiration: val(`wiz-lic-exp-${i}`),
+      }));
+      break;
+    case 4:
+      s.education = s.education.map((edu, i) => {
+        const selVal = val(`wiz-edu-inst-${i}`);
+        const customVal = val(`wiz-edu-inst-custom-${i}`);
+        return {
+          institution: selVal === '__other__' ? customVal : (selVal || customVal),
+          degree: val(`wiz-edu-degree-${i}`),
+          field: val(`wiz-edu-field-${i}`),
+          year: val(`wiz-edu-year-${i}`),
+        };
+      });
+      break;
+  }
+}
+
+function _validateWizardStep() {
+  const s = _wizardState;
+  switch (s.step) {
+    case 1:
+      if (!s.basic.firstName) { showToast('First name is required', 'error'); return false; }
+      if (!s.basic.lastName) { showToast('Last name is required', 'error'); return false; }
+      if (s.basic.npi && !/^\d{10}$/.test(s.basic.npi)) { showToast('NPI must be 10 digits', 'error'); return false; }
+      return true;
+    case 2: return true; // contact is optional
+    case 3:
+      for (const lic of s.licenses) {
+        if (!lic.state || !lic.number) { showToast('Each license needs a state and number', 'error'); return false; }
+      }
+      return true;
+    case 4:
+      for (const edu of s.education) {
+        if (!edu.institution || !edu.degree) { showToast('Each education entry needs an institution and degree', 'error'); return false; }
+      }
+      return true;
+    default: return true;
+  }
+}
+
+async function wizardNav(dir) {
+  _saveWizardStepData();
+  if (dir > 0 && !_validateWizardStep()) return;
+  _wizardState.step += dir;
+  if (_wizardState.step < 1) _wizardState.step = 1;
+  if (_wizardState.step > _wizardState.totalSteps) _wizardState.step = _wizardState.totalSteps;
+  await renderProviderOnboardingWizard();
+}
+
+function wizardAddLicense() {
+  _saveWizardStepData();
+  _wizardState.licenses.push({ state: '', number: '', type: '', expiration: '' });
+  renderProviderOnboardingWizard();
+}
+
+function wizardRemoveLicense(idx) {
+  _saveWizardStepData();
+  _wizardState.licenses.splice(idx, 1);
+  renderProviderOnboardingWizard();
+}
+
+function wizardAddEducation() {
+  _saveWizardStepData();
+  _wizardState.education.push({ institution: '', degree: '', field: '', year: '' });
+  renderProviderOnboardingWizard();
+}
+
+function wizardRemoveEducation(idx) {
+  _saveWizardStepData();
+  _wizardState.education.splice(idx, 1);
+  renderProviderOnboardingWizard();
+}
+
+async function wizardCreate() {
+  const s = _wizardState;
+  try {
+    // Create the provider
+    const providerData = {
+      firstName: s.basic.firstName,
+      lastName: s.basic.lastName,
+      npi: s.basic.npi,
+      credentials: s.basic.credentials,
+      specialty: s.basic.specialty,
+      taxonomy: s.basic.taxonomy,
+      email: s.contact.email,
+      phone: s.contact.phone,
+      address: s.contact.address,
+      city: s.contact.city,
+      state: s.contact.state,
+      zip: s.contact.zip,
+      active: true,
+    };
+    const provider = await store.create('providers', providerData);
+    const providerId = provider?.id || provider?.provider_id;
+
+    // Create licenses
+    for (const lic of s.licenses) {
+      if (lic.state && lic.number) {
+        await store.create('licenses', {
+          providerId,
+          state: lic.state,
+          licenseNumber: lic.number,
+          licenseType: lic.type,
+          expirationDate: lic.expiration,
+          status: 'active',
+        });
+      }
+    }
+
+    // Store education on the provider profile (update with education array)
+    if (s.education.length > 0) {
+      await store.update('providers', providerId, {
+        education: s.education.map(e => ({
+          institution: e.institution,
+          degree: e.degree,
+          fieldOfStudy: e.field,
+          yearCompleted: e.year,
+        })),
+      });
+    }
+
+    showToast('Provider created successfully!', 'success');
+    _wizardState = null; // Reset wizard
+    await navigateTo('providers');
+  } catch (err) {
+    showToast('Error creating provider: ' + err.message, 'error');
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FEATURE 3: Contextual Help Tooltips
+// ═══════════════════════════════════════════════════════════════════════════
+
+let _helpTipStyled = false;
+let _helpTipCounter = 0;
+
+function _injectHelpTipStyles() {
+  if (_helpTipStyled) return;
+  _helpTipStyled = true;
+  const style = document.createElement('style');
+  style.textContent = `
+    .help-tip{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#3b82f6;color:#fff;font-size:11px;font-weight:700;cursor:pointer;user-select:none;vertical-align:middle;margin-left:6px;line-height:1;position:relative;flex-shrink:0;transition:background 0.15s;}
+    .help-tip:hover{background:#2563eb;}
+    .help-popover{position:absolute;z-index:9999;background:var(--bg-primary,#fff);border:1px solid var(--gray-200,#e5e7eb);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,0.15);padding:14px 16px;max-width:280px;font-size:13px;font-weight:400;color:var(--text-primary,#374151);line-height:1.5;white-space:normal;left:50%;transform:translateX(-50%);top:calc(100% + 10px);animation:helpTipIn 0.15s ease;}
+    .help-popover::before{content:'';position:absolute;top:-6px;left:50%;transform:translateX(-50%) rotate(45deg);width:10px;height:10px;background:var(--bg-primary,#fff);border-top:1px solid var(--gray-200,#e5e7eb);border-left:1px solid var(--gray-200,#e5e7eb);}
+    @keyframes helpTipIn{from{opacity:0;transform:translateX(-50%) translateY(4px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+  `;
+  document.head.appendChild(style);
+}
+
+function helpTip(text) {
+  _injectHelpTipStyles();
+  const id = 'help-tip-' + (++_helpTipCounter);
+  return `<span class="help-tip" id="${id}" onclick="event.stopPropagation();window.app.toggleHelpTip('${id}')" data-help="${escHtml(text)}">?</span>`;
+}
+
+function toggleHelpTip(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  // If already showing, close it
+  const existing = el.querySelector('.help-popover');
+  if (existing) { existing.remove(); return; }
+
+  // Close any other open popovers
+  document.querySelectorAll('.help-popover').forEach(p => p.remove());
+
+  // Create popover
+  const pop = document.createElement('div');
+  pop.className = 'help-popover';
+  pop.textContent = el.dataset.help;
+  el.style.position = 'relative';
+  el.appendChild(pop);
+
+  // Auto-dismiss on click outside
+  const dismiss = (e) => {
+    if (!el.contains(e.target)) {
+      pop.remove();
+      document.removeEventListener('click', dismiss, true);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', dismiss, true), 10);
+}
+
+// Expose helpTip globally so render functions can use it
+window._helpTip = helpTip;
 
 function openFundingApplicationModal() {
   showToast('Application tracking coming soon — track your grant applications from draft to award.', 'info');
