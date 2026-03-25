@@ -727,7 +727,7 @@ async function renderProviderProfilePage(providerId) {
 
   body.innerHTML = `
     <style>
-      .cp-hero{display:grid;grid-template-columns:1fr 220px;gap:24px;background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 50%,#f5f3ff 100%);border:1px solid var(--gray-200,#e2e8f0);border-radius:16px;padding:28px 32px;margin-bottom:24px;align-items:start;}
+      .cp-hero{display:grid;grid-template-columns:1fr auto 220px;gap:24px;background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 50%,#f5f3ff 100%);border:1px solid var(--gray-200,#e2e8f0);border-radius:16px;padding:28px 32px;margin-bottom:24px;align-items:start;}
       .cp-identity{display:flex;flex-direction:column;gap:10px;}
       .cp-avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 12px rgba(99,102,241,.3);flex-shrink:0;}
       .cp-identity-top{display:flex;align-items:center;gap:16px;}
