@@ -13280,10 +13280,12 @@ async function renderUsersStub() {
     return `<span class="badge badge-${r.cls}">${r.icon} ${r.label}</span>`;
   };
 
-  const agencyUsers = users.filter(u => u.role === 'agency' || u.role === 'superadmin');
-  const staffUsers = users.filter(u => u.role === 'staff');
-  const orgUsers = users.filter(u => u.role === 'organization');
-  const providerUsers = users.filter(u => u.role === 'provider');
+  // Use ui_role (frontend role) when available, fallback to API role
+  const _uRole = (u) => u.uiRole || u.ui_role || u.role;
+  const agencyUsers = users.filter(u => _uRole(u) === 'agency' || _uRole(u) === 'superadmin');
+  const staffUsers = users.filter(u => _uRole(u) === 'staff');
+  const orgUsers = users.filter(u => _uRole(u) === 'organization');
+  const providerUsers = users.filter(u => _uRole(u) === 'provider');
 
   body.innerHTML = `
     <style>
@@ -13373,20 +13375,21 @@ async function renderUsersStub() {
               const name = escHtml(((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || '')).trim());
               const orgName = u.organization ? escHtml(u.organization.name) : '';
               const provName = u.provider ? escHtml((u.provider.firstName || u.provider.first_name || '') + ' ' + (u.provider.lastName || u.provider.last_name || '')) : '';
-              const scope = u.role === 'organization' ? orgName : u.role === 'provider' ? provName : 'All';
+              const uRole = u.uiRole || u.ui_role || u.role;
+              const scope = uRole === 'organization' ? orgName : uRole === 'provider' ? provName : 'All';
               const isActive = u.isActive !== false && u.is_active !== false;
               const isSelf = u.id === auth.getUser()?.id;
               return `
               <tr style="${!isActive ? 'opacity:0.5;' : ''}">
                 <td><strong>${name}</strong> <span style="font-family:monospace;font-size:11px;color:var(--gray-400);">#${toHexId(u.id)}</span></td>
                 <td>${escHtml(u.email || '')}</td>
-                <td>${roleBadge(u.role)}</td>
+                <td>${roleBadge(u.uiRole || u.ui_role || u.role)}</td>
                 <td>${scope}</td>
                 <td><span class="badge badge-${isActive ? 'approved' : 'denied'}">${isActive ? 'Active' : 'Inactive'}</span></td>
                 <td>
-                  ${!isSelf && u.role !== 'superadmin' ? `
+                  ${!isSelf && (u.uiRole || u.ui_role || u.role) !== 'superadmin' ? `
                     <div style="display:flex;gap:4px;flex-wrap:wrap;">
-                      <button class="btn btn-sm" onclick="window.app.editUserRole(${u.id}, '${u.role}')" title="Change role">&#9998;</button>
+                      <button class="btn btn-sm" onclick="window.app.editUserRole(${u.id}, '${u.uiRole || u.ui_role || u.role}')" title="Change role">&#9998;</button>
                       ${isActive
                         ? `<button class="btn btn-sm" onclick="window.app.deactivateUser(${u.id}, '${name.replace(/'/g, "\\'")}')" title="Deactivate" style="color:var(--red);">&#10005;</button>`
                         : `<button class="btn btn-sm" onclick="window.app.reactivateUser(${u.id})" title="Reactivate" style="color:var(--green);">&#10003;</button>`
