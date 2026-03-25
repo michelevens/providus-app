@@ -324,7 +324,8 @@ async function enrichPayerTags() {
 }
 
 function getPayerById(id) {
-  return PAYER_CATALOG.find(p => p.id === id) || null;
+  if (!id) return null;
+  return PAYER_CATALOG.find(p => String(p.id) === String(id)) || null;
 }
 function getStateName(code) {
   const s = STATES.find(st => st.code === code || st.abbreviation === code);
@@ -10585,13 +10586,17 @@ async function openApplicationModal(id) {
   const licensedStates = (await store.getAll('licenses')).map(l => l.state);
   const providers = await store.getAll('providers');
 
+  // Normalize IDs for comparison (API may return string or number)
+  const existProviderId = existing?.providerId || existing?.provider_id || '';
+  const existPayerId = existing?.payerId || existing?.payer_id || '';
+
   form.innerHTML = `
     <input type="hidden" id="edit-app-id" value="${id || ''}">
     <div class="form-row">
       <div class="form-group">
         <label>Provider</label>
         <select class="form-control" id="field-provider">
-          ${providers.map(p => `<option value="${p.id}" ${existing?.providerId === p.id ? 'selected' : ''}>${p.firstName} ${p.lastName} (${p.credentials})</option>`).join('')}
+          ${providers.map(p => `<option value="${p.id}" ${String(existProviderId) == String(p.id) ? 'selected' : ''}>${p.firstName} ${p.lastName} (${p.credentials})</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
@@ -10611,7 +10616,7 @@ async function openApplicationModal(id) {
         <label>Payer</label>
         <select class="form-control" id="field-payer">
           <option value="">Select payer...</option>
-          ${PAYER_CATALOG.map(p => `<option value="${p.id}" ${existing?.payerId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+          ${PAYER_CATALOG.map(p => `<option value="${p.id}" ${String(existPayerId) == String(p.id) ? 'selected' : ''}>${p.name}</option>`).join('')}
         </select>
       </div>
     </div>
@@ -10671,7 +10676,7 @@ window.saveApplication = async function() {
     state: document.getElementById('field-state').value,
     payerId,
     payerName: payer ? payer.name : '',
-    wave: parseInt(document.getElementById('field-wave').value) || 1,
+    wave: parseInt(document.getElementById('field-wave').value) || null,
     status: document.getElementById('field-status').value,
     type: document.getElementById('field-type').value,
     submittedDate: document.getElementById('field-submitted').value,
