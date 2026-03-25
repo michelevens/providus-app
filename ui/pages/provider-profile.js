@@ -644,6 +644,7 @@ async function renderProviderProfilePage(providerId) {
     { id: 'cme', label: 'CME' },
     { id: 'references', label: 'References' },
     { id: 'locations', label: 'Locations' },
+    { id: 'payers', label: 'Payers' },
     { id: 'documents', label: 'Documents' },
   ];
 
@@ -1260,6 +1261,132 @@ async function renderProviderProfilePage(providerId) {
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Payers Tab -->
+    <div class="profile-tab-content" id="tab-payers" style="display:none;">
+      ${(() => {
+        const allPayers = typeof PAYER_CATALOG !== 'undefined' ? PAYER_CATALOG : [];
+        // Group apps by status
+        const approvedApps = provApps.filter(a => a.status === 'approved' || a.status === 'credentialed');
+        const pendingApps = provApps.filter(a => ['submitted','in_review','pending_info','gathering_docs','pending'].includes(a.status));
+        const deniedApps = provApps.filter(a => a.status === 'denied' || a.status === 'rejected');
+        // Unique states this provider is licensed in
+        const licStates = [...new Set(providerLicenses.filter(l => l.status === 'active').map(l => l.state).filter(Boolean))];
+        // Find payers the provider is NOT yet credentialed with (opportunities)
+        const credPayerIds = new Set(approvedApps.map(a => String(a.payerId)).filter(Boolean));
+        const pendPayerIds = new Set(pendingApps.map(a => String(a.payerId)).filter(Boolean));
+        const opportunities = allPayers.filter(p => {
+          if (credPayerIds.has(String(p.id)) || pendPayerIds.has(String(p.id))) return false;
+          if (!p.tags || !Array.isArray(p.tags)) return false;
+          // Only show payers tagged must_have or high_volume or that operate in provider's states
+          const isStrategic = p.tags.includes('must_have') || p.tags.includes('high_volume') || p.tags.includes('growing_market');
+          const inState = !p.states || p.states.includes('ALL') || licStates.some(s => (p.states || []).includes(s));
+          return isStrategic && inState;
+        }).slice(0, 10);
+
+        const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+
+        return `
+      <!-- Summary Stats -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px;">
+        <div class="card" style="padding:16px;text-align:center;border-radius:14px;">
+          <div style="font-size:28px;font-weight:800;color:#16a34a;">${approvedApps.length}</div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:2px;">Credentialed</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center;border-radius:14px;">
+          <div style="font-size:28px;font-weight:800;color:#f59e0b;">${pendingApps.length}</div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:2px;">In Progress</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center;border-radius:14px;">
+          <div style="font-size:28px;font-weight:800;color:#ef4444;">${deniedApps.length}</div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:2px;">Denied</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center;border-radius:14px;">
+          <div style="font-size:28px;font-weight:800;color:var(--brand-600);">${licStates.length}</div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:2px;">Licensed States</div>
+        </div>
+      </div>
+
+      <!-- Credentialed Payers -->
+      <div class="card" style="border-radius:16px;overflow:hidden;margin-bottom:20px;">
+        <div class="card-header"><h3 style="color:#16a34a;">&#10003; Credentialed Payers (${approvedApps.length})</h3></div>
+        <div class="card-body" style="padding:0;">
+          ${approvedApps.length > 0 ? '<table><thead><tr><th>Payer</th><th>State</th><th>Effective Date</th><th>Enrollment ID</th><th>Tags</th></tr></thead><tbody>' +
+            approvedApps.map(a => {
+              const payer = getPayerById(a.payerId) || {};
+              const payerName = payer.name || a.payerName || a.payer_name || (typeof a.payer === 'object' && a.payer ? a.payer.name : a.payer) || '—';
+              return '<tr>' +
+                '<td><strong>' + escHtml(payerName) + '</strong>' + (payer.parentOrg ? '<br><span style="font-size:10px;color:var(--gray-400);">' + escHtml(payer.parentOrg) + '</span>' : '') + '</td>' +
+                '<td>' + escHtml(a.state || '—') + '</td>' +
+                '<td>' + fmtDate(a.effectiveDate || a.effective_date) + '</td>' +
+                '<td><code style="font-size:11px;">' + escHtml(a.enrollmentId || a.enrollment_id || a.applicationRef || a.application_ref || '—') + '</code></td>' +
+                '<td>' + renderPayerTags(payer.tags || []) + '</td>' +
+              '</tr>';
+            }).join('') +
+          '</tbody></table>' : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No credentialed payers yet.</div>'}
+        </div>
+      </div>
+
+      <!-- In-Progress Applications -->
+      ${pendingApps.length > 0 ? '<div class="card" style="border-radius:16px;overflow:hidden;margin-bottom:20px;">' +
+        '<div class="card-header"><h3 style="color:#f59e0b;">&#9203; In Progress ('+pendingApps.length+')</h3></div>' +
+        '<div class="card-body" style="padding:0;"><table><thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th><th>Days Pending</th><th>Tags</th></tr></thead><tbody>' +
+        pendingApps.map(a => {
+          const payer = getPayerById(a.payerId) || {};
+          const payerName = payer.name || a.payerName || a.payer_name || (typeof a.payer === 'object' && a.payer ? a.payer.name : a.payer) || '—';
+          const submitted = a.submittedDate || a.submitted_date || a.created_at || a.createdAt;
+          const daysPending = submitted ? Math.floor((new Date() - new Date(submitted)) / 86400000) : '—';
+          const statusLabel = a.status === 'in_review' ? 'In Review' : a.status === 'pending_info' ? 'Info Needed' : a.status === 'gathering_docs' ? 'Gathering Docs' : (a.status || 'Pending');
+          const statusColor = a.status === 'pending_info' ? '#f59e0b' : '#3b82f6';
+          return '<tr>' +
+            '<td><strong>' + escHtml(payerName) + '</strong></td>' +
+            '<td>' + escHtml(a.state || '—') + '</td>' +
+            '<td><span class="badge" style="background:' + statusColor + '22;color:' + statusColor + ';font-size:10px;font-weight:600;padding:3px 8px;border-radius:12px;">' + escHtml(statusLabel) + '</span></td>' +
+            '<td>' + fmtDate(submitted) + '</td>' +
+            '<td>' + (typeof daysPending === 'number' ? '<strong>' + daysPending + '</strong> days' : '—') + '</td>' +
+            '<td>' + renderPayerTags(payer.tags || []) + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div></div>' : ''}
+
+      <!-- Denied Applications -->
+      ${deniedApps.length > 0 ? '<div class="card" style="border-radius:16px;overflow:hidden;margin-bottom:20px;">' +
+        '<div class="card-header"><h3 style="color:#ef4444;">&#10007; Denied ('+deniedApps.length+')</h3></div>' +
+        '<div class="card-body" style="padding:0;"><table><thead><tr><th>Payer</th><th>State</th><th>Reason</th><th>Date</th></tr></thead><tbody>' +
+        deniedApps.map(a => {
+          const payer = getPayerById(a.payerId) || {};
+          const payerName = payer.name || a.payerName || a.payer_name || (typeof a.payer === 'object' && a.payer ? a.payer.name : a.payer) || '—';
+          return '<tr>' +
+            '<td><strong>' + escHtml(payerName) + '</strong></td>' +
+            '<td>' + escHtml(a.state || '—') + '</td>' +
+            '<td style="font-size:12px;color:var(--gray-500);">' + escHtml(a.denialReason || a.denial_reason || a.notes || '—') + '</td>' +
+            '<td>' + fmtDate(a.deniedDate || a.denied_date || a.updatedAt || a.updated_at) + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div></div>' : ''}
+
+      <!-- Strategic Opportunities -->
+      ${opportunities.length > 0 ? '<div class="card" style="border-radius:16px;overflow:hidden;margin-bottom:20px;border:2px dashed var(--brand-200);">' +
+        '<div class="card-header" style="background:linear-gradient(135deg,rgba(99,102,241,0.05),rgba(139,92,246,0.05));"><h3 style="color:var(--brand-600);">&#128161; Strategic Opportunities</h3><div style="font-size:12px;color:var(--gray-500);margin-top:2px;">High-value payers this provider is not yet credentialed with</div></div>' +
+        '<div class="card-body" style="padding:0;"><table><thead><tr><th>Payer</th><th>Category</th><th>Why</th><th>Notes</th><th>Tags</th></tr></thead><tbody>' +
+        opportunities.map(p => {
+          const why = [];
+          if (p.tags?.includes('must_have')) why.push('Must Have');
+          if (p.tags?.includes('high_volume')) why.push('High Volume');
+          if (p.tags?.includes('growing_market')) why.push('Growing Market');
+          if (p.tags?.includes('high_reimbursement')) why.push('High Reimb.');
+          return '<tr>' +
+            '<td><strong>' + escHtml(p.name) + '</strong>' + (p.parentOrg ? '<br><span style="font-size:10px;color:var(--gray-400);">' + escHtml(p.parentOrg) + '</span>' : '') + '</td>' +
+            '<td style="font-size:11px;">' + escHtml((p.category || '').replace(/_/g, ' ')) + '</td>' +
+            '<td>' + why.map(w => '<span style="display:inline-block;padding:2px 6px;border-radius:8px;font-size:10px;font-weight:600;background:#d1fae5;color:#065f46;margin:1px;">' + w + '</span>').join(' ') + '</td>' +
+            '<td style="font-size:11px;color:var(--gray-600);max-width:250px;">' + escHtml(p.notes || '—') + '</td>' +
+            '<td>' + renderPayerTags(p.tags || []) + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div></div>' : ''}
+      `;
+      })()}
     </div>
 
     <!-- Documents Tab -->
