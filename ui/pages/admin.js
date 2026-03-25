@@ -207,6 +207,9 @@ async function renderOnboardingStub() {
   }
   let tokens = [];
   try { tokens = await store.getOnboardTokens(); } catch {}
+  const allProviders = await store.getAll('providers').catch(() => []);
+  const provMap = {};
+  (Array.isArray(allProviders) ? allProviders : []).forEach(p => { provMap[p.id] = p; });
 
   const baseUrl = location.origin + location.pathname;
 
@@ -254,7 +257,8 @@ async function renderOnboardingStub() {
             <tbody>
               ${tokens.map(t => {
                 const email = t.providerEmail || t.provider_email || '';
-                const name = t.providerName || t.provider_name || '';
+                const prov = provMap[t.providerId] || provMap[t.provider_id] || {};
+                const name = t.providerName || t.provider_name || ((prov.firstName || prov.first_name || '') + ' ' + (prov.lastName || prov.last_name || '')).trim() || '';
                 const usedAt = t.usedAt || t.used_at;
                 const expiresAt = t.expiresAt || t.expires_at;
                 const isUsed = !!usedAt;
