@@ -10635,7 +10635,7 @@ window._credentik = {
   PRESET_INSTITUTIONS, PRESET_DEGREES, PRESET_FIELDS_OF_STUDY,
   PRESET_BOARDS, PRESET_MALPRACTICE_CARRIERS, PRESET_COVERAGE_AMOUNTS,
   PRESET_EMPLOYERS, PRESET_POSITIONS, PRESET_CME_PROVIDERS, PRESET_CME_COURSES,
-  renderDocumentVersioning,
+  renderDocumentVersioning, getDocVersionBadge, getDocExpiryHtml, openSignatureModal,
 };
 
 // ─── Application Modal ───
