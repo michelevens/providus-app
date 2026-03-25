@@ -8582,7 +8582,7 @@ function handleNppesProxy(payload) {
       set('fac-npi', f.npi);
       set('fac-type', f.facilityType || f.type);
       set('fac-phone', f.phone);
-      set('fac-address', f.address);
+      set('fac-address', f.street || f.address);
       set('fac-city', f.city);
       set('fac-state', f.state);
       set('fac-zip', f.zip || f.zipCode);
@@ -8598,12 +8598,12 @@ function handleNppesProxy(payload) {
       npi: document.getElementById('fac-npi')?.value?.trim() || '',
       facilityType: document.getElementById('fac-type')?.value || '',
       phone: document.getElementById('fac-phone')?.value?.trim() || '',
-      address: document.getElementById('fac-address')?.value?.trim() || '',
+      street: document.getElementById('fac-address')?.value?.trim() || '',
       city: document.getElementById('fac-city')?.value?.trim() || '',
       state: document.getElementById('fac-state')?.value?.trim().toUpperCase() || '',
       zip: document.getElementById('fac-zip')?.value?.trim() || '',
       status: document.getElementById('fac-status')?.value || 'active',
-      organization_id: document.getElementById('fac-org')?.value || '',
+      organizationId: document.getElementById('fac-org')?.value || '',
     };
     const editId = document.getElementById('fac-edit-id')?.value;
     try {

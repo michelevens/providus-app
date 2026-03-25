@@ -108,12 +108,11 @@
     try {
       const result = await post('/facilities', {
         name: loc.name,
-        address: loc.address,
+        street: loc.address,
         city: loc.city,
         state: loc.state,
         zip: loc.zip,
         facility_type: loc.type,
-        organization_id: org.id,
         status: 'active',
       });
       log(`  CREATED: "${loc.name}" → ${loc.city}, ${loc.state} ${loc.zip} (id=${result.id})`);
