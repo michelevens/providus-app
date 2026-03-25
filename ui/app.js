@@ -4423,7 +4423,8 @@ async function renderSettings() {
 
     <!-- V2 Tabs -->
     <div class="stv2-tabs">
-      <button class="stv2-tab active" onclick="window.app.settingsTab(this, 'settings-import')">Import / Export</button>
+      <button class="stv2-tab active" onclick="window.app.settingsTab(this, 'settings-agency')">Agency Profile</button>
+      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-import')">Import / Export</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-org')">Organization</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-licenses')">Licenses (${licenses.length})</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-groups')">Groups</button>
@@ -4433,7 +4434,70 @@ async function renderSettings() {
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-danger')">Danger Zone</button>
     </div>
 
-    <div id="settings-import" class="stv2-section">
+    <!-- Agency Profile Tab -->
+    <div id="settings-agency" class="stv2-section">
+      <div class="card" style="border-radius:16px;">
+        <div class="card-header">
+          <h3>Agency Information</h3>
+          <button class="btn btn-primary btn-sm" onclick="window.app.saveAgencyProfile()" style="border-radius:10px;">Save Changes</button>
+        </div>
+        <div class="card-body">
+          <div style="display:flex;align-items:center;gap:20px;margin-bottom:24px;padding:20px;background:var(--gray-50);border-radius:12px;">
+            <div style="width:72px;height:72px;border-radius:16px;background:linear-gradient(135deg,${escAttr(agency.primaryColor || agency.primary_color || '#2563EB')},${escAttr(agency.accentColor || agency.accent_color || '#7C3AED')});display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:28px;flex-shrink:0;">
+              ${agency.logoUrl || agency.logo_url ? `<img src="${escAttr(agency.logoUrl || agency.logo_url)}" style="width:72px;height:72px;border-radius:16px;object-fit:cover;">` : (agency.name || 'A').charAt(0)}
+            </div>
+            <div style="flex:1;">
+              <div style="font-size:20px;font-weight:700;color:var(--gray-900);">${escHtml(agency.name || 'Your Agency')}</div>
+              <div style="font-size:13px;color:var(--gray-500);margin-top:2px;">Slug: <code>${escHtml(agencySlug)}</code></div>
+              <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">Plan: <span class="badge badge-approved">${escHtml(agency.planTier || agency.plan_tier || 'starter')}</span></div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="form-group"><label>Agency Name *</label><input type="text" class="form-control" id="agency-name" value="${escAttr(agency.name || '')}" placeholder="Your agency name"></div>
+            <div class="form-group"><label>Group NPI</label><input type="text" class="form-control" id="agency-npi" value="${escAttr(agency.npi || '')}" placeholder="10-digit NPI"></div>
+            <div class="form-group"><label>Tax ID (EIN)</label><input type="text" class="form-control" id="agency-tax-id" value="${escAttr(agency.taxId || agency.tax_id || '')}" placeholder="XX-XXXXXXX"></div>
+            <div class="form-group"><label>Taxonomy Code</label><input type="text" class="form-control" id="agency-taxonomy" value="${escAttr(agency.taxonomy || '')}" placeholder="e.g. 2084P0800X"></div>
+            <div class="form-group"><label>Phone</label><input type="tel" class="form-control" id="agency-phone" value="${escAttr(agency.phone || '')}" placeholder="(555) 555-5555"></div>
+            <div class="form-group"><label>Email</label><input type="email" class="form-control" id="agency-email" value="${escAttr(agency.email || '')}" placeholder="admin@youragency.com"></div>
+            <div class="form-group"><label>Website</label><input type="url" class="form-control" id="agency-website" value="${escAttr(agency.website || '')}" placeholder="https://youragency.com"></div>
+            <div class="form-group"><label>Logo URL</label><input type="url" class="form-control" id="agency-logo" value="${escAttr(agency.logoUrl || agency.logo_url || '')}" placeholder="https://..."></div>
+          </div>
+
+          <div style="margin-top:20px;">
+            <h4 style="font-size:14px;font-weight:700;color:var(--gray-700);margin-bottom:12px;">Practice Address</h4>
+            <div class="form-group"><label>Street Address</label><input type="text" class="form-control" id="agency-street" value="${escAttr(agency.addressStreet || agency.address_street || '')}" placeholder="123 Main St, Suite 100"></div>
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;">
+              <div class="form-group"><label>City</label><input type="text" class="form-control" id="agency-city" value="${escAttr(agency.addressCity || agency.address_city || '')}"></div>
+              <div class="form-group"><label>State</label><input type="text" class="form-control" id="agency-state" value="${escAttr(agency.addressState || agency.address_state || '')}" maxlength="2" placeholder="FL"></div>
+              <div class="form-group"><label>ZIP</label><input type="text" class="form-control" id="agency-zip" value="${escAttr(agency.addressZip || agency.address_zip || '')}" placeholder="34711"></div>
+            </div>
+          </div>
+
+          <div style="margin-top:20px;">
+            <h4 style="font-size:14px;font-weight:700;color:var(--gray-700);margin-bottom:12px;">Branding</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label>Primary Color</label>
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <input type="color" id="agency-primary-color" value="${escAttr(agency.primaryColor || agency.primary_color || '#2563EB')}" style="width:44px;height:36px;border:1px solid var(--gray-300);border-radius:8px;cursor:pointer;padding:2px;">
+                  <input type="text" class="form-control" value="${escAttr(agency.primaryColor || agency.primary_color || '#2563EB')}" style="flex:1;font-family:monospace;" oninput="document.getElementById('agency-primary-color').value=this.value" id="agency-primary-color-text">
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Accent Color</label>
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <input type="color" id="agency-accent-color" value="${escAttr(agency.accentColor || agency.accent_color || '#D4A855')}" style="width:44px;height:36px;border:1px solid var(--gray-300);border-radius:8px;cursor:pointer;padding:2px;">
+                  <input type="text" class="form-control" value="${escAttr(agency.accentColor || agency.accent_color || '#D4A855')}" style="flex:1;font-family:monospace;" oninput="document.getElementById('agency-accent-color').value=this.value" id="agency-accent-color-text">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-import" class="hidden stv2-section">
       <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Export Data</h3></div>
         <div class="card-body">
@@ -7343,12 +7407,40 @@ window.app = {
   settingsTab(el, tabId) {
     document.querySelectorAll('.tab, .stv2-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    ['settings-import', 'settings-org', 'settings-licenses', 'settings-groups', 'settings-caqh', 'settings-integrations', 'settings-security', 'settings-danger'].forEach(id => {
+    ['settings-agency', 'settings-import', 'settings-org', 'settings-licenses', 'settings-groups', 'settings-caqh', 'settings-integrations', 'settings-security', 'settings-danger'].forEach(id => {
       const section = document.getElementById(id);
       if (section) section.classList.toggle('hidden', id !== tabId);
     });
-    // Load 2FA status when security tab is opened
     if (tabId === 'settings-security') this.load2FAStatus();
+  },
+
+  async saveAgencyProfile() {
+    const data = {
+      name: document.getElementById('agency-name')?.value?.trim() || '',
+      npi: document.getElementById('agency-npi')?.value?.trim() || '',
+      tax_id: document.getElementById('agency-tax-id')?.value?.trim() || '',
+      taxonomy: document.getElementById('agency-taxonomy')?.value?.trim() || '',
+      phone: document.getElementById('agency-phone')?.value?.trim() || '',
+      email: document.getElementById('agency-email')?.value?.trim() || '',
+      website: document.getElementById('agency-website')?.value?.trim() || '',
+      logo_url: document.getElementById('agency-logo')?.value?.trim() || '',
+      address_street: document.getElementById('agency-street')?.value?.trim() || '',
+      address_city: document.getElementById('agency-city')?.value?.trim() || '',
+      address_state: document.getElementById('agency-state')?.value?.trim() || '',
+      address_zip: document.getElementById('agency-zip')?.value?.trim() || '',
+      primary_color: document.getElementById('agency-primary-color')?.value || '',
+      accent_color: document.getElementById('agency-accent-color')?.value || '',
+    };
+    if (!data.name) { showToast('Agency name is required'); return; }
+    try {
+      await store.updateAgency(data);
+      showToast('Agency profile updated successfully');
+      // Update sidebar name
+      const sidebarName = document.getElementById('sidebar-agency-name');
+      if (sidebarName) sidebarName.textContent = data.name;
+    } catch (e) {
+      showToast('Error: ' + (e.message || 'Failed to update agency profile'));
+    }
   },
 
   async load2FAStatus() {
