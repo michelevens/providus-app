@@ -1370,7 +1370,7 @@ async function renderDashboard() {
   const pipelinePct = Math.round((pipelineApproved / pipelineTotal) * 100);
 
   // Revenue
-  const totalRevenue = stats.estMonthlyRevenue || 0;
+  const totalRevenue = Number(stats.estMonthlyRevenue) || 0;
 
   // Compliance score — based on license health + doc completion
   const totalLicenses = licenses.length || 1;
@@ -2086,7 +2086,7 @@ async function renderApplications() {
   const onHold = apps.filter(a => a.status === 'on_hold' || a.status === 'withdrawn').length;
   const uniqueStates = new Set(apps.map(a => a.state).filter(Boolean)).size;
   const uniquePayers = new Set(apps.map(a => a.payerId || a.payerName).filter(Boolean)).size;
-  const totalRevenue = apps.reduce((sum, a) => sum + (a.estMonthlyRevenue || 0), 0);
+  const totalRevenue = apps.reduce((sum, a) => sum + (Number(a.estMonthlyRevenue) || 0), 0);
 
   // Build filter options
   const states = [...new Set(apps.map(a => a.state).filter(Boolean))].sort();
@@ -2371,7 +2371,7 @@ async function renderAppTable(prefetchedApps = null) {
           ${a.effectiveDate ? `<div style="color:var(--green);">Eff: ${formatDateDisplay(a.effectiveDate)}</div>` : ''}
           ${!a.submittedDate && !a.effectiveDate ? '—' : ''}
         </td>
-        <td style="font-weight:600;">$${(a.estMonthlyRevenue || 0).toLocaleString()}</td>
+        <td style="font-weight:600;">$${(Number(a.estMonthlyRevenue) || 0).toLocaleString()}</td>
         <td class="truncate text-sm" style="max-width:150px;" title="${escAttr(a.notes || '')}">${a.notes || '-'}</td>
         <td onclick="event.stopPropagation();">
           <div style="position:relative;" class="app-action-menu">
