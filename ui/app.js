@@ -14781,6 +14781,8 @@ async function renderFacilityDetailPage(facilityId) {
   const statusLabel = isActive ? 'Active' : (fac.status || 'Inactive');
   const facType = (fac.facilityType || fac.type || fac.facility_type || '').replace(/_/g, ' ');
   const fullAddr = [fac.street || fac.address, fac.city, fac.state, fac.zip].filter(Boolean).join(', ');
+  const isTelehealth = (fac.facilityType || fac.type || '').toLowerCase().includes('telehealth');
+  const hasPhysicalAddr = (fac.street || fac.address) && fac.city && fac.state && !isTelehealth;
 
   body.innerHTML = `
     <style>
@@ -14821,12 +14823,21 @@ async function renderFacilityDetailPage(facilityId) {
         </div>
 
         <!-- Map -->
-        ${fullAddr ? `<div class="fac-detail-section" style="margin-top:20px;padding:0;overflow:hidden;">
+        ${hasPhysicalAddr ? `<div style="margin-top:20px;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
           <iframe
-            width="100%" height="260" style="border:0;border-radius:16px;display:block;"
-            loading="lazy" referrerpolicy="no-referrer-when-downgrade"
-            src="https://maps.google.com/maps?q=${encodeURIComponent(fullAddr)}&output=embed&z=14">
+            width="100%" height="260" style="border:0;display:block;"
+            loading="lazy"
+            src="https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(fullAddr)}&layer=mapnik&marker=true"
+            onerror="this.parentElement.style.display='none'">
           </iframe>
+          <div style="padding:10px 16px;background:var(--surface-card,#fff);display:flex;align-items:center;gap:8px;">
+            <span style="font-size:13px;">&#x1f4cd; ${escHtml(fullAddr)}</span>
+            <a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddr)}" target="_blank" rel="noopener" style="margin-left:auto;font-size:11px;color:var(--brand-600);text-decoration:none;font-weight:600;">Open in Google Maps ↗</a>
+          </div>
+        </div>` : isTelehealth ? `<div style="margin-top:20px;border-radius:16px;background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(59,130,246,0.08));padding:24px;text-align:center;">
+          <div style="font-size:32px;margin-bottom:8px;">🖥️</div>
+          <div style="font-weight:600;color:var(--gray-700);">Virtual / Telehealth Location</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">This location provides services via telehealth — no physical office.</div>
         </div>` : ''}
 
         <!-- Location Info Card -->
