@@ -2238,17 +2238,13 @@ async function renderApplications() {
           <thead>
             <tr>
               <th style="width:30px;"><input type="checkbox" onchange="document.querySelectorAll('.app-checkbox').forEach(c=>c.checked=this.checked);window.app.onBulkCheckChange();"></th>
-              <th style="width:70px;">ID</th>
-              <th onclick="window.app.sortBy('wave')">Group ${sortArrow('wave')}</th>
+              <th onclick="window.app.sortBy('wave')" style="width:70px;">ID ${sortArrow('wave')}</th>
               <th onclick="window.app.sortBy('state')">State ${sortArrow('state')}</th>
-              <th onclick="window.app.sortBy('payerName')">Payer ${sortArrow('payerName')}</th>
-              <th onclick="window.app.sortBy('status')">Status ${sortArrow('status')}</th>
-              <th onclick="window.app.sortBy('type')">Type ${sortArrow('type')}</th>
-              <th onclick="window.app.sortBy('submittedDate')">Submitted ${sortArrow('submittedDate')}</th>
-              <th onclick="window.app.sortBy('effectiveDate')">Effective ${sortArrow('effectiveDate')}</th>
-              <th onclick="window.app.sortBy('estMonthlyRevenue')">Est. $/mo ${sortArrow('estMonthlyRevenue')}</th>
+              <th onclick="window.app.sortBy('payerName')">Payer / Status ${sortArrow('payerName')}</th>
+              <th onclick="window.app.sortBy('submittedDate')">Dates ${sortArrow('submittedDate')}</th>
+              <th onclick="window.app.sortBy('estMonthlyRevenue')">Revenue ${sortArrow('estMonthlyRevenue')}</th>
               <th>Notes</th>
-              <th>Actions</th>
+              <th style="width:60px;">Actions</th>
             </tr>
           </thead>
           <tbody id="app-table-body"></tbody>
@@ -2338,9 +2334,18 @@ async function renderAppTable(prefetchedApps = null) {
   // Inject V2 hover style if not already present
   if (!document.getElementById('appv2-style')) {
     const s = document.createElement('style'); s.id = 'appv2-style';
-    s.textContent = '.app-table-v2 tr:hover{background:var(--gray-50,#f9fafb);}';
+    s.textContent = `.app-table-v2 tr:hover{background:var(--gray-50,#f9fafb);}
+      #app-table-body tr:hover{background:var(--gray-50,#f9fafb);}
+      .app-action-menu div[style*="display:block"]{animation:fadeIn .12s ease;}
+      @keyframes fadeIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:translateY(0);}}`;
     document.head.appendChild(s);
     const tw = document.querySelector('.table-wrap'); if (tw) tw.style.borderRadius = '16px';
+    // Close action menus on click outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.app-action-menu')) {
+        document.querySelectorAll('.app-action-menu > div').forEach(d => d.style.display = 'none');
+      }
+    });
   }
   // Always render list view tbody
   if (tbody) {
@@ -2350,26 +2355,34 @@ async function renderAppTable(prefetchedApps = null) {
       const statusObj = APPLICATION_STATUSES.find(s => s.value === a.status) || APPLICATION_STATUSES[0];
       const typeLabel = a.type === 'group' ? 'Group' : a.type === 'both' ? 'Both' : 'Indiv';
 
-      return `<tr>
-        <td><input type="checkbox" class="app-checkbox" data-app-id="${a.id}" onchange="window.app.onBulkCheckChange()"></td>
-        <td><span style="font-family:monospace;font-size:11px;color:var(--brand-600);">${toHexId(a.id)}</span></td>
-        <td>${groupBadge(a.wave)}</td>
-        <td><strong>${getStateName(a.state)}</strong></td>
-        <td title="${a.payerContactName ? escAttr(a.payerContactName + (a.payerContactPhone ? ' | ' + a.payerContactPhone : '')) : ''}">${payerName}${a.payerContactName ? ' <span class="text-sm text-muted">&#128222;</span>' : ''}</td>
-        <td><span class="badge badge-${a.status}">${statusObj.label}</span></td>
-        <td class="text-sm">${typeLabel}</td>
-        <td class="text-sm">${formatDateDisplay(a.submittedDate)}</td>
-        <td class="text-sm">${formatDateDisplay(a.effectiveDate)}</td>
-        <td>$${(a.estMonthlyRevenue || 0).toLocaleString()}</td>
-        <td class="truncate" title="${escAttr(a.notes || '')}">${a.notes || '-'}</td>
+      return `<tr onclick="window.app.viewTimeline('${a.id}')" style="cursor:pointer;">
+        <td onclick="event.stopPropagation();"><input type="checkbox" class="app-checkbox" data-app-id="${a.id}" onchange="window.app.onBulkCheckChange()"></td>
         <td>
-          <div class="flex gap-2 action-btns">
-            <button class="btn btn-sm btn-primary" onclick="window.app.openLogEntry('${a.id}')" title="Log activity">Log</button>
-            <button class="btn btn-sm" onclick="window.app.viewTimeline('${a.id}')" title="View timeline">TL</button>
-            <button class="btn btn-sm" onclick="window.app.openDocChecklist('${a.id}')" title="Document checklist">Docs</button>
-            <button class="btn btn-sm" onclick="window.app.aiPredictTimeline('${a.id}')" title="AI Timeline Prediction">AI</button>
-            <button class="btn btn-sm" onclick="window.app.editApplication('${a.id}')">Edit</button>
-            <button class="btn btn-sm btn-danger" onclick="window.app.deleteApplication('${a.id}')">Del</button>
+          <span style="font-family:monospace;font-size:10px;color:var(--brand-600);">${toHexId(a.id)}</span>
+          <div>${groupBadge(a.wave)}</div>
+        </td>
+        <td><strong>${getStateName(a.state)}</strong></td>
+        <td>
+          <div style="font-weight:600;font-size:13px;">${payerName}</div>
+          <div style="margin-top:3px;"><span class="badge badge-${a.status}" style="font-size:10px;">${statusObj.label}</span> <span style="font-size:10px;color:var(--gray-400);">${typeLabel}</span></div>
+        </td>
+        <td class="text-sm">
+          ${a.submittedDate ? `<div>Sub: ${formatDateDisplay(a.submittedDate)}</div>` : ''}
+          ${a.effectiveDate ? `<div style="color:var(--green);">Eff: ${formatDateDisplay(a.effectiveDate)}</div>` : ''}
+          ${!a.submittedDate && !a.effectiveDate ? '—' : ''}
+        </td>
+        <td style="font-weight:600;">$${(a.estMonthlyRevenue || 0).toLocaleString()}</td>
+        <td class="truncate text-sm" style="max-width:150px;" title="${escAttr(a.notes || '')}">${a.notes || '-'}</td>
+        <td onclick="event.stopPropagation();">
+          <div style="position:relative;" class="app-action-menu">
+            <button class="btn btn-sm" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';" title="Actions" style="padding:4px 8px;">&#8943;</button>
+            <div style="display:none;position:absolute;right:0;top:100%;z-index:50;background:#fff;border:1px solid var(--gray-200);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:4px;min-width:130px;">
+              <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.openLogEntry('${a.id}')">Log Activity</button>
+              <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.viewTimeline('${a.id}')">Timeline</button>
+              <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.openDocChecklist('${a.id}')">Documents</button>
+              <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.editApplication('${a.id}')">Edit</button>
+              <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--red);" onclick="window.app.deleteApplication('${a.id}')">Delete</button>
+            </div>
           </div>
         </td>
       </tr>`;
