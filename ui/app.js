@@ -11850,8 +11850,8 @@ async function renderReimbursement() {
     const payer = getPayerById(a.payerId);
     const payerName = payer ? payer.name : (a.payerName || 'Unknown');
     if (!rateMatrix[payerName]) rateMatrix[payerName] = {};
-    if (a.estMonthlyRevenue > 0) {
-      rateMatrix[payerName][a.state] = a.estMonthlyRevenue;
+    if (Number(a.estMonthlyRevenue) > 0) {
+      rateMatrix[payerName][a.state] = Number(a.estMonthlyRevenue);
     }
   });
 
@@ -11864,7 +11864,7 @@ async function renderReimbursement() {
     if (!payer || !plan.state || !plan.reimbursementRate) return;
     if (!rateMatrix[payer.name]) rateMatrix[payer.name] = {};
     if (!rateMatrix[payer.name][plan.state]) {
-      rateMatrix[payer.name][plan.state] = plan.reimbursementRate;
+      rateMatrix[payer.name][plan.state] = Number(plan.reimbursementRate);
     }
   });
 

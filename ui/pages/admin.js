@@ -14,7 +14,8 @@ async function renderAuditTrail() {
   }
 
   let entries = [];
-  try { entries = await store.getAuditLog(); } catch {}
+  try { const result = await store.getAuditLog(); entries = Array.isArray(result) ? result : (result?.data || result?.entries || []); } catch {}
+  if (!Array.isArray(entries)) entries = [];
 
   // Filters
   const collections = [...new Set(entries.map(e => e.collection).filter(Boolean))].sort();
