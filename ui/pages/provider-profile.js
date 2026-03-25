@@ -1151,14 +1151,18 @@ async function renderProviderProfilePage(providerId) {
           ${Array.isArray(references) && references.length > 0 ? `<table>
             <thead><tr><th>Name</th><th>Title / Position</th><th>Organization</th><th>Phone</th><th>Email</th><th>Relationship</th></tr></thead>
             <tbody>
-              ${references.map(r => `<tr>
+              ${references.map(r => {
+                console.log('Reference data:', JSON.stringify(r));
+                const refPhone = (r.phone || r.phoneNumber || r.phone_number || '').replace(/\D/g, '');
+                const fmtPhone = refPhone.length === 10 ? `(${refPhone.slice(0,3)}) ${refPhone.slice(3,6)}-${refPhone.slice(6)}` : (r.phone || r.phoneNumber || r.phone_number || '—');
+                return `<tr>
                 <td><strong>${escHtml(r.referenceName || r.reference_name || r.name || ((r.firstName || r.first_name || '') + ' ' + (r.lastName || r.last_name || '')).trim() || '—')}</strong></td>
-                <td>${escHtml(r.title || r.position || r.jobTitle || r.job_title || '—')}</td>
-                <td>${escHtml(r.organization || r.company || r.employer || '—')}</td>
-                <td>${escHtml(r.phone || r.phoneNumber || r.phone_number || '—')}</td>
+                <td>${escHtml(r.title || r.position || r.jobTitle || r.job_title || r.ref_title || '—')}</td>
+                <td>${escHtml(r.organization || r.company || r.employer || r.org || '—')}</td>
+                <td>${escHtml(fmtPhone)}</td>
                 <td>${escHtml(r.email || r.emailAddress || r.email_address || '—')}</td>
                 <td class="text-sm text-muted">${escHtml(r.relationship || r.referenceType || r.reference_type || '—')}</td>
-              </tr>`).join('')}
+              </tr>`; }).join('')}
             </tbody>
           </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No references on file.</div>'}
         </div>
