@@ -13932,10 +13932,10 @@ async function renderFacilitiesPage() {
     </div>
 
     <!-- Facility Modal -->
-    <div class="modal" id="facility-modal">
-      <div class="modal-content" style="max-width:560px;">
+    <div class="modal-overlay" id="facility-modal">
+      <div class="modal" style="max-width:560px;">
         <div class="modal-header">
-          <h3 id="facility-modal-title">Add Facility</h3>
+          <h3 id="facility-modal-title">Add Practice Location</h3>
           <button class="modal-close" onclick="document.getElementById('facility-modal').classList.remove('active')">&times;</button>
         </div>
         <div class="modal-body" id="facility-modal-body">
@@ -13986,16 +13986,16 @@ async function renderFacilitiesPage() {
         </div>
         <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
           <button class="btn" onclick="document.getElementById('facility-modal').classList.remove('active')">Cancel</button>
-          <button class="btn btn-primary" onclick="window.app.saveFacility()">Save Facility</button>
+          <button class="btn btn-primary" onclick="window.app.saveFacility()">Save Location</button>
         </div>
       </div>
     </div>
 
     <!-- NPI Facility Modal -->
-    <div class="modal" id="npi-facility-modal">
-      <div class="modal-content" style="max-width:420px;">
+    <div class="modal-overlay" id="npi-facility-modal">
+      <div class="modal" style="max-width:420px;">
         <div class="modal-header">
-          <h3>Add Facility from NPI</h3>
+          <h3>Add Location from NPI</h3>
           <button class="modal-close" onclick="document.getElementById('npi-facility-modal').classList.remove('active')">&times;</button>
         </div>
         <div class="modal-body">
