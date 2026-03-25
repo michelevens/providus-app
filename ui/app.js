@@ -475,7 +475,8 @@ export async function initApp() {
   initScopeSelector();
 
   // Role-based sidebar visibility
-  const userRole = auth.getUser()?.role || 'provider';
+  const _user = auth.getUser();
+  const userRole = _user?.uiRole || _user?.ui_role || _user?.role || 'provider';
   const roleLevel = { superadmin: 5, owner: 4, agency: 3, admin: 3, staff: 2, organization: 2, provider: 1 };
   const userLevel = roleLevel[userRole] || 1;
   document.querySelectorAll('.nav-item[data-min-role]').forEach(el => {

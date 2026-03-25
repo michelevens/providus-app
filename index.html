@@ -1792,9 +1792,9 @@
         if (headerAvatar) headerAvatar.textContent = initials;
         if (headerName) headerName.textContent = firstName;
 
-        // Role-based sidebar visibility
-        const role = user.role || 'provider';
-        const ROLE_LEVELS = { superadmin: 5, owner: 4, agency: 3, organization: 2, provider: 1 };
+        // Role-based sidebar visibility (ui_role overrides role for staff)
+        const role = user.ui_role || user.uiRole || user.role || 'provider';
+        const ROLE_LEVELS = { superadmin: 5, owner: 4, agency: 3, staff: 2, organization: 2, provider: 1 };
         const roleLevel = ROLE_LEVELS[role] || 1;
 
         // Hide nav items based on role
