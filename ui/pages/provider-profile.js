@@ -112,6 +112,33 @@ async function renderProviderDashboard(user) {
       </div>
     </div>
 
+    <!-- Onboarding Checklist (shown if provider is newly onboarded) -->
+    ${provider?.onboardingStatus !== 'completed' || (apps.length === 0 && documents.length === 0) ? `
+    <div class="card pdv2-card" style="margin-bottom:16px;border-left:3px solid var(--brand-600);">
+      <div class="card-header"><h3>Onboarding Checklist</h3><span style="font-size:12px;color:var(--gray-400);">Complete these steps to get fully credentialed</span></div>
+      <div class="card-body" style="padding:8px 16px;">
+        ${[
+          { done: !!provider?.npi, label: 'NPI verified', desc: 'National Provider Identifier on file' },
+          { done: activeLicenses.length > 0, label: 'State license(s) added', desc: `${activeLicenses.length} active license(s)` },
+          { done: documents.length > 0, label: 'Documents uploaded', desc: `${documents.length} document(s) on file` },
+          { done: apps.length > 0, label: 'Applications created', desc: `${apps.length} application(s) in pipeline` },
+          { done: approvedApps.length > 0, label: 'First payer approved', desc: approvedApps.length > 0 ? `${approvedApps.length} approved` : 'Pending payer approval' },
+        ].map((item, i) => `
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 0;${i > 0 ? 'border-top:1px solid var(--gray-100);' : ''}">
+            <div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;${item.done ? 'background:#dcfce7;color:#16a34a;' : 'background:var(--gray-100);color:var(--gray-400);'}">${item.done ? '&#10003;' : (i + 1)}</div>
+            <div style="flex:1;">
+              <div style="font-size:14px;font-weight:600;${item.done ? 'color:var(--gray-700);' : 'color:var(--text-primary);'}">${item.label}</div>
+              <div style="font-size:11px;color:var(--gray-500);">${item.desc}</div>
+            </div>
+            ${item.done ? '<span style="font-size:11px;font-weight:600;color:#16a34a;padding:2px 8px;border-radius:10px;background:#dcfce7;">Done</span>' : '<span style="font-size:11px;font-weight:600;color:var(--gray-400);padding:2px 8px;border-radius:10px;background:var(--gray-100);">Pending</span>'}
+          </div>
+        `).join('')}
+        <div style="margin-top:12px;padding:10px;background:var(--brand-50,#eff6ff);border-radius:8px;font-size:12px;color:var(--brand-600);">
+          <strong>${[!!provider?.npi, activeLicenses.length > 0, documents.length > 0, apps.length > 0, approvedApps.length > 0].filter(Boolean).length}/5 steps complete</strong> — ${approvedApps.length > 0 ? 'You\'re fully onboarded!' : 'Your credentialing team is working on it.'}
+        </div>
+      </div>
+    </div>` : ''}
+
     <!-- Stats -->
     <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:16px;">
       <div class="stat-card pdv2-stat"><div class="label">Active Licenses</div><div class="value" style="color:var(--green);">${activeLicenses.length}</div></div>
