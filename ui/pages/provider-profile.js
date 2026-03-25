@@ -554,18 +554,19 @@ async function renderProviderProfilePage(providerId) {
   let cme = [];
   let references = [];
 
-  try { provider = await store.getOne('providers', providerId); } catch (e) { console.error('Provider error:', e); }
-  try { profile = await store.getProviderProfile(providerId); } catch (e) { console.error('Profile error:', e); }
-  try { education = await store.getProviderEducation(providerId); } catch (e) {}
-  try { boards = await store.getProviderBoards(providerId); } catch (e) {}
-  try { malpractice = await store.getProviderMalpractice(providerId); } catch (e) {}
-  try { workHistory = await store.getProviderWorkHistory(providerId); } catch (e) {}
-  try { cme = await store.getProviderCme(providerId); } catch (e) {}
-  try { references = await store.getProviderReferences(providerId); } catch (e) {}
   try {
-    const allLic = await store.getAll('licenses');
-    providerLicenses = allLic.filter(l => (l.providerId || l.provider_id) === providerId);
-  } catch (e) {}
+    [provider, profile, education, boards, malpractice, workHistory, cme, references, providerLicenses] = await Promise.all([
+      store.getOne('providers', providerId).catch(e => { console.error('Provider error:', e); return {}; }),
+      store.getProviderProfile(providerId).catch(e => { console.error('Profile error:', e); return {}; }),
+      store.getProviderEducation(providerId).catch(() => []),
+      store.getProviderBoards(providerId).catch(() => []),
+      store.getProviderMalpractice(providerId).catch(() => []),
+      store.getProviderWorkHistory(providerId).catch(() => []),
+      store.getProviderCme(providerId).catch(() => []),
+      store.getProviderReferences(providerId).catch(() => []),
+      store.getAll('licenses').then(all => all.filter(l => (l.providerId || l.provider_id) === providerId)).catch(() => []),
+    ]);
+  } catch (e) { console.error('Provider profile load error:', e); }
 
   if (!Array.isArray(education)) education = [];
   if (!Array.isArray(boards)) boards = [];
