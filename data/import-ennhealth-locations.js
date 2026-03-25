@@ -7,6 +7,14 @@
   'use strict';
   const log = (msg) => console.log(`%c[LOCATIONS] ${msg}`, 'color:#0891b2;font-weight:bold;');
 
+  const API = 'https://api.credentik.com/api';
+  const token = localStorage.getItem('credentik_token');
+  if (!token) { log('ERROR: Not logged in — no token found'); return; }
+
+  const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' };
+  const get = async (path) => { const r = await fetch(`${API}${path}`, { headers }); const j = await r.json(); return j.data || j; };
+  const post = async (path, body) => { const r = await fetch(`${API}${path}`, { method: 'POST', headers, body: JSON.stringify(body) }); const j = await r.json(); return j.data || j; };
+
   const locations = [
     {
       name: 'EnnHealth Phoenix (Virtual)',
@@ -77,26 +85,28 @@
   ];
 
   // Get org ID
-  const orgs = await store.getAll('organizations');
-  const org = orgs.find(o => o.name?.toLowerCase().includes('ennhealth')) || orgs[0];
+  const orgs = await get('/organizations');
+  const orgList = Array.isArray(orgs) ? orgs : [];
+  const org = orgList.find(o => o.name?.toLowerCase().includes('ennhealth')) || orgList[0];
   if (!org) { log('ERROR: No organization found'); return; }
   log(`Organization: ${org.name} (id=${org.id})`);
 
   // Check existing facilities
-  const existing = await store.getFacilities();
-  const existingNames = new Set(existing.map(f => f.name?.toLowerCase()));
-  log(`Existing locations: ${existing.length}`);
+  const existing = await get('/facilities');
+  const existingList = Array.isArray(existing) ? existing : [];
+  const existingNames = new Set(existingList.map(f => f.name?.toLowerCase()));
+  log(`Existing locations: ${existingList.length}`);
 
   let created = 0, skipped = 0;
 
   for (const loc of locations) {
     if (existingNames.has(loc.name.toLowerCase())) {
-      log(`  ⊘ SKIP: "${loc.name}" already exists`);
+      log(`  SKIP: "${loc.name}" already exists`);
       skipped++;
       continue;
     }
     try {
-      const result = await store.createFacility({
+      const result = await post('/facilities', {
         name: loc.name,
         address: loc.address,
         city: loc.city,
@@ -106,15 +116,15 @@
         organization_id: org.id,
         status: 'active',
       });
-      log(`  ✚ CREATED: "${loc.name}" → ${loc.city}, ${loc.state} ${loc.zip} (id=${result.id})`);
+      log(`  CREATED: "${loc.name}" → ${loc.city}, ${loc.state} ${loc.zip} (id=${result.id})`);
       created++;
     } catch (e) {
-      console.error(`  ✗ FAILED: "${loc.name}" — ${e.message}`);
+      console.error(`  FAILED: "${loc.name}" — ${e.message}`);
     }
   }
 
   log('═══════════════════════════════════════');
   log(`DONE — Created: ${created}, Skipped: ${skipped}`);
-  log(`Total locations: ${existing.length + created}`);
+  log(`Total locations: ${existingList.length + created}`);
   log('═══════════════════════════════════════');
 })();
