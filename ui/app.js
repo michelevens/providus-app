@@ -9931,6 +9931,7 @@ function handleNppesProxy(payload) {
     if (!firstName || !lastName) { showToast('First and last name are required'); return; }
     try {
       await store.createProviderReference(providerId, {
+        referenceName: `${firstName} ${lastName}`,
         firstName,
         lastName,
         title: document.getElementById('ref-title')?.value?.trim() || '',
