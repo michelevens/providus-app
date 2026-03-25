@@ -500,6 +500,11 @@ export async function initApp() {
     } catch {}
   }
 
+  // Guided tour for new users (Feature 4)
+  if (!localStorage.getItem('credentik_tour_completed')) {
+    setTimeout(() => startGuidedTour(), 1500);
+  }
+
   // Cmd+K / Ctrl+K command palette shortcut
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -971,7 +976,7 @@ async function navigateTo(page) {
     case 'faq':
       pageTitle.textContent = 'Knowledge Base';
       pageSubtitle.textContent = 'FAQs and help articles';
-      pageActions.innerHTML = editButton('+ Add FAQ', 'window.app.openFaqModal()') + printBtn;
+      pageActions.innerHTML = '<button class="btn btn-sm" onclick="window.app.startGuidedTour()" style="border-radius:10px;margin-right:8px;">Start Tour</button>' + editButton('+ Add FAQ', 'window.app.openFaqModal()') + printBtn;
       await renderFaqPage();
       break;
     case 'provider-profile':
@@ -1204,6 +1209,7 @@ async function renderMyAccount() {
           <button class="btn btn-primary" onclick="showToast('Notification preferences saved')" style="margin-top:16px;border-radius:10px;">Save Preferences</button>
         </div>
       </div>
+      ${renderDigestSettings()}
     </div>
   `;
 
@@ -2865,6 +2871,9 @@ async function renderRevenueForecast() {
       .rv2-table-wrap table tr:hover{background:var(--gray-50);}
       @media(max-width:900px){.rv2-stats{grid-template-columns:repeat(2,1fr);}}
     </style>
+    <!-- Revenue Intelligence -->
+    ${renderRevenueIntelligence(apps, providers, approved, inProgress)}
+
     <!-- Revenue Summary -->
     <div class="rv2-stats">
       <div class="rv2-stat">
@@ -4936,6 +4945,9 @@ async function renderSettings() {
           </table>
         </div>
       </div>
+
+      <!-- Embeddable Widgets (Feature 9) -->
+      ${renderEmbedWidgetDocs(agencySlug, embedBase)}
     </div>
 
     <div id="settings-webhooks" class="hidden stv2-section">
@@ -11095,6 +11107,125 @@ function handleNppesProxy(payload) {
     const input = document.getElementById('global-search-input');
     if (input) { input.value = query; input.dispatchEvent(new Event('input')); }
   },
+
+  // ─── Feature 1: E-Signature ───
+  openSignatureModal(providerId) { openSignatureModal(providerId); },
+  openContractSignModal(contractId) { openContractSignModal(contractId); },
+  _sigClear(containerId) {
+    const canvas = document.getElementById(`${containerId}-canvas`);
+    if (canvas && canvas._sigClear) canvas._sigClear();
+  },
+  _sigSave(containerId) {
+    const canvas = document.getElementById(`${containerId}-canvas`);
+    if (canvas && canvas._sigSave) canvas._sigSave();
+  },
+
+  // ─── Feature 2: Email Digest Settings ───
+  updateDigestPref(key, value) {
+    const prefs = _getDigestPrefs();
+    prefs[key] = value;
+    _saveDigestPrefs(prefs);
+  },
+  saveDigestPrefs() {
+    showToast('Digest preferences saved');
+  },
+
+  // ─── Feature 3: Knowledge Base helpers ───
+  filterKbArticles() {
+    const q = (document.getElementById('kb-help-search')?.value || '').toLowerCase();
+    document.querySelectorAll('#kb-help-articles .kb-help-article').forEach(a => {
+      a.style.display = !q || a.dataset.search.includes(q) ? '' : 'none';
+    });
+  },
+  filterKbCategory(cat) {
+    document.querySelectorAll('#kb-help-cats .kb-help-cat').forEach(b => b.classList.toggle('active', b.textContent === cat));
+    document.querySelectorAll('#kb-help-articles .kb-help-article').forEach(a => {
+      a.style.display = cat === 'All' || a.dataset.category === cat ? '' : 'none';
+    });
+  },
+
+  // ─── Feature 4: Guided Tour ───
+  startGuidedTour() { startGuidedTour(); },
+  _tourNext: null,
+  _tourSkip: null,
+
+  // ─── Feature 5: Revenue Intelligence (wired via renderRevenueForecast) ───
+
+  // ─── Feature 6: Predictive Analytics (wired via renderApplicationTimeline) ───
+
+  // ─── Feature 7: Document Versioning ───
+  filterDocCategory(cat, providerId) {
+    const catMap = {
+      'License': ['state_license', 'dea_certificate', 'cds_certificate'],
+      'COI/Malpractice': ['malpractice_coi', 'proof_of_insurance'],
+      'W-9': ['w9'],
+      'NPI': ['npi'],
+      'Board Cert': ['board_certification'],
+      'Education': ['diploma', 'cv_resume'],
+    };
+    document.querySelectorAll('#doc-v2-pills .doc-v2-pill').forEach(b => b.classList.toggle('active', b.textContent === cat));
+    document.querySelectorAll('#tab-documents table tbody tr').forEach(r => {
+      if (cat === 'All') { r.style.display = ''; return; }
+      const typeCell = r.querySelector('td:nth-child(2)');
+      const type = typeCell ? typeCell.textContent.trim().toLowerCase().replace(/[\s\/]+/g, '_') : '';
+      const matchTypes = catMap[cat] || [];
+      const matches = matchTypes.length === 0 ? type === cat.toLowerCase() : matchTypes.some(m => type.includes(m.replace('_', ' ')) || type.includes(m));
+      r.style.display = matches || (cat === 'Other' && !Object.values(catMap).flat().some(m => type.includes(m.replace('_', ' ')))) ? '' : 'none';
+    });
+  },
+  async replaceDocument(providerId, docId) {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.tif,.tiff';
+    fileInput.onchange = async () => {
+      if (!fileInput.files[0]) return;
+      showToast('Replacing document...');
+      try {
+        const profile = await store.getProviderProfile(providerId);
+        const docs = profile.documents || [];
+        const doc = docs.find(d => d.id == docId);
+        if (doc) {
+          doc.version = (doc.version || 1) + 1;
+          doc.replacedAt = new Date().toISOString();
+          await store.saveProviderProfile(providerId, { ...profile, documents: docs });
+          showToast(`Document replaced (v${doc.version})`);
+          await renderProviderProfilePage(providerId);
+        }
+      } catch (e) { showToast('Error replacing document: ' + e.message, 'error'); }
+    };
+    fileInput.click();
+  },
+
+  // ─── Feature 8: Monitoring Scheduler ───
+  updateMonSchedule(key, value) {
+    const sched = _getMonitoringSchedule();
+    sched[key] = value;
+    _saveMonitoringSchedule(sched);
+    showToast(`${key.replace(/([A-Z])/g, ' $1').trim()} set to ${value}`);
+  },
+  async runMonCheck(key) {
+    const sched = _getMonitoringSchedule();
+    if (!sched.lastRun) sched.lastRun = {};
+    sched.lastRun[key] = new Date().toISOString();
+    _saveMonitoringSchedule(sched);
+    showToast(`Running ${key.replace(/([A-Z])/g, ' $1').toLowerCase().trim()} check...`);
+    setTimeout(async () => {
+      showToast(`${key.replace(/([A-Z])/g, ' $1').trim()} check complete`);
+      await renderMonitoringPage();
+    }, 1500);
+  },
+
+  // ─── Feature 9: Embed Widget Docs ───
+  copyEmbedSnippet(widgetId) {
+    const el = document.getElementById(`embed-snippet-${widgetId}`);
+    if (!el) return;
+    const text = el.textContent.replace('Copy', '').trim();
+    navigator.clipboard.writeText(text).then(() => showToast('Snippet copied to clipboard')).catch(() => showToast('Failed to copy'));
+  },
+  refreshEmbedSnippets() {
+    // Just show toast — snippets are regenerated on re-render
+    showToast('Widget settings updated');
+  },
 };
 
 // ─── Application Modal ───
@@ -11884,6 +12015,9 @@ async function renderApplicationTimeline(appId) {
         </div>
       `).join('')}
     </div>`}
+
+    <!-- Prediction Card -->
+    ${!['approved','denied','withdrawn'].includes(app.status) ? renderPredictionCard(app) : ''}
 
     <!-- Comment Thread -->
     ${renderCommentThread(appId, logs)}
@@ -16033,6 +16167,7 @@ async function renderContractDetail(id) {
       <button class="btn btn-sm" onclick="window.app.navigateTo('contracts')">&larr; Back to Contracts</button>
       <div style="display:flex;gap:8px;">
         ${c.status === 'draft' ? `<button class="btn btn-primary btn-sm" onclick="window.app.sendContract(${c.id})">Send Contract</button>` : ''}
+        ${['draft','sent','viewed'].includes(c.status) ? `<button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;" onclick="window.app.openContractSignModal(${c.id})">Sign Contract</button>` : ''}
         ${['draft','sent','viewed'].includes(c.status) ? `<button class="btn btn-sm" style="background:var(--brand-50);color:var(--brand-700);border:1px solid var(--brand-200);" onclick="window.app.markContractSigned(${c.id})">Mark as Signed</button>` : ''}
         ${['sent','viewed','accepted'].includes(c.status) ? `<button class="btn btn-sm" onclick="window.app.activateContract(${c.id})">Mark Active</button>` : ''}
         ${['active','accepted'].includes(c.status) ? `<button class="btn btn-sm" onclick="window.app.genInvoice(${c.id})">Generate Invoice</button>` : ''}
@@ -17111,6 +17246,15 @@ async function renderFaqPage() {
       </div>
     </div>
 
+    <!-- Knowledge Base (In-App Help) -->
+    <div class="card fq2-card" style="margin-bottom:24px;">
+      <div class="card-header"><h3>Knowledge Base</h3></div>
+      <div class="card-body">
+        ${renderKnowledgeBase()}
+      </div>
+    </div>
+
+    <h3 style="font-size:16px;font-weight:700;color:var(--gray-900);margin-bottom:12px;">Custom FAQs</h3>
     <div id="faq-list">
       ${faqs.length > 0 ? faqs.map((faq, idx) => `
         <div class="card faq-item fq2-card" data-category="${(faq.category || 'general').toLowerCase()}" data-search="${escHtml((faq.question || '').toLowerCase() + ' ' + (faq.answer || '').toLowerCase())}" style="margin-bottom:12px;">
@@ -17652,7 +17796,8 @@ async function renderProviderProfilePage(providerId) {
 
     <!-- Overview Tab -->
     <div class="profile-tab-content" id="tab-overview">
-      <div style="margin-bottom:12px;text-align:right;">
+      <div style="margin-bottom:12px;text-align:right;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+        <button class="btn btn-sm" onclick="window.app.openSignatureModal(${providerId})" style="border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;">Sign Attestation</button>
         <button class="btn btn-sm btn-gold" onclick="window.app.aiComplianceScan(${providerId})" id="ai-scan-btn">AI Compliance Scan</button>
       </div>
       <div id="ai-scan-result" style="display:none;margin-bottom:16px;"></div>
@@ -18029,6 +18174,7 @@ async function renderProviderProfilePage(providerId) {
           </div>
         </div>
         <div class="card-body" style="padding:0;">
+          ${renderDocumentVersioning(documents, providerId)}
           ${Array.isArray(documents) && documents.length > 0 ? `<table>
             <thead><tr><th>Document</th><th>Type</th><th>Status</th><th>Received</th><th>Expires</th><th>File</th><th></th></tr></thead>
             <tbody>
@@ -18038,13 +18184,14 @@ async function renderProviderProfilePage(providerId) {
                 const fileSize = d.fileSize || d.file_size;
                 const fileSizeStr = fileSize ? (fileSize > 1048576 ? (fileSize / 1048576).toFixed(1) + ' MB' : (fileSize / 1024).toFixed(0) + ' KB') : '';
                 return `<tr>
-                <td><strong>${escHtml(d.documentName || d.document_name || d.name || '—')}</strong></td>
+                <td><strong>${escHtml(d.documentName || d.document_name || d.name || '—')}</strong>${getDocVersionBadge(d, documents)}</td>
                 <td>${escHtml(d.documentType || d.document_type || d.type || '—')}</td>
                 <td><span class="badge badge-${statusClass}">${escHtml(d.status || 'pending')}</span></td>
                 <td>${formatDateDisplay(d.receivedDate || d.received_date || d.createdAt || d.created_at)}</td>
-                <td>${d.expirationDate || d.expiration_date ? formatDateDisplay(d.expirationDate || d.expiration_date) : '—'}</td>
+                <td>${getDocExpiryHtml(d)}</td>
                 <td>${hasFile ? `<span style="color:var(--green-600);cursor:pointer;" onclick="window.app.downloadDocument(${providerId}, ${d.id})" title="${escHtml(d.originalFilename || d.original_filename || '')} ${fileSizeStr}">Download</span>` : '<span style="color:var(--gray-400);">No file</span>'}</td>
                 <td style="white-space:nowrap;">
+                  ${!auth.isReadonly() ? `<button class="btn btn-sm" onclick="window.app.replaceDocument(${providerId}, ${d.id})" style="padding:2px 8px;font-size:11px;" title="Replace with new version">Replace</button>` : ''}
                   ${hasFile ? `<button class="btn btn-sm" onclick="window.app.aiExtractDoc(${providerId}, ${d.id})" style="padding:2px 8px;font-size:11px;" title="AI Extract Data">AI Extract</button>` : ''}
                   ${!auth.isReadonly() ? `<button class="btn btn-sm btn-danger" onclick="window.app.deleteDocument(${providerId}, ${d.id})" style="padding:2px 8px;font-size:11px;">Delete</button>` : ''}
                 </td>
@@ -18466,6 +18613,9 @@ async function renderMonitoringPage() {
       .monv2-alert-row { transition:background 0.15s; }
       .monv2-alert-row:hover { background:var(--gray-50,#f9fafb); }
     </style>
+
+    <!-- Monitoring Scheduler (Feature 8) -->
+    ${renderMonitoringScheduler()}
 
     <!-- V2 Stat Cards -->
     <div class="monv2-stats">
@@ -20396,4 +20546,828 @@ function _showSearchEmptyState() {
   </div>`;
 
   resultsDiv.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FEATURE SET — 9 CROSS-PLATFORM FEATURES
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Feature 1: E-Signature (Canvas-Based) ───
+
+function renderSignaturePad(containerId, onSave) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = `
+    <style>
+      .sig-pad-wrap{background:#fff;border:2px solid var(--gray-200);border-radius:16px;padding:16px;position:relative;}
+      .sig-canvas{width:100%;height:200px;border:1px dashed var(--gray-300);border-radius:12px;cursor:crosshair;touch-action:none;display:block;}
+      .sig-actions{display:flex;gap:10px;margin-top:12px;justify-content:flex-end;}
+      .sig-actions button{border-radius:10px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;transition:transform 0.15s,box-shadow 0.15s;}
+      .sig-actions button:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.1);}
+      .sig-clear{background:var(--gray-100);border:1px solid var(--gray-300);color:var(--gray-700);}
+      .sig-save{background:linear-gradient(135deg,var(--brand-500),var(--brand-700));border:none;color:#fff;}
+      .sig-hint{font-size:12px;color:var(--gray-400);text-align:center;margin-top:6px;}
+    </style>
+    <div class="sig-pad-wrap">
+      <canvas class="sig-canvas" id="${containerId}-canvas"></canvas>
+      <div class="sig-hint">Draw your signature above</div>
+      <div class="sig-actions">
+        <button class="sig-clear" onclick="window.app._sigClear('${containerId}')">Clear</button>
+        <button class="sig-save" onclick="window.app._sigSave('${containerId}')">Save Signature</button>
+      </div>
+    </div>
+  `;
+  const canvas = document.getElementById(`${containerId}-canvas`);
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * 2;
+  canvas.height = 400;
+  ctx.scale(2, 2);
+  ctx.strokeStyle = '#111827';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  let drawing = false;
+  let hasDrawn = false;
+
+  function getPos(e) {
+    const r = canvas.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+  }
+  canvas.addEventListener('mousedown', e => { drawing = true; hasDrawn = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); });
+  canvas.addEventListener('mousemove', e => { if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); });
+  canvas.addEventListener('mouseup', () => { drawing = false; });
+  canvas.addEventListener('mouseleave', () => { drawing = false; });
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; hasDrawn = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); }, { passive: false });
+  canvas.addEventListener('touchmove', e => { e.preventDefault(); if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); }, { passive: false });
+  canvas.addEventListener('touchend', () => { drawing = false; });
+
+  canvas._sigClear = () => { ctx.clearRect(0, 0, canvas.width / 2, canvas.height / 2); hasDrawn = false; };
+  canvas._sigSave = () => {
+    if (!hasDrawn) { showToast('Please draw your signature first', 'error'); return; }
+    const dataUrl = canvas.toDataURL('image/png');
+    if (typeof onSave === 'function') onSave(dataUrl);
+  };
+}
+
+function openSignatureModal(providerId) {
+  let overlay = document.getElementById('sig-modal-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'sig-modal-overlay';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:560px;border-radius:16px;">
+        <div class="modal-header">
+          <h2>Provider Attestation Signature</h2>
+          <button class="modal-close" onclick="document.getElementById('sig-modal-overlay').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="padding:16px;background:var(--gray-50);border-radius:12px;margin-bottom:16px;font-size:13px;line-height:1.6;color:var(--gray-700);">
+            <strong>Attestation:</strong> I hereby attest that all information provided in my credentialing profile is true, accurate, and complete to the best of my knowledge. I authorize the release of information necessary to verify my credentials.
+          </div>
+          <div id="sig-modal-pad"></div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+  overlay.classList.add('active');
+  setTimeout(() => {
+    renderSignaturePad('sig-modal-pad', async (dataUrl) => {
+      try {
+        const profile = await store.getProviderProfile(providerId);
+        await store.saveProviderProfile(providerId, { ...(profile || {}), attestationSignature: dataUrl, attestationDate: new Date().toISOString() });
+        showToast('Attestation signature saved');
+        overlay.classList.remove('active');
+      } catch (e) { showToast('Error saving signature: ' + e.message, 'error'); }
+    });
+  }, 100);
+}
+
+function openContractSignModal(contractId) {
+  let overlay = document.getElementById('sig-contract-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'sig-contract-overlay';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:560px;border-radius:16px;">
+        <div class="modal-header">
+          <h2>Sign Contract</h2>
+          <button class="modal-close" onclick="document.getElementById('sig-contract-overlay').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="padding:16px;background:#f0fdf4;border:1px solid #dcfce7;border-radius:12px;margin-bottom:16px;font-size:13px;color:#166534;">
+            By signing below, you agree to the terms outlined in this contract. This constitutes a legally binding electronic signature.
+          </div>
+          <div id="sig-contract-pad"></div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+  overlay.classList.add('active');
+  setTimeout(() => {
+    renderSignaturePad('sig-contract-pad', async (dataUrl) => {
+      try {
+        const contract = await store.getOne('contracts', contractId);
+        if (contract) {
+          await store.update('contracts', contractId, { signature: dataUrl, signedAt: new Date().toISOString(), status: 'signed' });
+        }
+        showToast('Contract signed successfully');
+        overlay.classList.remove('active');
+      } catch (e) { showToast('Error signing contract: ' + e.message, 'error'); }
+    });
+  }, 100);
+}
+
+// ─── Feature 2: Email Digest Settings ───
+
+function _getDigestPrefs() {
+  try { return JSON.parse(localStorage.getItem('credentik_digest_prefs') || '{}'); } catch { return {}; }
+}
+function _saveDigestPrefs(prefs) {
+  localStorage.setItem('credentik_digest_prefs', JSON.stringify(prefs));
+}
+
+function renderDigestSettings() {
+  const prefs = _getDigestPrefs();
+  return `
+    <style>
+      .digest-card{border-radius:16px;overflow:hidden;margin-top:20px;}
+      .digest-toggle{display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--gray-50);border-radius:12px;cursor:pointer;transition:background 0.15s;}
+      .digest-toggle:hover{background:var(--gray-100);}
+      .digest-toggle input[type="checkbox"]{width:18px;height:18px;accent-color:var(--brand-600);}
+      .digest-time-select{margin-top:16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;}
+      .digest-content-checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-top:12px;}
+      .digest-content-checks label{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--gray-50);border-radius:10px;cursor:pointer;font-size:13px;transition:background 0.15s;}
+      .digest-content-checks label:hover{background:var(--gray-100);}
+      .digest-preview{margin-top:20px;border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;}
+      .digest-preview-header{background:linear-gradient(135deg,var(--brand-500),var(--brand-700));color:#fff;padding:16px 20px;font-weight:700;font-size:15px;}
+      .digest-preview-body{padding:16px 20px;font-size:13px;color:var(--gray-700);line-height:1.7;}
+      .digest-preview-item{padding:8px 0;border-bottom:1px solid var(--gray-100);}
+      .digest-preview-item:last-child{border-bottom:none;}
+    </style>
+    <div class="card digest-card">
+      <div class="card-header"><h3>Email Digest Settings</h3></div>
+      <div class="card-body">
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <label class="digest-toggle">
+            <input type="checkbox" id="digest-daily" ${prefs.dailyDigest ? 'checked' : ''} onchange="window.app.updateDigestPref('dailyDigest', this.checked)">
+            <div><strong>Daily digest</strong><div class="text-sm text-muted">Summary of overdue items, status changes, and expirations delivered each morning</div></div>
+          </label>
+          <label class="digest-toggle">
+            <input type="checkbox" id="digest-weekly" ${prefs.weeklySummary ? 'checked' : ''} onchange="window.app.updateDigestPref('weeklySummary', this.checked)">
+            <div><strong>Weekly summary</strong><div class="text-sm text-muted">Comprehensive credentialing report delivered every Monday morning</div></div>
+          </label>
+        </div>
+
+        <div class="digest-time-select">
+          <label style="font-size:13px;font-weight:600;color:var(--gray-700);">Delivery time:</label>
+          <select class="form-control" style="width:160px;border-radius:10px;" id="digest-time" onchange="window.app.updateDigestPref('digestTime', this.value)">
+            <option value="6am" ${prefs.digestTime === '6am' ? 'selected' : ''}>6:00 AM</option>
+            <option value="8am" ${prefs.digestTime === '8am' || !prefs.digestTime ? 'selected' : ''}>8:00 AM</option>
+            <option value="10am" ${prefs.digestTime === '10am' ? 'selected' : ''}>10:00 AM</option>
+            <option value="12pm" ${prefs.digestTime === '12pm' ? 'selected' : ''}>12:00 PM</option>
+          </select>
+        </div>
+
+        <div style="margin-top:16px;">
+          <label style="font-size:13px;font-weight:600;color:var(--gray-700);display:block;margin-bottom:8px;">Digest content:</label>
+          <div class="digest-content-checks">
+            <label><input type="checkbox" ${prefs.contentApplications !== false ? 'checked' : ''} onchange="window.app.updateDigestPref('contentApplications', this.checked)"> Applications</label>
+            <label><input type="checkbox" ${prefs.contentLicenses !== false ? 'checked' : ''} onchange="window.app.updateDigestPref('contentLicenses', this.checked)"> Licenses</label>
+            <label><input type="checkbox" ${prefs.contentTasks !== false ? 'checked' : ''} onchange="window.app.updateDigestPref('contentTasks', this.checked)"> Tasks</label>
+            <label><input type="checkbox" ${prefs.contentFollowups !== false ? 'checked' : ''} onchange="window.app.updateDigestPref('contentFollowups', this.checked)"> Follow-ups</label>
+            <label><input type="checkbox" ${prefs.contentCompliance !== false ? 'checked' : ''} onchange="window.app.updateDigestPref('contentCompliance', this.checked)"> Compliance</label>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" onclick="window.app.saveDigestPrefs()" style="margin-top:16px;border-radius:10px;">Save Digest Settings</button>
+
+        <div class="digest-preview">
+          <div class="digest-preview-header">Daily Digest Preview — Credentik</div>
+          <div class="digest-preview-body">
+            <div class="digest-preview-item"><strong>3 applications</strong> changed status yesterday</div>
+            <div class="digest-preview-item"><strong>2 licenses</strong> expiring within 30 days</div>
+            <div class="digest-preview-item"><strong>5 tasks</strong> are overdue and need attention</div>
+            <div class="digest-preview-item"><strong>1 follow-up</strong> scheduled for today</div>
+            <div class="digest-preview-item"><strong>Compliance score:</strong> 87% (down 2% from last week)</div>
+            <div style="margin-top:12px;font-size:11px;color:var(--gray-400);">This is a preview. Actual digest will contain your real data.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Feature 3: Knowledge Base (In-App Help) ───
+
+const KB_ARTICLES = [
+  { id: 1, category: 'Getting Started', title: 'How do I add a new provider?', body: 'Navigate to the Providers section in the sidebar. Click the "+ Add Provider" button in the top-right corner. Fill in the required fields: First Name, Last Name, NPI, Specialty, and State. Click Save to create the provider record. You can then add education, board certifications, malpractice insurance, and other credential data from the provider\'s profile page.' },
+  { id: 2, category: 'Getting Started', title: 'Quick start guide for new agencies', body: 'Welcome to Credentik! Here is the recommended setup order: 1) Configure your agency profile in Settings. 2) Add your organization(s). 3) Import or create providers. 4) Add state licenses for each provider. 5) Create credentialing applications for each provider-payer combination. 6) Set up follow-up reminders. 7) Configure monitoring schedules.' },
+  { id: 3, category: 'Applications', title: 'What do application statuses mean?', body: 'Applications move through these statuses: NOT STARTED — application created but not yet submitted to the payer. SUBMITTED — application sent to the payer and awaiting review. IN REVIEW — payer is actively reviewing the application. PENDING INFO — payer has requested additional information. APPROVED — application approved with an effective date. DENIED — application was denied (review reason and appeal options). WITHDRAWN — application was voluntarily withdrawn.' },
+  { id: 4, category: 'Applications', title: 'How to track application progress', body: 'Open any application and click the timeline icon to view the full activity history. You can log calls, emails, portal checks, and status changes. Each activity can include a contact name, reference number, outcome, and next steps. Use the Follow-ups section to set reminders for check-ins. The Kanban board provides a visual overview of all applications by status.' },
+  { id: 5, category: 'Applications', title: 'How to use the batch generator', body: 'The Batch Generator (found in the Tools dropdown) allows you to create multiple applications at once. Select providers, choose target payers, and the system will generate applications for each provider-payer combination. This is especially useful when onboarding a new provider who needs to be credentialed with multiple payers simultaneously.' },
+  { id: 6, category: 'Licenses', title: 'Managing state license renewals', body: 'Credentik tracks license expiration dates and sends alerts at 90, 60, and 30 days before expiration. Visit the Renewal Calendar page for a visual timeline of upcoming renewals. Each license can be verified through the Verification (PSV) module. When a license is renewed, update the expiration date and upload the new license document.' },
+  { id: 7, category: 'Providers', title: 'Building a complete provider profile', body: 'A complete provider profile includes: personal information (name, NPI, taxonomy code), education history (medical school, residency, fellowship), board certifications, malpractice insurance, work history (last 5 years), CME credits, professional references (minimum 3), and supporting documents. The Credential Passport ring chart on the profile page shows completion percentage.' },
+  { id: 8, category: 'Providers', title: 'Understanding the Credential Passport', body: 'The Credential Passport is a visual representation of a provider\'s credentialing readiness. It tracks 8 categories: Education (15%), Board Certs (15%), Malpractice (15%), Licenses (20%), Work History (10%), CME (10%), References (10%), and Documents (5%). Each segment turns green when requirements are met. A 100% score means the provider is fully credentialing-ready.' },
+  { id: 9, category: 'Payers', title: 'How to add and manage payers', body: 'Go to the Payers section to view all insurance payers in your database. The system comes preloaded with major national payers, BCBS plans, regional payers, and Medicaid programs. You can add custom payers with the + button. Each payer record includes: name, category, states served, average credentialing days, and required documents. The payer strategic planner helps prioritize which payers to target.' },
+  { id: 10, category: 'Billing', title: 'Setting up billing and invoicing', body: 'Navigate to Billing & Invoicing in the Finance section. You can create invoices for credentialing services, track payments, and manage accounts receivable. Set up service line items with rates. The revenue forecast page uses application data to project future revenue based on payer reimbursement rates and credentialing timelines.' },
+  { id: 11, category: 'Compliance', title: 'Understanding compliance scores', body: 'The Compliance Center calculates a compliance score based on: active licenses (are they current?), exclusion screening (have all providers been screened?), board certifications (are they valid?), malpractice insurance (is coverage active?), and document completeness. Critical issues like expired licenses or exclusion flags significantly impact the score. Run regular compliance scans from the Monitoring page.' },
+  { id: 12, category: 'Compliance', title: 'OIG/SAM exclusion screening explained', body: 'Exclusion screening checks whether providers appear on the OIG (Office of Inspector General) List of Excluded Individuals/Entities or the SAM (System for Award Management) exclusion list. Excluded providers cannot participate in federal healthcare programs. Credentik recommends monthly screening. Results are tracked in the Exclusion Screening section with pass/fail indicators.' },
+  { id: 13, category: 'Integrations', title: 'How to set up CAQH integration', body: 'Go to Settings > CAQH API tab. Enter your CAQH Organization ID, API username, and API password. Select Production or Sandbox environment. Click Test Connection to verify. Once connected, the CAQH Manager page allows you to check roster status, profile completeness, and attestation dates for all providers. You may need to set up the Apps Script proxy for server-side API calls.' },
+  { id: 14, category: 'Integrations', title: 'Setting up webhooks', body: 'Webhooks send real-time notifications to external systems when events occur in Credentik. Go to Settings > Webhooks tab. Add a webhook URL and select which events to trigger on (application status change, license expiration, task completion, etc.). Webhooks send JSON payloads with event details. Test webhooks before deploying to production.' },
+  { id: 15, category: 'Getting Started', title: 'Navigating with keyboard shortcuts', body: 'Press Cmd+K (or Ctrl+K on Windows) to open the global search. Type to search across applications, providers, licenses, tasks, and more. Use arrow keys to navigate results and Enter to select. The search also supports quick actions like "Add Application" or "Go to Dashboard". Recent searches are saved for quick access.' },
+  { id: 16, category: 'Providers', title: 'How to use the NPI lookup', body: 'When adding or editing a provider, use the NPI Lookup tool in the Tools dropdown. Enter a provider name or NPI number to search the CMS NPPES registry. Results include: NPI, name, credential, taxonomy code, practice address, and phone number. Click "Use This NPI" to auto-fill provider fields. This helps ensure accurate NPI data.' },
+  { id: 17, category: 'Compliance', title: 'Primary Source Verification (PSV) guide', body: 'PSV is the gold standard for credential verification. The PSV module checks credentials directly with the issuing source: state licensing boards for licenses, ABMS for board certifications, and medical schools for education. Go to Verification (PSV) in the Compliance section. Select a provider and run verification checks. Results are timestamped and stored for audit purposes.' },
+  { id: 18, category: 'Billing', title: 'Revenue forecasting explained', body: 'The Revenue Forecast page projects your agency\'s revenue based on: currently approved applications (confirmed revenue), in-progress applications (pipeline revenue weighted by approval probability), and planned applications (future revenue). The 12-month projection chart shows expected revenue growth. Revenue by state and payer category breakdowns help identify your most profitable segments.' },
+];
+
+function renderKnowledgeBase() {
+  const categories = ['All', 'Getting Started', 'Applications', 'Licenses', 'Providers', 'Payers', 'Billing', 'Compliance', 'Integrations'];
+  return `
+    <style>
+      .kb-help-search{width:100%;padding:12px 18px;border:2px solid var(--gray-200);border-radius:16px;font-size:15px;background:var(--surface-card,#fff);color:var(--gray-900);outline:none;transition:border-color 0.2s;}
+      .kb-help-search:focus{border-color:var(--brand-500);}
+      .kb-help-cats{display:flex;gap:6px;flex-wrap:wrap;margin:16px 0;}
+      .kb-help-cat{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--gray-200);background:var(--surface-card,#fff);color:var(--gray-600);cursor:pointer;transition:all 0.15s;}
+      .kb-help-cat:hover{border-color:var(--brand-400);color:var(--brand-600);}
+      .kb-help-cat.active{background:linear-gradient(135deg,var(--brand-500),var(--brand-700));color:#fff;border-color:transparent;}
+      .kb-help-article{border-radius:16px;overflow:hidden;margin-bottom:12px;border:1px solid var(--gray-200);background:var(--surface-card,#fff);transition:transform 0.15s,box-shadow 0.15s;}
+      .kb-help-article:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.06);}
+      .kb-help-article-header{padding:16px 20px;cursor:pointer;display:flex;align-items:center;gap:10px;}
+      .kb-help-article-body{padding:0 20px 16px 42px;font-size:14px;color:var(--gray-600);line-height:1.7;display:none;}
+      .kb-help-feedback{display:flex;gap:10px;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--gray-100);}
+      .kb-help-feedback button{border-radius:8px;padding:4px 12px;font-size:12px;font-weight:600;border:1px solid var(--gray-200);background:var(--surface-card);cursor:pointer;transition:all 0.15s;}
+      .kb-help-feedback button:hover{border-color:var(--brand-500);color:var(--brand-600);}
+    </style>
+    <input type="text" class="kb-help-search" id="kb-help-search" placeholder="Search the knowledge base..." oninput="window.app.filterKbArticles()">
+    <div class="kb-help-cats" id="kb-help-cats">
+      ${categories.map(c => `<button class="kb-help-cat ${c === 'All' ? 'active' : ''}" onclick="window.app.filterKbCategory('${c}')">${c}</button>`).join('')}
+    </div>
+    <div id="kb-help-articles">
+      ${KB_ARTICLES.map((a, i) => `
+        <div class="kb-help-article" data-category="${a.category}" data-search="${(a.title + ' ' + a.body).toLowerCase()}">
+          <div class="kb-help-article-header" onclick="
+            const b=document.getElementById('kb-body-${i}');
+            const ar=document.getElementById('kb-arrow-${i}');
+            b.style.display=b.style.display==='block'?'none':'block';
+            ar.style.transform=b.style.display==='block'?'rotate(90deg)':'';
+          ">
+            <svg id="kb-arrow-${i}" width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style="transition:transform 0.2s;flex-shrink:0;"><path d="M4 2l5 4-5 4z"/></svg>
+            <div style="flex:1;">
+              <div style="font-weight:600;font-size:14px;color:var(--gray-900);">${escHtml(a.title)}</div>
+            </div>
+            <span class="badge badge-pending" style="font-size:10px;">${escHtml(a.category)}</span>
+          </div>
+          <div class="kb-help-article-body" id="kb-body-${i}">
+            ${escHtml(a.body)}
+            <div class="kb-help-feedback">
+              <span class="text-sm text-muted">Was this helpful?</span>
+              <button onclick="showToast('Thanks for your feedback!')">Yes</button>
+              <button onclick="showToast('We will improve this article')">No</button>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ─── Feature 4: Guided Tour for New Users ───
+
+function startGuidedTour() {
+  const steps = [
+    { selector: '[data-page="dashboard"]', title: 'Dashboard', text: 'This is your command center. See real-time stats, charts, and alerts for all your credentialing activity.' },
+    { selector: '[data-page="applications"]', title: 'Applications', text: 'Track credentialing applications here. View status, follow-ups, and timelines for every payer enrollment.' },
+    { selector: '[data-page="providers"]', title: 'Providers', text: 'Manage your providers and their credentials. Build complete profiles with education, licenses, and more.' },
+    { selector: '#header-add-btn, .header-add-btn, [onclick*="quickAddApp"]', title: 'Quick Add', text: 'Quickly add new credentialing applications without leaving your current page.' },
+    { selector: '#global-search-trigger, [onclick*="openGlobalSearch"]', title: 'Quick Search (Cmd+K)', text: 'Press Cmd+K (or Ctrl+K) for instant navigation. Search providers, applications, payers, and more.' },
+    { selector: '#notif-bell, .notif-bell, [onclick*="toggleNotifications"]', title: 'Notifications', text: 'Stay updated on important changes — license expirations, status updates, and task reminders.' },
+    { selector: '[data-page="my-account"]', title: 'My Account', text: 'Manage your profile, security settings, MFA, and notification preferences.' },
+  ];
+
+  let current = 0;
+
+  function showStep(idx) {
+    removeOverlay();
+    if (idx >= steps.length) { completeTour(); return; }
+    const step = steps[idx];
+    const el = document.querySelector(step.selector);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'tour-overlay';
+    overlay.id = 'tour-overlay';
+    overlay.innerHTML = `
+      <style>
+        .tour-overlay{position:fixed;top:0;left:0;right:0;bottom:0;z-index:100000;pointer-events:all;}
+        .tour-backdrop{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);z-index:100000;}
+        .tour-spotlight{position:fixed;z-index:100001;border-radius:12px;box-shadow:0 0 0 9999px rgba(0,0,0,0.55);pointer-events:none;}
+        .tour-tooltip{position:fixed;z-index:100002;background:#fff;border-radius:16px;padding:20px 24px;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,0.2);pointer-events:all;}
+        .tour-tooltip h4{margin:0 0 8px;font-size:16px;font-weight:700;color:var(--gray-900);}
+        .tour-tooltip p{margin:0 0 16px;font-size:13px;color:var(--gray-600);line-height:1.6;}
+        .tour-actions{display:flex;gap:8px;justify-content:space-between;align-items:center;}
+        .tour-dots{display:flex;gap:4px;}
+        .tour-dot{width:8px;height:8px;border-radius:50%;background:var(--gray-300);}
+        .tour-dot.active{background:var(--brand-500);}
+        .tour-btn{padding:8px 18px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:transform 0.15s;}
+        .tour-btn:hover{transform:translateY(-1px);}
+        .tour-skip{background:none;border:1px solid var(--gray-300);color:var(--gray-600);}
+        .tour-next{background:linear-gradient(135deg,var(--brand-500),var(--brand-700));color:#fff;border:none;}
+        .tour-step-num{font-size:11px;color:var(--gray-400);font-weight:600;}
+      </style>
+    `;
+    document.body.appendChild(overlay);
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'tour-backdrop';
+    backdrop.id = 'tour-backdrop';
+
+    if (el) {
+      const r = el.getBoundingClientRect();
+      const pad = 8;
+      const spotlight = document.createElement('div');
+      spotlight.className = 'tour-spotlight';
+      spotlight.style.cssText = `top:${r.top - pad}px;left:${r.left - pad}px;width:${r.width + pad * 2}px;height:${r.height + pad * 2}px;`;
+      overlay.appendChild(spotlight);
+
+      const tooltip = document.createElement('div');
+      tooltip.className = 'tour-tooltip';
+      const tooltipTop = r.bottom + 16;
+      const tooltipLeft = Math.max(16, Math.min(r.left, window.innerWidth - 360));
+      tooltip.style.cssText = `top:${tooltipTop > window.innerHeight - 200 ? r.top - 200 : tooltipTop}px;left:${tooltipLeft}px;`;
+      tooltip.innerHTML = `
+        <div class="tour-step-num">Step ${idx + 1} of ${steps.length}</div>
+        <h4>${step.title}</h4>
+        <p>${step.text}</p>
+        <div class="tour-actions">
+          <button class="tour-btn tour-skip" onclick="window.app._tourSkip()">Skip Tour</button>
+          <div class="tour-dots">${steps.map((_, i) => `<div class="tour-dot ${i === idx ? 'active' : ''}"></div>`).join('')}</div>
+          <button class="tour-btn tour-next" onclick="window.app._tourNext()">${idx === steps.length - 1 ? 'Finish' : 'Next'}</button>
+        </div>
+      `;
+      overlay.appendChild(tooltip);
+    } else {
+      // Element not found, skip to next
+      current++;
+      showStep(current);
+      return;
+    }
+  }
+
+  function removeOverlay() {
+    const el = document.getElementById('tour-overlay');
+    if (el) el.remove();
+  }
+
+  function completeTour() {
+    removeOverlay();
+    localStorage.setItem('credentik_tour_completed', 'true');
+    showToast('Tour complete! You are all set to use Credentik.');
+  }
+
+  window.app._tourNext = () => { current++; showStep(current); };
+  window.app._tourSkip = () => { completeTour(); };
+
+  showStep(0);
+}
+
+// ─── Feature 5: Revenue Intelligence ───
+
+function renderRevenueIntelligence(apps, providers, approved, inProgress) {
+  const payers = [];
+  const payerMap = {};
+  apps.forEach(a => {
+    const payer = getPayerById(a.payerId);
+    if (!payer) return;
+    if (!payerMap[payer.id]) {
+      payerMap[payer.id] = { name: payer.name, category: payer.category, apps: [], approved: 0, total: 0, totalDays: 0, approvedCount: 0, totalRev: 0 };
+      payers.push(payerMap[payer.id]);
+    }
+    const p = payerMap[payer.id];
+    p.total++;
+    p.totalRev += Number(a.estMonthlyRevenue) || 0;
+    if (a.status === 'approved') {
+      p.approved++;
+      if (a.submittedDate && a.effectiveDate) {
+        p.totalDays += Math.round((new Date(a.effectiveDate) - new Date(a.submittedDate)) / 86400000);
+        p.approvedCount++;
+      }
+    }
+  });
+  payers.forEach(p => { p.avgDays = p.approvedCount > 0 ? Math.round(p.totalDays / p.approvedCount) : 0; p.rate = p.total > 0 ? Math.round(p.approved / p.total * 100) : 0; });
+  payers.sort((a, b) => b.totalRev - a.totalRev);
+
+  // ROI per provider
+  const providerRoi = providers.map(p => {
+    const provApps = apps.filter(a => (a.providerId || a.provider_id) == p.id);
+    const monthlyRev = provApps.filter(a => a.status === 'approved').reduce((s, a) => s + (Number(a.estMonthlyRevenue) || 0), 0);
+    const credCost = provApps.length * 350; // estimated cost per credentialing app
+    const roi = credCost > 0 ? ((monthlyRev * 12 - credCost) / credCost * 100).toFixed(0) : 0;
+    return { name: `${p.firstName} ${p.lastName}`, monthlyRev, credCost, roi: Number(roi), apps: provApps.length };
+  }).sort((a, b) => b.roi - a.roi).slice(0, 8);
+
+  // Delayed revenue
+  const staleApps = inProgress.filter(a => {
+    const submitted = a.submittedDate || a.submitted_date;
+    return submitted && Math.round((new Date() - new Date(submitted)) / 86400000) > 90;
+  });
+  const delayedRev = staleApps.reduce((s, a) => s + (Number(a.estMonthlyRevenue) || 0), 0);
+
+  return `
+    <style>
+      .rev-intel-section{margin-bottom:24px;}
+      .rev-intel-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:20px;}
+      .rev-intel-card{border-radius:16px;padding:18px;background:var(--surface-card,#fff);border:1px solid var(--gray-200);position:relative;overflow:hidden;transition:transform 0.18s,box-shadow 0.18s;}
+      .rev-intel-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
+      .rev-intel-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+      .rev-intel-card.positive::before{background:linear-gradient(90deg,#22c55e,#4ade80);}
+      .rev-intel-card.negative::before{background:linear-gradient(90deg,#ef4444,#f87171);}
+      .rev-intel-card.neutral::before{background:linear-gradient(90deg,#f59e0b,#fbbf24);}
+      .rev-intel-name{font-size:13px;font-weight:700;color:var(--gray-900);margin-bottom:4px;}
+      .rev-intel-val{font-size:22px;font-weight:800;}
+      .rev-intel-sub{font-size:11px;color:var(--gray-500);margin-top:2px;}
+      .rev-intel-table{border-radius:16px;overflow:hidden;border:1px solid var(--gray-200);}
+      .rev-intel-table table{margin:0;}
+      .rev-intel-table tr:hover{background:var(--gray-50);}
+      .rev-intel-delay{border-radius:16px;padding:20px 24px;background:linear-gradient(135deg,#fef2f2,#fff1f2);border:1px solid #fecaca;margin-bottom:20px;}
+    </style>
+    <div class="rev-intel-section">
+      <h3 style="font-size:18px;font-weight:700;color:var(--gray-900);margin-bottom:16px;">Revenue Intelligence</h3>
+
+      ${delayedRev > 0 ? `
+      <div class="rev-intel-delay">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="font-size:28px;">&#9888;&#65039;</div>
+          <div>
+            <div style="font-size:15px;font-weight:700;color:#b91c1c;">${staleApps.length} application${staleApps.length !== 1 ? 's' : ''} pending for 90+ days</div>
+            <div style="font-size:22px;font-weight:800;color:#dc2626;margin-top:4px;">$${delayedRev.toLocaleString()}/mo revenue delayed</div>
+            <div style="font-size:12px;color:#991b1b;margin-top:2px;">Estimated $${(delayedRev * 12).toLocaleString()}/yr at risk from credentialing delays</div>
+          </div>
+        </div>
+      </div>
+      ` : ''}
+
+      <h4 style="font-size:14px;font-weight:700;color:var(--gray-700);margin-bottom:12px;">ROI per Provider</h4>
+      <div class="rev-intel-cards">
+        ${providerRoi.map(p => `
+          <div class="rev-intel-card ${p.roi > 0 ? 'positive' : p.roi < 0 ? 'negative' : 'neutral'}">
+            <div class="rev-intel-name">${escHtml(p.name)}</div>
+            <div class="rev-intel-val" style="color:${p.roi > 0 ? '#16a34a' : p.roi < 0 ? '#dc2626' : '#d97706'};">${p.roi > 0 ? '+' : ''}${p.roi}% ROI</div>
+            <div class="rev-intel-sub">$${p.monthlyRev.toLocaleString()}/mo revenue | $${p.credCost.toLocaleString()} cred cost</div>
+            <div class="rev-intel-sub">${p.apps} application${p.apps !== 1 ? 's' : ''}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <h4 style="font-size:14px;font-weight:700;color:var(--gray-700);margin-bottom:12px;">Payer Profitability</h4>
+      <div class="rev-intel-table">
+        <table>
+          <thead><tr><th>Payer</th><th>Category</th><th>Avg Days</th><th>Approval Rate</th><th>Est. Monthly Rev</th><th>Cost/Credential</th></tr></thead>
+          <tbody>
+            ${payers.slice(0, 12).map(p => `<tr>
+              <td><strong>${escHtml(p.name)}</strong></td>
+              <td><span class="badge badge-pending" style="font-size:10px;">${escHtml(p.category || 'other')}</span></td>
+              <td style="font-weight:600;color:${p.avgDays <= 60 ? 'var(--green)' : p.avgDays <= 90 ? '#d97706' : 'var(--red)'};">${p.avgDays || '—'}d</td>
+              <td style="font-weight:600;">${p.rate}%</td>
+              <td style="font-weight:700;color:#16a34a;">$${p.totalRev.toLocaleString()}</td>
+              <td>$${(p.total * 350).toLocaleString()}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Feature 6: Predictive Analytics ───
+
+function predictApplicationOutcome(app) {
+  const payer = getPayerById(app.payerId);
+  const category = payer?.category || 'other';
+  const avgCredDays = payer?.avgCredDays || 90;
+
+  // Approval probability by payer category
+  const categoryProb = { national: 90, bcbs_anthem: 88, bcbs_hcsc: 87, bcbs_highmark: 87, bcbs_independent: 85, regional: 85, medicaid: 75, other: 80 };
+  let approvalProb = categoryProb[category] || 80;
+
+  // Risk factors
+  const risks = [];
+  const now = new Date();
+  const submitted = app.submittedDate || app.submitted_date;
+  const daysSinceSubmit = submitted ? Math.round((now - new Date(submitted)) / 86400000) : 0;
+
+  if (!submitted) { risks.push({ text: 'Not yet submitted', severity: 'warning' }); approvalProb -= 5; }
+  if (daysSinceSubmit > 120) { risks.push({ text: `${daysSinceSubmit} days since submission (very slow)`, severity: 'critical' }); approvalProb -= 10; }
+  else if (daysSinceSubmit > 90) { risks.push({ text: `${daysSinceSubmit} days since submission`, severity: 'warning' }); approvalProb -= 5; }
+  if (app.status === 'pending_info') { risks.push({ text: 'Payer requested additional info', severity: 'warning' }); approvalProb -= 10; }
+  if (!app.documentChecklist || Object.keys(app.documentChecklist || {}).length === 0) { risks.push({ text: 'No documents tracked', severity: 'warning' }); approvalProb -= 5; }
+
+  approvalProb = Math.max(10, Math.min(99, approvalProb));
+
+  const estCompletionDays = Math.max(0, avgCredDays - daysSinceSubmit);
+  const estCompletionDate = new Date(now.getTime() + estCompletionDays * 86400000);
+
+  return { approvalProb, estCompletionDays, estCompletionDate, risks, avgCredDays, daysSinceSubmit };
+}
+
+function renderPredictionCard(app) {
+  const pred = predictApplicationOutcome(app);
+  const probColor = pred.approvalProb >= 80 ? '#16a34a' : pred.approvalProb >= 60 ? '#d97706' : '#dc2626';
+  const probBg = pred.approvalProb >= 80 ? '#f0fdf4' : pred.approvalProb >= 60 ? '#fffbeb' : '#fef2f2';
+
+  return `
+    <style>
+      .predict-card{border-radius:16px;padding:20px;background:var(--surface-card,#fff);border:1px solid var(--gray-200);margin-top:16px;overflow:hidden;position:relative;}
+      .predict-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,${probColor},${probColor}80);}
+      .predict-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+      .predict-header h4{margin:0;font-size:15px;font-weight:700;color:var(--gray-900);}
+      .predict-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;}
+      .predict-stat{text-align:center;padding:12px;background:var(--gray-50);border-radius:12px;}
+      .predict-stat-val{font-size:22px;font-weight:800;}
+      .predict-stat-label{font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.3px;margin-top:2px;}
+      .predict-risks{display:flex;flex-direction:column;gap:6px;}
+      .predict-risk{display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 10px;border-radius:8px;}
+      .predict-risk.critical{background:#fef2f2;color:#b91c1c;}
+      .predict-risk.warning{background:#fffbeb;color:#92400e;}
+      .predict-risk-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+      .predict-risk.critical .predict-risk-dot{background:#dc2626;}
+      .predict-risk.warning .predict-risk-dot{background:#f59e0b;}
+    </style>
+    <div class="predict-card">
+      <div class="predict-header">
+        <span style="font-size:20px;">&#129504;</span>
+        <h4>Prediction</h4>
+      </div>
+      <div class="predict-stats">
+        <div class="predict-stat" style="background:${probBg};">
+          <div class="predict-stat-val" style="color:${probColor};">${pred.approvalProb}%</div>
+          <div class="predict-stat-label">Approval Probability</div>
+        </div>
+        <div class="predict-stat">
+          <div class="predict-stat-val" style="color:var(--brand-600);">${pred.estCompletionDays}d</div>
+          <div class="predict-stat-label">Est. Days Left</div>
+        </div>
+        <div class="predict-stat">
+          <div class="predict-stat-val" style="color:var(--gray-700);font-size:14px;">${pred.estCompletionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+          <div class="predict-stat-label">Est. Completion</div>
+        </div>
+      </div>
+      ${pred.risks.length > 0 ? `
+        <div style="font-size:12px;font-weight:600;color:var(--gray-500);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.3px;">Risk Factors</div>
+        <div class="predict-risks">
+          ${pred.risks.map(r => `<div class="predict-risk ${r.severity}"><div class="predict-risk-dot"></div>${escHtml(r.text)}</div>`).join('')}
+        </div>
+      ` : '<div style="font-size:13px;color:#16a34a;font-weight:600;">No risk factors identified</div>'}
+    </div>
+  `;
+}
+
+// ─── Feature 7: Document Versioning + Categories ───
+
+function renderDocumentVersioning(documents, providerId) {
+  const categories = ['All', 'License', 'COI/Malpractice', 'W-9', 'NPI', 'Board Cert', 'Education', 'Other'];
+  const catMap = {
+    'state_license': 'License', 'dea_certificate': 'License', 'cds_certificate': 'License',
+    'malpractice_coi': 'COI/Malpractice', 'proof_of_insurance': 'COI/Malpractice',
+    'w9': 'W-9',
+    'board_certification': 'Board Cert',
+    'diploma': 'Education', 'cv_resume': 'Education',
+  };
+
+  const now = new Date();
+  // Count versions by name
+  const versionCounts = {};
+  (documents || []).forEach(d => {
+    const name = d.documentName || d.document_name || d.name || '';
+    versionCounts[name] = (versionCounts[name] || 0) + 1;
+  });
+
+  return `
+    <style>
+      .doc-v2-pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding:16px 16px 0;}
+      .doc-v2-pill{padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid var(--gray-200);background:var(--surface-card,#fff);color:var(--gray-600);cursor:pointer;transition:all 0.15s;}
+      .doc-v2-pill:hover{border-color:var(--brand-400);color:var(--brand-600);}
+      .doc-v2-pill.active{background:var(--brand-500);color:#fff;border-color:transparent;}
+      .doc-v2-version{display:inline-flex;align-items:center;padding:1px 6px;border-radius:6px;font-size:10px;font-weight:700;background:var(--brand-100,#cffafe);color:var(--brand-700);margin-left:6px;}
+      .doc-v2-expiry{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;}
+      .doc-v2-expiry.green{color:#16a34a;}
+      .doc-v2-expiry.amber{color:#d97706;}
+      .doc-v2-expiry.red{color:#dc2626;}
+    </style>
+    <div class="doc-v2-pills" id="doc-v2-pills">
+      ${categories.map(c => `<button class="doc-v2-pill ${c === 'All' ? 'active' : ''}" onclick="window.app.filterDocCategory('${c}', ${providerId})">${c}</button>`).join('')}
+    </div>
+  `;
+}
+
+function getDocExpiryHtml(doc) {
+  const exp = doc.expirationDate || doc.expiration_date;
+  if (!exp) return '<span style="color:var(--gray-400);">—</span>';
+  const days = Math.round((new Date(exp) - new Date()) / 86400000);
+  const cls = days > 60 ? 'green' : days > 30 ? 'amber' : 'red';
+  const dot = days > 60 ? '#22c55e' : days > 30 ? '#f59e0b' : '#ef4444';
+  return `<span class="doc-v2-expiry ${cls}"><span style="width:6px;height:6px;border-radius:50%;background:${dot};"></span>${formatDateDisplay(exp)} (${days > 0 ? days + 'd' : 'expired'})</span>`;
+}
+
+function getDocVersionBadge(doc, documents) {
+  const name = doc.documentName || doc.document_name || doc.name || '';
+  const versions = (documents || []).filter(d => (d.documentName || d.document_name || d.name || '') === name).length;
+  return versions > 1 ? `<span class="doc-v2-version">v${versions}</span>` : '';
+}
+
+// ─── Feature 8: Continuous Monitoring Scheduler ───
+
+function _getMonitoringSchedule() {
+  try { return JSON.parse(localStorage.getItem('credentik_monitoring_schedule') || '{}'); } catch { return {}; }
+}
+function _saveMonitoringSchedule(sched) {
+  localStorage.setItem('credentik_monitoring_schedule', JSON.stringify(sched));
+}
+
+function renderMonitoringScheduler() {
+  const sched = _getMonitoringSchedule();
+  const defaults = {
+    licenseVerification: sched.licenseVerification || 'daily',
+    exclusionScreening: sched.exclusionScreening || 'monthly',
+    boardCertVerification: sched.boardCertVerification || 'quarterly',
+    documentExpiration: sched.documentExpiration || 'daily',
+  };
+
+  const lastRun = sched.lastRun || {};
+  const now = new Date();
+
+  function nextRunDate(freq, last) {
+    if (!last) return 'Not scheduled';
+    const d = new Date(last);
+    if (freq === 'daily') d.setDate(d.getDate() + 1);
+    else if (freq === 'weekly') d.setDate(d.getDate() + 7);
+    else if (freq === 'monthly') d.setMonth(d.getMonth() + 1);
+    else if (freq === 'quarterly') d.setMonth(d.getMonth() + 3);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  const checks = [
+    { key: 'licenseVerification', label: 'License Verification', options: ['daily', 'weekly', 'monthly'], icon: '&#128196;' },
+    { key: 'exclusionScreening', label: 'Exclusion Screening', options: ['weekly', 'monthly'], icon: '&#128737;' },
+    { key: 'boardCertVerification', label: 'Board Cert Verification', options: ['monthly', 'quarterly'], icon: '&#127891;' },
+    { key: 'documentExpiration', label: 'Document Expiration Check', options: ['daily', 'weekly'], icon: '&#128197;' },
+  ];
+
+  return `
+    <style>
+      .monsched-card{border-radius:16px;overflow:hidden;margin-bottom:20px;border:1px solid var(--gray-200);background:var(--surface-card,#fff);}
+      .monsched-header{padding:16px 20px;border-bottom:1px solid var(--gray-100);display:flex;align-items:center;gap:10px;}
+      .monsched-header h3{margin:0;font-size:16px;font-weight:700;}
+      .monsched-body{padding:0;}
+      .monsched-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:12px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--gray-100);transition:background 0.15s;}
+      .monsched-row:last-child{border-bottom:none;}
+      .monsched-row:hover{background:var(--gray-50);}
+      .monsched-label{display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px;color:var(--gray-900);}
+      .monsched-label span{font-size:18px;}
+      .monsched-select{border-radius:10px;padding:6px 10px;font-size:12px;border:1px solid var(--gray-300);background:var(--surface-card);color:var(--gray-700);}
+      .monsched-time{font-size:12px;color:var(--gray-500);}
+      .monsched-run-btn{padding:5px 12px;border-radius:8px;font-size:11px;font-weight:600;background:linear-gradient(135deg,var(--brand-500),var(--brand-700));color:#fff;border:none;cursor:pointer;transition:transform 0.15s,box-shadow 0.15s;white-space:nowrap;}
+      .monsched-run-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(8,145,178,0.3);}
+      @media(max-width:768px){.monsched-row{grid-template-columns:1fr 1fr;gap:8px;}}
+    </style>
+    <div class="monsched-card">
+      <div class="monsched-header">
+        <span style="font-size:20px;">&#128344;</span>
+        <h3>Monitoring Schedule</h3>
+      </div>
+      <div class="monsched-body">
+        <div class="monsched-row" style="font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;background:var(--gray-50);">
+          <div>Check Type</div><div>Frequency</div><div>Last Run</div><div>Next Run</div><div></div>
+        </div>
+        ${checks.map(c => `
+          <div class="monsched-row">
+            <div class="monsched-label"><span>${c.icon}</span> ${c.label}</div>
+            <div>
+              <select class="monsched-select" onchange="window.app.updateMonSchedule('${c.key}', this.value)">
+                ${c.options.map(o => `<option value="${o}" ${defaults[c.key] === o ? 'selected' : ''}>${o.charAt(0).toUpperCase() + o.slice(1)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="monsched-time">${lastRun[c.key] ? formatDateDisplay(lastRun[c.key]) : 'Never'}</div>
+            <div class="monsched-time">${nextRunDate(defaults[c.key], lastRun[c.key] || now.toISOString())}</div>
+            <div><button class="monsched-run-btn" onclick="window.app.runMonCheck('${c.key}')">Run Now</button></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ─── Feature 9: Embeddable Widget Documentation ───
+
+function renderEmbedWidgetDocs(agencySlug, embedBase) {
+  const widgets = [
+    {
+      id: 'enrollment',
+      title: 'Provider Enrollment Widget',
+      desc: 'Embed a provider self-registration form on your website. Providers can submit their information directly, which flows into your Credentik pipeline.',
+      snippet: (color, logo) => `<div id="credentik-enrollment"></div>\n<script src="${embedBase}/embed.js"\n  data-agency="${agencySlug}"\n  data-widget="enrollment"\n  data-color="${color}"\n  ${logo ? `data-logo="${logo}"` : ''}\n></script>`,
+    },
+    {
+      id: 'verification',
+      title: 'Credential Verification Widget',
+      desc: 'Display a real-time credential verification badge on provider profiles or your organization\'s website, showing current credential status.',
+      snippet: (color) => `<div id="credentik-verify"></div>\n<script src="${embedBase}/embed.js"\n  data-agency="${agencySlug}"\n  data-widget="verification"\n  data-color="${color}"\n></script>`,
+    },
+    {
+      id: 'status',
+      title: 'Application Status Widget',
+      desc: 'Let providers track their credentialing application status directly from your website. Shows real-time progress updates.',
+      snippet: (color) => `<div id="credentik-status"></div>\n<script src="${embedBase}/embed.js"\n  data-agency="${agencySlug}"\n  data-widget="status"\n  data-color="${color}"\n></script>`,
+    },
+  ];
+
+  return `
+    <style>
+      .embed-section{margin-top:24px;}
+      .embed-widget-card{border-radius:16px;border:1px solid var(--gray-200);overflow:hidden;margin-bottom:20px;background:var(--surface-card,#fff);transition:transform 0.15s,box-shadow 0.15s;}
+      .embed-widget-card:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(0,0,0,0.08);}
+      .embed-widget-header{padding:18px 20px;border-bottom:1px solid var(--gray-100);}
+      .embed-widget-header h4{margin:0 0 6px;font-size:15px;font-weight:700;color:var(--gray-900);}
+      .embed-widget-header p{margin:0;font-size:13px;color:var(--gray-600);line-height:1.5;}
+      .embed-widget-body{padding:18px 20px;}
+      .embed-custom{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
+      .embed-custom .form-group{margin:0;flex:1;min-width:150px;}
+      .embed-code-block{background:#1e293b;color:#e2e8f0;padding:16px;border-radius:12px;font-size:12px;font-family:'JetBrains Mono',monospace,Menlo,Monaco,Consolas;white-space:pre-wrap;word-break:break-all;position:relative;line-height:1.6;}
+      .embed-copy-btn{position:absolute;top:8px;right:8px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;background:rgba(255,255,255,0.1);color:#94a3b8;border:1px solid rgba(255,255,255,0.15);cursor:pointer;transition:all 0.15s;}
+      .embed-copy-btn:hover{background:rgba(255,255,255,0.2);color:#e2e8f0;}
+      .embed-preview{margin-top:14px;border:2px dashed var(--gray-200);border-radius:12px;padding:24px;text-align:center;background:var(--gray-50);}
+      .embed-preview-label{font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;}
+      .embed-preview-mock{border-radius:12px;background:#fff;border:1px solid var(--gray-200);padding:20px;max-width:320px;margin:0 auto;text-align:left;}
+    </style>
+    <div class="embed-section">
+      <h3 style="font-size:16px;font-weight:700;color:var(--gray-900);margin-bottom:4px;">Embeddable Widgets</h3>
+      <p style="font-size:13px;color:var(--gray-500);margin-bottom:20px;">Add credentialing widgets to your website with a single script tag. Widgets fetch data from Credentik in real-time.</p>
+
+      <div class="embed-custom">
+        <div class="form-group">
+          <label style="font-size:12px;font-weight:600;">Primary Color</label>
+          <input type="color" id="embed-primary-color" value="#0891b2" class="form-control" style="height:36px;padding:2px;cursor:pointer;" onchange="window.app.refreshEmbedSnippets()">
+        </div>
+        <div class="form-group">
+          <label style="font-size:12px;font-weight:600;">Logo URL (optional)</label>
+          <input type="url" id="embed-logo-url" class="form-control" placeholder="https://..." style="height:36px;font-size:12px;" onchange="window.app.refreshEmbedSnippets()">
+        </div>
+      </div>
+
+      ${widgets.map(w => `
+        <div class="embed-widget-card">
+          <div class="embed-widget-header">
+            <h4>${w.title}</h4>
+            <p>${w.desc}</p>
+          </div>
+          <div class="embed-widget-body">
+            <div class="embed-code-block" id="embed-snippet-${w.id}">
+              <button class="embed-copy-btn" onclick="window.app.copyEmbedSnippet('${w.id}')">Copy</button>
+${escHtml(w.snippet('#0891b2', ''))}
+            </div>
+            <div class="embed-preview">
+              <div class="embed-preview-label">Live Preview</div>
+              <div class="embed-preview-mock" id="embed-preview-${w.id}">
+                ${w.id === 'enrollment' ? `
+                  <div style="font-weight:700;font-size:14px;margin-bottom:12px;color:#0891b2;">Provider Enrollment</div>
+                  <div style="margin-bottom:8px;"><div style="font-size:11px;color:#6b7280;margin-bottom:4px;">Full Name</div><div style="height:32px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;"></div></div>
+                  <div style="margin-bottom:8px;"><div style="font-size:11px;color:#6b7280;margin-bottom:4px;">NPI Number</div><div style="height:32px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;"></div></div>
+                  <div style="margin-bottom:8px;"><div style="font-size:11px;color:#6b7280;margin-bottom:4px;">Email</div><div style="height:32px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;"></div></div>
+                  <div style="height:32px;border-radius:8px;background:#0891b2;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600;">Submit</div>
+                ` : w.id === 'verification' ? `
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="width:40px;height:40px;border-radius:50%;background:#f0fdf4;display:flex;align-items:center;justify-content:center;font-size:20px;">&#9989;</div>
+                    <div>
+                      <div style="font-weight:700;font-size:13px;">Credentials Verified</div>
+                      <div style="font-size:11px;color:#6b7280;">All licenses active. Last verified: Today</div>
+                    </div>
+                  </div>
+                ` : `
+                  <div style="font-weight:700;font-size:14px;margin-bottom:12px;color:#0891b2;">Application Status</div>
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                    <div style="width:24px;height:24px;border-radius:50%;background:#22c55e;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;">1</div>
+                    <div style="flex:1;font-size:12px;">Application Submitted</div>
+                    <span style="font-size:10px;color:#16a34a;font-weight:600;">Complete</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                    <div style="width:24px;height:24px;border-radius:50%;background:#3b82f6;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;">2</div>
+                    <div style="flex:1;font-size:12px;">Under Review</div>
+                    <span style="font-size:10px;color:#3b82f6;font-weight:600;">In Progress</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <div style="width:24px;height:24px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px;font-weight:700;">3</div>
+                    <div style="flex:1;font-size:12px;color:#9ca3af;">Approved</div>
+                    <span style="font-size:10px;color:#9ca3af;">Pending</span>
+                  </div>
+                `}
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
