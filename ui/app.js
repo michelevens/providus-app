@@ -14539,11 +14539,15 @@ async function renderFacilitiesPage() {
   try { facilities = await store.getFacilities(); } catch (e) { console.error('Facilities error:', e); }
   if (!Array.isArray(facilities)) facilities = [];
 
-  // Build facility-to-application count map
+  // Build facility-to-application count map — count apps by state matching facility state
   const allAppsForFac = await store.getAll('applications').catch(() => []);
   const facAppCount = {};
-  (Array.isArray(allAppsForFac) ? allAppsForFac : []).forEach(a => {
-    if (a.facilityId) facAppCount[a.facilityId] = (facAppCount[a.facilityId] || 0) + 1;
+  const appArr = Array.isArray(allAppsForFac) ? allAppsForFac : [];
+  // Count by facilityId if set, otherwise count apps in same state as facility
+  facilities.forEach(f => {
+    const byId = appArr.filter(a => a.facilityId && String(a.facilityId) === String(f.id)).length;
+    const byState = byId === 0 && f.state ? appArr.filter(a => a.state === f.state).length : 0;
+    facAppCount[f.id] = byId || byState;
   });
 
   const facActive = facilities.filter(f => f.status === 'active' || f.isActive).length;
