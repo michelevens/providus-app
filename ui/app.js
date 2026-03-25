@@ -14173,7 +14173,7 @@ async function renderFacilitiesPage() {
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Location</th><th>Organization</th><th>Type</th><th>Address</th><th>Phone</th><th>Applications</th><th>Status</th><th>Actions</th></tr>
+              <tr><th>Location</th><th>Type</th><th>Address</th><th>Phone</th><th>Applications</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody id="facility-table-body">
               ${facilities.map(f => {
@@ -14183,7 +14183,6 @@ async function renderFacilitiesPage() {
                 return `
                 <tr class="facility-row" data-name="${escHtml((f.name || '').toLowerCase())}">
                   <td><strong>${escHtml(f.name || '—')}</strong>${f.npi ? '<br><span style="font-size:10px;color:var(--gray-400);font-family:monospace;">NPI: ' + escHtml(f.npi) + '</span>' : ''}</td>
-                  <td>${escHtml(f.organization?.name || f.organizationName || '—')}</td>
                   <td>${(f.facilityType || f.type) ? '<span class="facv2-type-badge">' + escHtml((f.facilityType || f.type).replace(/_/g, ' ')) + '</span>' : '—'}</td>
                   <td>${f.address || f.street ? '<div style="font-size:12px;">' + escHtml(f.address || f.street || '') + '</div>' : ''}${escHtml(addr) || '—'}</td>
                   <td>${escHtml(f.phone || '—')}</td>
@@ -14195,7 +14194,7 @@ async function renderFacilitiesPage() {
                   </td>
                 </tr>`;
               }).join('')}
-              ${facilities.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No facilities yet. Add one above.</td></tr>' : ''}
+              ${facilities.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-500);">No facilities yet. Add one above.</td></tr>' : ''}
             </tbody>
           </table>
         </div>
@@ -14244,7 +14243,12 @@ async function renderFacilitiesPage() {
             <div class="auth-field" style="margin:0;"><label>Phone</label><input type="tel" id="fac-phone" class="form-control"></div>
             <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Address</label><input type="text" id="fac-address" class="form-control"></div>
             <div class="auth-field" style="margin:0;"><label>City</label><input type="text" id="fac-city" class="form-control"></div>
-            <div class="auth-field" style="margin:0;"><label>State</label><input type="text" id="fac-state" class="form-control" maxlength="2" placeholder="e.g. TX"></div>
+            <div class="auth-field" style="margin:0;"><label>State</label>
+              <select id="fac-state" class="form-control">
+                <option value="">Select State...</option>
+                ${STATES.map(s => `<option value="${s.code}">${s.name} (${s.code})</option>`).join('')}
+              </select>
+            </div>
             <div class="auth-field" style="margin:0;"><label>ZIP</label><input type="text" id="fac-zip" class="form-control" maxlength="10"></div>
             <div class="auth-field" style="margin:0;"><label>Status</label>
               <select id="fac-status" class="form-control">
