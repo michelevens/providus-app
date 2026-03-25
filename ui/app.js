@@ -8624,6 +8624,7 @@ function handleNppesProxy(payload) {
       set('fac-npi', f.npi);
       set('fac-type', f.facilityType || f.type);
       set('fac-phone', f.phone);
+      set('fac-fax', f.fax);
       set('fac-address', f.street || f.address);
       set('fac-city', f.city);
       set('fac-state', f.state);
@@ -8640,6 +8641,7 @@ function handleNppesProxy(payload) {
       npi: document.getElementById('fac-npi')?.value?.trim() || '',
       facilityType: document.getElementById('fac-type')?.value || '',
       phone: document.getElementById('fac-phone')?.value?.trim() || '',
+      fax: document.getElementById('fac-fax')?.value?.trim() || '',
       street: document.getElementById('fac-address')?.value?.trim() || '',
       city: document.getElementById('fac-city')?.value?.trim() || '',
       state: document.getElementById('fac-state')?.value?.trim().toUpperCase() || '',
@@ -14217,7 +14219,7 @@ async function renderFacilitiesPage() {
               </select>
             </div>
             <div class="auth-field" style="margin:0;"><label>Location Name *</label><input type="text" id="fac-name" class="form-control" placeholder="e.g. Main Office, Orlando Satellite"></div>
-            <div class="auth-field" style="margin:0;"><label>Location NPI</label><input type="text" id="fac-npi" class="form-control" maxlength="10" placeholder="If different from org NPI"></div>
+            <div class="auth-field" style="margin:0;"><label>Location NPI</label><input type="text" id="fac-npi" class="form-control" maxlength="10" placeholder="10-digit NPI" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,10)"></div>
             <div class="auth-field" style="margin:0;"><label>Location Type</label>
               <select id="fac-type" class="form-control">
                 <option value="">Select Type</option>
@@ -14240,8 +14242,9 @@ async function renderFacilitiesPage() {
                 <option value="other">Other</option>
               </select>
             </div>
-            <div class="auth-field" style="margin:0;"><label>Phone</label><input type="tel" id="fac-phone" class="form-control"></div>
-            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Address</label><input type="text" id="fac-address" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Phone</label><input type="tel" id="fac-phone" class="form-control" placeholder="(555) 555-5555" maxlength="14" oninput="this.value=this.value.replace(/\\D/g,'').replace(/(\\d{3})(\\d{3})(\\d{4}).*/,'($1) $2-$3')"></div>
+            <div class="auth-field" style="margin:0;"><label>Fax</label><input type="tel" id="fac-fax" class="form-control" placeholder="(555) 555-5555" maxlength="14" oninput="this.value=this.value.replace(/\\D/g,'').replace(/(\\d{3})(\\d{3})(\\d{4}).*/,'($1) $2-$3')"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Street Address</label><input type="text" id="fac-address" class="form-control" placeholder="123 Main St, Suite 100"></div>
             <div class="auth-field" style="margin:0;"><label>City</label><input type="text" id="fac-city" class="form-control"></div>
             <div class="auth-field" style="margin:0;"><label>State</label>
               <select id="fac-state" class="form-control">
@@ -14249,7 +14252,7 @@ async function renderFacilitiesPage() {
                 ${STATES.map(s => `<option value="${s.code}">${s.name} (${s.code})</option>`).join('')}
               </select>
             </div>
-            <div class="auth-field" style="margin:0;"><label>ZIP</label><input type="text" id="fac-zip" class="form-control" maxlength="10"></div>
+            <div class="auth-field" style="margin:0;"><label>ZIP Code</label><input type="text" id="fac-zip" class="form-control" placeholder="12345" maxlength="10" oninput="this.value=this.value.replace(/[^\\d-]/g,'').replace(/(\\d{5})(\\d{1,4}).*/,'$1-$2')"></div>
             <div class="auth-field" style="margin:0;"><label>Status</label>
               <select id="fac-status" class="form-control">
                 <option value="active">Active</option>
