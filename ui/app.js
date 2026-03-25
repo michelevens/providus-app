@@ -2495,7 +2495,7 @@ async function renderAppTable(prefetchedApps = null) {
           <div class="v2-apps-card-stats">
             <div><div class="cs-label">Days in Status</div><div class="cs-val" style="color:${daysIn > 60 ? 'var(--red)' : daysIn > 30 ? 'var(--warning-500)' : 'var(--text-primary)'};">${daysIn !== null ? daysIn : '-'}</div></div>
             <div><div class="cs-label">Submitted</div><div class="cs-val" style="font-size:13px;">${formatDateDisplay(a.submittedDate) || '-'}</div></div>
-            <div><div class="cs-label">Est. $/mo</div><div class="cs-val" style="color:var(--brand-600);font-size:14px;">$${(a.estMonthlyRevenue || 0).toLocaleString()}</div></div>
+            <div><div class="cs-label">Est. $/mo</div><div class="cs-val" style="color:var(--brand-600);font-size:14px;">$${(Number(a.estMonthlyRevenue) || 0).toLocaleString()}</div></div>
           </div>
           <div class="v2-apps-card-actions">
             <button class="btn btn-sm" onclick="window.app.editApplication('${a.id}')">Edit</button>
@@ -6927,7 +6927,7 @@ window.app = {
                   <td>${groupBadge(a.wave)}</td>
                   <td>${getStateName(a.state)}</td>
                   <td>${a.payerName}</td>
-                  <td>$${(a.estMonthlyRevenue || 0).toLocaleString()}</td>
+                  <td>$${(Number(a.estMonthlyRevenue) || 0).toLocaleString()}</td>
                   <td class="truncate text-sm text-muted">${a.notes || '-'}</td>
                 </tr>
               `).join('')}
@@ -12988,7 +12988,7 @@ async function renderOrgDetailPage(orgId) {
   const orgLicenses = licenses.filter(l => providers.some(p => p.id == (l.providerId || l.provider_id)));
   const orgApps = apps.filter(a => (a.organizationId || a.orgId) == orgId || providers.some(p => p.id == (a.providerId || a.provider_id)));
   const licensedStates = [...new Set(orgLicenses.map(l => l.state))];
-  const estRevenue = orgApps.filter(a => a.status === 'approved' || a.status === 'credentialed').reduce((s, a) => s + (a.estMonthlyRevenue || a.est_monthly_revenue || 0), 0);
+  const estRevenue = orgApps.filter(a => a.status === 'approved' || a.status === 'credentialed').reduce((s, a) => s + (Number(a.estMonthlyRevenue || a.est_monthly_revenue) || 0), 0);
 
   const pageTitle = document.getElementById('page-title');
   const pageSubtitle = document.getElementById('page-subtitle');
