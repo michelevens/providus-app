@@ -920,9 +920,9 @@ async function navigateTo(page) {
       await renderExclusionsPage();
       break;
     case 'facilities':
-      pageTitle.textContent = 'Facilities';
-      pageSubtitle.textContent = 'Manage healthcare facility locations';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openFacilityModal()">+ Add Facility</button> <button class="btn" onclick="window.app.openNpiFacilityModal()">+ Add from NPI</button>' + printBtn;
+      pageTitle.textContent = 'Practice Locations';
+      pageSubtitle.textContent = 'Office sites and service delivery locations';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openFacilityModal()">+ Add Location</button> <button class="btn" onclick="window.app.openNpiFacilityModal()">+ Add from NPI</button>' + printBtn;
       await renderFacilitiesPage();
       break;
     case 'billing':
@@ -13903,7 +13903,7 @@ async function renderFacilitiesPage() {
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Name</th><th>NPI</th><th>Type</th><th>City / State</th><th>Phone</th><th>Status</th><th>Actions</th></tr>
+              <tr><th>Location</th><th>Organization</th><th>Type</th><th>Address</th><th>Phone</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody id="facility-table-body">
               ${facilities.map(f => {
@@ -13912,10 +13912,10 @@ async function renderFacilitiesPage() {
                 const addr = [f.city, f.state].filter(Boolean).join(', ');
                 return `
                 <tr class="facility-row" data-name="${escHtml((f.name || '').toLowerCase())}">
-                  <td><strong>${escHtml(f.name || '—')}</strong>${f.address || f.street ? '<br><span style="font-size:11px;color:var(--gray-500);">' + escHtml(f.address || f.street || '') + '</span>' : ''}</td>
-                  <td>${f.npi ? '<span class="facv2-pill" style="background:var(--brand-100,#e0f2fe);color:var(--brand-700);font-family:monospace;">' + escHtml(f.npi) + '</span>' : '<span style="color:var(--gray-400);">—</span>'}</td>
-                  <td>${(f.facilityType || f.type) ? '<span class="facv2-type-badge">' + escHtml(f.facilityType || f.type) + '</span>' : '—'}</td>
-                  <td>${escHtml(addr) || '—'}</td>
+                  <td><strong>${escHtml(f.name || '—')}</strong>${f.npi ? '<br><span style="font-size:10px;color:var(--gray-400);font-family:monospace;">NPI: ' + escHtml(f.npi) + '</span>' : ''}</td>
+                  <td>${escHtml(f.organization?.name || f.organizationName || '—')}</td>
+                  <td>${(f.facilityType || f.type) ? '<span class="facv2-type-badge">' + escHtml((f.facilityType || f.type).replace(/_/g, ' ')) + '</span>' : '—'}</td>
+                  <td>${f.address || f.street ? '<div style="font-size:12px;">' + escHtml(f.address || f.street || '') + '</div>' : ''}${escHtml(addr) || '—'}</td>
                   <td>${escHtml(f.phone || '—')}</td>
                   <td><span class="facv2-status-dot" style="background:${isActive ? 'rgba(34,197,94,0.12)' : 'rgba(156,163,175,0.12)'};color:${isActive ? 'var(--green)' : 'var(--gray-500)'};"><span style="width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;"></span>${statusLabel}</span></td>
                   <td>
@@ -13940,20 +13940,33 @@ async function renderFacilitiesPage() {
         </div>
         <div class="modal-body" id="facility-modal-body">
           <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div class="auth-field" style="margin:0;"><label>Facility Name *</label><input type="text" id="fac-name" class="form-control"></div>
-            <div class="auth-field" style="margin:0;"><label>NPI</label><input type="text" id="fac-npi" class="form-control" maxlength="10"></div>
-            <div class="auth-field" style="margin:0;"><label>Type</label>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Organization *</label>
+              <select id="fac-org" class="form-control">
+                <option value="">Select Organization...</option>
+                ${(await store.getAll('organizations').catch(() => [])).map(o => `<option value="${o.id}">${escHtml(o.name)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Location Name *</label><input type="text" id="fac-name" class="form-control" placeholder="e.g. Main Office, Orlando Satellite"></div>
+            <div class="auth-field" style="margin:0;"><label>Location NPI</label><input type="text" id="fac-npi" class="form-control" maxlength="10" placeholder="If different from org NPI"></div>
+            <div class="auth-field" style="margin:0;"><label>Location Type</label>
               <select id="fac-type" class="form-control">
                 <option value="">Select Type</option>
-                <option value="hospital">Hospital</option>
-                <option value="clinic">Clinic</option>
-                <option value="office">Office</option>
-                <option value="urgent_care">Urgent Care</option>
-                <option value="surgical_center">Surgical Center</option>
-                <option value="lab">Laboratory</option>
-                <option value="imaging">Imaging Center</option>
-                <option value="pharmacy">Pharmacy</option>
-                <option value="telehealth">Telehealth</option>
+                <option value="primary_office">Primary Office</option>
+                <option value="satellite_office">Satellite Office</option>
+                <option value="telehealth">Telehealth Only (Virtual)</option>
+                <option value="clinic">Outpatient Clinic</option>
+                <option value="cmhc">Community Mental Health Center</option>
+                <option value="residential">Residential Treatment Facility</option>
+                <option value="hospital_outpatient">Hospital — Outpatient</option>
+                <option value="hospital_inpatient">Hospital — Inpatient Psych</option>
+                <option value="fqhc">FQHC (Federally Qualified Health Center)</option>
+                <option value="school_based">School-Based Health Center</option>
+                <option value="crisis_center">Crisis Stabilization Unit</option>
+                <option value="substance_abuse">Substance Abuse Treatment Center</option>
+                <option value="group_home">Group Home / Assisted Living</option>
+                <option value="correctional">Correctional Facility</option>
+                <option value="va">VA Medical Center</option>
+                <option value="home_based">Home-Based Services</option>
                 <option value="other">Other</option>
               </select>
             </div>
