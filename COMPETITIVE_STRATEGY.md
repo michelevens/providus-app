@@ -1,8 +1,8 @@
 # Credentik — Comprehensive Competitive Strategy
 ## Match Them. Then Beat Them.
 
-**Version:** 1.0 | **Date:** March 18, 2026
-**Platform:** Credentik v2.2.0 — Multi-tenant Healthcare Credentialing SaaS
+**Version:** 2.0 | **Date:** March 25, 2026
+**Platform:** Credentik v3.0.0 — Multi-tenant Healthcare Credentialing SaaS
 
 ---
 
@@ -718,3 +718,103 @@ Don't forget — Credentik already leads in several areas:
 
 **The pitch:**
 > "Credentik gives you everything Medallion offers for 80% less, with revenue intelligence and compliance tools none of them have. Start free. See pricing upfront. No sales calls required."
+
+---
+
+## APPENDIX: V2 Feature Inventory (Updated March 25, 2026)
+
+### New Features Built (V2 Release)
+
+#### UI/UX Overhaul
+- **V2 Mission Control Dashboard** — hero metrics with SVG progress rings, action feed, kanban preview
+- **V2 Design Language** — applied to all 72 render functions (gradient accents, 16px radius, hover lifts)
+- **V2 Kanban Board** — 10-column drag-and-drop with rich cards, filters, Board/Table toggle
+- **V2 Provider Credential Passport** — completion ring, missing items alert, quick stats
+- **Mobile-First Responsive** — 811 lines of CSS, bottom nav, bottom-sheet modals, safe area insets
+- **Dark Mode** — full app dark theme with system preference detection
+- **Cmd+K Command Palette** — 21 commands, keyboard navigation, instant access
+
+#### Role & Access Management
+- **Staff Role** — credentialing coordinator with scoped access (level 2)
+- **My Account Page** — profile, password, MFA for ALL user types
+- **Agency Profile** — editable name, logo, address, branding (Settings → first tab)
+- **MFA/2FA for All Users** — not just agency admins
+- **User Profile Avatar** — header button with initials + name
+
+#### Automation & Intelligence
+- **Workflow Automation Rule Builder** — trigger → condition → action, 5 pre-built rules
+- **Compliance Command Center** — weighted scoring (6 components), trending, per-provider scores
+- **Revenue Intelligence** — ROI per provider, payer profitability, delay impact analysis
+- **Predictive Analytics** — approval probability, estimated completion, risk factors per application
+- **Continuous Monitoring Scheduler** — configurable frequency per check type with run-now
+
+#### Data & Content
+- **227+ Payer Catalog** — 164 new payers (BH carve-outs, Medicaid MCOs, BCBS, VA/military)
+- **20 Strategic Payer Tags** — across 5 groups with filter bar and Strategic Planner view
+- **Provider Profile Presets** — prepopulated dropdowns for Education, Boards, Malpractice, CME, Work History
+- **Knowledge Base** — 18 searchable help articles across 8 categories
+- **18 Contextual Help Tooltips** — `?` icons on key pages explaining features
+
+#### Collaboration & Communication
+- **In-App Commenting** — threaded notes on applications with @mention support
+- **Enhanced Notification Center** — V2 design, unread tracking, filter tabs, mark read
+- **Audit Trail** — automatic who/what/when logging on every create/update/delete
+- **Email Digest Settings** — daily/weekly summary configuration per user
+
+#### Integrations & Developer
+- **API Documentation Page** — 11 endpoint groups, method badges, curl copy, collapsible details
+- **Webhook Event System** — configure URLs, 11 event types, test button, delivery log
+- **Embeddable Widget Documentation** — 3 widgets with code snippets and live preview
+- **E-Signature** — canvas-based signature pad for attestations and contracts
+
+#### Onboarding & Help
+- **Provider Onboarding Wizard** — 5-step guided flow (Basic Info → Contact → Licenses → Education → Review)
+- **Guided Tour** — 7-step first-login tour with spotlight overlay
+- **One-Click Demo Login** — passwordless demo accounts, self-bootstrapping backend
+
+#### Document Management
+- **Document Versioning** — version badges, replace with increment
+- **Document Categories** — filter pills (License, COI, W-9, NPI, Board Cert, etc.)
+- **Document Expiration Indicators** — color-coded (green/amber/red)
+
+#### Infrastructure
+- **All Modals Converted** — zero raw browser prompt/confirm, all use app modal system
+- **Application Summary Cards** — status pipeline bar with clickable segments
+- **Kanban Width Fix** — columns fit at 100% zoom
+- **Demo Login Backend** — self-bootstrapping `/auth/demo-login` endpoint with isolated demo agency
+
+### Feature Count
+- **V1 Features:** 75+ across 43 modules
+- **V2 New Features:** 40+ features added
+- **Total:** 115+ features — more than any competitor at any price point
+
+### Competitive Position (Updated)
+
+| Feature | Medallion | Verifiable | Modio | **Credentik V2** |
+|---------|:---------:|:----------:|:-----:|:-----------------:|
+| Verification (PSV) | Full | Full | Basic | Basic + NPPES/OIG |
+| Continuous Monitoring | ✓ | ✓ | ✓ | ✓ (scheduler UI) |
+| Payer Enrollment | Managed | — | Assisted | Tracking + Batch |
+| Revenue Intelligence | — | — | — | **✓ (unique)** |
+| Compliance Scoring | — | — | — | **✓ (unique)** |
+| Workflow Automation | — | — | — | **✓ (unique)** |
+| Predictive Analytics | — | — | — | **✓ (unique)** |
+| Dark Mode | — | — | — | **✓** |
+| Cmd+K Palette | — | — | — | **✓** |
+| E-Signature | — | — | ✓ | **✓** |
+| API Documentation | — | ✓ | — | **✓** |
+| Webhooks | — | ✓ | — | **✓** |
+| Knowledge Base | — | — | ✓ | **✓** |
+| Guided Tour | — | — | — | **✓** |
+| Document Versioning | — | — | — | **✓** |
+| Embeddable Widgets | — | — | — | **✓** |
+| Fee Schedule Calculator | — | — | — | **✓ (unique)** |
+| Coverage Matrix | — | — | — | **✓ (unique)** |
+| Telehealth Policy DB | — | — | — | **✓ (unique)** |
+| Mobile PWA | — | — | ✓ | **✓** |
+| Multi-role MFA | — | — | — | **✓** |
+| Audit Trail | — | — | — | **✓** |
+| Strategic Payer Tags | — | — | — | **✓ (unique)** |
+| Payer Catalog (227+) | — | — | — | **✓ (unique)** |
+
+**Credentik V2 has 10 features no competitor offers at any price.**
