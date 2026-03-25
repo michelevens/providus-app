@@ -14794,7 +14794,7 @@ async function renderFacilityDetailPage(facilityId) {
       .fac-info-item { }
       .fac-info-item .fac-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray-400); margin-bottom:3px; }
       .fac-info-item .fac-value { font-size:14px; font-weight:500; color:var(--gray-800); }
-      .fac-map-placeholder { background:var(--gray-100); border-radius:12px; height:180px; display:flex; align-items:center; justify-content:center; color:var(--gray-400); font-size:13px; margin-top:16px; }
+      .fac-map-frame { border-radius:16px; overflow:hidden; margin-top:20px; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
       @media (max-width:768px) { .fac-detail-grid { grid-template-columns:1fr; } .fac-info-grid { grid-template-columns:1fr; } }
     </style>
 
@@ -14820,18 +14820,32 @@ async function renderFacilityDetailPage(facilityId) {
           </div>
         </div>
 
+        <!-- Map -->
+        ${fullAddr ? `<div class="fac-detail-section" style="margin-top:20px;padding:0;overflow:hidden;">
+          <iframe
+            width="100%" height="260" style="border:0;border-radius:16px;display:block;"
+            loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+            src="https://maps.google.com/maps?q=${encodeURIComponent(fullAddr)}&output=embed&z=14">
+          </iframe>
+        </div>` : ''}
+
         <!-- Location Info Card -->
         <div class="fac-detail-section" style="margin-top:20px;">
           <h3 style="margin:0 0 16px;font-size:15px;font-weight:700;">Location Information</h3>
           <div class="fac-info-grid">
-            <div class="fac-info-item"><div class="fac-label">Address</div><div class="fac-value">${escHtml(fullAddr || '—')}</div></div>
-            <div class="fac-info-item"><div class="fac-label">Phone</div><div class="fac-value">${escHtml(fac.phone || '—')}</div></div>
-            <div class="fac-info-item"><div class="fac-label">Fax</div><div class="fac-value">${escHtml(fac.fax || '—')}</div></div>
+            <div class="fac-info-item"><div class="fac-label">Street Address</div><div class="fac-value">${escHtml(fac.street || fac.address || '—')}</div></div>
+            <div class="fac-info-item"><div class="fac-label">City</div><div class="fac-value">${escHtml(fac.city || '—')}</div></div>
             <div class="fac-info-item"><div class="fac-label">State</div><div class="fac-value">${escHtml(fac.state || '—')}</div></div>
-            <div class="fac-info-item"><div class="fac-label">ZIP</div><div class="fac-value">${escHtml(fac.zip || fac.zipCode || '—')}</div></div>
+            <div class="fac-info-item"><div class="fac-label">ZIP Code</div><div class="fac-value">${escHtml(fac.zip || fac.zipCode || '—')}</div></div>
+            <div class="fac-info-item"><div class="fac-label">Phone</div><div class="fac-value">${fac.phone ? '<a href="tel:' + escHtml(fac.phone) + '" style="color:var(--brand-600);text-decoration:none;">' + escHtml(fac.phone) + '</a>' : '—'}</div></div>
+            <div class="fac-info-item"><div class="fac-label">Fax</div><div class="fac-value">${escHtml(fac.fax || '—')}</div></div>
+            <div class="fac-info-item"><div class="fac-label">Location NPI</div><div class="fac-value"><code>${escHtml(fac.npi || '—')}</code></div></div>
+            <div class="fac-info-item"><div class="fac-label">Location Type</div><div class="fac-value">${escHtml(facType || '—')}</div></div>
             <div class="fac-info-item"><div class="fac-label">Organization</div><div class="fac-value">${org ? escHtml(org.name) : '—'}</div></div>
+            <div class="fac-info-item"><div class="fac-label">Status</div><div class="fac-value"><span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:8px;height:8px;border-radius:50%;background:${isActive ? 'var(--green)' : 'var(--gray-400)'};"></span>${statusLabel}</span></div></div>
+            <div class="fac-info-item"><div class="fac-label">Facility ID</div><div class="fac-value"><code style="font-size:11px;color:var(--gray-500);">${escHtml(String(fac.id))}</code></div></div>
+            <div class="fac-info-item"><div class="fac-label">Applications</div><div class="fac-value"><strong>${facApps.length}</strong> application${facApps.length !== 1 ? 's' : ''}</div></div>
           </div>
-          ${fullAddr ? '<div class="fac-map-placeholder"><span>&#x1f4cd; ' + escHtml(fullAddr) + '</span></div>' : ''}
         </div>
       </div>
 
@@ -14873,9 +14887,10 @@ async function renderFacilityDetailPage(facilityId) {
                   const prov = provArr.find(pr => String(pr.id) === String(a.providerId || a.provider_id));
                   const provLabel = prov ? ((prov.firstName || prov.first_name || '') + ' ' + (prov.lastName || prov.last_name || '')).trim() : (a.providerName || '—');
                   const statusColor = a.status === 'approved' ? 'approved' : a.status === 'denied' ? 'denied' : 'pending';
+                  const payerLabel = a.payerName || a.payer_name || (typeof a.payer === 'object' && a.payer ? (a.payer.name || a.payer.payerName || a.payer.payer_name || JSON.stringify(a.payer)) : a.payer) || '—';
                   return `<tr>
                     <td style="font-size:12px;">${escHtml(provLabel)}</td>
-                    <td style="font-size:12px;">${escHtml(a.payerName || a.payer_name || a.payer || '—')}</td>
+                    <td style="font-size:12px;">${escHtml(payerLabel)}</td>
                     <td>${escHtml(a.state || '—')}</td>
                     <td><span class="badge badge-${statusColor}">${escHtml(a.status || 'pending')}</span></td>
                     <td style="font-size:11px;">${a.submittedDate || a.submitted_date ? formatDateDisplay(a.submittedDate || a.submitted_date) : '—'}</td>
