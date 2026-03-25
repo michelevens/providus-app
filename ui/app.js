@@ -1816,9 +1816,15 @@ async function renderDashboard() {
         <div class="mc-quick-glance">
           <h4>Upcoming</h4>
           ${upcomingItems.length > 0 ? upcomingItems.map(item => {
-            const d = item.date ? new Date(item.date + 'T00:00:00') : null;
-            const monthStr = d ? d.toLocaleDateString('en-US', { month: 'short' }) : '';
-            const dayStr = d ? d.getDate() : '';
+            let d = null;
+            if (item.date) {
+              const raw = String(item.date).split('T')[0]; // handle both YYYY-MM-DD and ISO strings
+              d = new Date(raw + 'T00:00:00');
+              if (isNaN(d.getTime())) d = new Date(item.date); // fallback
+              if (isNaN(d.getTime())) d = null; // give up
+            }
+            const monthStr = d ? d.toLocaleDateString('en-US', { month: 'short' }) : '—';
+            const dayStr = d ? d.getDate() : '—';
             return `<div class="mc-upcoming-item">
               <div class="mc-upcoming-date">
                 <div class="mc-up-month">${monthStr}</div>
@@ -11551,7 +11557,9 @@ async function renderReimbursement() {
   });
 
   // Also include payer plan reimbursement rates
-  const pPlans = await store.getAll('payer_plans') || [];
+  let pPlans = [];
+  try { pPlans = await store.getAll('payer_plans') || []; } catch (e) { console.warn('Could not load payer plans:', e); }
+  if (!Array.isArray(pPlans)) pPlans = [];
   pPlans.forEach(plan => {
     const payer = getPayerById(plan.payerId);
     if (!payer || !plan.state || !plan.reimbursementRate) return;
