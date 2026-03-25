@@ -68,17 +68,41 @@ window.addEventListener('online', () => {
 // Users can still type custom values via the "Other" option.
 
 const PRESET_INSTITUTIONS = [
+  // Top Medical Schools
   'Johns Hopkins University','Harvard Medical School','Yale School of Medicine','Stanford University School of Medicine',
   'University of Pennsylvania','Columbia University','Duke University','University of Michigan',
   'University of California, San Francisco','Northwestern University','Emory University','University of Pittsburgh',
+  'Washington University in St. Louis','University of Washington','Mayo Clinic Alix School of Medicine',
+  'Cornell University (Weill Cornell)','New York University (NYU)','University of Chicago','Baylor College of Medicine',
+  'University of California, Los Angeles','University of California, San Diego','University of California, Davis',
+  'University of California, Irvine','University of Southern California','Icahn School of Medicine at Mount Sinai',
+  // Florida Schools
   'University of Florida','University of Miami','University of South Florida','Nova Southeastern University',
   'Barry University','Florida Atlantic University','University of Central Florida','Florida International University',
+  'Florida State University','Jacksonville University','University of North Florida','Keiser University',
+  'AdventHealth University','Palm Beach Atlantic University','South University (West Palm Beach)',
+  // NP/Nursing Programs
   'Walden University','Chamberlain University','Frontier Nursing University','Vanderbilt University',
-  'Georgetown University','George Washington University','University of Maryland','University of Virginia',
-  'University of North Carolina','Rush University','University of Illinois Chicago','Arizona State University',
+  'Georgetown University','George Washington University','Rush University','University of Illinois Chicago',
+  'Simmons University','Maryville University','University of Cincinnati','Gonzaga University',
+  'University of South Alabama','Purdue University Global','Western Governors University','Capella University',
+  'Grand Canyon University','Liberty University','Regis University','University of Hartford',
+  'Drexel University','Thomas Jefferson University','University of Massachusetts','Boston College',
+  'University of Alabama at Birmingham','University of Tennessee','University of Kentucky','Ohio State University',
+  'University of Iowa','University of Minnesota','University of Wisconsin-Madison','Indiana University',
+  // HBCU & Minority-Serving
+  'Meharry Medical College','Howard University','Morehouse School of Medicine','Charles R. Drew University',
+  'Hampton University','Tuskegee University','Xavier University of Louisiana','Florida A&M University',
+  // Other Major Universities
+  'University of Maryland','University of Virginia','University of North Carolina','Arizona State University',
   'University of Arizona','Oregon Health & Science University','University of Colorado','Case Western Reserve University',
-  'University of Cincinnati','University of Alabama at Birmingham','Medical University of South Carolina',
-  'Uniformed Services University','Meharry Medical College','Howard University','Morehouse School of Medicine',
+  'Medical University of South Carolina','Uniformed Services University','University of Texas at Austin',
+  'Texas A&M University','University of Texas Health Science Center','University of Nebraska','Creighton University',
+  'University of Kansas','University of Oklahoma','University of New Mexico','University of Nevada, Las Vegas',
+  'University of Hawaii','University of Connecticut','Rutgers University','Stony Brook University',
+  'University at Buffalo','Temple University','Penn State University','Virginia Commonwealth University',
+  'Wake Forest University','Tulane University','Loyola University Chicago','Saint Louis University',
+  'Loma Linda University','University of Rochester','Albert Einstein College of Medicine',
 ];
 
 const PRESET_DEGREES = [
@@ -9851,6 +9875,7 @@ function handleNppesProxy(payload) {
     if (!employer) { showToast('Employer is required'); return; }
     try {
       await store.createProviderWorkHistory(providerId, {
+        employerName: employer,
         employer,
         organization: employer,
         position: getPresetValue('wh-position'),

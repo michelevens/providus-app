@@ -426,7 +426,7 @@ async function renderProviderPrintout(providerId) {
           <thead><tr><th>Institution</th><th>Degree</th><th>Year</th></tr></thead>
           <tbody>
             ${education.map(e => `<tr>
-              <td>${esc(e.institution || e.school || '')}</td>
+              <td>${esc(e.institutionName || e.institution || e.school || '')}</td>
               <td>${esc(e.degree || '')}</td>
               <td>${e.graduationYear || e.graduation_year || '—'}</td>
             </tr>`).join('')}
@@ -819,14 +819,15 @@ async function renderProviderProfilePage(providerId) {
         </div>
         <div class="card-body" style="padding:0;">
           ${education.length > 0 ? `<table>
-            <thead><tr><th>Institution</th><th>Degree</th><th>Field</th><th>Start</th><th>End</th></tr></thead>
+            <thead><tr><th>Institution</th><th>Degree</th><th>Field</th><th>Start</th><th>End</th><th></th></tr></thead>
             <tbody>
               ${education.map(e => `<tr>
-                <td><strong>${escHtml(e.institution || e.schoolName || '—')}</strong></td>
+                <td><strong>${escHtml(e.institutionName || e.institution || e.schoolName || '—')}</strong></td>
                 <td>${escHtml(e.degree || e.degreeType || '—')}</td>
                 <td>${escHtml(e.fieldOfStudy || e.field || e.specialty || '—')}</td>
                 <td>${formatDateDisplay(e.startDate || e.start_date)}</td>
                 <td>${formatDateDisplay(e.endDate || e.end_date || e.graduationDate)}</td>
+                <td>${deleteButton('Delete', `window.app.deleteEducation(${providerId}, ${e.id})`)}</td>
               </tr>`).join('')}
             </tbody>
           </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No education records. Add medical school, residency, or fellowship records.</div>'}
