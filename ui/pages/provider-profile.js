@@ -218,6 +218,38 @@ async function renderProviderDashboard(user) {
         </div>
       </div>
 
+      <!-- Practice Locations -->
+      ${await (async () => {
+        const allFacilities = await store.getFacilities().catch(() => []);
+        const facMap = {};
+        (Array.isArray(allFacilities) ? allFacilities : []).forEach(f => { facMap[f.id] = f; });
+        const locApps = apps.filter(a => a.facilityId && facMap[a.facilityId]);
+        // Deduplicate by facilityId to get unique locations
+        const seenFac = new Set();
+        const provLocations = [];
+        locApps.forEach(a => {
+          if (!seenFac.has(a.facilityId)) {
+            seenFac.add(a.facilityId);
+            const f = facMap[a.facilityId];
+            const facApps = locApps.filter(x => x.facilityId === a.facilityId);
+            provLocations.push({ facility: f, apps: facApps });
+          }
+        });
+        return `<div class="card pdv2-card">
+          <div class="card-header"><h3>Practice Locations (${provLocations.length})</h3></div>
+          <div class="card-body" style="padding:0;">
+            ${provLocations.length > 0 ? `<table><thead><tr><th>Location</th><th>City / State</th><th>Type</th><th>Applications</th></tr></thead><tbody>
+              ${provLocations.map(pl => `<tr>
+                <td><strong>${escHtml(pl.facility.name || '—')}</strong></td>
+                <td>${escHtml([pl.facility.city, pl.facility.state].filter(Boolean).join(', ') || '—')}</td>
+                <td>${escHtml((pl.facility.facilityType || pl.facility.type || '—').replace(/_/g, ' '))}</td>
+                <td><span class="badge badge-approved" style="font-size:10px;">${pl.apps.length} app${pl.apps.length !== 1 ? 's' : ''}</span></td>
+              </tr>`).join('')}
+            </tbody></table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No practice locations linked via applications.</div>'}
+          </div>
+        </div>`;
+      })()}
+
       <!-- My Documents -->
       <div class="card pdv2-card">
         <div class="card-header"><h3>My Documents (${documents.length})</h3></div>

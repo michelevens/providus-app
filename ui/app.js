@@ -2270,6 +2270,9 @@ async function renderApplications() {
 async function renderAppTable(prefetchedApps = null) {
   const apps = prefetchedApps || await store.getAll('applications');
   const allProviders = await store.getAll('providers').catch(() => []);
+  const allFacilities = await store.getFacilities().catch(() => []);
+  const facMap = {};
+  (Array.isArray(allFacilities) ? allFacilities : []).forEach(f => { facMap[f.id] = f; });
   const tbody = document.getElementById('app-table-body');
   const empty = document.getElementById('app-empty');
   if (!tbody && !document.getElementById('app-card-view')) return;
@@ -2378,7 +2381,13 @@ async function renderAppTable(prefetchedApps = null) {
     s.textContent = `.app-table-v2 tr:hover{background:var(--gray-50,#f9fafb);}
       #app-table-body tr:hover{background:var(--gray-50,#f9fafb);}
       .app-action-menu div[style*="display:block"]{animation:fadeIn .12s ease;}
-      @keyframes fadeIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:translateY(0);}}`;
+      @keyframes fadeIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:translateY(0);}}
+      .loc-indicator{line-height:1.3;}
+      .loc-card-pill{font-size:10px!important;}
+      .loc-app-count{cursor:default;}
+      .loc-info-banner strong{font-weight:700;}
+      .loc-form-grid select,.loc-form-grid input,.loc-form-grid textarea{font-size:13px;}
+      .loc-new-section summary:hover{color:var(--brand-600);}`;
     document.head.appendChild(s);
     const tw = document.querySelector('.table-wrap'); if (tw) tw.style.borderRadius = '16px';
     // Close action menus on click outside
@@ -2394,7 +2403,9 @@ async function renderAppTable(prefetchedApps = null) {
       const payer = getPayerById(a.payerId);
       const payerName = payer ? payer.name : (a.payerName || '-');
       const statusObj = APPLICATION_STATUSES.find(s => s.value === a.status) || APPLICATION_STATUSES[0];
-      const typeLabel = a.type === 'group' ? 'Group' : a.type === 'both' ? 'Both' : 'Indiv';
+      const typeLabel = a.type === 'group' ? 'Group' : a.type === 'both' ? 'Both' : a.type === 'location_addition' ? 'Loc Add' : a.type === 'recredentialing' ? 'Recred' : 'Indiv';
+      const facObj = a.facilityId ? facMap[a.facilityId] : null;
+      const facilityName = facObj ? facObj.name : '';
 
       return `<tr onclick="window.app.viewTimeline('${a.id}')" style="cursor:pointer;">
         <td onclick="event.stopPropagation();"><input type="checkbox" class="app-checkbox" data-app-id="${a.id}" onchange="window.app.onBulkCheckChange()"></td>
@@ -2405,7 +2416,8 @@ async function renderAppTable(prefetchedApps = null) {
         <td><strong>${getStateName(a.state)}</strong></td>
         <td>
           <div style="font-weight:600;font-size:13px;">${payerName}</div>
-          <div style="margin-top:3px;"><span class="badge badge-${a.status}" style="font-size:10px;">${statusObj.label}</span> <span style="font-size:10px;color:var(--gray-400);">${typeLabel}</span></div>
+          <div style="margin-top:3px;"><span class="badge badge-${a.status}" style="font-size:10px;">${statusObj.label}</span> <span style="font-size:10px;color:var(--gray-400);">${typeLabel}</span>${a.type === 'location_addition' ? ' <span style="font-size:10px;" title="Location Addition">&#128205;</span>' : ''}</div>
+          ${a.facilityId ? `<div class="loc-indicator" style="font-size:10px;color:var(--gray-400);margin-top:2px;">&#128205; ${escHtml(facilityName)}</div>` : ''}
         </td>
         <td class="text-sm">
           ${a.submittedDate ? `<div>Sub: ${formatDateDisplay(a.submittedDate)}</div>` : ''}
@@ -2422,6 +2434,7 @@ async function renderAppTable(prefetchedApps = null) {
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.viewTimeline('${a.id}')">Timeline</button>
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.openDocChecklist('${a.id}')">Documents</button>
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.editApplication('${a.id}')">Edit</button>
+              ${['approved','credentialed'].includes(a.status) ? `<button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--brand-600);" onclick="window.app.addLocationToApp('${a.id}')">+ Add Location</button>` : ''}
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--red);" onclick="window.app.deleteApplication('${a.id}')">Delete</button>
             </div>
           </div>
@@ -2436,7 +2449,8 @@ async function renderAppTable(prefetchedApps = null) {
       const payer = getPayerById(a.payerId);
       const payerName = payer ? payer.name : (a.payerName || '-');
       const statusObj = APPLICATION_STATUSES.find(s => s.value === a.status) || APPLICATION_STATUSES[0];
-      const typeLabel = a.type === 'group' ? 'Group' : a.type === 'both' ? 'Both' : 'Indiv';
+      const typeLabel = a.type === 'group' ? 'Group' : a.type === 'both' ? 'Both' : a.type === 'location_addition' ? 'Loc Add' : a.type === 'recredentialing' ? 'Recred' : 'Indiv';
+      const cardFacObj = a.facilityId ? facMap[a.facilityId] : null;
       const ref = a.statusChangedDate || a.submittedDate || a.createdAt;
       const daysIn = ref ? Math.floor((Date.now() - new Date(ref).getTime()) / 86400000) : null;
       const providerObj = a.providerId ? allProviders?.find(p => p.id === a.providerId) : null;
@@ -2457,6 +2471,7 @@ async function renderAppTable(prefetchedApps = null) {
             <span class="v2-apps-pill" style="background:${statusObj.color}18;color:${statusObj.color};">${statusObj.label}</span>
             <span class="v2-apps-pill" style="background:var(--gray-50);color:var(--text-muted);">${typeLabel}</span>
             ${a.wave ? `<span class="v2-apps-pill" style="background:var(--brand-50);color:var(--brand-600);">G${a.wave}</span>` : ''}
+            ${cardFacObj ? `<span class="v2-apps-pill loc-card-pill" style="background:rgba(139,92,246,0.08);color:#7c3aed;">&#128205; ${escHtml(cardFacObj.name || '')}</span>` : ''}
           </div>
           <div class="v2-apps-card-stats">
             <div><div class="cs-label">Days in Status</div><div class="cs-val" style="color:${daysIn > 60 ? 'var(--red)' : daysIn > 30 ? 'var(--warning-500)' : 'var(--text-primary)'};">${daysIn !== null ? daysIn : '-'}</div></div>
@@ -2466,6 +2481,7 @@ async function renderAppTable(prefetchedApps = null) {
           <div class="v2-apps-card-actions">
             <button class="btn btn-sm" onclick="window.app.editApplication('${a.id}')">Edit</button>
             <button class="btn btn-sm btn-primary" onclick="window.app.openLogEntry('${a.id}')">Follow-up</button>
+            ${['approved','credentialed'].includes(a.status) ? `<button class="btn btn-sm" style="color:var(--brand-600);" onclick="window.app.addLocationToApp('${a.id}')">+ Location</button>` : ''}
           </div>
         </div>
       </div>`;
@@ -6563,6 +6579,8 @@ window.app = {
   // Applications
   async openAddModal() { await openApplicationModal(); },
   async editApplication(id) { await openApplicationModal(id); },
+  async addLocationToApp(id) { await addLocationToApp(id); },
+  async submitLocationAddition(parentAppId) { await window.submitLocationAddition(parentAppId); },
   async deleteApplication(id) {
     if (!await appConfirm('Delete this application?', { title: 'Delete Application', okLabel: 'Delete', okClass: 'btn-danger' })) return;
     await store.remove('applications', id);
@@ -10586,10 +10604,12 @@ async function openApplicationModal(id) {
 
   const licensedStates = (await store.getAll('licenses')).map(l => l.state);
   const providers = await store.getAll('providers');
+  const facilities = await store.getFacilities().catch(() => []);
 
   // Normalize IDs for comparison (API may return string or number)
   const existProviderId = existing?.providerId || existing?.provider_id || '';
   const existPayerId = existing?.payerId || existing?.payer_id || '';
+  const existFacilityId = existing?.facilityId || '';
 
   form.innerHTML = `
     <input type="hidden" id="edit-app-id" value="${id || ''}">
@@ -10598,6 +10618,13 @@ async function openApplicationModal(id) {
         <label>Provider</label>
         <select class="form-control" id="field-provider">
           ${providers.map(p => `<option value="${p.id}" ${String(existProviderId) == String(p.id) ? 'selected' : ''}>${p.firstName} ${p.lastName} (${p.credentials})</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Practice Location</label>
+        <select class="form-control" id="field-facility">
+          <option value="">Primary / Default</option>
+          ${facilities.map(f => `<option value="${f.id}" ${String(existFacilityId) == String(f.id) ? 'selected' : ''}>${escHtml(f.name || '')}${f.city || f.state ? ' — ' + [f.city, f.state].filter(Boolean).join(', ') : ''}</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
@@ -10640,6 +10667,8 @@ async function openApplicationModal(id) {
           <option value="individual" ${existing?.type === 'individual' ? 'selected' : ''}>Individual</option>
           <option value="group" ${existing?.type === 'group' ? 'selected' : ''}>Group</option>
           <option value="both" ${existing?.type === 'both' ? 'selected' : ''}>Both</option>
+          <option value="location_addition" ${existing?.type === 'location_addition' ? 'selected' : ''}>Location Addition</option>
+          <option value="recredentialing" ${existing?.type === 'recredentialing' ? 'selected' : ''}>Re-credentialing</option>
         </select>
       </div>
     </div>
@@ -10690,6 +10719,7 @@ window.saveApplication = async function() {
     payerContactEmail: document.getElementById('field-payer-email').value.trim(),
     notes: document.getElementById('field-notes').value,
     providerId: document.getElementById('field-provider').value || '',
+    facilityId: document.getElementById('field-facility')?.value || '',
     organizationId: '',
   };
 
@@ -10737,6 +10767,171 @@ window.saveApplication = async function() {
   closeModal();
   await navigateTo('applications');
   } finally { if (btn) { btn.disabled = false; btn.textContent = btnText; } }
+};
+
+// ─── Add Location to Approved Application ───
+
+async function addLocationToApp(appId) {
+  const app = await store.getOne('applications', appId);
+  if (!app) { showToast('Application not found'); return; }
+
+  const payer = getPayerById(app.payerId);
+  const payerName = payer ? payer.name : (app.payerName || 'Unknown Payer');
+  const stateName = getStateName(app.state) || app.state || 'N/A';
+  const providers = await store.getAll('providers').catch(() => []);
+  const provObj = providers.find(p => String(p.id) === String(app.providerId));
+  const provName = provObj ? `${provObj.firstName} ${provObj.lastName}` : 'Provider';
+  const facilities = await store.getFacilities().catch(() => []);
+  const facArr = Array.isArray(facilities) ? facilities : [];
+
+  // Build location addition modal
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay active';
+  overlay.id = 'loc-add-modal';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:580px;">
+      <div class="modal-header">
+        <h3>Add Practice Location</h3>
+        <button class="modal-close" onclick="document.getElementById('loc-add-modal').remove()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <style>
+          .loc-info-banner { background:var(--brand-50,#eff6ff); border:1px solid var(--brand-200,#bfdbfe); border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:13px; color:var(--brand-700,#1d4ed8); }
+          .loc-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+          .loc-form-grid .loc-full { grid-column:1/-1; }
+          .loc-form-grid label { display:block; font-size:12px; font-weight:600; color:var(--gray-600); margin-bottom:4px; }
+          .loc-form-grid .form-control { width:100%; }
+          .loc-new-section { margin-top:14px; padding:14px; background:var(--gray-50,#f9fafb); border-radius:10px; border:1px dashed var(--gray-300,#d1d5db); }
+        </style>
+        <div class="loc-info-banner">
+          <strong>${escHtml(provName)}</strong> is already credentialed with <strong>${escHtml(payerName)}</strong> in <strong>${escHtml(stateName)}</strong>.<br>
+          <span style="font-size:12px;color:var(--gray-500);">This will create a new request to add a practice location to this existing relationship.</span>
+        </div>
+        <div class="loc-form-grid">
+          <div class="loc-full">
+            <label>Select Existing Location</label>
+            <select class="form-control" id="loc-add-facility">
+              <option value="">-- Select a location --</option>
+              ${facArr.map(f => `<option value="${f.id}">${escHtml(f.name || '')}${f.city || f.state ? ' — ' + [f.city, f.state].filter(Boolean).join(', ') : ''}</option>`).join('')}
+            </select>
+          </div>
+          <div class="loc-full">
+            <label>Request Type</label>
+            <select class="form-control" id="loc-add-request-type">
+              <option value="add_practice_location">Add Practice Location</option>
+              <option value="change_primary_location">Change Primary Location</option>
+              <option value="add_telehealth_location">Add Telehealth Location</option>
+            </select>
+          </div>
+          <div class="loc-full">
+            <label>Notes</label>
+            <textarea class="form-control" id="loc-add-notes" rows="3" placeholder="Additional details about this location addition..."></textarea>
+          </div>
+        </div>
+        <details class="loc-new-section" style="cursor:pointer;">
+          <summary style="font-weight:600;font-size:13px;color:var(--gray-700);">Or add a new location inline</summary>
+          <div class="loc-form-grid" style="margin-top:12px;">
+            <div><label>Location Name</label><input type="text" class="form-control" id="loc-new-name" placeholder="e.g. Downtown Office"></div>
+            <div><label>Type</label>
+              <select class="form-control" id="loc-new-type">
+                <option value="">Select type...</option>
+                <option value="primary_office">Primary Office</option>
+                <option value="satellite_office">Satellite Office</option>
+                <option value="telehealth">Telehealth Only</option>
+                <option value="clinic">Outpatient Clinic</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="loc-full"><label>Address</label><input type="text" class="form-control" id="loc-new-address" placeholder="Street address"></div>
+            <div><label>City</label><input type="text" class="form-control" id="loc-new-city"></div>
+            <div><label>State</label><input type="text" class="form-control" id="loc-new-state" maxlength="2" placeholder="e.g. TX" value="${escAttr(app.state !== 'ALL' ? app.state : '')}"></div>
+            <div><label>ZIP</label><input type="text" class="form-control" id="loc-new-zip" maxlength="10"></div>
+          </div>
+        </details>
+      </div>
+      <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+        <button class="btn" onclick="document.getElementById('loc-add-modal').remove()">Cancel</button>
+        <button class="btn btn-primary" id="loc-add-submit-btn" onclick="window.app.submitLocationAddition('${appId}')">Submit Location Request</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+window.submitLocationAddition = async function(parentAppId) {
+  const btn = document.getElementById('loc-add-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+  try {
+    const parentApp = await store.getOne('applications', parentAppId);
+    if (!parentApp) { showToast('Parent application not found'); return; }
+
+    let facilityId = document.getElementById('loc-add-facility')?.value || '';
+    const requestType = document.getElementById('loc-add-request-type')?.value || 'add_practice_location';
+    const notes = document.getElementById('loc-add-notes')?.value?.trim() || '';
+
+    // If new location fields are filled, create the facility first
+    const newName = document.getElementById('loc-new-name')?.value?.trim();
+    if (!facilityId && newName) {
+      const newFac = await store.createFacility({
+        name: newName,
+        facilityType: document.getElementById('loc-new-type')?.value || '',
+        address: document.getElementById('loc-new-address')?.value?.trim() || '',
+        city: document.getElementById('loc-new-city')?.value?.trim() || '',
+        state: document.getElementById('loc-new-state')?.value?.trim().toUpperCase() || '',
+        zip: document.getElementById('loc-new-zip')?.value?.trim() || '',
+        status: 'active',
+      });
+      if (newFac && newFac.id) facilityId = newFac.id;
+    }
+
+    if (!facilityId) {
+      showToast('Please select or create a location');
+      if (btn) { btn.disabled = false; btn.textContent = 'Submit Location Request'; }
+      return;
+    }
+
+    const requestTypeLabels = {
+      add_practice_location: 'Add Practice Location',
+      change_primary_location: 'Change Primary Location',
+      add_telehealth_location: 'Add Telehealth Location',
+    };
+
+    // Create new application linked to the parent
+    const data = {
+      providerId: parentApp.providerId || '',
+      payerId: parentApp.payerId || '',
+      payerName: parentApp.payerName || '',
+      state: parentApp.state || '',
+      status: 'submitted',
+      type: 'location_addition',
+      facilityId,
+      parentApplicationId: parentAppId,
+      wave: parentApp.wave || null,
+      notes: `[Location Addition] ${requestTypeLabels[requestType] || requestType}${notes ? ' — ' + notes : ''}`,
+      submittedDate: new Date().toISOString().split('T')[0],
+      organizationId: parentApp.organizationId || '',
+    };
+
+    const created = await store.create('applications', data);
+    if (created && created.id) {
+      try {
+        await store.create('activity_logs', {
+          applicationId: created.id,
+          type: 'note',
+          loggedDate: new Date().toISOString().split('T')[0],
+          outcome: `Location addition request created (linked to ${parentAppId}). Type: ${requestTypeLabels[requestType] || requestType}`,
+        });
+      } catch (e) { console.error('Failed to log location addition:', e); }
+    }
+
+    document.getElementById('loc-add-modal')?.remove();
+    showToast('Location addition request created');
+    await navigateTo('applications');
+  } catch (e) {
+    showToast('Error: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit Location Request'; }
+  }
 };
 
 // ─── License Modal ───
@@ -13868,6 +14063,13 @@ async function renderFacilitiesPage() {
   try { facilities = await store.getFacilities(); } catch (e) { console.error('Facilities error:', e); }
   if (!Array.isArray(facilities)) facilities = [];
 
+  // Build facility-to-application count map
+  const allAppsForFac = await store.getAll('applications').catch(() => []);
+  const facAppCount = {};
+  (Array.isArray(allAppsForFac) ? allAppsForFac : []).forEach(a => {
+    if (a.facilityId) facAppCount[a.facilityId] = (facAppCount[a.facilityId] || 0) + 1;
+  });
+
   const facActive = facilities.filter(f => f.status === 'active' || f.isActive).length;
   const facStates = new Set(facilities.map(f => f.state).filter(Boolean));
 
@@ -13903,7 +14105,7 @@ async function renderFacilitiesPage() {
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Location</th><th>Organization</th><th>Type</th><th>Address</th><th>Phone</th><th>Status</th><th>Actions</th></tr>
+              <tr><th>Location</th><th>Organization</th><th>Type</th><th>Address</th><th>Phone</th><th>Applications</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody id="facility-table-body">
               ${facilities.map(f => {
@@ -13917,6 +14119,7 @@ async function renderFacilitiesPage() {
                   <td>${(f.facilityType || f.type) ? '<span class="facv2-type-badge">' + escHtml((f.facilityType || f.type).replace(/_/g, ' ')) + '</span>' : '—'}</td>
                   <td>${f.address || f.street ? '<div style="font-size:12px;">' + escHtml(f.address || f.street || '') + '</div>' : ''}${escHtml(addr) || '—'}</td>
                   <td>${escHtml(f.phone || '—')}</td>
+                  <td>${(facAppCount[f.id] || 0) > 0 ? `<span class="badge badge-approved loc-app-count" style="font-size:10px;">${facAppCount[f.id]} app${facAppCount[f.id] !== 1 ? 's' : ''}</span>` : '<span style="font-size:11px;color:var(--gray-400);">0</span>'}</td>
                   <td><span class="facv2-status-dot" style="background:${isActive ? 'rgba(34,197,94,0.12)' : 'rgba(156,163,175,0.12)'};color:${isActive ? 'var(--green)' : 'var(--gray-500)'};"><span style="width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;"></span>${statusLabel}</span></td>
                   <td>
                     ${editButton('Edit', `window.app.editFacility(${f.id})`)}
@@ -13924,7 +14127,7 @@ async function renderFacilitiesPage() {
                   </td>
                 </tr>`;
               }).join('')}
-              ${facilities.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-500);">No facilities yet. Add one above.</td></tr>' : ''}
+              ${facilities.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No facilities yet. Add one above.</td></tr>' : ''}
             </tbody>
           </table>
         </div>
