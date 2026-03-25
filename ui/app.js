@@ -10406,6 +10406,9 @@ function handleNppesProxy(payload) {
   wizardRemoveLicense(idx) { wizardRemoveLicense(idx); },
   wizardAddEducation() { wizardAddEducation(); },
   wizardRemoveEducation(idx) { wizardRemoveEducation(idx); },
+  async wizardNpiLookup() { await wizardNpiLookup(); },
+  wizardUploadDoc(key, label, input) { wizardUploadDoc(key, label, input); },
+  wizardGeneratePassword() { wizardGeneratePassword(); },
 
   // ─── Help Tooltips ───
   toggleHelpTip(id) { toggleHelpTip(id); },
@@ -14649,11 +14652,13 @@ let _wizardState = null;
 function _initWizardState() {
   _wizardState = {
     step: 1,
-    totalSteps: 5,
+    totalSteps: 7,
     basic: { firstName: '', lastName: '', npi: '', credentials: '', specialty: '', taxonomy: '' },
     contact: { email: '', phone: '', address: '', city: '', state: '', zip: '' },
     licenses: [],
     education: [],
+    documents: [],
+    account: { email: '', password: '', createAccount: true },
   };
 }
 
@@ -14663,7 +14668,7 @@ async function renderProviderOnboardingWizard() {
   const s = _wizardState;
 
   // Inject wizard styles once
-  const stepLabels = ['Basic Info', 'Contact', 'Licenses', 'Education', 'Review'];
+  const stepLabels = ['Basic Info', 'Contact', 'Licenses', 'Education', 'Documents', 'Account', 'Review'];
 
   body.innerHTML = `
     <style>
@@ -14742,18 +14747,26 @@ function _wizardStepContent(s) {
   switch (s.step) {
     case 1: return `
       <h3>Step 1: Basic Information</h3>
+      <div style="background:var(--brand-50,#eff6ff);border:1px solid var(--brand-200,#bfdbfe);border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:var(--brand-700,#1d4ed8);">
+        <strong>Quick Start:</strong> Enter your NPI and click "Lookup" to auto-fill your information from the NPI Registry.
+      </div>
+      <div class="wizard-field">
+        <label>NPI (National Provider Identifier) *</label>
+        <div style="display:flex;gap:8px;">
+          <input id="wiz-npi" value="${escHtml(s.basic.npi)}" placeholder="10-digit NPI" maxlength="10" style="flex:1;" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,10)" />
+          <button class="wizard-btn wizard-btn-primary" onclick="window.app.wizardNpiLookup()" style="white-space:nowrap;padding:10px 16px;">Lookup NPI</button>
+        </div>
+        <div id="wiz-npi-status" style="font-size:12px;margin-top:4px;"></div>
+      </div>
       <div class="wizard-row">
         <div class="wizard-field"><label>First Name *</label><input id="wiz-firstName" value="${escHtml(s.basic.firstName)}" placeholder="First name" /></div>
         <div class="wizard-field"><label>Last Name *</label><input id="wiz-lastName" value="${escHtml(s.basic.lastName)}" placeholder="Last name" /></div>
       </div>
       <div class="wizard-row">
-        <div class="wizard-field"><label>NPI *</label><input id="wiz-npi" value="${escHtml(s.basic.npi)}" placeholder="10-digit NPI" maxlength="10" /></div>
         <div class="wizard-field"><label>Credentials</label><input id="wiz-credentials" value="${escHtml(s.basic.credentials)}" placeholder="e.g. MD, DO, PMHNP" /></div>
-      </div>
-      <div class="wizard-row">
         <div class="wizard-field"><label>Specialty</label><input id="wiz-specialty" value="${escHtml(s.basic.specialty)}" placeholder="e.g. Psychiatry" /></div>
-        <div class="wizard-field"><label>Taxonomy Code</label><input id="wiz-taxonomy" value="${escHtml(s.basic.taxonomy)}" placeholder="e.g. 2084P0800X" /></div>
-      </div>`;
+      </div>
+      <div class="wizard-field"><label>Taxonomy Code</label><input id="wiz-taxonomy" value="${escHtml(s.basic.taxonomy)}" placeholder="e.g. 2084P0800X" /></div>`;
 
     case 2: return `
       <h3>Step 2: Contact Information</h3>
@@ -14823,9 +14836,68 @@ function _wizardStepContent(s) {
       </div>
       <button class="wizard-btn wizard-btn-secondary" onclick="window.app.wizardAddEducation()" style="margin-top:8px;">+ Add Education</button>`;
 
-    case 5:
+    case 5: return `
+      <h3>Step 5: Required Documents</h3>
+      <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">Upload your credentialing documents. You can skip this step and upload later from your dashboard.</p>
+      <div id="wiz-docs-list">
+        ${[
+          { key: 'cv_resume', label: 'CV / Resume', desc: 'Current curriculum vitae' },
+          { key: 'state_license', label: 'State License Copy', desc: 'Photo or scan of active license' },
+          { key: 'dea_certificate', label: 'DEA Certificate', desc: 'If applicable' },
+          { key: 'malpractice_insurance', label: 'Malpractice Insurance', desc: 'Current certificate of insurance' },
+          { key: 'diploma', label: 'Diploma / Degree', desc: 'Highest degree earned' },
+          { key: 'board_certification', label: 'Board Certification', desc: 'If board certified' },
+          { key: 'cds_certificate', label: 'CDS Certificate', desc: 'Controlled Dangerous Substances (if applicable)' },
+          { key: 'photo_id', label: 'Government Photo ID', desc: 'Driver\'s license or passport' },
+        ].map(doc => {
+          const uploaded = s.documents.find(d => d.key === doc.key);
+          return `<div class="wizard-sub-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;">
+            <div style="flex:1;">
+              <div style="font-weight:600;font-size:14px;">${doc.label}</div>
+              <div style="font-size:11px;color:var(--gray-500);">${doc.desc}</div>
+            </div>
+            ${uploaded
+              ? '<span style="color:#22c55e;font-weight:600;font-size:13px;">&#10003; Uploaded</span>'
+              : `<label class="wizard-btn wizard-btn-secondary" style="margin:0;padding:6px 14px;font-size:12px;cursor:pointer;">
+                  Choose File
+                  <input type="file" style="display:none;" onchange="window.app.wizardUploadDoc('${doc.key}', '${escHtml(doc.label)}', this)" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" />
+                </label>`
+            }
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="margin-top:12px;padding:12px;background:var(--gray-50);border-radius:8px;font-size:12px;color:var(--gray-500);">
+        <strong>Accepted formats:</strong> PDF, JPG, PNG, DOC &middot; Max 10MB per file &middot; You can upload remaining documents later.
+      </div>`;
+
+    case 6: return `
+      <h3>Step 6: Create Your Account</h3>
+      <p style="font-size:13px;color:var(--gray-500);margin-bottom:20px;">Set up your login credentials so you can access your onboarding dashboard, track application status, and upload documents anytime.</p>
+      <div class="wizard-field">
+        <label>Email Address *</label>
+        <input id="wiz-account-email" type="email" value="${escHtml(s.account.email || s.contact.email)}" placeholder="your.email@example.com" />
+        <div style="font-size:11px;color:var(--gray-500);margin-top:4px;">This will be your login email</div>
+      </div>
+      <div class="wizard-field">
+        <label>Password *</label>
+        <div style="display:flex;gap:8px;">
+          <input id="wiz-account-password" type="text" value="${escHtml(s.account.password)}" placeholder="Min 8 characters" style="flex:1;" />
+          <button class="wizard-btn wizard-btn-secondary" onclick="window.app.wizardGeneratePassword()" style="white-space:nowrap;padding:8px 14px;font-size:12px;">Generate</button>
+        </div>
+      </div>
+      <div style="margin-top:16px;padding:16px;background:var(--brand-50,#eff6ff);border-radius:10px;border:1px solid var(--brand-200,#bfdbfe);">
+        <div style="font-size:13px;font-weight:600;color:var(--brand-700);margin-bottom:8px;">What you'll get access to:</div>
+        <ul style="font-size:13px;color:var(--brand-600);margin:0;padding-left:20px;line-height:1.8;">
+          <li>Onboarding task checklist &amp; progress tracker</li>
+          <li>Application status updates in real time</li>
+          <li>Upload and manage your credentialing documents</li>
+          <li>License expiration alerts &amp; renewal reminders</li>
+        </ul>
+      </div>`;
+
+    case 7:
       return `
-      <h3>Step 5: Review & Create</h3>
+      <h3>Step 7: Review & Create</h3>
       <p style="font-size:13px;color:var(--gray-500);margin-bottom:20px;">Review the information below, then click "Create Provider" to save.</p>
       <div class="wizard-review-section">
         <h4>Basic Information</h4>
@@ -14848,7 +14920,18 @@ function _wizardStepContent(s) {
       ${s.education.length > 0 ? `<div class="wizard-review-section">
         <h4>Education (${s.education.length})</h4>
         ${s.education.map(e => `<div class="wizard-review-row"><span class="wizard-review-label">${escHtml(e.degree || '—')} — ${escHtml(e.field || '—')}</span><span class="wizard-review-value">${escHtml(e.institution || '—')}${e.year ? ' (' + e.year + ')' : ''}</span></div>`).join('')}
-      </div>` : ''}`;
+      </div>` : ''}
+      <div class="wizard-review-section">
+        <h4>Documents (${s.documents.length} uploaded)</h4>
+        ${s.documents.length > 0
+          ? s.documents.map(d => `<div class="wizard-review-row"><span class="wizard-review-label">${escHtml(d.label)}</span><span class="wizard-review-value" style="color:#22c55e;">&#10003; Uploaded</span></div>`).join('')
+          : '<div style="font-size:13px;color:var(--gray-400);">No documents uploaded yet — you can add them from your dashboard after creation.</div>'}
+      </div>
+      <div class="wizard-review-section">
+        <h4>Account</h4>
+        <div class="wizard-review-row"><span class="wizard-review-label">Login Email</span><span class="wizard-review-value">${escHtml(s.account.email) || '—'}</span></div>
+        <div class="wizard-review-row"><span class="wizard-review-label">Password</span><span class="wizard-review-value">${s.account.password ? '••••••••' : '—'}</span></div>
+      </div>`;
 
     default: return '';
   }
@@ -14895,6 +14978,13 @@ function _saveWizardStepData() {
         };
       });
       break;
+    case 5:
+      // Documents are saved via wizardUploadDoc — nothing to capture here
+      break;
+    case 6:
+      s.account.email = val('wiz-account-email');
+      s.account.password = val('wiz-account-password');
+      break;
   }
 }
 
@@ -14916,6 +15006,11 @@ function _validateWizardStep() {
       for (const edu of s.education) {
         if (!edu.institution || !edu.degree) { showToast('Each education entry needs an institution and degree', 'error'); return false; }
       }
+      return true;
+    case 5: return true; // documents are optional
+    case 6:
+      if (!s.account.email) { showToast('Email is required for your account', 'error'); return false; }
+      if (!s.account.password || s.account.password.length < 8) { showToast('Password must be at least 8 characters', 'error'); return false; }
       return true;
     default: return true;
   }
@@ -14954,10 +15049,77 @@ function wizardRemoveEducation(idx) {
   renderProviderOnboardingWizard();
 }
 
+async function wizardNpiLookup() {
+  const npiInput = document.getElementById('wiz-npi');
+  const statusEl = document.getElementById('wiz-npi-status');
+  const npi = npiInput?.value?.trim();
+  if (!npi || npi.length !== 10) { if (statusEl) statusEl.innerHTML = '<span style="color:#ef4444;">Enter a valid 10-digit NPI</span>'; return; }
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--brand-600);">Looking up NPI...</span>';
+  try {
+    const result = await store.nppesLookup(npi);
+    if (!result || (Array.isArray(result) && result.length === 0)) {
+      if (statusEl) statusEl.innerHTML = '<span style="color:#ef4444;">No provider found for this NPI</span>';
+      return;
+    }
+    const r = Array.isArray(result) ? result[0] : result;
+    const basic = r.basic || r;
+    const taxonomy = (r.taxonomies || [])[0] || {};
+    const addr = (r.addresses || []).find(a => a.address_purpose === 'LOCATION') || (r.addresses || [])[0] || {};
+
+    // Auto-fill fields
+    const s = _wizardState;
+    s.basic.firstName = basic.first_name || basic.firstName || s.basic.firstName;
+    s.basic.lastName = basic.last_name || basic.lastName || s.basic.lastName;
+    s.basic.npi = npi;
+    s.basic.credentials = basic.credential || basic.credentials || s.basic.credentials;
+    s.basic.specialty = taxonomy.desc || taxonomy.description || s.basic.specialty;
+    s.basic.taxonomy = taxonomy.code || s.basic.taxonomy;
+    // Also fill contact from NPI
+    s.contact.address = addr.address_1 || s.contact.address;
+    s.contact.city = addr.city || s.contact.city;
+    s.contact.state = addr.state || s.contact.state;
+    s.contact.zip = (addr.postal_code || '').substring(0, 5) || s.contact.zip;
+    s.contact.phone = addr.telephone_number || s.contact.phone;
+
+    if (statusEl) statusEl.innerHTML = `<span style="color:#22c55e;">&#10003; Found: <strong>${escHtml(s.basic.firstName)} ${escHtml(s.basic.lastName)}</strong> — fields auto-filled!</span>`;
+    await renderProviderOnboardingWizard();
+  } catch (e) {
+    if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444;">Lookup failed: ${escHtml(e.message)}</span>`;
+  }
+}
+
+function wizardUploadDoc(key, label, input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) { showToast('File must be under 10MB', 'error'); return; }
+  // Store file reference for upload after provider creation
+  const existing = _wizardState.documents.findIndex(d => d.key === key);
+  if (existing >= 0) _wizardState.documents.splice(existing, 1);
+  _wizardState.documents.push({ key, label, file, fileName: file.name });
+  _saveWizardStepData();
+  renderProviderOnboardingWizard();
+}
+
+function wizardGeneratePassword() {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghjkmnpqrstuvwxyz';
+  const digits = '23456789';
+  const symbols = '!@#$%&*';
+  const all = upper + lower + digits + symbols;
+  let pw = [upper[Math.floor(Math.random() * upper.length)], lower[Math.floor(Math.random() * lower.length)], digits[Math.floor(Math.random() * digits.length)], symbols[Math.floor(Math.random() * symbols.length)]];
+  for (let i = 4; i < 14; i++) pw.push(all[Math.floor(Math.random() * all.length)]);
+  pw = pw.sort(() => Math.random() - 0.5);
+  const el = document.getElementById('wiz-account-password');
+  if (el) el.value = pw.join('');
+  _wizardState.account.password = pw.join('');
+}
+
 async function wizardCreate() {
   const s = _wizardState;
+  const btn = document.querySelector('.wizard-btn-success');
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
   try {
-    // Create the provider
+    // 1. Create the provider
     const providerData = {
       firstName: s.basic.firstName,
       lastName: s.basic.lastName,
@@ -14965,48 +15127,82 @@ async function wizardCreate() {
       credentials: s.basic.credentials,
       specialty: s.basic.specialty,
       taxonomy: s.basic.taxonomy,
-      email: s.contact.email,
+      email: s.contact.email || s.account.email,
       phone: s.contact.phone,
-      address: s.contact.address,
-      city: s.contact.city,
-      state: s.contact.state,
-      zip: s.contact.zip,
-      active: true,
+      addressStreet: s.contact.address,
+      addressCity: s.contact.city,
+      addressState: s.contact.state,
+      addressZip: s.contact.zip,
+      isActive: true,
     };
     const provider = await store.create('providers', providerData);
     const providerId = provider?.id || provider?.provider_id;
 
-    // Create licenses
-    for (const lic of s.licenses) {
-      if (lic.state && lic.number) {
-        await store.create('licenses', {
-          providerId,
-          state: lic.state,
-          licenseNumber: lic.number,
-          licenseType: lic.type,
-          expirationDate: lic.expiration,
-          status: 'active',
+    // 2. Create licenses (parallel)
+    await Promise.all(s.licenses.filter(lic => lic.state && lic.number).map(lic =>
+      store.create('licenses', {
+        providerId,
+        state: lic.state,
+        licenseNumber: lic.number,
+        licenseType: lic.type,
+        expirationDate: lic.expiration,
+        status: 'active',
+      }).catch(e => console.error('License creation error:', e))
+    ));
+
+    // 3. Create education records (parallel)
+    await Promise.all(s.education.filter(e => e.institution).map(e =>
+      store.createProviderEducation(providerId, {
+        institutionName: e.institution,
+        degree: e.degree,
+        fieldOfStudy: e.field,
+        startDate: e.year ? `${e.year}-01-01` : '',
+        endDate: e.year ? `${e.year}-12-31` : '',
+        graduationDate: e.year ? `${e.year}-12-31` : '',
+      }).catch(err => console.error('Education creation error:', err))
+    ));
+
+    // 4. Upload documents (sequential — file uploads)
+    for (const doc of s.documents) {
+      try {
+        if (doc.file) {
+          const formData = new FormData();
+          formData.append('file', doc.file);
+          formData.append('document_type', doc.key);
+          formData.append('document_name', doc.label);
+          formData.append('status', 'received');
+          const token = localStorage.getItem('credentik_token');
+          await fetch(`${CONFIG.API_URL}/providers/${providerId}/documents`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+            body: formData,
+          });
+        }
+      } catch (e) { console.error('Document upload error:', e); }
+    }
+
+    // 5. Create user account for the provider
+    if (s.account.email && s.account.password) {
+      try {
+        await store.inviteUser({
+          first_name: s.basic.firstName,
+          last_name: s.basic.lastName,
+          email: s.account.email,
+          password: s.account.password,
+          role: 'provider',
+          ui_role: 'provider',
+          provider_id: providerId,
         });
-      }
+      } catch (e) { console.error('Account creation error:', e); }
     }
 
-    // Store education on the provider profile (update with education array)
-    if (s.education.length > 0) {
-      await store.update('providers', providerId, {
-        education: s.education.map(e => ({
-          institution: e.institution,
-          degree: e.degree,
-          fieldOfStudy: e.field,
-          yearCompleted: e.year,
-        })),
-      });
-    }
-
-    showToast('Provider created successfully!', 'success');
-    _wizardState = null; // Reset wizard
+    showToast('Provider onboarded successfully!', 'success');
+    _wizardState = null;
     await navigateTo('providers');
   } catch (err) {
     showToast('Error creating provider: ' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Create Provider'; }
   }
 }
 
