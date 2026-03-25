@@ -6199,7 +6199,7 @@ window.app = {
           ${PAYER_CATALOG.map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('')}
         </select>
       </div>
-      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Select Facilities (${facilities.length} available)</label>
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Select Practice Locations (${facilities.length} available)</label>
       <div style="max-height:200px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:8px;padding:8px;">
         ${facilities.map(f => {
           const hasApp = apps.some(a => a.facilityId === f.id);
@@ -8603,6 +8603,7 @@ function handleNppesProxy(payload) {
       state: document.getElementById('fac-state')?.value?.trim().toUpperCase() || '',
       zip: document.getElementById('fac-zip')?.value?.trim() || '',
       status: document.getElementById('fac-status')?.value || 'active',
+      organization_id: document.getElementById('fac-org')?.value || '',
     };
     const editId = document.getElementById('fac-edit-id')?.value;
     try {
@@ -14091,14 +14092,14 @@ async function renderFacilitiesPage() {
 
     <!-- V2 Stat Cards -->
     <div class="facv2-stats">
-      <div class="facv2-stat"><div class="facv2-val" style="color:var(--brand-600);">${facilities.length}</div><div class="facv2-lbl">Total Facilities</div></div>
+      <div class="facv2-stat"><div class="facv2-val" style="color:var(--brand-600);">${facilities.length}</div><div class="facv2-lbl">Total Locations</div></div>
       <div class="facv2-stat"><div class="facv2-val" style="color:#16a34a;">${facActive}</div><div class="facv2-lbl">Active</div></div>
       <div class="facv2-stat"><div class="facv2-val" style="color:#7c3aed;">${facStates.size}</div><div class="facv2-lbl">States</div></div>
     </div>
 
     <div class="card" style="border-radius:16px;overflow:hidden;">
       <div class="card-header">
-        <h3>All Facilities (${facilities.length})</h3>
+        <h3>All Practice Locations (${facilities.length})</h3>
         <input type="text" id="facility-search" placeholder="Search facilities..." class="form-control" style="width:240px;height:34px;font-size:13px;border-radius:10px;" oninput="window.app.filterFacilities()">
       </div>
       <div class="card-body" style="padding:0;">

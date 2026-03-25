@@ -307,7 +307,7 @@ async function renderImportPage() {
               <option value="providers">Providers</option>
               <option value="organizations">Organizations</option>
               <option value="licenses">Licenses</option>
-              <option value="facilities">Facilities</option>
+              <option value="facilities">Practice Locations</option>
             </select>
           </div>
           <div class="auth-field" style="margin:0;flex:2;min-width:250px;">
