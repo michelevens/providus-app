@@ -4,7 +4,7 @@
 const { store, auth, CONFIG, workflow, escHtml, escAttr, formatDateDisplay, toHexId,
         showToast, getPayerById, getStateName, navigateTo, appConfirm, appPrompt,
         editButton, deleteButton, helpTip, presetSelectHtml, getPresetValue,
-        renderPayerTags, sortArrow, timeAgo,
+        renderPayerTags, sortArrow, timeAgo, renderDocumentVersioning,
         PAYER_CATALOG, STATES, APPLICATION_STATUSES, PAYER_TAG_DEFS,
         CRED_DOCUMENTS,
         PRESET_INSTITUTIONS, PRESET_DEGREES, PRESET_FIELDS_OF_STUDY,
