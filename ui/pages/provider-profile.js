@@ -292,6 +292,34 @@ async function renderProviderDashboard(user) {
         </div>
       </div>
 
+      <!-- Messages from Credentialing Team -->
+      ${await (async () => {
+        let msgs = [];
+        try { msgs = await store.getCommunicationLogs({ channel: 'internal' }).catch(() => []); } catch {}
+        if (!Array.isArray(msgs)) msgs = [];
+        const myMsgs = msgs.filter(m => String(m.recipientId || m.recipient_id) === String(providerId) || String(m.providerId || m.provider_id) === String(providerId));
+        const unreadMsgs = myMsgs.filter(m => !m.isRead && !m.is_read);
+        return myMsgs.length > 0 ? `
+        <div class="card pdv2-card" ${unreadMsgs.length > 0 ? 'style="border-left:3px solid var(--brand-600);"' : ''}>
+          <div class="card-header"><h3>Messages ${unreadMsgs.length > 0 ? `<span style="background:var(--brand-600);color:#fff;padding:2px 8px;border-radius:10px;font-size:12px;margin-left:6px;">${unreadMsgs.length} new</span>` : ''}</h3></div>
+          <div class="card-body" style="padding:0;">
+            <table><thead><tr><th>From</th><th>Subject</th><th>Type</th><th>Date</th></tr></thead><tbody>
+              ${myMsgs.slice(0, 10).map(m => {
+                const isUnread = !m.isRead && !m.is_read;
+                const typeLabels = { document_request: 'Doc Request', info_request: 'Info Request', urgent: 'Urgent', status_update: 'Status', follow_up: 'Follow-up', message: 'Message' };
+                const msgType = m.messageType || m.message_type || m.type || 'message';
+                return `<tr style="${isUnread ? 'font-weight:700;background:var(--brand-50);' : ''}">
+                  <td>${escHtml(m.senderName || m.sender_name || 'Credentialing Team')}</td>
+                  <td>${escHtml(m.subject || m.body?.substring(0, 50) || '—')}</td>
+                  <td><span style="font-size:10px;font-weight:600;text-transform:uppercase;">${typeLabels[msgType] || msgType}</span></td>
+                  <td>${formatDateDisplay(m.createdAt || m.created_at)}</td>
+                </tr>`;
+              }).join('')}
+            </tbody></table>
+          </div>
+        </div>` : '';
+      })()}
+
       <!-- Compliance Issues -->
       <div class="card pdv2-card">
         <div class="card-header"><h3>Compliance Status</h3></div>

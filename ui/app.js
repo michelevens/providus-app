@@ -1032,6 +1032,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openCommLogModal()">+ Log Communication</button>' + printBtn;
       await renderCommunicationsPage();
       break;
+    case 'messages':
+      pageTitle.textContent = 'Messages';
+      pageSubtitle.textContent = 'Internal messaging between staff and providers';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openNewMessage()">+ New Message</button>' + printBtn;
+      await renderMessagesPage();
+      break;
     case 'kanban':
       pageTitle.textContent = 'Kanban Board';
       pageSubtitle.textContent = 'Drag-and-drop application workflow';
@@ -1193,7 +1199,13 @@ async function renderMyAccount() {
         <div class="card-body">
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
             <div class="form-group"><label>Current Password *</label><input type="password" class="form-control" id="myacc-current-pw" placeholder="Current password"></div>
-            <div class="form-group"><label>New Password *</label><input type="password" class="form-control" id="myacc-new-pw" placeholder="New password (min 8 chars)"></div>
+            <div class="form-group"><label>New Password *</label>
+              <div style="display:flex;gap:8px;">
+                <input type="text" class="form-control" id="myacc-new-pw" placeholder="New password (min 8 chars)" style="flex:1;">
+                <button type="button" class="btn btn-sm" onclick="window.app.generateStrongPassword()" style="white-space:nowrap;">Generate</button>
+              </div>
+              <div id="myacc-pw-strength" style="margin-top:4px;"></div>
+            </div>
             <div class="form-group"><label>Confirm New Password *</label><input type="password" class="form-control" id="myacc-confirm-pw" placeholder="Confirm new password"></div>
           </div>
           <button class="btn btn-primary" onclick="window.app.changeMyPassword()" style="margin-top:12px;border-radius:10px;">Update Password</button>
@@ -2476,6 +2488,8 @@ async function renderAppTable(prefetchedApps = null) {
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.viewTimeline('${a.id}')">Timeline</button>
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.openDocChecklist('${a.id}')">Documents</button>
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.editApplication('${a.id}')">Edit</button>
+              <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--brand-600);" onclick="window.app.requestDocument('${a.providerId}','${escAttr((allProviders?.find(p=>p.id===a.providerId)||{}).firstName||'')}','${a.id}')">Request Doc</button>
+              <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--brand-600);" onclick="window.app.requestInfo('${a.providerId}','${escAttr((allProviders?.find(p=>p.id===a.providerId)||{}).firstName||'')}','${a.id}')">Request Info</button>
               ${['approved','credentialed'].includes(a.status) ? `<button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--brand-600);" onclick="window.app.addLocationToApp('${a.id}')">+ Add Location</button>` : ''}
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--red);" onclick="window.app.deleteApplication('${a.id}')">Delete</button>
             </div>
@@ -7644,6 +7658,23 @@ window.app = {
     } catch (e) { showToast('Error: ' + e.message); }
   },
 
+  generateStrongPassword() {
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lower = 'abcdefghjkmnpqrstuvwxyz';
+    const digits = '23456789';
+    const symbols = '!@#$%&*';
+    const all = upper + lower + digits + symbols;
+    let pw = [upper[Math.floor(Math.random() * upper.length)], lower[Math.floor(Math.random() * lower.length)], digits[Math.floor(Math.random() * digits.length)], symbols[Math.floor(Math.random() * symbols.length)]];
+    for (let i = 4; i < 16; i++) pw.push(all[Math.floor(Math.random() * all.length)]);
+    pw = pw.sort(() => Math.random() - 0.5);
+    const el = document.getElementById('myacc-new-pw');
+    if (el) { el.value = pw.join(''); el.type = 'text'; }
+    const confirmEl = document.getElementById('myacc-confirm-pw');
+    if (confirmEl) { confirmEl.value = pw.join(''); }
+    const strengthEl = document.getElementById('myacc-pw-strength');
+    if (strengthEl) strengthEl.innerHTML = '<span style="color:#22c55e;font-size:12px;font-weight:600;">Strong password generated — copy it before saving!</span>';
+  },
+
   // Audit trail
   async filterAuditTrail() {
     const collection = document.getElementById('audit-filter-collection')?.value || '';
@@ -10271,6 +10302,36 @@ function handleNppesProxy(payload) {
   },
   filterComms() { renderCommunicationsPage(); },
 
+  // ─── Messages / Inbox ───
+  openNewMessage(opts) { openNewMessage(opts); },
+  async sendMessage() { await sendMessage(); },
+  async openThread(id) { await openThread(id); },
+  async sendReply() { await sendReply(); },
+  filterMessages() { renderMessagesPage(); },
+  // Quick action: request doc from provider
+  requestDocument(providerId, provName, appId) {
+    openNewMessage({
+      title: 'Request Document',
+      type: 'document_request',
+      recipientId: providerId,
+      contextType: appId ? 'application' : 'provider',
+      contextId: appId || providerId,
+      subject: 'Document Required',
+      body: `Hi ${provName || 'Provider'},\n\nWe need the following document(s) for your credentialing application:\n\n- \n\nPlease upload at your earliest convenience.\n\nThank you.`,
+    });
+  },
+  requestInfo(providerId, provName, appId) {
+    openNewMessage({
+      title: 'Request Information',
+      type: 'info_request',
+      recipientId: providerId,
+      contextType: appId ? 'application' : 'provider',
+      contextId: appId || providerId,
+      subject: 'Information Needed',
+      body: `Hi ${provName || 'Provider'},\n\nWe need the following information to proceed with your application:\n\n- \n\nPlease respond at your earliest convenience.\n\nThank you.`,
+    });
+  },
+
   // ─── Kanban ───
   async kanbanDrop(appId, newStatus) {
     try {
@@ -11492,6 +11553,17 @@ async function updateNotificationBell() {
     countEl.textContent = unreadCount;
     countEl.style.display = unreadCount > 0 ? 'flex' : 'none';
   }
+  // Update message badge in sidebar
+  try {
+    const msgs = await store.getCommunicationLogs({ channel: 'internal' }).catch(() => []);
+    const currentUserId = auth.getUser()?.id;
+    const unreadMsgs = (Array.isArray(msgs) ? msgs : []).filter(m => !m.isRead && !m.is_read && String(m.recipientId || m.recipient_id) === String(currentUserId)).length;
+    const msgBadge = document.getElementById('msg-badge');
+    if (msgBadge) {
+      msgBadge.textContent = unreadMsgs;
+      msgBadge.style.display = unreadMsgs > 0 ? '' : 'none';
+    }
+  } catch {}
 }
 
 async function renderNotifications() {
@@ -13440,6 +13512,320 @@ async function renderUsersStub() {
 // ─── Provider Self-Service Dashboard ───
 
 // [Lazy-loaded] renderProviderDashboard — moved to ui/pages/ module
+
+// ─── Messages / Internal Inbox ───
+
+async function renderMessagesPage() {
+  const body = document.getElementById('page-body');
+  const currentUser = auth.getUser();
+  const currentUserId = currentUser?.id;
+
+  let logs = [], users = [], providers = [];
+  try {
+    [logs, users, providers] = await Promise.all([
+      store.getCommunicationLogs({ channel: 'internal' }).catch(() => []),
+      store.getAgencyUsers().catch(() => []),
+      store.getAll('providers').catch(() => []),
+    ]);
+  } catch (e) { console.error('Messages error:', e); }
+  if (!Array.isArray(logs)) logs = [];
+  if (!Array.isArray(users)) users = [];
+  if (!Array.isArray(providers)) providers = [];
+
+  // Build user lookup
+  const userMap = {};
+  users.forEach(u => { userMap[u.id] = (u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''); });
+  providers.forEach(p => { if (!userMap[p.userId || p.user_id]) userMap[p.id] = (p.firstName || p.first_name || '') + ' ' + (p.lastName || p.last_name || ''); });
+
+  // Group by thread_id, or use id as thread
+  const threads = {};
+  logs.forEach(m => {
+    const tid = m.threadId || m.thread_id || m.id;
+    if (!threads[tid]) threads[tid] = { id: tid, messages: [], lastAt: m.createdAt || m.created_at || '', subject: m.subject || '' };
+    threads[tid].messages.push(m);
+    const ts = m.createdAt || m.created_at || '';
+    if (ts > threads[tid].lastAt) threads[tid].lastAt = ts;
+  });
+  const threadList = Object.values(threads).sort((a, b) => (b.lastAt || '').localeCompare(a.lastAt || ''));
+
+  // Stats
+  const unread = logs.filter(m => !m.isRead && !m.is_read && String(m.recipientId || m.recipient_id) === String(currentUserId)).length;
+  const sent = logs.filter(m => String(m.senderId || m.sender_id) === String(currentUserId)).length;
+  const received = logs.filter(m => String(m.recipientId || m.recipient_id) === String(currentUserId)).length;
+
+  // Build recipient options (all users + providers)
+  const recipientOptions = users.map(u => `<option value="user:${u.id}">${escHtml((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''))} (${u.uiRole || u.ui_role || u.role})</option>`).join('') +
+    providers.map(p => `<option value="provider:${p.id}">${escHtml((p.firstName || p.first_name || '') + ' ' + (p.lastName || p.last_name || ''))} (Provider)</option>`).join('');
+
+  body.innerHTML = `
+    <style>
+      .msg-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
+      .msg-stat{background:var(--surface-card,#fff);border-radius:16px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+      .msg-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+      .msg-stat:nth-child(1)::before{background:linear-gradient(90deg,#ef4444,#f87171);}
+      .msg-stat:nth-child(2)::before{background:linear-gradient(90deg,#3b82f6,#60a5fa);}
+      .msg-stat:nth-child(3)::before{background:linear-gradient(90deg,#22c55e,#4ade80);}
+      .msg-stat .val{font-size:28px;font-weight:800;line-height:1.1;}
+      .msg-stat .lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;}
+      .msg-thread{padding:14px 16px;border-bottom:1px solid var(--gray-100);cursor:pointer;transition:background 0.15s;}
+      .msg-thread:hover{background:var(--gray-50);}
+      .msg-thread.msg-unread{background:var(--brand-50,#eff6ff);border-left:3px solid var(--brand-600);}
+      .msg-type-badge{display:inline-flex;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;}
+    </style>
+
+    <div class="msg-stats">
+      <div class="msg-stat"><div class="val" style="color:#ef4444;">${unread}</div><div class="lbl">Unread</div></div>
+      <div class="msg-stat"><div class="val" style="color:#3b82f6;">${received}</div><div class="lbl">Received</div></div>
+      <div class="msg-stat"><div class="val" style="color:#22c55e;">${sent}</div><div class="lbl">Sent</div></div>
+    </div>
+
+    <!-- New Message Modal -->
+    <div class="modal-overlay" id="new-msg-modal">
+      <div class="modal" style="max-width:560px;">
+        <div class="modal-header">
+          <h3 id="new-msg-title">New Message</h3>
+          <button class="modal-close" onclick="document.getElementById('new-msg-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="msg-reply-thread" value="">
+          <input type="hidden" id="msg-context-type" value="">
+          <input type="hidden" id="msg-context-id" value="">
+          <div class="form-group" id="msg-to-group">
+            <label>To</label>
+            <select class="form-control" id="msg-to">${recipientOptions}</select>
+          </div>
+          <div class="form-group">
+            <label>Type</label>
+            <select class="form-control" id="msg-type">
+              <option value="message">General Message</option>
+              <option value="document_request">Document Request</option>
+              <option value="info_request">Information Request</option>
+              <option value="status_update">Status Update</option>
+              <option value="follow_up">Follow-up</option>
+              <option value="urgent">Urgent Notice</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Subject</label>
+            <input type="text" class="form-control" id="msg-subject" placeholder="Subject line...">
+          </div>
+          <div class="form-group">
+            <label>Message</label>
+            <textarea class="form-control" id="msg-body" rows="5" placeholder="Write your message..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('new-msg-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.sendMessage()">Send Message</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Thread List -->
+    <div class="card" style="border-radius:16px;overflow:hidden;">
+      <div class="card-header">
+        <h3>Inbox (${threadList.length} conversations)</h3>
+        <select class="form-control" id="msg-filter" style="width:auto;min-width:140px;" onchange="window.app.filterMessages()">
+          <option value="">All Messages</option>
+          <option value="unread">Unread</option>
+          <option value="document_request">Document Requests</option>
+          <option value="info_request">Info Requests</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </div>
+      <div class="card-body" style="padding:0;" id="msg-thread-list">
+        ${threadList.length > 0 ? threadList.map(t => {
+          const last = t.messages[t.messages.length - 1];
+          const isUnread = t.messages.some(m => !m.isRead && !m.is_read && String(m.recipientId || m.recipient_id) === String(currentUserId));
+          const senderName = userMap[last.senderId || last.sender_id] || 'System';
+          const recipName = userMap[last.recipientId || last.recipient_id] || 'Unknown';
+          const msgType = last.messageType || last.message_type || last.type || 'message';
+          const typeColors = { document_request: '#f59e0b', info_request: '#3b82f6', urgent: '#ef4444', status_update: '#22c55e', follow_up: '#8b5cf6', message: '#6b7280' };
+          const typeLabels = { document_request: 'Doc Request', info_request: 'Info Request', urgent: 'Urgent', status_update: 'Status', follow_up: 'Follow-up', message: 'Message' };
+          return `
+          <div class="msg-thread ${isUnread ? 'msg-unread' : ''}" onclick="window.app.openThread('${t.id}')">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+              <div>
+                <strong style="font-size:14px;">${escHtml(senderName)}</strong>
+                <span style="font-size:12px;color:var(--gray-400);"> &rarr; ${escHtml(recipName)}</span>
+                <span class="msg-type-badge" style="background:${typeColors[msgType] || '#6b7280'}20;color:${typeColors[msgType] || '#6b7280'};margin-left:6px;">${typeLabels[msgType] || msgType}</span>
+              </div>
+              <span style="font-size:11px;color:var(--gray-400);white-space:nowrap;">${timeAgo(last.createdAt || last.created_at)}</span>
+            </div>
+            <div style="font-size:13px;font-weight:${isUnread ? '700' : '400'};">${escHtml(last.subject || '(no subject)')}</div>
+            <div style="font-size:12px;color:var(--gray-500);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:600px;">${escHtml((last.body || last.notes || '').substring(0, 100))}</div>
+            ${t.messages.length > 1 ? `<span style="font-size:10px;color:var(--gray-400);margin-top:4px;display:inline-block;">${t.messages.length} messages in thread</span>` : ''}
+          </div>`;
+        }).join('') : '<div style="padding:2rem;text-align:center;color:var(--gray-500);"><h3>No messages yet</h3><p>Start a conversation using the "+ New Message" button.</p></div>'}
+      </div>
+    </div>
+
+    <!-- Thread Detail Modal -->
+    <div class="modal-overlay" id="thread-detail-modal">
+      <div class="modal" style="max-width:640px;max-height:80vh;display:flex;flex-direction:column;">
+        <div class="modal-header">
+          <h3 id="thread-detail-title">Conversation</h3>
+          <button class="modal-close" onclick="document.getElementById('thread-detail-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body" id="thread-detail-body" style="flex:1;overflow-y:auto;padding:16px 24px;"></div>
+        <div style="padding:12px 24px;border-top:1px solid var(--gray-200);display:flex;gap:8px;">
+          <input type="text" class="form-control" id="thread-reply-input" placeholder="Type a reply..." style="flex:1;" onkeydown="if(event.key==='Enter')window.app.sendReply()">
+          <button class="btn btn-primary" onclick="window.app.sendReply()">Send</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function openNewMessage(opts = {}) {
+  document.getElementById('msg-reply-thread').value = '';
+  document.getElementById('msg-context-type').value = opts.contextType || '';
+  document.getElementById('msg-context-id').value = opts.contextId || '';
+  document.getElementById('msg-subject').value = opts.subject || '';
+  document.getElementById('msg-body').value = opts.body || '';
+  document.getElementById('msg-type').value = opts.type || 'message';
+  document.getElementById('new-msg-title').textContent = opts.title || 'New Message';
+  if (opts.recipientId) {
+    const sel = document.getElementById('msg-to');
+    if (sel) { for (const o of sel.options) { if (o.value.endsWith(':' + opts.recipientId)) { o.selected = true; break; } } }
+  }
+  document.getElementById('msg-to-group').style.display = '';
+  document.getElementById('new-msg-modal').classList.add('active');
+}
+
+async function sendMessage() {
+  const toVal = document.getElementById('msg-to')?.value || '';
+  const [toType, toId] = toVal.split(':');
+  const subject = document.getElementById('msg-subject')?.value?.trim();
+  const body = document.getElementById('msg-body')?.value?.trim();
+  const msgType = document.getElementById('msg-type')?.value || 'message';
+  const contextType = document.getElementById('msg-context-type')?.value || '';
+  const contextId = document.getElementById('msg-context-id')?.value || '';
+  const threadId = document.getElementById('msg-reply-thread')?.value || '';
+
+  if (!body) { showToast('Message body is required'); return; }
+  if (!toId) { showToast('Please select a recipient'); return; }
+
+  const currentUser = auth.getUser();
+  try {
+    await store.createCommunicationLog({
+      channel: 'internal',
+      direction: 'outbound',
+      type: msgType,
+      messageType: msgType,
+      subject: subject || '',
+      body,
+      notes: body,
+      senderId: currentUser?.id,
+      senderName: (currentUser?.first_name || '') + ' ' + (currentUser?.last_name || ''),
+      recipientId: toId,
+      recipientType: toType,
+      threadId: threadId || undefined,
+      applicationId: contextType === 'application' ? contextId : undefined,
+      providerId: contextType === 'provider' ? contextId : (toType === 'provider' ? toId : undefined),
+      isRead: false,
+      status: 'sent',
+    });
+    showToast('Message sent');
+    document.getElementById('new-msg-modal').classList.remove('active');
+    await renderMessagesPage();
+  } catch (e) { showToast('Error: ' + e.message); }
+}
+
+async function openThread(threadId) {
+  const body = document.getElementById('thread-detail-body');
+  const currentUser = auth.getUser();
+  const currentUserId = currentUser?.id;
+
+  let logs = [], users = [], providers = [];
+  try {
+    [logs, users, providers] = await Promise.all([
+      store.getCommunicationLogs({ channel: 'internal' }).catch(() => []),
+      store.getAgencyUsers().catch(() => []),
+      store.getAll('providers').catch(() => []),
+    ]);
+  } catch (e) {}
+  if (!Array.isArray(logs)) logs = [];
+  const userMap = {};
+  users.forEach(u => { userMap[u.id] = (u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''); });
+  providers.forEach(p => { userMap[p.id] = (p.firstName || p.first_name || '') + ' ' + (p.lastName || p.last_name || ''); });
+
+  const threadMsgs = logs.filter(m => String(m.threadId || m.thread_id || m.id) === String(threadId))
+    .sort((a, b) => (a.createdAt || a.created_at || '').localeCompare(b.createdAt || b.created_at || ''));
+
+  if (threadMsgs.length > 0) {
+    const first = threadMsgs[0];
+    document.getElementById('thread-detail-title').textContent = first.subject || 'Conversation';
+
+    // Mark unread messages as read
+    for (const m of threadMsgs) {
+      if (!m.isRead && !m.is_read && String(m.recipientId || m.recipient_id) === String(currentUserId)) {
+        try { await store.updateCommunicationLog(m.id, { isRead: true }); } catch (e) {}
+      }
+    }
+  }
+
+  // Store thread ID for replies
+  window._activeThreadId = threadId;
+  window._activeThreadRecipient = threadMsgs.length > 0 ? (String(threadMsgs[0].senderId || threadMsgs[0].sender_id) === String(currentUserId)
+    ? (threadMsgs[0].recipientId || threadMsgs[0].recipient_id)
+    : (threadMsgs[0].senderId || threadMsgs[0].sender_id)) : '';
+
+  body.innerHTML = threadMsgs.map(m => {
+    const isMine = String(m.senderId || m.sender_id) === String(currentUserId);
+    const senderName = userMap[m.senderId || m.sender_id] || 'Unknown';
+    const ts = m.createdAt || m.created_at || '';
+    const typeColors = { document_request: '#f59e0b', info_request: '#3b82f6', urgent: '#ef4444', status_update: '#22c55e', follow_up: '#8b5cf6', message: '#6b7280' };
+    const msgType = m.messageType || m.message_type || m.type || 'message';
+    return `
+      <div style="display:flex;justify-content:${isMine ? 'flex-end' : 'flex-start'};margin-bottom:12px;">
+        <div style="max-width:80%;padding:12px 16px;border-radius:${isMine ? '16px 16px 4px 16px' : '16px 16px 16px 4px'};background:${isMine ? 'var(--brand-600)' : 'var(--gray-100)'};color:${isMine ? '#fff' : 'var(--text-primary)'};">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <strong style="font-size:12px;">${escHtml(senderName)}</strong>
+            <span style="font-size:10px;opacity:0.7;margin-left:12px;">${timeAgo(ts)}</span>
+          </div>
+          ${m.subject ? `<div style="font-size:11px;font-weight:600;margin-bottom:4px;opacity:0.8;">${escHtml(m.subject)}</div>` : ''}
+          <div style="font-size:13px;line-height:1.5;white-space:pre-wrap;">${escHtml(m.body || m.notes || '')}</div>
+          ${msgType !== 'message' ? `<div style="margin-top:6px;"><span class="msg-type-badge" style="background:${isMine ? 'rgba(255,255,255,0.2)' : (typeColors[msgType] || '#6b7280') + '20'};color:${isMine ? '#fff' : typeColors[msgType] || '#6b7280'};font-size:9px;">${msgType.replace(/_/g, ' ')}</span></div>` : ''}
+          ${!m.isRead && !m.is_read && !isMine ? '<div style="margin-top:4px;font-size:10px;opacity:0.6;">Delivered</div>' : ''}
+          ${(m.isRead || m.is_read) && isMine ? '<div style="margin-top:4px;font-size:10px;opacity:0.6;">Read</div>' : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('thread-detail-modal').classList.add('active');
+  body.scrollTop = body.scrollHeight;
+}
+
+async function sendReply() {
+  const input = document.getElementById('thread-reply-input');
+  const body = input?.value?.trim();
+  if (!body) return;
+
+  const currentUser = auth.getUser();
+  const threadId = window._activeThreadId;
+  const recipientId = window._activeThreadRecipient;
+
+  try {
+    await store.createCommunicationLog({
+      channel: 'internal',
+      direction: 'outbound',
+      type: 'message',
+      messageType: 'message',
+      subject: '',
+      body,
+      notes: body,
+      senderId: currentUser?.id,
+      senderName: (currentUser?.first_name || '') + ' ' + (currentUser?.last_name || ''),
+      recipientId,
+      threadId,
+      isRead: false,
+      status: 'sent',
+    });
+    input.value = '';
+    await openThread(threadId);
+  } catch (e) { showToast('Error: ' + e.message); }
+}
 
 // ─── Communications Page ───
 
