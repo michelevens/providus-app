@@ -612,6 +612,66 @@ function readFiltersFromURL() {
   if (params.has('q')) filters.search = params.get('q');
 }
 
+// ─── Organization Branding (White-Label) ───
+
+function _darkenHex(hex, percent) {
+  hex = hex.replace('#', '');
+  if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+  const r = Math.max(0, Math.round(parseInt(hex.substring(0,2),16) * (1 - percent / 100)));
+  const g = Math.max(0, Math.round(parseInt(hex.substring(2,4),16) * (1 - percent / 100)));
+  const b = Math.max(0, Math.round(parseInt(hex.substring(4,6),16) * (1 - percent / 100)));
+  return '#' + [r,g,b].map(c => c.toString(16).padStart(2,'0')).join('');
+}
+
+function _applyBrandingCSS(branding) {
+  if (!branding) return;
+  const root = document.documentElement;
+  if (branding.primaryColor) {
+    root.style.setProperty('--brand-500', branding.primaryColor);
+    root.style.setProperty('--brand-600', _darkenHex(branding.primaryColor, 10));
+    root.style.setProperty('--brand-700', _darkenHex(branding.primaryColor, 20));
+  }
+  if (branding.accentColor) {
+    root.style.setProperty('--accent-500', branding.accentColor);
+  }
+  // Update sidebar header logo/name
+  const sidebarName = document.getElementById('sidebar-agency-name');
+  if (sidebarName && branding.companyName) sidebarName.textContent = branding.companyName;
+  const sidebarHeader = document.querySelector('.sidebar-header');
+  if (sidebarHeader && branding.logoUrl) {
+    const svg = sidebarHeader.querySelector('svg');
+    if (svg) {
+      const img = document.createElement('img');
+      img.src = branding.logoUrl;
+      img.alt = branding.companyName || 'Logo';
+      img.style.cssText = 'width:32px;height:32px;border-radius:8px;object-fit:cover;';
+      svg.replaceWith(img);
+    }
+  }
+  // Update page title
+  if (branding.companyName) {
+    document.title = branding.companyName + ' — Credentialing Platform';
+  }
+}
+
+async function applyOrgBranding() {
+  // Instant load from localStorage
+  try {
+    const cached = localStorage.getItem('credentik_org_branding');
+    if (cached) _applyBrandingCSS(JSON.parse(cached));
+  } catch (e) { /* ignore */ }
+  // Fetch fresh from API
+  try {
+    const branding = await store.getOrgBranding();
+    if (branding && (branding.primaryColor || branding.companyName || branding.logoUrl)) {
+      _applyBrandingCSS(branding);
+      localStorage.setItem('credentik_org_branding', JSON.stringify(branding));
+    }
+  } catch (e) {
+    console.warn('Failed to load org branding:', e);
+  }
+}
+
 // ─── Init ───
 
 export async function initApp() {
@@ -644,6 +704,9 @@ export async function initApp() {
       APP_GROUPS = waves;
     }
   } catch (e) { /* use defaults */ }
+
+  // Apply organization branding (white-label)
+  await applyOrgBranding();
 
   // Display app version
   const versionEl = document.getElementById('app-version');
@@ -2144,6 +2207,26 @@ async function renderDashboard() {
         }).join('') +
       '</div>' : '<div style="text-align:center;padding:12px;color:var(--gray-400);font-size:12px;">All applications on track</div>'}
     </div>
+
+    <!-- Row 6: Predicted Approvals -->
+    ${(() => {
+      const preds = _buildDashboardPredictions(apps, providers);
+      if (preds.length === 0) return '';
+      const cDot = (c) => c === 'high' ? '#10B981' : c === 'medium' ? '#F59E0B' : '#9CA3AF';
+      const rClr = (r) => r === 'delayed' ? '#EF4444' : r === 'at-risk' ? '#F59E0B' : '#10B981';
+      const rLbl = (r) => r === 'delayed' ? 'Delayed' : r === 'at-risk' ? 'At Risk' : 'On Track';
+      const rBg = (r) => r === 'delayed' ? '#FEE2E2' : r === 'at-risk' ? '#FEF3C7' : '#D1FAE5';
+      const ths = 'text-align:left;padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray-500);border-bottom:2px solid var(--gray-200);';
+      return '<div style="background:#fff;border-radius:16px;border:1px solid var(--gray-200);padding:20px;margin-bottom:20px;">' +
+        '<div class="mc-section-title" style="margin-bottom:16px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gray-400)" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg> Predicted Approvals <span class="mc-count">' + preds.length + ' pending</span></div>' +
+        '<div style="overflow-x:auto;"><table style="width:100%;font-size:12px;"><thead><tr><th style="' + ths + '">Provider</th><th style="' + ths + '">Payer</th><th style="' + ths + '">State</th><th style="' + ths + '">Predicted Date</th><th style="' + ths + '">Confidence</th><th style="' + ths + '">Status</th></tr></thead><tbody>' +
+        preds.map(function(p) {
+          var ds = p.estimatedApproval.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          var rs = p.daysRemaining > 0 ? p.daysRemaining + 'd remaining' : Math.abs(p.daysRemaining) + 'd past expected';
+          return '<tr style="border-bottom:1px solid var(--gray-100);"><td style="padding:10px;font-weight:600;color:var(--gray-800);">' + escHtml(p.providerName || '\u2014') + '</td><td style="padding:10px;color:var(--gray-700);">' + escHtml(p.payerName) + '</td><td style="padding:10px;color:var(--gray-500);">' + escHtml(p.state || '\u2014') + '</td><td style="padding:10px;"><div style="font-weight:600;color:var(--gray-800);">' + ds + '</div><div style="font-size:10px;color:var(--gray-500);">' + rs + '</div></td><td style="padding:10px;"><span style="display:inline-flex;align-items:center;gap:5px;" title="' + escAttr(p.basedOn) + '"><span style="width:8px;height:8px;border-radius:50%;background:' + cDot(p.confidence) + ';display:inline-block;"></span><span style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:capitalize;">' + p.confidence + '</span></span></td><td style="padding:10px;"><span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;background:' + rBg(p.riskLevel) + ';color:' + rClr(p.riskLevel) + ';">' + rLbl(p.riskLevel) + '</span></td></tr>';
+        }).join('') +
+        '</tbody></table></div><div style="margin-top:10px;font-size:10px;color:var(--gray-400);font-style:italic;">Predictions based on historical application data and payer SLA patterns. Not a guarantee of approval timing.</div></div>';
+    })()}
   `;
 
   } catch (e) {
@@ -5034,8 +5117,9 @@ async function renderSettings() {
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-caqh')">CAQH API</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-integrations')">Integrations</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-notifications')">Notifications</button>
-      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-webhooks')">Webhooks</button>
+      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-developer')">API &amp; Webhooks</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-security')">Security</button>
+      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-branding')">Branding</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-danger')">Danger Zone</button>
     </div>
 
@@ -5342,20 +5426,58 @@ async function renderSettings() {
       ${renderEmbedWidgetDocs(agencySlug, embedBase)}
     </div>
 
-    <div id="settings-webhooks" class="hidden stv2-section">
+    <div id="settings-developer" class="hidden stv2-section">
+      <!-- Security Note -->
+      <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1px solid #f59e0b;border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:flex-start;gap:12px;">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="#d97706" style="flex-shrink:0;margin-top:1px;"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+        <div style="font-size:13px;color:#92400e;line-height:1.5;"><strong>Security Notice:</strong> API keys grant programmatic access to your data. Keep them secure, never share them in client-side code, and rotate regularly.</div>
+      </div>
+
+      <!-- API Keys Section -->
       <div class="card" style="border-radius:16px;">
         <div class="card-header">
-          <h3>Webhook Endpoints</h3>
-          <button class="btn btn-primary btn-sm" onclick="window.app.addWebhook()" style="border-radius:10px;">+ Add Webhook</button>
+          <h3>API Keys</h3>
+          <button class="btn btn-primary btn-sm" onclick="window.app.openCreateApiKeyModal()" style="border-radius:10px;">+ Create API Key</button>
         </div>
-        <div class="card-body" id="webhook-list-container">
-          ${renderWebhookList()}
+        <div class="card-body" id="api-keys-container">
+          <div style="text-align:center;padding:32px;color:var(--text-quaternary);">
+            <div class="spinner" style="margin:0 auto 12px;"></div>
+            <div style="font-size:13px;">Loading API keys...</div>
+          </div>
         </div>
       </div>
-      <div class="card" style="border-radius:16px;margin-top:16px;">
-        <div class="card-header"><h3>Recent Deliveries</h3></div>
-        <div class="card-body" id="webhook-deliveries-container">
-          ${renderWebhookDeliveries()}
+
+      <!-- Webhooks Section -->
+      <div class="card" style="border-radius:16px;margin-top:20px;">
+        <div class="card-header">
+          <h3>Webhook Endpoints</h3>
+          <button class="btn btn-primary btn-sm" onclick="window.app.openCreateWebhookModal()" style="border-radius:10px;">+ Add Webhook</button>
+        </div>
+        <div class="card-body" id="dev-webhook-list-container">
+          <div style="text-align:center;padding:32px;color:var(--text-quaternary);">
+            <div class="spinner" style="margin:0 auto 12px;"></div>
+            <div style="font-size:13px;">Loading webhooks...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Webhook Payload Preview -->
+      <div class="card" style="border-radius:16px;margin-top:20px;">
+        <div class="card-header"><h3>Webhook Payload Preview</h3></div>
+        <div class="card-body">
+          <p style="font-size:13px;color:var(--gray-500);margin-bottom:12px;">Sample JSON payload sent to your webhook endpoints:</p>
+          <pre style="background:var(--gray-900,#1f2937);color:#e5e7eb;border-radius:10px;padding:16px;font-size:12px;overflow-x:auto;line-height:1.6;"><code>{
+  "event": "application.status_changed",
+  "data": {
+    "applicationId": 123,
+    "providerId": 456,
+    "status": "approved",
+    "previousStatus": "pending",
+    "updatedAt": "2026-03-25T14:30:00Z"
+  },
+  "timestamp": "2026-03-25T14:30:00.000Z",
+  "webhookId": "wh_abc123"
+}</code></pre>
         </div>
       </div>
     </div>
@@ -5419,6 +5541,78 @@ async function renderSettings() {
             <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;"><input type="checkbox" id="settings-notif-weekly" style="opacity:0;width:0;height:0;position:absolute;"><span style="position:absolute;inset:0;background:var(--gray-300);border-radius:11px;transition:0.2s;"></span></label>
           </div>
           <div style="margin-top:16px;"><button class="btn btn-primary" onclick="window.app.saveSettingsNotifPrefs()">Save Notification Settings</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-branding" class="hidden stv2-section">
+      <div class="card" style="border-radius:16px;">
+        <div class="card-header">
+          <h3>Organization Branding</h3>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm" onclick="window.app.resetBrandingDefaults()" style="border-radius:10px;">Reset to Defaults</button>
+            <button class="btn btn-primary btn-sm" onclick="window.app.saveOrgBranding()" style="border-radius:10px;">Save Branding</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <p style="font-size:13px;color:var(--gray-500);margin-bottom:20px;">Customize your organization's branding. These settings apply across the platform for your team.</p>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+            <!-- Company Name -->
+            <div class="auth-field" style="margin:0;">
+              <label>Company Display Name</label>
+              <input type="text" id="branding-company-name" class="form-control" placeholder="Your Company Name">
+            </div>
+            <!-- Logo URL -->
+            <div class="auth-field" style="margin:0;">
+              <label>Logo URL</label>
+              <input type="text" id="branding-logo-url" class="form-control" placeholder="https://example.com/logo.png" oninput="window.app.previewBrandingLogo()">
+            </div>
+            <!-- Primary Color -->
+            <div class="auth-field" style="margin:0;">
+              <label>Primary Color</label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="color" id="branding-primary-color-picker" value="#2563EB" style="width:42px;height:36px;border:1px solid var(--gray-200);border-radius:8px;cursor:pointer;padding:2px;" oninput="document.getElementById('branding-primary-color').value=this.value;window.app.previewBrandingColors();">
+                <input type="text" id="branding-primary-color" class="form-control" placeholder="#2563EB" style="flex:1;font-family:monospace;" oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value)){document.getElementById('branding-primary-color-picker').value=this.value;window.app.previewBrandingColors();}">
+              </div>
+            </div>
+            <!-- Accent Color -->
+            <div class="auth-field" style="margin:0;">
+              <label>Accent Color</label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="color" id="branding-accent-color-picker" value="#7C3AED" style="width:42px;height:36px;border:1px solid var(--gray-200);border-radius:8px;cursor:pointer;padding:2px;" oninput="document.getElementById('branding-accent-color').value=this.value;window.app.previewBrandingColors();">
+                <input type="text" id="branding-accent-color" class="form-control" placeholder="#7C3AED" style="flex:1;font-family:monospace;" oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value)){document.getElementById('branding-accent-color-picker').value=this.value;window.app.previewBrandingColors();}">
+              </div>
+            </div>
+            <!-- Email Footer -->
+            <div class="auth-field" style="margin:0;grid-column:1/-1;">
+              <label>Email Footer Text</label>
+              <textarea id="branding-email-footer" class="form-control" rows="2" placeholder="Custom footer text for outgoing emails..."></textarea>
+            </div>
+            <!-- Custom Domain -->
+            <div class="auth-field" style="margin:0;grid-column:1/-1;">
+              <label>Custom Domain <span style="font-size:11px;color:var(--gray-400);">(optional — for white-label login page)</span></label>
+              <input type="text" id="branding-custom-domain" class="form-control" placeholder="app.yourdomain.com">
+            </div>
+          </div>
+
+          <!-- Live Preview -->
+          <div style="margin-top:24px;padding:20px;background:var(--gray-50);border-radius:12px;border:1px solid var(--gray-100);">
+            <h4 style="font-size:13px;font-weight:700;margin:0 0 12px;color:var(--gray-500);">Live Preview</h4>
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+              <div id="branding-preview-logo" style="width:48px;height:48px;border-radius:12px;background:var(--brand-500,#2563EB);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:20px;flex-shrink:0;overflow:hidden;">C</div>
+              <div>
+                <div id="branding-preview-name" style="font-size:16px;font-weight:700;color:var(--gray-900);">Credentik</div>
+                <div style="font-size:12px;color:var(--gray-400);">Credentialing Platform</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div id="branding-preview-primary" style="height:36px;width:80px;border-radius:8px;background:var(--brand-500,#2563EB);"></div>
+              <div id="branding-preview-primary-dark" style="height:36px;width:80px;border-radius:8px;background:var(--brand-600,#1d4ed8);"></div>
+              <div id="branding-preview-primary-darker" style="height:36px;width:80px;border-radius:8px;background:var(--brand-700,#1e40af);"></div>
+              <div id="branding-preview-accent" style="height:36px;width:80px;border-radius:8px;background:var(--accent-500,#7C3AED);"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -7395,11 +7589,13 @@ window.app = {
   settingsTab(el, tabId) {
     document.querySelectorAll('.tab, .stv2-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    ['settings-agency', 'settings-import', 'settings-org', 'settings-licenses', 'settings-groups', 'settings-caqh', 'settings-integrations', 'settings-notifications', 'settings-webhooks', 'settings-security', 'settings-danger'].forEach(id => {
+    ['settings-agency', 'settings-import', 'settings-org', 'settings-licenses', 'settings-groups', 'settings-caqh', 'settings-integrations', 'settings-notifications', 'settings-developer', 'settings-security', 'settings-branding', 'settings-danger'].forEach(id => {
       const section = document.getElementById(id);
       if (section) section.classList.toggle('hidden', id !== tabId);
     });
     if (tabId === 'settings-security') this.load2FAStatus();
+    if (tabId === 'settings-developer') this.loadDeveloperTab();
+    if (tabId === 'settings-branding') this.loadBrandingTab();
   },
 
   async saveAgencyProfile() {
@@ -8620,6 +8816,110 @@ function handleNppesProxy(payload) {
     } catch (err) {
       if (result) result.innerHTML = `<div class="alert alert-danger">Connection failed: ${escHtml(err.message)}</div>`;
     }
+  },
+
+  // ─── Organization Branding ───
+
+  async loadBrandingTab() {
+    try {
+      const branding = await store.getOrgBranding();
+      if (branding) {
+        if (branding.companyName) document.getElementById('branding-company-name').value = branding.companyName;
+        if (branding.primaryColor) {
+          document.getElementById('branding-primary-color').value = branding.primaryColor;
+          document.getElementById('branding-primary-color-picker').value = branding.primaryColor;
+        }
+        if (branding.accentColor) {
+          document.getElementById('branding-accent-color').value = branding.accentColor;
+          document.getElementById('branding-accent-color-picker').value = branding.accentColor;
+        }
+        if (branding.logoUrl) document.getElementById('branding-logo-url').value = branding.logoUrl;
+        if (branding.emailFooter) document.getElementById('branding-email-footer').value = branding.emailFooter;
+        if (branding.customDomain) document.getElementById('branding-custom-domain').value = branding.customDomain;
+        // Update preview
+        this.previewBrandingColors();
+        this.previewBrandingLogo();
+        const previewName = document.getElementById('branding-preview-name');
+        if (previewName && branding.companyName) previewName.textContent = branding.companyName;
+      }
+    } catch (e) {
+      console.warn('Failed to load branding config:', e);
+    }
+  },
+
+  previewBrandingColors() {
+    const primary = document.getElementById('branding-primary-color')?.value || '';
+    const accent = document.getElementById('branding-accent-color')?.value || '';
+    if (/^#[0-9a-fA-F]{6}$/.test(primary)) {
+      document.getElementById('branding-preview-primary').style.background = primary;
+      document.getElementById('branding-preview-primary-dark').style.background = _darkenHex(primary, 10);
+      document.getElementById('branding-preview-primary-darker').style.background = _darkenHex(primary, 20);
+      document.getElementById('branding-preview-logo').style.background = primary;
+      _applyBrandingCSS({ primaryColor: primary });
+    }
+    if (/^#[0-9a-fA-F]{6}$/.test(accent)) {
+      document.getElementById('branding-preview-accent').style.background = accent;
+      _applyBrandingCSS({ accentColor: accent });
+    }
+  },
+
+  previewBrandingLogo() {
+    const url = document.getElementById('branding-logo-url')?.value?.trim() || '';
+    const preview = document.getElementById('branding-preview-logo');
+    if (!preview) return;
+    if (url) {
+      preview.innerHTML = '<img src="' + url.replace(/"/g, '&quot;') + '" style="width:100%;height:100%;object-fit:cover;border-radius:12px;" onerror="this.parentNode.innerHTML=\'C\'">';
+    } else {
+      const name = document.getElementById('branding-company-name')?.value?.trim() || '';
+      preview.innerHTML = (name || 'C').charAt(0).toUpperCase();
+    }
+  },
+
+  async saveOrgBranding() {
+    const data = {
+      companyName: document.getElementById('branding-company-name')?.value?.trim() || '',
+      primaryColor: document.getElementById('branding-primary-color')?.value?.trim() || '',
+      accentColor: document.getElementById('branding-accent-color')?.value?.trim() || '',
+      logoUrl: document.getElementById('branding-logo-url')?.value?.trim() || '',
+      emailFooter: document.getElementById('branding-email-footer')?.value?.trim() || '',
+      customDomain: document.getElementById('branding-custom-domain')?.value?.trim() || '',
+    };
+    try {
+      await store.updateOrgBranding(data);
+      _applyBrandingCSS(data);
+      localStorage.setItem('credentik_org_branding', JSON.stringify(data));
+      showToast('Branding settings saved');
+    } catch (err) {
+      showToast('Error saving branding: ' + err.message, 'error');
+    }
+  },
+
+  resetBrandingDefaults() {
+    document.getElementById('branding-company-name').value = '';
+    document.getElementById('branding-primary-color').value = '#2563EB';
+    document.getElementById('branding-primary-color-picker').value = '#2563EB';
+    document.getElementById('branding-accent-color').value = '#7C3AED';
+    document.getElementById('branding-accent-color-picker').value = '#7C3AED';
+    document.getElementById('branding-logo-url').value = '';
+    document.getElementById('branding-email-footer').value = '';
+    document.getElementById('branding-custom-domain').value = '';
+    const root = document.documentElement;
+    root.style.removeProperty('--brand-500');
+    root.style.removeProperty('--brand-600');
+    root.style.removeProperty('--brand-700');
+    root.style.removeProperty('--accent-500');
+    document.getElementById('branding-preview-primary').style.background = '#2563EB';
+    document.getElementById('branding-preview-primary-dark').style.background = _darkenHex('#2563EB', 10);
+    document.getElementById('branding-preview-primary-darker').style.background = _darkenHex('#2563EB', 20);
+    document.getElementById('branding-preview-accent').style.background = '#7C3AED';
+    document.getElementById('branding-preview-logo').innerHTML = 'C';
+    document.getElementById('branding-preview-logo').style.background = '#2563EB';
+    document.getElementById('branding-preview-name').textContent = 'Credentik';
+    const sidebarName = document.getElementById('sidebar-agency-name');
+    if (sidebarName) sidebarName.textContent = 'Credentik';
+    document.title = 'Credentik \u2014 Credentialing Platform';
+    localStorage.removeItem('credentik_org_branding');
+    showToast('Branding reset to defaults');
   },
 
   async generateLetter() {
@@ -11154,6 +11454,110 @@ function handleNppesProxy(payload) {
   },
 };
 
+// ─── Predictive Timeline Analytics ───
+
+let _historicalTimelineCache = null;
+
+/**
+ * analyzeHistoricalTimelines — groups completed apps by payer, calculates actual avg/min/max days.
+ * Results are cached in memory for the session.
+ */
+function analyzeHistoricalTimelines(apps) {
+  if (!Array.isArray(apps) || apps.length === 0) return {};
+  const completed = apps.filter(a => a.status === 'approved' || a.status === 'credentialed');
+  const byPayer = {};
+  completed.forEach(a => {
+    const payerName = a.payerName || a.payer_name || (typeof a.payer === 'object' && a.payer ? a.payer.name : '') || '';
+    if (!payerName) return;
+    const submitted = a.submittedDate || a.submitted_date || a.created_at || a.createdAt;
+    const approved = a.effectiveDate || a.effective_date || a.approvedDate || a.approved_date || a.updatedAt || a.updated_at;
+    if (!submitted || !approved) return;
+    const days = Math.floor((new Date(approved) - new Date(submitted)) / 86400000);
+    if (days <= 0 || days > 730) return; // sanity check
+    if (!byPayer[payerName]) byPayer[payerName] = { payer: payerName, days: [], states: new Set(), specialties: new Set() };
+    byPayer[payerName].days.push(days);
+    if (a.state) byPayer[payerName].states.add(a.state);
+    const spec = a.specialty || a.providerSpecialty || '';
+    if (spec) byPayer[payerName].specialties.add(spec);
+  });
+  const result = {};
+  for (const [payer, data] of Object.entries(byPayer)) {
+    const sorted = data.days.slice().sort((a, b) => a - b);
+    const sum = sorted.reduce((s, d) => s + d, 0);
+    result[payer] = {
+      payer,
+      count: sorted.length,
+      avgDays: Math.round(sum / sorted.length),
+      minDays: sorted[0],
+      maxDays: sorted[sorted.length - 1],
+      medianDays: sorted[Math.floor(sorted.length / 2)],
+      states: [...data.states],
+      specialties: [...data.specialties],
+    };
+  }
+  _historicalTimelineCache = result;
+  return result;
+}
+
+/**
+ * _buildDashboardPredictions — computes predicted approvals for all pending apps.
+ * Used by renderDashboard to inject the Predicted Approvals card.
+ */
+function _buildDashboardPredictions(apps, providers) {
+  const historical = _historicalTimelineCache || analyzeHistoricalTimelines(apps);
+  const pendingApps = apps.filter(a => ['submitted','in_review','pending_info','gathering_docs','pending','new'].includes(a.status));
+  const predictions = [];
+  pendingApps.forEach(a => {
+    const payerName = a.payerName || a.payer_name || (typeof a.payer === 'object' && a.payer ? a.payer.name : '') || '';
+    const payer = getPayerById(a.payerId) || {};
+    const displayPayer = payer.name || payerName || 'Unknown';
+    const submitted = a.submittedDate || a.submitted_date || a.created_at || a.createdAt;
+    if (!submitted) return;
+    const elapsed = Math.floor((new Date() - new Date(submitted)) / 86400000);
+    // Use historical data if available, else SLA defaults
+    const hist = historical[displayPayer] || historical[payerName];
+    let predictedDays, confidence, basedOn;
+    if (hist && hist.count >= 5) {
+      predictedDays = hist.avgDays;
+      confidence = 'high';
+      basedOn = hist.count + ' completed applications';
+    } else if (hist && hist.count >= 2) {
+      predictedDays = hist.avgDays;
+      confidence = 'medium';
+      basedOn = hist.count + ' completed applications';
+    } else {
+      const sla = getPayerSLA(displayPayer);
+      predictedDays = sla.avgDays;
+      confidence = 'low';
+      basedOn = 'Payer SLA defaults';
+    }
+    const submittedDate = new Date(submitted);
+    const estimatedApproval = new Date(submittedDate.getTime() + predictedDays * 86400000);
+    const daysRemaining = predictedDays - elapsed;
+    let riskLevel = 'on-track';
+    if (elapsed > predictedDays * 1.2) riskLevel = 'delayed';
+    else if (elapsed > predictedDays * 0.75) riskLevel = 'at-risk';
+    // Find provider name
+    const prov = providers.find(p => String(p.id) === String(a.providerId || a.provider_id));
+    const provName = prov ? ((prov.firstName || prov.first_name || '') + ' ' + (prov.lastName || prov.last_name || '')).trim() : '';
+    predictions.push({
+      appId: a.id,
+      payerName: displayPayer,
+      providerName: provName,
+      state: a.state,
+      elapsed,
+      predictedDays,
+      daysRemaining,
+      confidence,
+      basedOn,
+      estimatedApproval,
+      riskLevel,
+    });
+  });
+  predictions.sort((a, b) => a.estimatedApproval - b.estimatedApproval);
+  return predictions.slice(0, 10);
+}
+
 // ─── Shared Context for Lazy-Loaded Page Modules ───
 // Page modules under ui/pages/ destructure from this object.
 // Values are stable by the time any page navigates (initApp loads data first).
@@ -11173,7 +11577,7 @@ window._credentik = {
   get TELEHEALTH_POLICIES() { return TELEHEALTH_POLICIES; },
   APPLICATION_STATUSES, PAYER_TAG_DEFS, CRED_DOCUMENTS,
   // SLA
-  PAYER_SLA_DEFAULTS, getPayerSLA,
+  PAYER_SLA_DEFAULTS, getPayerSLA, analyzeHistoricalTimelines,
   // Presets (for provider profile)
   PRESET_INSTITUTIONS, PRESET_DEGREES, PRESET_FIELDS_OF_STUDY,
   PRESET_BOARDS, PRESET_MALPRACTICE_CARRIERS, PRESET_COVERAGE_AMOUNTS,

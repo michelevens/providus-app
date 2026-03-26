@@ -1227,6 +1227,86 @@ class Store {
         return result.data || result;
     }
 
+    // ── Organization Branding (White-Label) ──
+
+    async getOrgBranding() {
+        const cacheKey = 'org_branding';
+        const cached = this._getCache(cacheKey);
+        if (cached) return cached;
+        const result = await this._fetch(`${CONFIG.API_URL}/api/organizations/branding`);
+        const data = result.data || result;
+        this._setCache(cacheKey, data);
+        return data;
+    }
+
+    async updateOrgBranding(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/api/organizations/branding`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+        this._invalidateCache('org_branding');
+        return result.data || result;
+    }
+
+    // ── API Keys ──
+
+    async getApiKeys() {
+        const result = await this._fetch(`${CONFIG.API_URL}/api/api-keys`);
+        return this._snakeToCamel(result.data || result);
+    }
+
+    async createApiKey(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/api/api-keys`, {
+            method: 'POST',
+            body: JSON.stringify(this._camelToSnake(data)),
+        });
+        return this._snakeToCamel(result.data || result);
+    }
+
+    async revokeApiKey(id) {
+        const result = await this._fetch(`${CONFIG.API_URL}/api/api-keys/${id}`, {
+            method: 'DELETE',
+        });
+        return result.data || result;
+    }
+
+    // ── Webhooks (API-backed) ──
+
+    async getWebhooks() {
+        const result = await this._fetch(`${CONFIG.API_URL}/api/webhooks`);
+        return this._snakeToCamel(result.data || result);
+    }
+
+    async createWebhook(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/api/webhooks`, {
+            method: 'POST',
+            body: JSON.stringify(this._camelToSnake(data)),
+        });
+        return this._snakeToCamel(result.data || result);
+    }
+
+    async updateWebhook(id, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/api/webhooks/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(this._camelToSnake(data)),
+        });
+        return this._snakeToCamel(result.data || result);
+    }
+
+    async deleteWebhook(id) {
+        const result = await this._fetch(`${CONFIG.API_URL}/api/webhooks/${id}`, {
+            method: 'DELETE',
+        });
+        return result.data || result;
+    }
+
+    async testWebhook(id) {
+        const result = await this._fetch(`${CONFIG.API_URL}/api/webhooks/${id}/test`, {
+            method: 'POST',
+        });
+        return this._snakeToCamel(result.data || result);
+    }
+
     // ── Public Share Links ──
     async generateShareLink(providerId) {
         const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/share`, { method: 'POST' });
