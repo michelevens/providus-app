@@ -294,7 +294,9 @@ class Store {
     }
 
     async create(collection, data) {
-        const result = await this._fetch(this._url(collection), {
+        // Use alternate route for applications (CDN caches 503 on POST /applications)
+        const url = collection === 'applications' ? `${CONFIG.API_URL}/app-create` : this._url(collection);
+        const result = await this._fetch(url, {
             method: 'POST',
             body: JSON.stringify(data),
         });
