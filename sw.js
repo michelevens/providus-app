@@ -1,4 +1,4 @@
-const CACHE_NAME = 'credentik-v7';
+const CACHE_NAME = 'credentik-v8';
 const API_CACHE = 'credentik-api-v1';
 const API_TTL = 60 * 60 * 1000; // 60 minutes
 const API_MAX_ENTRIES = 100;
