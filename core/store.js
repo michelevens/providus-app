@@ -1142,6 +1142,65 @@ class Store {
         return (await response.json());
     }
 
+    // ── Notifications (Resend) ──
+
+    async sendNotification(type, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/notifications/send`, {
+            method: 'POST',
+            body: JSON.stringify({ type, ...data }),
+        });
+        this._invalidateCache('notifications');
+        return result.data || result;
+    }
+
+    async getNotificationLog(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/notifications${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
+
+    async getNotificationPreferences() {
+        const cacheKey = 'notification_preferences';
+        const cached = this._getCache(cacheKey);
+        if (cached) return cached;
+        try {
+            const result = await this._fetch(`${CONFIG.API_URL}/notifications/preferences`);
+            const data = result.data || result;
+            this._setCache(cacheKey, data);
+            return data;
+        } catch {
+            // Return defaults if API doesn't support it yet
+            return this._getDefaultNotificationPreferences();
+        }
+    }
+
+    async updateNotificationPreferences(prefs) {
+        const result = await this._fetch(`${CONFIG.API_URL}/notifications/preferences`, {
+            method: 'PUT',
+            body: JSON.stringify(prefs),
+        });
+        this._invalidateCache('notification_preferences');
+        return result.data || result;
+    }
+
+    async testNotification(recipientEmail) {
+        const result = await this._fetch(`${CONFIG.API_URL}/notifications/test`, {
+            method: 'POST',
+            body: JSON.stringify({ recipientEmail }),
+        });
+        return result.data || result;
+    }
+
+    _getDefaultNotificationPreferences() {
+        return {
+            statusChanges: true,
+            licenseExpirationDays: 30,
+            documentRequests: true,
+            weeklySummary: false,
+            recipientEmail: '',
+        };
+    }
+
     // ── Subscription & Billing (Stripe) ──
     async getSubscriptionStatus() {
         const result = await this._fetch(`${CONFIG.API_URL}/subscription/status`);
@@ -1166,6 +1225,24 @@ class Store {
     async resumeSubscription() {
         const result = await this._fetch(`${CONFIG.API_URL}/subscription/resume`, { method: 'POST' });
         return result.data || result;
+    }
+
+    // ── Public Share Links ──
+    async generateShareLink(providerId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/share`, { method: 'POST' });
+        return result.data || result;
+    }
+    async getPublicShare(token) {
+        // Public endpoint — no auth header needed
+        const response = await fetch(`${CONFIG.API_URL}/share/${token}`, {
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.message || `HTTP ${response.status}`);
+        }
+        const json = await response.json();
+        return this._snakeToCamel(json.data || json);
     }
 }
 

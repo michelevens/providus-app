@@ -1621,15 +1621,149 @@
       } catch(e) { errEl.textContent = 'Network error. Please try again.'; }
     }
 
+    // ── Public Share View ──
+    function checkShareHash() {
+      const match = location.hash.match(/^#share\/(.+)$/);
+      if (!match) return false;
+      document.getElementById('auth-gate').style.display = 'none';
+      document.getElementById('app-shell').style.display = 'none';
+      document.getElementById('share-portal').style.display = '';
+      loadPublicShare(match[1]);
+      return true;
+    }
+
+    async function loadPublicShare(token) {
+      const API = 'https://api.credentik.com/api';
+      try {
+        const res = await fetch(API + '/share/' + encodeURIComponent(token), { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error('not found');
+        const json = await res.json();
+        const d = json.data || json;
+
+        document.getElementById('share-loading').style.display = 'none';
+        document.getElementById('share-content').style.display = '';
+        renderPublicShareView(d);
+      } catch (e) {
+        console.error('Share link error:', e);
+        document.getElementById('share-loading').style.display = 'none';
+        document.getElementById('share-invalid').style.display = '';
+      }
+    }
+
+    function renderPublicShareView(d) {
+      // Normalize snake_case to camelCase for key fields
+      const name = d.providerName || d.provider_name || ((d.firstName || d.first_name || '') + ' ' + (d.lastName || d.last_name || '')).trim() || 'Provider';
+      const credentials = d.credentials || d.credential || '';
+      const npi = d.npi || '---';
+      const specialty = d.specialty || d.taxonomyDesc || d.taxonomy_desc || '';
+      const completionPct = d.completionPct || d.completion_pct || d.completionPercent || d.completion_percent || 0;
+      const lastUpdated = d.lastUpdated || d.last_updated || d.updatedAt || d.updated_at || '';
+      const agencyName = d.agencyName || d.agency_name || 'Credentik';
+
+      // License stats
+      const lic = d.licenses || d.licensesSummary || d.licenses_summary || {};
+      const licActive = lic.active || 0;
+      const licExpiring = lic.expiring || 0;
+      const licExpired = lic.expired || 0;
+      const licTotal = lic.total || (licActive + licExpiring + licExpired);
+
+      // Application stats
+      const apps = d.applications || d.applicationsSummary || d.applications_summary || {};
+      const appsApproved = apps.approved || 0;
+      const appsPending = apps.pending || 0;
+      const appsDenied = apps.denied || 0;
+      const appsTotal = apps.total || (appsApproved + appsPending + appsDenied);
+
+      const fmtDate = (v) => { if (!v) return '---'; try { return new Date(v).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }); } catch(e) { return v; } };
+
+      // Completion ring SVG
+      const pct = Math.min(100, Math.max(0, Math.round(completionPct)));
+      const radius = 60;
+      const circumference = 2 * Math.PI * radius;
+      const filled = (pct / 100) * circumference;
+      const ringColor = pct >= 80 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
+
+      document.getElementById('share-content').innerHTML = `
+        <div style="margin-bottom:16px;text-align:right;" class="no-print">
+          <button onclick="window.print()" style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 16px;cursor:pointer;font-size:13px;color:#475569;">&#128424; Print / PDF</button>
+        </div>
+
+        <!-- Header Card -->
+        <div style="background:#fff;border-radius:16px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border:1px solid #e2e8f0;overflow:hidden;margin-bottom:20px;">
+          <div style="background:linear-gradient(135deg,#0e7490 0%,#0891b2 50%,#06b6d4 100%);padding:28px 32px;color:#fff;">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;opacity:0.8;margin-bottom:8px;">Credentialing Progress Report</div>
+            <h1 style="margin:0 0 4px;font-size:28px;font-weight:800;">${esc(name)}${credentials ? '<span style="font-weight:400;opacity:0.85;">, ' + esc(credentials) + '</span>' : ''}</h1>
+            <div style="font-size:14px;opacity:0.85;margin-top:4px;">NPI: ${esc(npi)}${specialty ? ' &mdash; ' + esc(specialty) : ''}</div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:200px 1fr;gap:0;padding:0;">
+            <!-- Ring Chart -->
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 16px;border-right:1px solid #f1f5f9;">
+              <svg width="140" height="140" viewBox="0 0 140 140">
+                <circle cx="70" cy="70" r="${radius}" fill="none" stroke="#f1f5f9" stroke-width="10"/>
+                <circle cx="70" cy="70" r="${radius}" fill="none" stroke="${ringColor}" stroke-width="10"
+                  stroke-dasharray="${filled} ${circumference - filled}" stroke-dashoffset="${circumference * 0.25}"
+                  stroke-linecap="round" transform="rotate(-90 70 70)"/>
+                <text x="70" y="65" text-anchor="middle" style="font-size:32px;font-weight:800;fill:#1e293b;">${pct}%</text>
+                <text x="70" y="82" text-anchor="middle" style="font-size:11px;fill:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Complete</text>
+              </svg>
+            </div>
+
+            <!-- Stats Grid -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
+              <div style="padding:20px 24px;border-bottom:1px solid #f1f5f9;border-right:1px solid #f1f5f9;">
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;font-weight:600;">Licenses</div>
+                <div style="font-size:28px;font-weight:800;color:#1e293b;margin:4px 0;">${licTotal}</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(34,197,94,0.1);color:#16a34a;font-weight:600;">${licActive} active</span>
+                  ${licExpiring ? '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(245,158,11,0.1);color:#d97706;font-weight:600;">' + licExpiring + ' expiring</span>' : ''}
+                  ${licExpired ? '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,0.1);color:#dc2626;font-weight:600;">' + licExpired + ' expired</span>' : ''}
+                </div>
+              </div>
+              <div style="padding:20px 24px;border-bottom:1px solid #f1f5f9;">
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;font-weight:600;">Payer Enrollments</div>
+                <div style="font-size:28px;font-weight:800;color:#1e293b;margin:4px 0;">${appsTotal}</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(34,197,94,0.1);color:#16a34a;font-weight:600;">${appsApproved} approved</span>
+                  ${appsPending ? '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(59,130,246,0.1);color:#2563eb;font-weight:600;">' + appsPending + ' pending</span>' : ''}
+                  ${appsDenied ? '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,0.1);color:#dc2626;font-weight:600;">' + appsDenied + ' denied</span>' : ''}
+                </div>
+              </div>
+              <div style="padding:20px 24px;border-right:1px solid #f1f5f9;">
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;font-weight:600;">Status</div>
+                <div style="font-size:16px;font-weight:700;color:${pct >= 80 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626'};margin-top:8px;">${pct >= 80 ? 'On Track' : pct >= 50 ? 'In Progress' : 'Needs Attention'}</div>
+              </div>
+              <div style="padding:20px 24px;">
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;font-weight:600;">Last Updated</div>
+                <div style="font-size:14px;font-weight:600;color:#1e293b;margin-top:8px;">${fmtDate(lastUpdated)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align:center;padding:20px;font-size:12px;color:#94a3b8;line-height:1.6;">
+          <div style="margin-bottom:4px;">This is a point-in-time credentialing progress snapshot shared by <strong style="color:#64748b;">${esc(agencyName)}</strong>.</div>
+          <div>Generated by <strong style="color:#0891b2;">Credentik</strong> &mdash; ${fmtDate(new Date().toISOString())}</div>
+          <div style="margin-top:8px;font-size:11px;">No sensitive data (SSN, DOB, addresses) is included in this report.</div>
+        </div>
+      `;
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
     // Check onboard hash on page load
     if (checkOnboardHash()) {
       // We're in onboard mode — don't proceed with normal auth
     } else if (checkContractHash()) {
       // Contract view mode
+    } else if (checkShareHash()) {
+      // Public share view mode
     }
     window.addEventListener('hashchange', () => {
       if (location.hash.match(/^#onboard\//)) checkOnboardHash();
       if (location.hash.match(/^#contract\//)) checkContractHash();
+      if (location.hash.match(/^#share\//)) checkShareHash();
     });
   </script>
 

@@ -1129,6 +1129,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderApiDocsPage();
       break;
+    case 'notifications':
+      pageTitle.textContent = 'Email Notifications';
+      pageSubtitle.textContent = 'Manage notification preferences and view sent emails';
+      pageActions.innerHTML = printBtn;
+      await renderNotificationSettingsPage();
+      break;
     default:
       pageBody.innerHTML = '<div class="empty-state"><h3>Page not found</h3></div>';
   }
@@ -4790,6 +4796,7 @@ async function renderSettings() {
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-groups')">Groups</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-caqh')">CAQH API</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-integrations')">Integrations</button>
+      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-notifications')">Notifications</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-webhooks')">Webhooks</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-security')">Security</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-danger')">Danger Zone</button>
@@ -5149,6 +5156,32 @@ async function renderSettings() {
         <div class="card-header"><h3>Active Sessions</h3></div>
         <div class="card-body">
           <p class="text-sm text-muted">You are currently logged in. Sign out to end your session.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-notifications" class="hidden stv2-section">
+      <div class="card" style="border-radius:16px;">
+        <div class="card-header"><h3>Email Notification Settings</h3></div>
+        <div class="card-body">
+          <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">Configure automatic email notifications sent via Resend. For full notification management, visit the <a href="#" onclick="navigateTo('notifications');return false;" style="color:var(--brand-600);font-weight:600;">Notifications page</a>.</p>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--gray-100);">
+            <div><strong style="font-size:13px;">Status change alerts</strong><div style="font-size:11px;color:var(--gray-400);">Email when application status changes</div></div>
+            <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;"><input type="checkbox" id="settings-notif-status" checked style="opacity:0;width:0;height:0;position:absolute;"><span style="position:absolute;inset:0;background:var(--gray-300);border-radius:11px;transition:0.2s;"></span></label>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--gray-100);">
+            <div><strong style="font-size:13px;">License expiration warnings</strong><div style="font-size:11px;color:var(--gray-400);">Alert before licenses expire</div></div>
+            <select class="form-control" id="settings-notif-exp" style="width:auto;"><option value="0">Off</option><option value="30" selected>30 days</option><option value="60">60 days</option><option value="90">90 days</option></select>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--gray-100);">
+            <div><strong style="font-size:13px;">Document requests</strong><div style="font-size:11px;color:var(--gray-400);">Notify when documents are needed</div></div>
+            <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;"><input type="checkbox" id="settings-notif-docs" checked style="opacity:0;width:0;height:0;position:absolute;"><span style="position:absolute;inset:0;background:var(--gray-300);border-radius:11px;transition:0.2s;"></span></label>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
+            <div><strong style="font-size:13px;">Weekly summary digest</strong><div style="font-size:11px;color:var(--gray-400);">Weekly recap every Monday</div></div>
+            <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;"><input type="checkbox" id="settings-notif-weekly" style="opacity:0;width:0;height:0;position:absolute;"><span style="position:absolute;inset:0;background:var(--gray-300);border-radius:11px;transition:0.2s;"></span></label>
+          </div>
+          <div style="margin-top:16px;"><button class="btn btn-primary" onclick="window.app.saveSettingsNotifPrefs()">Save Notification Settings</button></div>
         </div>
       </div>
     </div>
@@ -5881,6 +5914,7 @@ async function renderAuditTrail()            { (await _page('admin')).renderAudi
 async function renderFaqPage()               { (await _page('admin')).renderFaqPage(); }
 async function renderAutomationsPage()       { (await _page('admin')).renderAutomationsPage(); }
 async function renderApiDocsPage()           { (await _page('admin')).renderApiDocsPage(); }
+async function renderNotificationSettingsPage() { (await _page('admin')).renderNotificationSettingsPage(); }
 async function renderProviderDashboard(u)    { (await _page('provider-profile')).renderProviderDashboard(u); }
 async function renderProviderProfilePage(id) { (await _page('provider-profile')).renderProviderProfilePage(id); }
 async function renderProviderPrintout(id)    { (await _page('provider-profile')).renderProviderPrintout(id); }
@@ -6225,6 +6259,55 @@ window.app = {
   copyProviderProfileLink(providerId) {
     const url = `${window.location.origin}${window.location.pathname}#provider-profile-share&id=${providerId}`;
     navigator.clipboard.writeText(url).then(() => showToast('Profile link copied!')).catch(() => showToast('Failed to copy link'));
+  },
+  async generatePublicShareLink(providerId) {
+    showToast('Generating share link...');
+    try {
+      const result = await store.generateShareLink(providerId);
+      const token = result.token || result.shareToken || result.share_token;
+      if (token) {
+        const url = `${window.location.origin}${window.location.pathname}#share/${token}`;
+        await navigator.clipboard.writeText(url).catch(() => {});
+        // Show a modal-style copy dialog
+        const existing = document.getElementById('share-link-dialog');
+        if (existing) existing.remove();
+        const dlg = document.createElement('div');
+        dlg.id = 'share-link-dialog';
+        dlg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+        dlg.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+          <h3 style="margin:0 0 8px;font-size:18px;">Share Link Generated</h3>
+          <p style="margin:0 0 16px;font-size:13px;color:#64748b;">Anyone with this link can view a read-only credentialing progress summary. No login required. No sensitive data is exposed.</p>
+          <div style="display:flex;gap:8px;"><input id="share-link-input" readonly value="${url}" style="flex:1;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:monospace;background:#f8fafc;color:#1e293b;"/>
+          <button onclick="document.getElementById('share-link-input').select();document.execCommand('copy');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500);" style="padding:10px 18px;border-radius:8px;background:#0891b2;color:#fff;border:none;cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap;">Copy</button></div>
+          <div style="text-align:right;margin-top:16px;"><button onclick="this.closest('#share-link-dialog').remove();" style="padding:8px 20px;border-radius:8px;background:#f1f5f9;border:1px solid #e2e8f0;cursor:pointer;font-size:13px;color:#475569;">Close</button></div>
+        </div>`;
+        document.body.appendChild(dlg);
+        dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.remove(); });
+        showToast('Share link copied to clipboard!');
+      } else {
+        showToast('Share link created, but no token returned. Check API configuration.');
+      }
+    } catch (e) {
+      console.error('Share link generation error:', e);
+      // Fallback — if API endpoint doesn't exist yet, show a helpful message
+      if (e.message && (e.message.includes('404') || e.message.includes('405') || e.message.includes('not found'))) {
+        const existing = document.getElementById('share-link-dialog');
+        if (existing) existing.remove();
+        const dlg = document.createElement('div');
+        dlg.id = 'share-link-dialog';
+        dlg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+        dlg.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:480px;width:100%;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+          <h3 style="margin:0 0 8px;font-size:18px;">&#128279; Share Link Not Yet Configured</h3>
+          <p style="margin:0 0 12px;font-size:13px;color:#64748b;line-height:1.6;">The public share API endpoint is not yet available on the server. Once configured, this will generate a unique, time-limited link that external stakeholders can view without logging in.</p>
+          <p style="margin:0 0 16px;font-size:12px;color:#94a3b8;">Provider ID: ${providerId} &mdash; Endpoint needed: <code>POST /api/providers/{id}/share</code></p>
+          <div style="text-align:right;"><button onclick="this.closest('#share-link-dialog').remove();" style="padding:8px 20px;border-radius:8px;background:#f1f5f9;border:1px solid #e2e8f0;cursor:pointer;font-size:13px;color:#475569;">Close</button></div>
+        </div>`;
+        document.body.appendChild(dlg);
+        dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.remove(); });
+      } else {
+        showToast('Error generating share link: ' + e.message, 'error');
+      }
+    }
   },
 
   // ── Monitoring Controls ──
@@ -6927,6 +7010,7 @@ window.app = {
     const nextAction = await appPrompt('Next action (leave blank if none):', { title: 'Next Action', placeholder: 'e.g. Call back in 2 weeks...' });
     if (nextAction === false || nextAction === null) return;
     await workflow.completeFollowup(fuId, outcome, nextAction || '');
+    _triggerFollowupNotification(fuId, outcome).catch(() => {});
     await navigateTo('followups');
     showToast('Follow-up completed');
   },
@@ -7063,7 +7147,7 @@ window.app = {
   settingsTab(el, tabId) {
     document.querySelectorAll('.tab, .stv2-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    ['settings-agency', 'settings-import', 'settings-org', 'settings-licenses', 'settings-groups', 'settings-caqh', 'settings-integrations', 'settings-webhooks', 'settings-security', 'settings-danger'].forEach(id => {
+    ['settings-agency', 'settings-import', 'settings-org', 'settings-licenses', 'settings-groups', 'settings-caqh', 'settings-integrations', 'settings-notifications', 'settings-webhooks', 'settings-security', 'settings-danger'].forEach(id => {
       const section = document.getElementById(id);
       if (section) section.classList.toggle('hidden', id !== tabId);
     });
@@ -10382,6 +10466,8 @@ function handleNppesProxy(payload) {
         method: 'POST', body: JSON.stringify({ new_status: newStatus })
       });
       showToast(`Moved to ${newStatus.replace(/_/g, ' ')}`);
+      // Fire-and-forget notification for status change
+      _triggerStatusChangeNotification(appId, newStatus).catch(() => {});
       await renderKanbanBoard();
     } catch (e) {
       showToast('Cannot transition: ' + (e.message || 'Invalid status change'));
@@ -10545,6 +10631,61 @@ function handleNppesProxy(payload) {
   deleteAutomationRule(id) { deleteAutomationRule(id); },
   toggleAutomationRule(id) { toggleAutomationRule(id); },
   closeAutomationModal() { document.getElementById('automation-rule-modal')?.classList.remove('active'); },
+
+  // ─── Email Notifications ───
+  notifTab(el, tabId) {
+    document.querySelectorAll('.notif-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    ['notif-settings', 'notif-log'].forEach(id => {
+      const section = document.getElementById(id);
+      if (section) section.classList.toggle('hidden', id !== tabId);
+    });
+  },
+  async saveNotificationPreferences() {
+    const prefs = {
+      statusChanges: document.getElementById('notif-pref-status')?.checked || false,
+      licenseExpirationDays: parseInt(document.getElementById('notif-pref-exp-days')?.value || '0', 10),
+      documentRequests: document.getElementById('notif-pref-docs')?.checked || false,
+      weeklySummary: document.getElementById('notif-pref-weekly')?.checked || false,
+      recipientEmail: document.getElementById('notif-recipient-email')?.value?.trim() || '',
+    };
+    try {
+      await store.updateNotificationPreferences(prefs);
+      showToast('Notification preferences saved');
+    } catch (e) {
+      // Save locally as fallback
+      localStorage.setItem('credentik_notification_prefs', JSON.stringify(prefs));
+      showToast('Preferences saved locally');
+    }
+  },
+  async sendTestNotification() {
+    const email = document.getElementById('notif-recipient-email')?.value?.trim();
+    if (!email) { showToast('Enter a recipient email first'); return; }
+    try {
+      await store.testNotification(email);
+      showToast('Test email sent to ' + email);
+    } catch (e) { showToast('Failed to send test: ' + e.message); }
+  },
+  async refreshNotificationLog() {
+    showToast('Refreshing...');
+    store._invalidateCache('notifications');
+    await renderNotificationSettingsPage();
+  },
+  async saveSettingsNotifPrefs() {
+    const prefs = {
+      statusChanges: document.getElementById('settings-notif-status')?.checked || false,
+      licenseExpirationDays: parseInt(document.getElementById('settings-notif-exp')?.value || '0', 10),
+      documentRequests: document.getElementById('settings-notif-docs')?.checked || false,
+      weeklySummary: document.getElementById('settings-notif-weekly')?.checked || false,
+    };
+    try {
+      await store.updateNotificationPreferences(prefs);
+      showToast('Notification settings saved');
+    } catch (e) {
+      localStorage.setItem('credentik_notification_prefs', JSON.stringify(prefs));
+      showToast('Settings saved locally');
+    }
+  },
 
   // ─── Feature 1: In-App Comments ───
   async addComment(appId) {
@@ -15036,6 +15177,51 @@ if (typeof window._contractLineItems === 'undefined') window._contractLineItems 
 
 // [Lazy-loaded] toggleAutomationRule — moved to ui/pages/ module
 
+// ─── Email Notification Triggers ───
+
+function _getNotificationPrefs() {
+  try {
+    const stored = localStorage.getItem('credentik_notification_prefs');
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return { statusChanges: true, licenseExpirationDays: 30, documentRequests: true, weeklySummary: false };
+}
+
+async function _triggerStatusChangeNotification(appId, newStatus) {
+  const prefs = _getNotificationPrefs();
+  if (!prefs.statusChanges) return;
+  try {
+    const app = await store.getOne('applications', appId);
+    const statusLabel = (APPLICATION_STATUSES.find(s => s.value === newStatus) || {}).label || newStatus.replace(/_/g, ' ');
+    const providerName = app.providerName || app.provider?.firstName ? `${app.provider.firstName} ${app.provider.lastName}` : 'Provider';
+    const payerName = app.payerName || 'Unknown Payer';
+    const subject = `Application Status Update: ${statusLabel} — ${payerName}`;
+    const body = `The credentialing application for ${providerName} with ${payerName} (${app.state || ''}) has been moved to "${statusLabel}".\n\nApplication ID: ${appId}\nPrevious Status: ${(app.status || '').replace(/_/g, ' ')}\nNew Status: ${statusLabel}\n\nLog in to Credentik to view details.`;
+    await store.sendNotification('status_change', {
+      recipientEmail: prefs.recipientEmail || '',
+      recipientName: providerName,
+      subject,
+      body,
+      providerId: app.providerId || null,
+      metadata: { appId, newStatus, payerName, state: app.state },
+    });
+  } catch {}
+}
+
+async function _triggerFollowupNotification(followupId, outcome) {
+  const prefs = _getNotificationPrefs();
+  if (!prefs.statusChanges) return;
+  try {
+    await store.sendNotification('followup_created', {
+      recipientEmail: prefs.recipientEmail || '',
+      recipientName: '',
+      subject: `Follow-up Completed — ${outcome || 'No outcome recorded'}`,
+      body: `A follow-up has been completed.\n\nFollow-up ID: ${followupId}\nOutcome: ${outcome || 'N/A'}\n\nLog in to Credentik to view details.`,
+      metadata: { followupId, outcome },
+    });
+  } catch {}
+}
+
 // ─── FAQ / Knowledge Base Page ───
 
 // [Lazy-loaded] renderFaqPage — moved to ui/pages/ module
@@ -15169,6 +15355,7 @@ const CMD_PALETTE_COMMANDS = [
   { id: 'nav-account', label: 'My Account', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('my-account'); } },
   { id: 'nav-audit', label: 'Audit Trail', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('audit-trail'); } },
   { id: 'nav-automations', label: 'Automations', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('automations'); } },
+  { id: 'nav-notifications', label: 'Email Notifications', category: 'Navigation', action: () => { closeCommandPalette(); navigateTo('notifications'); } },
   // Actions
   { id: 'act-add-app', label: 'Add Application', category: 'Actions', action: () => { closeCommandPalette(); navigateTo('applications').then(() => { if (window.app.openAddModal) window.app.openAddModal(); }); } },
   { id: 'act-add-prov', label: 'Add Provider', category: 'Actions', action: () => { closeCommandPalette(); navigateTo('providers').then(() => { if (window.app.openProviderModal) window.app.openProviderModal(); }); } },
