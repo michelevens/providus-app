@@ -639,13 +639,23 @@ function _applyBrandingCSS(branding) {
   if (sidebarName && branding.companyName) sidebarName.textContent = branding.companyName;
   const sidebarHeader = document.querySelector('.sidebar-header');
   if (sidebarHeader && branding.logoUrl) {
-    const svg = sidebarHeader.querySelector('svg');
-    if (svg) {
+    const existing = sidebarHeader.querySelector('img.brand-logo') || sidebarHeader.querySelector('svg');
+    if (existing) {
       const img = document.createElement('img');
       img.src = branding.logoUrl;
       img.alt = branding.companyName || 'Logo';
+      img.className = 'brand-logo';
       img.style.cssText = 'width:32px;height:32px;border-radius:8px;object-fit:cover;';
-      svg.replaceWith(img);
+      existing.replaceWith(img);
+    }
+  } else if (sidebarHeader && !branding.logoUrl) {
+    // Restore default SVG if logo cleared
+    const existingImg = sidebarHeader.querySelector('img.brand-logo');
+    if (existingImg) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '32'); svg.setAttribute('height', '32'); svg.setAttribute('viewBox', '0 0 56 56'); svg.setAttribute('fill', 'none');
+      svg.innerHTML = '<rect width="56" height="56" rx="14" fill="#0891b2"/><path d="M16 20h8c3.3 0 6 2.7 6 6s-2.7 6-6 6h-8V20z" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M34 20v12l4 4" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+      existingImg.replaceWith(svg);
     }
   }
   // Update page title
