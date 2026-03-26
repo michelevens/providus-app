@@ -5167,13 +5167,17 @@ async function renderSettings() {
             <div class="form-group"><label>Email</label><input type="email" class="form-control" id="agency-email" value="${escAttr(agency.email || '')}" placeholder="admin@youragency.com"></div>
             <div class="form-group"><label>Website</label><input type="url" class="form-control" id="agency-website" value="${escAttr(agency.website || '')}" placeholder="https://youragency.com"></div>
             <div class="form-group"><label>Logo</label>
-              <div style="display:flex;gap:8px;align-items:center;">
-                <input type="text" class="form-control" id="agency-logo" value="${escAttr(agency.logoUrl || agency.logo_url || '')}" placeholder="https://..." style="flex:1;">
-                <label style="cursor:pointer;background:var(--brand-600);color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;white-space:nowrap;">
-                  Upload
-                  <input type="file" accept="image/*" style="display:none;" onchange="window.app.uploadAgencyLogo(this)">
-                </label>
-              </div>
+              <input type="hidden" id="agency-logo" value="${escAttr(agency.logoUrl || agency.logo_url || '')}">
+              <label style="cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px;border:2px dashed var(--gray-300);border-radius:12px;transition:border-color 0.15s;" onmouseover="this.style.borderColor='var(--brand-500)'" onmouseout="this.style.borderColor='var(--gray-300)'">
+                <div id="agency-logo-thumb" style="width:44px;height:44px;border-radius:10px;background:var(--gray-100);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">
+                  ${(agency.logoUrl || agency.logo_url) ? '<img src="' + escAttr(agency.logoUrl || agency.logo_url) + '" style="width:100%;height:100%;object-fit:cover;">' : '<span style="color:var(--gray-400);font-size:18px;">+</span>'}
+                </div>
+                <div>
+                  <div style="font-weight:600;font-size:13px;color:var(--gray-700);">Click to upload logo</div>
+                  <div style="font-size:11px;color:var(--gray-400);">PNG, JPG — max 200KB</div>
+                </div>
+                <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;" onchange="window.app.uploadAgencyLogo(this)">
+              </label>
             </div>
           </div>
 
@@ -7747,6 +7751,8 @@ window.app = {
     const reader = new FileReader();
     reader.onload = (e) => {
       document.getElementById('agency-logo').value = e.target.result;
+      const thumb = document.getElementById('agency-logo-thumb');
+      if (thumb) thumb.innerHTML = '<img src="' + e.target.result + '" style="width:100%;height:100%;object-fit:cover;">';
       showToast('Logo loaded — click Save to apply');
     };
     reader.readAsDataURL(file);
