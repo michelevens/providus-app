@@ -11331,6 +11331,240 @@ function handleNppesProxy(payload) {
   saveWebhookForm() { saveWebhookForm(); },
   closeWebhookModal() { document.getElementById('webhook-modal')?.classList.remove('active'); },
 
+  // ─── Developer Tab: API Keys & Webhooks ───
+
+  async loadDeveloperTab() {
+    await Promise.all([this._renderApiKeysTable(), this._renderDevWebhooksTable()]);
+  },
+
+  // -- API Keys --
+
+  async _renderApiKeysTable() {
+    const container = document.getElementById('api-keys-container');
+    if (!container) return;
+    try {
+      const keys = await store.getApiKeys();
+      if (!keys.length) {
+        container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-quaternary);"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;display:block;opacity:0.4;"><path d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg><div style="font-size:14px;font-weight:600;margin-bottom:4px;">No API keys</div><div style="font-size:12px;">Create an API key to enable programmatic access.</div></div>';
+        return;
+      }
+      container.innerHTML = '<div style="overflow-x:auto;"><table style="width:100%;font-size:13px;"><thead><tr><th style="text-align:left;padding:10px 12px;border-bottom:2px solid var(--gray-200);font-weight:700;">Name</th><th style="text-align:left;padding:10px 12px;border-bottom:2px solid var(--gray-200);font-weight:700;">Key</th><th style="text-align:left;padding:10px 12px;border-bottom:2px solid var(--gray-200);font-weight:700;">Permissions</th><th style="text-align:left;padding:10px 12px;border-bottom:2px solid var(--gray-200);font-weight:700;">Created</th><th style="text-align:left;padding:10px 12px;border-bottom:2px solid var(--gray-200);font-weight:700;">Status</th><th style="text-align:right;padding:10px 12px;border-bottom:2px solid var(--gray-200);font-weight:700;">Actions</th></tr></thead><tbody>' +
+        keys.map(k => {
+          const masked = (k.key || k.id || '').slice(0, 8) + '...' + (k.key || k.id || '').slice(-4);
+          const perms = (k.permissions || []).join(', ') || 'All';
+          const created = k.createdAt ? new Date(k.createdAt).toLocaleDateString() : '-';
+          const status = k.revokedAt ? '<span style="color:#ef4444;font-weight:600;">Revoked</span>' : '<span style="color:#10b981;font-weight:600;">Active</span>';
+          return '<tr style="border-bottom:1px solid var(--gray-100);"><td style="padding:10px 12px;font-weight:600;">' + escHtml(k.name || 'Unnamed') + '</td><td style="padding:10px 12px;"><code id="apikey-val-' + k.id + '" style="font-size:12px;background:var(--gray-100);padding:2px 6px;border-radius:4px;">' + escHtml(masked) + '</code> <button class="btn btn-sm" style="font-size:11px;padding:2px 8px;" onclick="window.app.toggleApiKeyVisibility(\'' + k.id + '\',\'' + escHtml(k.key || k.id || '') + '\')">Show</button></td><td style="padding:10px 12px;font-size:12px;">' + escHtml(perms) + '</td><td style="padding:10px 12px;font-size:12px;">' + created + '</td><td style="padding:10px 12px;">' + status + '</td><td style="padding:10px 12px;text-align:right;">' + (k.revokedAt ? '' : '<button class="btn btn-sm btn-danger" onclick="window.app.revokeApiKey(\'' + k.id + '\')">Revoke</button>') + '</td></tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    } catch (e) {
+      container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-quaternary);"><div style="font-size:14px;font-weight:600;margin-bottom:4px;">No API keys</div><div style="font-size:12px;">Create an API key to enable programmatic access.</div></div>';
+    }
+  },
+
+  _apiKeyVisibility: {},
+  toggleApiKeyVisibility(id, fullKey) {
+    this._apiKeyVisibility[id] = !this._apiKeyVisibility[id];
+    const el = document.getElementById('apikey-val-' + id);
+    if (el) {
+      el.textContent = this._apiKeyVisibility[id] ? fullKey : fullKey.slice(0, 8) + '...' + fullKey.slice(-4);
+    }
+  },
+
+  openCreateApiKeyModal() {
+    const API_KEY_PERMISSIONS = [
+      { value: 'read:providers', label: 'Read Providers' },
+      { value: 'write:providers', label: 'Write Providers' },
+      { value: 'read:applications', label: 'Read Applications' },
+      { value: 'write:applications', label: 'Write Applications' },
+      { value: 'read:licenses', label: 'Read Licenses' },
+      { value: 'webhooks', label: 'Webhooks' },
+    ];
+    let modal = document.getElementById('apikey-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'apikey-modal';
+      modal.className = 'modal-overlay';
+      modal.innerHTML = '<div class="modal" style="max-width:520px;border-radius:16px;"><div class="modal-header"><h2>Create API Key</h2><button class="modal-close" onclick="document.getElementById(\'apikey-modal\').classList.remove(\'active\')">&times;</button></div><div class="modal-body" id="apikey-modal-body"></div></div>';
+      document.body.appendChild(modal);
+    }
+    document.getElementById('apikey-modal-body').innerHTML = '<div class="form-group"><label style="font-weight:600;">Key Name *</label><input type="text" class="form-control" id="apikey-name" placeholder="e.g. Production, Staging" style="border-radius:10px;"></div><div class="form-group"><label style="font-weight:600;">Permissions</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">' +
+      API_KEY_PERMISSIONS.map(p => '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:6px 8px;border-radius:8px;transition:background 0.1s;" onmouseenter="this.style.background=\'var(--table-row-hover)\'" onmouseleave="this.style.background=\'none\'"><input type="checkbox" class="apikey-perm-cb" value="' + p.value + '"> ' + p.label + '</label>').join('') +
+      '</div></div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;"><button class="btn" onclick="document.getElementById(\'apikey-modal\').classList.remove(\'active\')">Cancel</button><button class="btn btn-primary" onclick="window.app.submitCreateApiKey()" style="border-radius:10px;">Create Key</button></div>';
+    modal.classList.add('active');
+  },
+
+  async submitCreateApiKey() {
+    const name = document.getElementById('apikey-name')?.value?.trim();
+    if (!name) { showToast('Enter a key name'); return; }
+    const permissions = [...document.querySelectorAll('.apikey-perm-cb:checked')].map(cb => cb.value);
+    try {
+      const result = await store.createApiKey({ name, permissions });
+      document.getElementById('apikey-modal')?.classList.remove('active');
+      const secret = result.secret || result.key || '';
+      const keyVal = result.key || result.id || '';
+      let reveal = document.getElementById('apikey-reveal-modal');
+      if (!reveal) {
+        reveal = document.createElement('div');
+        reveal.id = 'apikey-reveal-modal';
+        reveal.className = 'modal-overlay';
+        reveal.innerHTML = '<div class="modal" style="max-width:520px;border-radius:16px;"><div class="modal-header"><h2>API Key Created</h2><button class="modal-close" onclick="document.getElementById(\'apikey-reveal-modal\').classList.remove(\'active\')">&times;</button></div><div class="modal-body" id="apikey-reveal-body"></div></div>';
+        document.body.appendChild(reveal);
+      }
+      document.getElementById('apikey-reveal-body').innerHTML = '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:12px 16px;margin-bottom:16px;"><div style="font-size:13px;color:#991b1b;font-weight:600;">This secret will not be shown again. Copy it now and store it securely.</div></div>' +
+        '<div class="form-group"><label style="font-weight:600;font-size:13px;">API Key</label><div style="display:flex;gap:8px;align-items:center;"><code style="flex:1;font-size:12px;background:var(--gray-100);padding:8px 12px;border-radius:8px;word-break:break-all;">' + escHtml(keyVal) + '</code><button class="btn btn-sm" onclick="navigator.clipboard.writeText(\'' + escHtml(keyVal).replace(/'/g, "\\'") + '\');showToast(\'Key copied\')">Copy</button></div></div>' +
+        '<div class="form-group"><label style="font-weight:600;font-size:13px;">Secret</label><div style="display:flex;gap:8px;align-items:center;"><code style="flex:1;font-size:12px;background:var(--gray-100);padding:8px 12px;border-radius:8px;word-break:break-all;">' + escHtml(secret) + '</code><button class="btn btn-sm" onclick="navigator.clipboard.writeText(\'' + escHtml(secret).replace(/'/g, "\\'") + '\');showToast(\'Secret copied\')">Copy</button></div></div>' +
+        '<div style="text-align:right;margin-top:16px;"><button class="btn btn-primary" onclick="document.getElementById(\'apikey-reveal-modal\').classList.remove(\'active\')" style="border-radius:10px;">Done</button></div>';
+      reveal.classList.add('active');
+      await this._renderApiKeysTable();
+    } catch (e) {
+      showToast('Failed to create API key: ' + (e.message || e));
+    }
+  },
+
+  async revokeApiKey(id) {
+    if (!await appConfirm('Revoke this API key? This cannot be undone. Any integrations using this key will stop working immediately.', { title: 'Revoke API Key', okLabel: 'Revoke', danger: true })) return;
+    try {
+      await store.revokeApiKey(id);
+      showToast('API key revoked');
+      await this._renderApiKeysTable();
+    } catch (e) {
+      showToast('Failed to revoke key: ' + (e.message || e));
+    }
+  },
+
+  // -- Developer Webhooks (API-backed) --
+
+  async _renderDevWebhooksTable() {
+    const container = document.getElementById('dev-webhook-list-container');
+    if (!container) return;
+    try {
+      const hooks = await store.getWebhooks();
+      if (!hooks.length) {
+        container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-quaternary);"><svg width="40" height="40" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" style="margin:0 auto 12px;display:block;opacity:0.4;"><path d="M1 8h3l2-5 2 10 2-5h5"/></svg><div style="font-size:14px;font-weight:600;margin-bottom:4px;">No webhooks configured</div><div style="font-size:12px;">Add a webhook endpoint to receive real-time event notifications.</div></div>';
+        return;
+      }
+      container.innerHTML = hooks.map(h => {
+        const statusDot = h.active !== false ? '#10b981' : '#9ca3af';
+        const statusText = h.active !== false ? 'Active' : 'Inactive';
+        const lastTriggered = h.lastTriggeredAt ? new Date(h.lastTriggeredAt).toLocaleDateString() : (h.lastTriggered ? h.lastTriggered : 'Never');
+        const events = h.events || [];
+        return '<div style="padding:16px;border-radius:16px;border:1px solid var(--border-color,#e5e7eb);margin-bottom:12px;background:var(--surface-card,#f9fafb);">' +
+          '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">' +
+          '<div style="width:8px;height:8px;border-radius:50%;background:' + statusDot + ';flex-shrink:0;"></div>' +
+          '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(h.url) + '</div><div style="font-size:11px;color:var(--text-quaternary);margin-top:2px;">' + events.length + ' events &middot; ' + statusText + ' &middot; Last: ' + lastTriggered + '</div></div>' +
+          '<div style="display:flex;gap:6px;flex-shrink:0;">' +
+          '<button class="btn btn-sm" onclick="window.app.testDevWebhook(\'' + h.id + '\')" title="Send test">Test</button>' +
+          '<button class="btn btn-sm" onclick="window.app.toggleDevWebhook(\'' + h.id + '\',' + (h.active !== false ? 'false' : 'true') + ')" title="' + (h.active !== false ? 'Deactivate' : 'Activate') + '">' + (h.active !== false ? 'Pause' : 'Activate') + '</button>' +
+          '<button class="btn btn-sm" onclick="window.app.editDevWebhook(\'' + h.id + '\')" title="Edit">Edit</button>' +
+          '<button class="btn btn-sm btn-danger" onclick="window.app.deleteDevWebhook(\'' + h.id + '\')" title="Delete">Delete</button>' +
+          '</div></div>' +
+          '<div style="display:flex;gap:4px;flex-wrap:wrap;">' + events.map(ev => '<span style="font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px;background:var(--brand-100,#cffafe);color:var(--brand-700,#0e7490);">' + escHtml(ev) + '</span>').join('') + '</div></div>';
+      }).join('');
+    } catch (e) {
+      container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-quaternary);"><div style="font-size:14px;font-weight:600;margin-bottom:4px;">No webhooks configured</div><div style="font-size:12px;">Add a webhook endpoint to receive real-time event notifications.</div></div>';
+    }
+  },
+
+  openCreateWebhookModal(editData) {
+    const DEV_WEBHOOK_EVENTS = [
+      { value: 'application.created', label: 'Application Created' },
+      { value: 'application.status_changed', label: 'Status Changed' },
+      { value: 'application.approved', label: 'Application Approved' },
+      { value: 'application.denied', label: 'Application Denied' },
+      { value: 'provider.created', label: 'Provider Created' },
+      { value: 'provider.updated', label: 'Provider Updated' },
+      { value: 'license.expiring', label: 'License Expiring' },
+      { value: 'document.uploaded', label: 'Document Uploaded' },
+    ];
+    const genSecret = () => 'whsec_' + Array.from(crypto.getRandomValues(new Uint8Array(24))).map(b => b.toString(16).padStart(2, '0')).join('');
+    let modal = document.getElementById('dev-webhook-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'dev-webhook-modal';
+      modal.className = 'modal-overlay';
+      modal.innerHTML = '<div class="modal" style="max-width:540px;border-radius:16px;"><div class="modal-header"><h2 id="dev-webhook-modal-title">Add Webhook</h2><button class="modal-close" onclick="document.getElementById(\'dev-webhook-modal\').classList.remove(\'active\')">&times;</button></div><div class="modal-body" id="dev-webhook-modal-body"></div></div>';
+      document.body.appendChild(modal);
+    }
+    const isEdit = editData && editData.id;
+    const secret = (editData && editData.secret) || genSecret();
+    document.getElementById('dev-webhook-modal-title').textContent = isEdit ? 'Edit Webhook' : 'Add Webhook';
+    document.getElementById('dev-webhook-modal-body').innerHTML =
+      (isEdit ? '<input type="hidden" id="dev-wh-edit-id" value="' + editData.id + '">' : '') +
+      '<div class="form-group"><label style="font-weight:600;">Endpoint URL * <span style="font-size:11px;color:var(--gray-400);">(must be https://)</span></label><input type="url" class="form-control" id="dev-wh-url" placeholder="https://your-server.com/webhook" style="border-radius:10px;" value="' + escHtml((editData && editData.url) || '') + '"></div>' +
+      '<div class="form-group"><label style="font-weight:600;">Signing Secret</label><div style="display:flex;gap:8px;align-items:center;"><code style="flex:1;font-size:12px;background:var(--gray-100);padding:8px 12px;border-radius:8px;word-break:break-all;" id="dev-wh-secret-display">' + escHtml(secret) + '</code><button class="btn btn-sm" onclick="navigator.clipboard.writeText(document.getElementById(\'dev-wh-secret-display\').textContent);showToast(\'Secret copied\')">Copy</button></div><input type="hidden" id="dev-wh-secret" value="' + escHtml(secret) + '"></div>' +
+      '<div class="form-group"><label style="font-weight:600;">Events to Subscribe</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">' +
+      DEV_WEBHOOK_EVENTS.map(ev => '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:6px 8px;border-radius:8px;transition:background 0.1s;" onmouseenter="this.style.background=\'var(--table-row-hover)\'" onmouseleave="this.style.background=\'none\'"><input type="checkbox" class="dev-wh-event-cb" value="' + ev.value + '"' + (editData && editData.events && editData.events.includes(ev.value) ? ' checked' : '') + '> ' + ev.label + '</label>').join('') +
+      '</div></div>' +
+      '<div class="form-group" style="display:flex;align-items:center;gap:10px;"><label style="font-weight:600;margin:0;">Active</label><input type="checkbox" id="dev-wh-active"' + (editData && editData.active === false ? '' : ' checked') + '></div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;"><button class="btn" onclick="document.getElementById(\'dev-webhook-modal\').classList.remove(\'active\')">Cancel</button><button class="btn btn-primary" onclick="window.app.submitDevWebhookForm()" style="border-radius:10px;">' + (isEdit ? 'Update' : 'Save') + ' Webhook</button></div>';
+    modal.classList.add('active');
+  },
+
+  async submitDevWebhookForm() {
+    const url = document.getElementById('dev-wh-url')?.value?.trim();
+    if (!url) { showToast('Enter a webhook URL'); return; }
+    if (!url.startsWith('https://')) { showToast('Webhook URL must use HTTPS'); return; }
+    const events = [...document.querySelectorAll('.dev-wh-event-cb:checked')].map(cb => cb.value);
+    if (!events.length) { showToast('Select at least one event'); return; }
+    const active = document.getElementById('dev-wh-active')?.checked !== false;
+    const secret = document.getElementById('dev-wh-secret')?.value || '';
+    const editId = document.getElementById('dev-wh-edit-id')?.value;
+    try {
+      if (editId) {
+        await store.updateWebhook(editId, { url, events, active, secret });
+        showToast('Webhook updated');
+      } else {
+        await store.createWebhook({ url, events, active, secret });
+        showToast('Webhook created');
+      }
+      document.getElementById('dev-webhook-modal')?.classList.remove('active');
+      await this._renderDevWebhooksTable();
+    } catch (e) {
+      showToast('Failed to save webhook: ' + (e.message || e));
+    }
+  },
+
+  async testDevWebhook(id) {
+    try {
+      await store.testWebhook(id);
+      showToast('Test webhook sent successfully');
+    } catch (e) {
+      showToast('Test failed: ' + (e.message || e));
+    }
+  },
+
+  async toggleDevWebhook(id, active) {
+    try {
+      await store.updateWebhook(id, { active: active });
+      showToast(active ? 'Webhook activated' : 'Webhook paused');
+      await this._renderDevWebhooksTable();
+    } catch (e) {
+      showToast('Failed to update webhook: ' + (e.message || e));
+    }
+  },
+
+  async editDevWebhook(id) {
+    try {
+      const hooks = await store.getWebhooks();
+      const hook = hooks.find(h => h.id === id || h.id == id);
+      if (hook) this.openCreateWebhookModal(hook);
+    } catch (e) {
+      showToast('Failed to load webhook: ' + (e.message || e));
+    }
+  },
+
+  async deleteDevWebhook(id) {
+    if (!await appConfirm('Delete this webhook endpoint? This cannot be undone.', { title: 'Delete Webhook', okLabel: 'Delete', danger: true })) return;
+    try {
+      await store.deleteWebhook(id);
+      showToast('Webhook deleted');
+      await this._renderDevWebhooksTable();
+    } catch (e) {
+      showToast('Failed to delete webhook: ' + (e.message || e));
+    }
+  },
+
   // ─── Feature 4: Enhanced Search helpers ───
   clearRecentSearches() {
     localStorage.removeItem('credentik_recent_searches');

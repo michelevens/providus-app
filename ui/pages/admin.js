@@ -1160,6 +1160,270 @@ async function renderNotificationSettingsPage() {
   `;
 }
 
+// ─── Bottleneck / Pipeline Analytics ───
+
+async function renderBottleneckAnalysis() {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">Loading pipeline analytics...</div>';
+
+  const [apps, providers] = await Promise.all([
+    store.getAll('applications'),
+    store.getAll('providers'),
+  ]);
+  const allApps = Array.isArray(apps) ? apps : [];
+  const allProviders = Array.isArray(providers) ? providers : [];
+
+  const provMap = {};
+  allProviders.forEach(p => { provMap[p.id] = p; });
+
+  const now = Date.now();
+  const dayMs = 86400000;
+
+  // Helper: days between two dates
+  const daysBetween = (a, b) => Math.max(0, Math.round(Math.abs(new Date(b) - new Date(a)) / dayMs));
+  const daysAgo = (ts) => ts ? Math.round((now - new Date(ts).getTime()) / dayMs) : 0;
+
+  // ─── Section 1: Pipeline Funnel ───
+  const funnelStages = [
+    { value: 'new', label: 'New', color: '#6B7280' },
+    { value: 'gathering_docs', label: 'Gathering Docs', color: '#3B82F6' },
+    { value: 'submitted', label: 'Submitted', color: '#8B5CF6' },
+    { value: 'in_review', label: 'In Review', color: '#F59E0B' },
+    { value: 'pending_info', label: 'Pending Info', color: '#EF4444' },
+    { value: 'approved', label: 'Approved', color: '#10B981' },
+    { value: 'credentialed', label: 'Credentialed', color: '#059669' },
+    { value: 'denied', label: 'Denied', color: '#DC2626' },
+  ];
+  const stageCounts = {};
+  funnelStages.forEach(s => { stageCounts[s.value] = 0; });
+  allApps.forEach(a => { if (stageCounts[a.status] !== undefined) stageCounts[a.status]++; });
+  const maxCount = Math.max(1, ...Object.values(stageCounts));
+
+  // Cumulative funnel: apps that have reached at least this stage
+  // For funnel drop-off, we calculate based on stages 0..4 (active pipeline) then terminal
+  const funnelCumulative = [];
+  let cumTotal = allApps.length;
+  for (let i = 0; i < funnelStages.length; i++) {
+    funnelCumulative.push(cumTotal);
+    cumTotal -= stageCounts[funnelStages[i].value];
+  }
+
+  const funnelBarsHtml = funnelStages.map((s, i) => {
+    const count = stageCounts[s.value];
+    const pct = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
+    const dropoff = i > 0 && funnelCumulative[i - 1] > 0
+      ? Math.round(((funnelCumulative[i - 1] - funnelCumulative[i]) / funnelCumulative[i - 1]) * 100)
+      : 0;
+    const isStuck = ['pending_info', 'on_hold'].includes(s.value);
+    const barColor = isStuck ? '#EF4444' : s.color;
+    return `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+        <div style="width:130px;font-size:12px;font-weight:600;text-align:right;color:var(--text-secondary);">${escHtml(s.label)}</div>
+        <div style="flex:1;background:var(--gray-100,#f3f4f6);border-radius:6px;height:28px;position:relative;overflow:hidden;">
+          <div style="width:${pct}%;height:100%;background:${barColor};border-radius:6px;transition:width 0.5s;min-width:${count > 0 ? '2px' : '0'};"></div>
+          <span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:700;color:${pct > 30 ? '#fff' : 'var(--text-primary)'};">${count}</span>
+        </div>
+        ${i > 0 ? `<div style="width:60px;font-size:11px;color:${dropoff > 30 ? '#EF4444' : '#6B7280'};font-weight:600;">-${dropoff}%</div>` : '<div style="width:60px;"></div>'}
+      </div>`;
+  }).join('');
+
+  // ─── Section 2: Slowest Payers ───
+  const payerStats = {};
+  allApps.forEach(a => {
+    const payer = getPayerById(a.payerId);
+    const pName = payer?.name || a.payerName || 'Unknown';
+    if (!payerStats[pName]) payerStats[pName] = { name: pName, totalDays: 0, count: 0, approved: 0, denied: 0 };
+    payerStats[pName].count++;
+    if (a.status === 'approved' || a.status === 'credentialed') {
+      payerStats[pName].approved++;
+      const created = a.createdAt || a.created_at;
+      const updated = a.updatedAt || a.updated_at;
+      if (created && updated) payerStats[pName].totalDays += daysBetween(created, updated);
+    }
+    if (a.status === 'denied') payerStats[pName].denied++;
+  });
+
+  const payerList = Object.values(payerStats)
+    .map(p => ({
+      ...p,
+      avgDays: p.approved > 0 ? Math.round(p.totalDays / p.approved) : 0,
+      approvalRate: p.count > 0 ? Math.round((p.approved / p.count) * 100) : 0,
+    }))
+    .sort((a, b) => b.avgDays - a.avgDays);
+
+  const globalAvgDays = payerList.length > 0
+    ? Math.round(payerList.reduce((sum, p) => sum + p.avgDays, 0) / (payerList.filter(p => p.avgDays > 0).length || 1))
+    : 0;
+  const maxPayerDays = Math.max(1, ...payerList.map(p => p.avgDays));
+
+  const payerRowsHtml = payerList.slice(0, 20).map(p => {
+    const isSlow = p.avgDays > globalAvgDays * 1.3;
+    const barW = maxPayerDays > 0 ? Math.round((p.avgDays / maxPayerDays) * 100) : 0;
+    return `
+      <tr style="${isSlow ? 'background:rgba(239,68,68,0.04);' : ''}">
+        <td style="font-weight:600;">${escHtml(p.name)} ${isSlow ? '<span style="color:#EF4444;font-size:10px;font-weight:700;">SLOW</span>' : ''}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div style="width:${barW}%;height:8px;background:${isSlow ? '#EF4444' : '#3B82F6'};border-radius:4px;min-width:2px;transition:width 0.4s;"></div>
+            <span style="font-size:12px;font-weight:600;white-space:nowrap;">${p.avgDays}d</span>
+          </div>
+        </td>
+        <td style="text-align:center;">${p.count}</td>
+        <td style="text-align:center;font-weight:600;color:${p.approvalRate >= 80 ? '#10B981' : p.approvalRate >= 50 ? '#F59E0B' : '#EF4444'};">${p.approvalRate}%</td>
+      </tr>`;
+  }).join('');
+
+  // ─── Section 3: Stage Duration Analysis ───
+  const stageAnalysis = funnelStages.slice(0, 5).map(s => {
+    const inStage = allApps.filter(a => a.status === s.value);
+    const durations = inStage.map(a => {
+      const ts = a.updatedAt || a.updated_at || a.createdAt || a.created_at;
+      return ts ? daysAgo(ts) : 0;
+    });
+    const avgDuration = durations.length > 0 ? Math.round(durations.reduce((sum, d) => sum + d, 0) / durations.length) : 0;
+    const oldest = durations.length > 0 ? Math.max(...durations) : 0;
+    return { ...s, currentCount: inStage.length, avgDuration, oldest };
+  });
+
+  const maxStageDuration = Math.max(1, ...stageAnalysis.map(s => s.avgDuration));
+
+  const stageCardsHtml = stageAnalysis.map(s => {
+    const barW = maxStageDuration > 0 ? Math.round((s.avgDuration / maxStageDuration) * 100) : 0;
+    const isHot = s.avgDuration > 30;
+    return `
+      <div style="background:var(--surface-card,#fff);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);border-left:4px solid ${isHot ? '#EF4444' : s.color};">
+        <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:8px;">${escHtml(s.label)}</div>
+        <div style="display:flex;gap:16px;margin-bottom:10px;">
+          <div><div style="font-size:20px;font-weight:800;color:${isHot ? '#EF4444' : s.color};">${s.avgDuration}d</div><div style="font-size:10px;color:var(--text-muted);font-weight:600;">AVG TIME</div></div>
+          <div><div style="font-size:20px;font-weight:800;">${s.currentCount}</div><div style="font-size:10px;color:var(--text-muted);font-weight:600;">CURRENT</div></div>
+          <div><div style="font-size:20px;font-weight:800;color:${s.oldest > 60 ? '#EF4444' : 'var(--text-primary)'};">${s.oldest}d</div><div style="font-size:10px;color:var(--text-muted);font-weight:600;">OLDEST</div></div>
+        </div>
+        <div style="background:var(--gray-100,#f3f4f6);border-radius:4px;height:6px;overflow:hidden;">
+          <div style="width:${barW}%;height:100%;background:${isHot ? '#EF4444' : s.color};border-radius:4px;"></div>
+        </div>
+      </div>`;
+  }).join('');
+
+  // ─── Section 4: Stuck Applications (30+ days without status change) ───
+  const stuckApps = allApps
+    .filter(a => {
+      if (a.status === 'approved' || a.status === 'credentialed' || a.status === 'denied' || a.status === 'withdrawn') return false;
+      const ts = a.updatedAt || a.updated_at || a.createdAt || a.created_at;
+      return ts && daysAgo(ts) >= 30;
+    })
+    .map(a => {
+      const ts = a.updatedAt || a.updated_at || a.createdAt || a.created_at;
+      const prov = provMap[a.providerId] || {};
+      const provName = prov.firstName ? `${prov.firstName} ${prov.lastName || ''}`.trim() : (a.providerName || 'Unknown');
+      const payer = getPayerById(a.payerId);
+      const payerName = payer?.name || a.payerName || 'Unknown';
+      const statusObj = APPLICATION_STATUSES.find(s => s.value === a.status) || { label: a.status, color: '#6B7280', bg: '#F3F4F6' };
+      return { id: a.id, provName, payerName, state: a.state, status: a.status, statusObj, daysStuck: daysAgo(ts), lastUpdated: ts };
+    })
+    .sort((a, b) => b.daysStuck - a.daysStuck);
+
+  const stuckRowsHtml = stuckApps.slice(0, 50).map(a => `
+    <tr>
+      <td style="font-weight:600;">${escHtml(a.provName)}</td>
+      <td>${escHtml(a.payerName)}</td>
+      <td>${a.state ? escHtml(getStateName(a.state) || a.state) : ''}</td>
+      <td><span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;background:${a.statusObj.bg};color:${a.statusObj.color};">${escHtml(a.statusObj.label)}</span></td>
+      <td style="font-weight:700;color:${a.daysStuck > 60 ? '#DC2626' : '#F59E0B'};">${a.daysStuck}d</td>
+      <td style="font-size:11px;color:var(--text-muted);">${a.lastUpdated ? formatDateDisplay(a.lastUpdated) : ''}</td>
+      <td><button class="btn btn-sm" style="font-size:11px;padding:3px 10px;" onclick="window.app.nudgeStuckApp('${a.id}','${escAttr(a.provName)}','${escAttr(a.payerName)}')">Nudge</button></td>
+    </tr>`).join('');
+
+  // ─── Section 5: Approval Rate by State ───
+  const stateStats = {};
+  allApps.forEach(a => {
+    if (!a.state) return;
+    if (!stateStats[a.state]) stateStats[a.state] = { total: 0, approved: 0 };
+    stateStats[a.state].total++;
+    if (a.status === 'approved' || a.status === 'credentialed') stateStats[a.state].approved++;
+  });
+  const stateEntries = Object.entries(stateStats)
+    .map(([st, d]) => ({ state: st, rate: d.total > 0 ? Math.round((d.approved / d.total) * 100) : 0, total: d.total }))
+    .sort((a, b) => a.rate - b.rate);
+
+  const stateGridHtml = stateEntries.map(s => {
+    const bg = s.rate >= 80 ? '#D1FAE5' : s.rate >= 50 ? '#FEF3C7' : '#FEE2E2';
+    const fg = s.rate >= 80 ? '#059669' : s.rate >= 50 ? '#D97706' : '#DC2626';
+    return `<div style="background:${bg};border-radius:8px;padding:10px 12px;text-align:center;min-width:80px;">
+      <div style="font-size:11px;font-weight:700;color:${fg};text-transform:uppercase;">${escHtml(getStateName(s.state) || s.state)}</div>
+      <div style="font-size:22px;font-weight:800;color:${fg};">${s.rate}%</div>
+      <div style="font-size:10px;color:var(--text-muted);">${s.total} apps</div>
+    </div>`;
+  }).join('');
+
+  // ─── Render ───
+  body.innerHTML = `
+    <style>
+      .ba-section{background:var(--surface-card,#fff);border-radius:16px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+      .ba-section h3{font-size:15px;font-weight:700;margin:0 0 14px 0;color:var(--text-primary);}
+      .ba-section table{width:100%;border-collapse:collapse;font-size:13px;}
+      .ba-section th{text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);padding:8px 10px;border-bottom:2px solid var(--gray-200,#e5e7eb);}
+      .ba-section td{padding:8px 10px;border-bottom:1px solid var(--gray-100,#f3f4f6);}
+      .ba-section tr:hover{background:var(--gray-50,#f9fafb);}
+      .ba-stage-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
+      .ba-state-grid{display:flex;flex-wrap:wrap;gap:8px;}
+      .ba-stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+      .ba-stat{background:var(--surface-card,#fff);border-radius:12px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);position:relative;overflow:hidden;}
+      .ba-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+      .ba-stat .val{font-size:26px;font-weight:800;line-height:1.1;}
+      .ba-stat .lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-top:2px;}
+      @media(max-width:768px){.ba-stats-row{grid-template-columns:repeat(2,1fr);}.ba-stage-grid{grid-template-columns:1fr 1fr;}}
+    </style>
+
+    <!-- Summary Stats -->
+    <div class="ba-stats-row">
+      <div class="ba-stat" style="--accent:#3B82F6;"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#3B82F6,#2563EB);"></div><div class="val">${allApps.length}</div><div class="lbl">Total Applications</div></div>
+      <div class="ba-stat" style="--accent:#F59E0B;"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#F59E0B,#D97706);"></div><div class="val" style="color:#F59E0B;">${allApps.filter(a => !['approved','credentialed','denied','withdrawn'].includes(a.status)).length}</div><div class="lbl">In Progress</div></div>
+      <div class="ba-stat" style="--accent:#EF4444;"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#EF4444,#DC2626);"></div><div class="val" style="color:#EF4444;">${stuckApps.length}</div><div class="lbl">Stuck (30+ days)</div></div>
+      <div class="ba-stat" style="--accent:#10B981;"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#10B981,#059669);"></div><div class="val" style="color:#10B981;">${allApps.filter(a => a.status === 'approved' || a.status === 'credentialed').length}</div><div class="lbl">Approved / Credentialed</div></div>
+    </div>
+
+    <!-- Section 1: Pipeline Funnel -->
+    <div class="ba-section">
+      <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>Pipeline Funnel</h3>
+      <div style="padding:4px 0;">${funnelBarsHtml}</div>
+    </div>
+
+    <!-- Section 2: Slowest Payers -->
+    <div class="ba-section">
+      <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Slowest Payers ${globalAvgDays > 0 ? `<span style="font-size:11px;font-weight:500;color:var(--text-muted);margin-left:8px;">Avg: ${globalAvgDays} days</span>` : ''}</h3>
+      ${payerList.length > 0 ? `
+        <table>
+          <thead><tr><th>Payer</th><th>Avg Days to Approval</th><th style="text-align:center;">Total Apps</th><th style="text-align:center;">Approval Rate</th></tr></thead>
+          <tbody>${payerRowsHtml}</tbody>
+        </table>` : '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">No payer data available yet.</div>'}
+    </div>
+
+    <!-- Section 3: Stage Duration Analysis -->
+    <div class="ba-section">
+      <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>Stage Duration Analysis</h3>
+      <div class="ba-stage-grid">${stageCardsHtml}</div>
+    </div>
+
+    <!-- Section 4: Stuck Applications -->
+    <div class="ba-section">
+      <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Stuck Applications <span style="font-size:11px;font-weight:500;color:var(--text-muted);margin-left:6px;">(30+ days without movement)</span></h3>
+      ${stuckApps.length > 0 ? `
+        <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>Provider</th><th>Payer</th><th>State</th><th>Status</th><th>Days Stuck</th><th>Last Updated</th><th></th></tr></thead>
+          <tbody>${stuckRowsHtml}</tbody>
+        </table>
+        </div>` : '<div style="text-align:center;padding:20px;color:#10B981;font-size:13px;font-weight:600;">No stuck applications. Pipeline is moving well!</div>'}
+    </div>
+
+    <!-- Section 5: Approval Rate by State -->
+    <div class="ba-section">
+      <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>Approval Rate by State</h3>
+      ${stateEntries.length > 0 ? `<div class="ba-state-grid">${stateGridHtml}</div>` : '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">No state-level data available yet.</div>'}
+    </div>
+  `;
+}
+
 export {
   renderAuditTrail,
   renderAdminPanel,
@@ -1173,4 +1437,5 @@ export {
   renderFaqPage,
   renderApiDocsPage,
   renderNotificationSettingsPage,
+  renderBottleneckAnalysis,
 };
