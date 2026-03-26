@@ -5156,7 +5156,15 @@ async function renderSettings() {
             <div class="form-group"><label>Phone</label><input type="tel" class="form-control" id="agency-phone" value="${escAttr(agency.phone || '')}" placeholder="(555) 555-5555"></div>
             <div class="form-group"><label>Email</label><input type="email" class="form-control" id="agency-email" value="${escAttr(agency.email || '')}" placeholder="admin@youragency.com"></div>
             <div class="form-group"><label>Website</label><input type="url" class="form-control" id="agency-website" value="${escAttr(agency.website || '')}" placeholder="https://youragency.com"></div>
-            <div class="form-group"><label>Logo URL</label><input type="url" class="form-control" id="agency-logo" value="${escAttr(agency.logoUrl || agency.logo_url || '')}" placeholder="https://..."></div>
+            <div class="form-group"><label>Logo</label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="text" class="form-control" id="agency-logo" value="${escAttr(agency.logoUrl || agency.logo_url || '')}" placeholder="https://..." style="flex:1;">
+                <label style="cursor:pointer;background:var(--brand-600);color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;white-space:nowrap;">
+                  Upload
+                  <input type="file" accept="image/*" style="display:none;" onchange="window.app.uploadAgencyLogo(this)">
+                </label>
+              </div>
+            </div>
           </div>
 
           <div style="margin-top:20px;">
@@ -5569,10 +5577,17 @@ async function renderSettings() {
               <label>Company Display Name</label>
               <input type="text" id="branding-company-name" class="form-control" placeholder="Your Company Name">
             </div>
-            <!-- Logo URL -->
+            <!-- Logo -->
             <div class="auth-field" style="margin:0;">
-              <label>Logo URL</label>
-              <input type="text" id="branding-logo-url" class="form-control" placeholder="https://example.com/logo.png" oninput="window.app.previewBrandingLogo()">
+              <label>Logo</label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="text" id="branding-logo-url" class="form-control" placeholder="https://example.com/logo.png" style="flex:1;" oninput="window.app.previewBrandingLogo()">
+                <label style="cursor:pointer;background:var(--brand-600);color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;white-space:nowrap;">
+                  Upload
+                  <input type="file" accept="image/*" style="display:none;" onchange="window.app.uploadBrandingLogo(this)">
+                </label>
+              </div>
+              <div style="font-size:11px;color:var(--gray-400);margin-top:4px;">Upload an image or paste a URL. Max 200KB.</div>
             </div>
             <!-- Primary Color -->
             <div class="auth-field" style="margin:0;">
@@ -7711,6 +7726,18 @@ window.app = {
     if (tabId === 'settings-branding') this.loadBrandingTab();
   },
 
+  uploadAgencyLogo(input) {
+    const file = input?.files?.[0];
+    if (!file) return;
+    if (file.size > 200 * 1024) { showToast('Logo must be under 200KB'); input.value = ''; return; }
+    if (!file.type.startsWith('image/')) { showToast('Please select an image file'); input.value = ''; return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      document.getElementById('agency-logo').value = e.target.result;
+      showToast('Logo loaded — click Save to apply');
+    };
+    reader.readAsDataURL(file);
+  },
   async saveAgencyProfile() {
     const data = {
       name: document.getElementById('agency-name')?.value?.trim() || '',
@@ -8976,6 +9003,20 @@ function handleNppesProxy(payload) {
     }
   },
 
+  uploadBrandingLogo(input) {
+    const file = input?.files?.[0];
+    if (!file) return;
+    if (file.size > 200 * 1024) { showToast('Logo must be under 200KB'); input.value = ''; return; }
+    if (!file.type.startsWith('image/')) { showToast('Please select an image file'); input.value = ''; return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      document.getElementById('branding-logo-url').value = dataUrl;
+      this.previewBrandingLogo();
+      showToast('Logo loaded — click Save to apply');
+    };
+    reader.readAsDataURL(file);
+  },
   previewBrandingLogo() {
     const url = document.getElementById('branding-logo-url')?.value?.trim() || '';
     const preview = document.getElementById('branding-preview-logo');
@@ -14915,7 +14956,41 @@ async function renderMessagesPage() {
   `;
 }
 
-function openNewMessage(opts = {}) {
+async function openNewMessage(opts = {}) {
+  // If modal not in DOM (e.g. called from Applications page), inject it
+  if (!document.getElementById('new-msg-modal')) {
+    const providers = await store.getAll('providers').catch(() => []);
+    const users = await store.getAll('users').catch(() => []);
+    const provArr = Array.isArray(providers) ? providers : [];
+    const userArr = Array.isArray(users) ? users : [];
+    const recipientOpts = [
+      '<option value="">Select recipient...</option>',
+      ...provArr.map(p => `<option value="provider:${p.id}">${escHtml((p.firstName || p.first_name || '') + ' ' + (p.lastName || p.last_name || ''))} (Provider)</option>`),
+      ...userArr.map(u => `<option value="user:${u.id}">${escHtml((u.firstName || u.first_name || u.name || '') + ' ' + (u.lastName || u.last_name || ''))} (Staff)</option>`),
+    ].join('');
+    const modalHtml = `<div class="modal-overlay" id="new-msg-modal">
+      <div class="modal" style="max-width:560px;">
+        <div class="modal-header">
+          <h3 id="new-msg-title">New Message</h3>
+          <button class="modal-close" onclick="document.getElementById('new-msg-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="msg-to-group" class="auth-field" style="margin:0 0 12px;"><label>To</label><select id="msg-to" class="form-control">${recipientOpts}</select></div>
+          <div class="auth-field" style="margin:0 0 12px;"><label>Subject</label><input type="text" id="msg-subject" class="form-control"></div>
+          <div class="auth-field" style="margin:0;"><label>Message</label><textarea id="msg-body" class="form-control" rows="6" style="resize:vertical;"></textarea></div>
+          <input type="hidden" id="msg-type" value="message">
+          <input type="hidden" id="msg-context-type" value="">
+          <input type="hidden" id="msg-context-id" value="">
+          <input type="hidden" id="msg-reply-thread" value="">
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('new-msg-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+  }
   document.getElementById('msg-reply-thread').value = '';
   document.getElementById('msg-context-type').value = opts.contextType || '';
   document.getElementById('msg-context-id').value = opts.contextId || '';
