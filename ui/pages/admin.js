@@ -4,7 +4,7 @@
 const { store, auth, CONFIG, escHtml, escAttr, formatDateDisplay, toHexId,
         showToast, getPayerById, getStateName, navigateTo, appConfirm, appPrompt,
         editButton, deleteButton, helpTip, sortArrow, timeAgo,
-        PAYER_CATALOG, STATES, APPLICATION_STATUSES, CRED_DOCUMENTS } = window._credentik;
+        PAYER_CATALOG, STATES, APPLICATION_STATUSES, CRED_DOCUMENTS, workflow } = window._credentik;
 
 async function renderAuditTrail() {
   const body = document.getElementById('page-body');
@@ -493,6 +493,50 @@ async function renderAutomationsPage() {
           </div>
         </div>`;
       }).join('')}
+    </div>
+
+    <!-- Built-in Workflow Automation Rules (read-only) -->
+    <div style="margin-top:32px;">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+        <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--brand-600)" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l2.5 1.5"/></svg>
+        Built-in Workflow Rules
+        <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:8px;background:rgba(8,145,178,0.1);color:var(--brand-600);">SYSTEM</span>
+      </h3>
+      <p style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">These rules run automatically on every matching event. They cannot be edited or disabled.</p>
+      ${(workflow && workflow.getDefaultAutomationRules ? workflow.getDefaultAutomationRules() : []).map(r => {
+        const actionColors = { create_task: '#f59e0b', create_followup: '#8b5cf6', send_notification: '#10b981', update_status: '#0891b2' };
+        const actionIcons = { create_task: '&#9745;', create_followup: '&#128337;', send_notification: '&#128232;', update_status: '&#9889;' };
+        return `<div class="auto-card" style="border-left:3px solid ${actionColors[r.action] || '#9ca3af'};">
+          <div class="auto-card-icon" style="background:rgba(8,145,178,0.08);color:var(--brand-600);font-size:18px;">${actionIcons[r.action] || '&#9881;'}</div>
+          <div class="auto-card-body">
+            <div class="auto-card-name">${escHtml(r.description)} <span class="auto-badge on">Always On</span></div>
+            <div class="auto-card-desc"><span>Event:</span> ${escHtml(r.event.replace(/\./g, ' '))} &rarr; <span>Action:</span> ${escHtml(r.action.replace(/_/g, ' '))}</div>
+          </div>
+          <div class="auto-card-actions">
+            <span style="font-size:11px;color:var(--gray-400);font-weight:600;">BUILT-IN</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Recent Automation Log -->
+    <div style="margin-top:32px;">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+        <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--gray-600)" stroke-width="1.5" stroke-linecap="round"><path d="M2 2v12h12M5 10l3-3 2 2 4-4"/></svg>
+        Recent Automation Activity
+      </h3>
+      ${(() => {
+        const log = workflow && workflow.getAutomationLog ? workflow.getAutomationLog() : [];
+        if (log.length === 0) return '<div style="text-align:center;padding:24px;color:var(--gray-400);font-size:13px;">No automations have triggered yet.</div>';
+        return '<div style="max-height:300px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:12px;">' +
+          '<table style="width:100%;font-size:12px;border-collapse:collapse;">' +
+          '<thead><tr style="background:var(--gray-50);"><th style="padding:8px 12px;text-align:left;font-weight:600;">Time</th><th style="padding:8px 12px;text-align:left;font-weight:600;">Rule</th><th style="padding:8px 12px;text-align:left;font-weight:600;">Event</th></tr></thead>' +
+          '<tbody>' + log.slice(0, 50).map(e => {
+            const time = e.timestamp ? new Date(e.timestamp).toLocaleString() : '—';
+            return '<tr style="border-top:1px solid var(--gray-100);"><td style="padding:6px 12px;white-space:nowrap;">' + escHtml(time) + '</td><td style="padding:6px 12px;">' + escHtml(e.ruleId || '') + '</td><td style="padding:6px 12px;"><span style="padding:2px 6px;background:var(--gray-100);border-radius:4px;font-size:11px;">' + escHtml(e.event || '') + '</span></td></tr>';
+          }).join('') +
+          '</tbody></table></div>';
+      })()}
     </div>
 
     <!-- Automation Rule Modal -->

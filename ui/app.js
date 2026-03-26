@@ -361,6 +361,42 @@ const PAYER_TAG_DEFS = {
   medicaid_prerequisite:  { label: 'Medicaid Prereq.',       group: 'strategic', bg: '#fef3c7', color: '#92400e' },
 };
 
+// ─── Payer SLA Defaults (typical credentialing timelines in days) ───
+
+const PAYER_SLA_DEFAULTS = {
+  'UnitedHealthcare': { avgDays: 60, minDays: 30, maxDays: 120 },
+  'Aetna': { avgDays: 45, minDays: 21, maxDays: 90 },
+  'Cigna': { avgDays: 60, minDays: 30, maxDays: 120 },
+  'Humana': { avgDays: 75, minDays: 45, maxDays: 120 },
+  'Medicare': { avgDays: 90, minDays: 60, maxDays: 180 },
+  'Medicaid': { avgDays: 90, minDays: 45, maxDays: 180 },
+  'Anthem/Elevance': { avgDays: 60, minDays: 30, maxDays: 120 },
+  'Centene/Ambetter': { avgDays: 60, minDays: 30, maxDays: 120 },
+  'Molina Healthcare': { avgDays: 75, minDays: 45, maxDays: 120 },
+  'Tricare': { avgDays: 90, minDays: 60, maxDays: 180 },
+  'Kaiser Permanente': { avgDays: 90, minDays: 60, maxDays: 180 },
+  '_behavioral': { avgDays: 45, minDays: 21, maxDays: 90 },
+  '_commercial': { avgDays: 60, minDays: 30, maxDays: 120 },
+  '_government': { avgDays: 90, minDays: 60, maxDays: 180 },
+  '_default': { avgDays: 60, minDays: 30, maxDays: 120 },
+};
+
+function getPayerSLA(payerName) {
+  if (!payerName) return PAYER_SLA_DEFAULTS['_default'];
+  if (PAYER_SLA_DEFAULTS[payerName]) return PAYER_SLA_DEFAULTS[payerName];
+  const lowerName = payerName.toLowerCase();
+  for (const key of Object.keys(PAYER_SLA_DEFAULTS)) {
+    if (key.charAt(0) === '_') continue;
+    if (lowerName.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerName)) {
+      return PAYER_SLA_DEFAULTS[key];
+    }
+  }
+  const ptags = PAYER_TAG_MAP[payerName] || [];
+  if (ptags.includes('behavioral_health') || ptags.includes('substance_use')) return PAYER_SLA_DEFAULTS['_behavioral'];
+  if (ptags.includes('medicare_advantage') || ptags.includes('medicaid_prerequisite')) return PAYER_SLA_DEFAULTS['_government'];
+  return PAYER_SLA_DEFAULTS['_default'];
+}
+
 function renderPayerTags(tags) {
   if (!Array.isArray(tags) || tags.length === 0) return '';
   return tags.map(t => {
@@ -1663,6 +1699,29 @@ async function renderDashboard() {
   // Compliance ring
   const compRingOffset = ringCirc - (complianceScore / 100) * ringCirc;
 
+  // ─── SLA Health computation ───
+  const activeApps = apps.filter(a => ['submitted','in_review','pending_info','gathering_docs','pending','new'].includes(a.status));
+  const completedApps = apps.filter(a => a.status === 'approved' || a.status === 'credentialed');
+  let slaOnTrack = 0, slaAtRisk = 0, slaOverdue = 0;
+  const slaDetails = activeApps.map(a => {
+    const payer = getPayerById(a.payerId) || {};
+    const payerName = payer.name || a.payerName || a.payer_name || '';
+    const sla = getPayerSLA(payerName);
+    const submitted = a.submittedDate || a.submitted_date || a.created_at || a.createdAt;
+    const elapsed = submitted ? Math.floor((today - new Date(submitted)) / 86400000) : 0;
+    const pct = sla.avgDays > 0 ? elapsed / sla.avgDays : 0;
+    let status = 'on-track';
+    if (elapsed > sla.maxDays) { status = 'overdue'; slaOverdue++; }
+    else if (pct > 0.75) { status = 'at-risk'; slaAtRisk++; }
+    else { slaOnTrack++; }
+    return { payerName, elapsed, sla, status, pct };
+  });
+  const completedDays = completedApps
+    .map(a => { const s = a.submittedDate || a.submitted_date || a.created_at || a.createdAt; const e = a.effectiveDate || a.effective_date || a.updatedAt || a.updated_at; return s && e ? Math.floor((new Date(e) - new Date(s)) / 86400000) : null; })
+    .filter(d => d !== null && d > 0);
+  const avgApprovalDays = completedDays.length > 0 ? Math.round(completedDays.reduce((s, d) => s + d, 0) / completedDays.length) : 0;
+  const slowestPayers = slaDetails.filter(d => d.status !== 'on-track').sort((a, b) => b.elapsed - a.elapsed).slice(0, 3);
+
   body.innerHTML = `
     <style>
       .mc-welcome {
@@ -2041,6 +2100,49 @@ async function renderDashboard() {
           </div>
         `).join('')}
       </div>
+    </div>
+
+    <!-- Row 5: SLA Health -->
+    <div style="background:#fff;border-radius:16px;border:1px solid var(--gray-200);padding:20px;margin-bottom:20px;">
+      <div class="mc-section-title" style="margin-bottom:16px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gray-400)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        SLA Health
+        <span class="mc-count">${activeApps.length} active</span>
+      </div>
+
+      <!-- SLA Summary Stats -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:18px;">
+        <div style="text-align:center;padding:14px;border-radius:12px;background:#d1fae520;border:1px solid #d1fae5;">
+          <div style="font-size:24px;font-weight:800;color:#10B981;">${slaOnTrack}</div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:#065f46;margin-top:2px;">On Track</div>
+        </div>
+        <div style="text-align:center;padding:14px;border-radius:12px;background:#fef3c720;border:1px solid #fef3c7;">
+          <div style="font-size:24px;font-weight:800;color:#F59E0B;">${slaAtRisk}</div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:#92400e;margin-top:2px;">At Risk</div>
+        </div>
+        <div style="text-align:center;padding:14px;border-radius:12px;background:#fee2e220;border:1px solid #fee2e2;">
+          <div style="font-size:24px;font-weight:800;color:#EF4444;">${slaOverdue}</div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:#991b1b;margin-top:2px;">Overdue</div>
+        </div>
+        <div style="text-align:center;padding:14px;border-radius:12px;background:var(--gray-50);border:1px solid var(--gray-200);">
+          <div style="font-size:24px;font-weight:800;color:var(--gray-700);">${avgApprovalDays > 0 ? avgApprovalDays + 'd' : '—'}</div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray-500);margin-top:2px;">Avg to Approval</div>
+        </div>
+      </div>
+
+      <!-- Slowest Payers -->
+      ${slowestPayers.length > 0 ? '<div style="margin-top:4px;"><div style="font-size:12px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Longest Wait Times</div>' +
+        slowestPayers.map(d => {
+          const barPct = Math.min(100, Math.round((d.elapsed / d.sla.maxDays) * 100));
+          const barColor = d.status === 'overdue' ? '#EF4444' : '#F59E0B';
+          return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">' +
+            '<div style="width:140px;font-size:12px;font-weight:600;color:var(--gray-700);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escAttr(d.payerName) + '">' + escHtml(d.payerName || 'Unknown') + '</div>' +
+            '<div style="flex:1;height:8px;border-radius:4px;background:var(--gray-100);overflow:hidden;"><div style="height:100%;width:' + barPct + '%;background:' + barColor + ';border-radius:4px;transition:width 0.3s;"></div></div>' +
+            '<div style="font-size:11px;font-weight:600;color:' + barColor + ';min-width:60px;text-align:right;">' + d.elapsed + 'd / ' + d.sla.maxDays + 'd</div>' +
+            (d.status === 'overdue' ? '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;background:#FEE2E2;color:#EF4444;">OVERDUE</span>' : '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;background:#FEF3C7;color:#F59E0B;">AT RISK</span>') +
+          '</div>';
+        }).join('') +
+      '</div>' : '<div style="text-align:center;padding:12px;color:var(--gray-400);font-size:12px;">All applications on track</div>'}
     </div>
   `;
 
@@ -10270,6 +10372,10 @@ function handleNppesProxy(payload) {
         document.getElementById('doc-upload-notes')?.value?.trim() || null
       );
       showToast('Document uploaded successfully');
+      // Fire automation rules for document upload
+      workflow.processAutomationRules('document.uploaded', {
+        providerId, documentType: docType, documentName: docName,
+      }).catch(err => console.warn('[Automation] doc-upload trigger error:', err));
       document.getElementById('doc-upload-modal').classList.remove('active');
       await renderProviderProfilePage(providerId);
       window.app.switchProfileTab('documents');
@@ -11049,6 +11155,8 @@ window._credentik = {
   get STATES() { return STATES; },
   get TELEHEALTH_POLICIES() { return TELEHEALTH_POLICIES; },
   APPLICATION_STATUSES, PAYER_TAG_DEFS, CRED_DOCUMENTS,
+  // SLA
+  PAYER_SLA_DEFAULTS, getPayerSLA,
   // Presets (for provider profile)
   PRESET_INSTITUTIONS, PRESET_DEGREES, PRESET_FIELDS_OF_STUDY,
   PRESET_BOARDS, PRESET_MALPRACTICE_CARRIERS, PRESET_COVERAGE_AMOUNTS,
