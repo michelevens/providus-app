@@ -9372,6 +9372,22 @@ function handleNppesProxy(payload) {
     showToast('Switched to ' + agencyName);
     await navigateTo('dashboard');
   },
+  async approveAgency(agencyId, agencyName) {
+    if (!await appConfirm(`Approve agency "${agencyName}"? They will gain full access.`, { title: 'Approve Agency', okLabel: 'Approve', okClass: 'btn-primary' })) return;
+    try {
+      await store.updateAdminAgency(agencyId, { is_active: true });
+      showToast(`${agencyName} approved`);
+      await navigateTo('admin');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async suspendAgency(agencyId, agencyName) {
+    if (!await appConfirm(`Suspend agency "${agencyName}"? They will lose access.`, { title: 'Suspend Agency', okLabel: 'Suspend', okClass: 'btn-danger' })) return;
+    try {
+      await store.updateAdminAgency(agencyId, { is_active: false });
+      showToast(`${agencyName} suspended`);
+      await navigateTo('admin');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
   async clearAgencyOverride() {
     store.clearActiveAgency();
     const user = auth.getUser();

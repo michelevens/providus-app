@@ -724,6 +724,14 @@ class Store {
         return result.data || result;
     }
 
+    async updateAdminAgency(id, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/admin/agencies/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+        return result.data || result;
+    }
+
     // ── Exclusion Screening ──
     async getExclusions(params = {}) {
         const query = new URLSearchParams(params).toString();

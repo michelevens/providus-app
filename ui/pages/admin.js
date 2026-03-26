@@ -196,35 +196,69 @@ async function renderAdminPanel() {
       <div class="stat-card"><div class="label">Total Applications</div><div class="value" style="color:var(--amber);">${totalApps}</div></div>
     </div>
 
+    <!-- Pending Approvals -->
+    ${agencies.filter(a => !a.is_active && !a.isActive).length > 0 ? `
+    <div class="card" style="border:2px solid #f59e0b;border-radius:16px;overflow:hidden;margin-bottom:20px;">
+      <div class="card-header" style="background:#fffbeb;"><h3 style="color:#92400e;">Pending Approval (${agencies.filter(a => !a.is_active && !a.isActive).length})</h3></div>
+      <div class="card-body" style="padding:0;">
+        <table>
+          <thead><tr><th>Agency</th><th>Email</th><th>Registered</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${agencies.filter(a => !a.is_active && !a.isActive).map(a => `
+              <tr>
+                <td><strong>${escHtml(a.name)}</strong><br><code style="font-size:10px;">${escHtml(a.slug || '')}</code></td>
+                <td>${escHtml(a.email || '')}</td>
+                <td style="font-size:12px;">${a.created_at || a.createdAt ? new Date(a.created_at || a.createdAt).toLocaleDateString() : '—'}</td>
+                <td>
+                  <div style="display:flex;gap:4px;">
+                    <button class="btn btn-sm" style="background:#16a34a;color:#fff;" onclick="window.app.approveAgency(${a.id},'${escHtml(a.name)}')">Approve</button>
+                    <button class="btn btn-sm" style="background:#dc2626;color:#fff;" onclick="window.app.suspendAgency(${a.id},'${escHtml(a.name)}')">Reject</button>
+                    <button class="btn btn-sm" onclick="window.app.switchToAgency(${a.id}, '${escHtml(a.name)}')">Preview</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}
+
     <div class="card">
       <div class="card-header"><h3>All Agencies</h3></div>
       <div class="card-body" style="padding:0;">
         <table>
           <thead>
             <tr>
-              <th>Agency</th><th>Slug</th><th>Users</th><th>Orgs</th>
-              <th>Providers</th><th>Applications</th><th>Actions</th>
+              <th>Agency</th><th>Plan</th><th>Status</th><th>Users</th>
+              <th>Providers</th><th>Applications</th><th>Registered</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            ${agencies.map(a => `
+            ${agencies.map(a => {
+              const isActive = a.is_active !== false && a.isActive !== false;
+              const plan = a.plan_tier || a.planTier || 'starter';
+              const statusLabel = isActive ? 'Active' : 'Pending';
+              const statusColor = isActive ? '#16a34a' : '#f59e0b';
+              return `
               <tr style="${activeAgencyId === a.id ? 'background:var(--brand-50);' : ''}">
-                <td><strong>${escHtml(a.name)}</strong></td>
-                <td><code>${escHtml(a.slug || '')}</code></td>
+                <td><strong>${escHtml(a.name)}</strong><br><code style="font-size:10px;color:var(--gray-400);">${escHtml(a.slug || '')}</code>${a.email ? '<br><span style="font-size:11px;color:var(--gray-500);">' + escHtml(a.email) + '</span>' : ''}</td>
+                <td><span style="display:inline-flex;padding:3px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;background:rgba(99,102,241,0.1);color:#6366f1;">${escHtml(plan)}</span></td>
+                <td><span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:${statusColor};"><span style="width:7px;height:7px;border-radius:50%;background:${statusColor};"></span>${statusLabel}</span></td>
                 <td>${a.usersCount || 0}</td>
-                <td>${a.organizationsCount || 0}</td>
                 <td>${a.providersCount || 0}</td>
                 <td>${a.applicationsCount || 0}</td>
+                <td style="font-size:11px;">${a.created_at || a.createdAt ? new Date(a.created_at || a.createdAt).toLocaleDateString() : '—'}</td>
                 <td>
-                  <div style="display:flex;gap:4px;">
+                  <div style="display:flex;gap:4px;flex-wrap:wrap;">
                     <button class="btn btn-sm btn-primary" onclick="window.app.switchToAgency(${a.id}, '${escHtml(a.name)}')" title="View as this agency">
                       ${activeAgencyId === a.id ? 'Viewing' : 'Switch'}
                     </button>
-                    <button class="btn btn-sm" onclick="window.app.viewAgencyDetail(${a.id})" title="Agency details">Details</button>
+                    ${!isActive ? '<button class="btn btn-sm" style="background:#16a34a;color:#fff;" onclick="window.app.approveAgency(' + a.id + ',\'' + escHtml(a.name) + '\')">Approve</button>' : ''}
+                    ${isActive ? '<button class="btn btn-sm" style="color:#dc2626;" onclick="window.app.suspendAgency(' + a.id + ',\'' + escHtml(a.name) + '\')">Suspend</button>' : ''}
                   </div>
                 </td>
-              </tr>
-            `).join('')}
+              </tr>`;
+            }).join('')}
           </tbody>
         </table>
       </div>
