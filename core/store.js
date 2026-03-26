@@ -1100,6 +1100,84 @@ class Store {
         await this._fetch(`${CONFIG.API_URL}/communication-logs/${id}`, { method: 'DELETE' });
     }
 
+    // ── Billing Services Management ──
+    // Client billing assignments (agency manages billing for org/provider)
+    async getBillingClients(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-clients${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
+    async getBillingClient(id) {
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-clients/${id}`);
+        return result.data || result;
+    }
+    async createBillingClient(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-clients`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async updateBillingClient(id, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-clients/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async deleteBillingClient(id) {
+        return this._fetch(`${CONFIG.API_URL}/billing-clients/${id}`, { method: 'DELETE' });
+    }
+    async getBillingClientStats() {
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-clients/stats`);
+        return result.data || result;
+    }
+
+    // Billing tasks (charge entry, claim follow-up, denial mgmt, payment posting)
+    async getBillingTasks(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-tasks${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
+    async createBillingTask(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-tasks`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async updateBillingTask(id, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async deleteBillingTask(id) {
+        return this._fetch(`${CONFIG.API_URL}/billing-tasks/${id}`, { method: 'DELETE' });
+    }
+
+    // Billing activity log (what work was done, when, by whom)
+    async getBillingActivities(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-activities${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
+    async createBillingActivity(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-activities`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async updateBillingActivity(id, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-activities/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async deleteBillingActivity(id) {
+        return this._fetch(`${CONFIG.API_URL}/billing-activities/${id}`, { method: 'DELETE' });
+    }
+
+    // Billing financial summaries (claims, collections, denials per org/provider)
+    async getBillingFinancials(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-financials${query ? '?' + query : ''}`);
+        return result.data || result;
+    }
+    async createBillingFinancial(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-financials`, { method: 'POST', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+    async updateBillingFinancial(id, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/billing-financials/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        return result.data || result;
+    }
+
     // ── Contracts & Agreements ──
     async getContracts(params = {}) {
         const query = new URLSearchParams(params).toString();
