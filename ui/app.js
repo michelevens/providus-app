@@ -14697,7 +14697,7 @@ async function renderOrgDetailPage(orgId) {
   try { providers = (await store.getAll('providers')).filter(p => (p.organizationId || p.orgId) == orgId); } catch {}
   try { licenses = await store.getAll('licenses'); } catch {}
   try { apps = await store.getAll('applications'); } catch {}
-  try { facilities = (await store.getAll('facilities')).filter(f => (f.organizationId || f.organization_id || f.orgId) == orgId); } catch {}
+  try { facilities = await store.getAll('facilities'); } catch {}
 
   if (!o || !o.id) { body.innerHTML = '<div class="empty-state"><h3>Organization not found</h3></div>'; return; }
 
