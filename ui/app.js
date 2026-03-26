@@ -5424,6 +5424,17 @@ async function renderSettings() {
     </div>
 
     <div id="settings-danger" class="hidden stv2-section">
+      <!-- Restart Onboarding -->
+      <div class="card" style="border-radius:16px;margin-bottom:16px;">
+        <div class="card-header"><h3>Setup Wizard</h3></div>
+        <div class="card-body">
+          <p style="font-size:13px;color:var(--gray-600);margin:0 0 12px;">Re-run the guided onboarding to update your organization, add providers, and select payers.</p>
+          <button class="btn" onclick="window.app.restartOnboarding()" style="border-radius:10px;">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M1 4v4h4"/><path d="M3.51 10a6 6 0 1 0 .49-5.5L1 8"/></svg>
+            Restart Setup Wizard
+          </button>
+        </div>
+      </div>
       <div class="alert alert-danger" style="border-radius:12px;">These actions are destructive and cannot be undone.</div>
       <div class="card" style="border-radius:16px;">
         <div class="card-body">
@@ -7711,6 +7722,12 @@ window.app = {
     if (!await appConfirm('RESET EVERYTHING? All data will be permanently deleted.', { title: 'Reset All Data', okLabel: 'Reset Everything', okClass: 'btn-danger' })) return;
     if (!await appConfirm('Are you absolutely sure? This is irreversible.', { title: 'Final Confirmation', okLabel: 'Yes, Delete All', okClass: 'btn-danger' })) return;
     showToast('Full data reset is not available via the API. Contact support.');
+  },
+
+  restartOnboarding() {
+    localStorage.removeItem('credentik_onboarding_complete');
+    localStorage.removeItem('credentik_setup_dismissed');
+    showAgencyOnboarding();
   },
 
   // Licenses
@@ -15497,82 +15514,552 @@ async function _triggerFollowupNotification(followupId, outcome) {
 // [Lazy-loaded] renderProviderProfilePage — moved to ui/pages/ module
 
 // ═══════════════════════════════════════════════════════════════════
-// SETUP WIZARD (First-Run Onboarding)
+// GUIDED AGENCY ONBOARDING  (4-step)
+// Step 1: Welcome & Organization
+// Step 2: Add First Provider (with NPI lookup)
+// Step 3: Select Target Payers
+// Step 4: Create First Applications + Confirmation
 // ═══════════════════════════════════════════════════════════════════
 
-function showSetupWizard() {
-  let overlay = document.getElementById('setup-wizard-overlay');
+// Legacy alias — calls the new comprehensive onboarding
+function showSetupWizard() { showAgencyOnboarding(); }
+
+function showAgencyOnboarding() {
+  let overlay = document.getElementById('agency-onboarding-overlay');
   if (overlay) overlay.remove();
 
   overlay = document.createElement('div');
-  overlay.id = 'setup-wizard-overlay';
+  overlay.id = 'agency-onboarding-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,0.7);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
 
-  const steps = [
-    { title: 'Welcome to Credentik', icon: '&#128075;', desc: 'Let\'s get your credentialing workspace set up in under 5 minutes. We\'ll walk you through the key steps to start managing provider credentials.', action: null },
-    { title: 'Add Your First Provider', icon: '&#128100;', desc: 'Start by adding a healthcare provider. You\'ll need their name, NPI number, credentials, and specialty. You can import more providers later via CSV.', action: 'navigateTo(\'providers\')' },
-    { title: 'Add State Licenses', icon: '&#127963;', desc: 'Add the provider\'s state licenses with expiration dates. Credentik will automatically track renewals, send alerts, and verify license status.', action: 'navigateTo(\'licenses\')' },
-    { title: 'Set Up Payer Applications', icon: '&#128196;', desc: 'Create credentialing applications for each payer the provider needs to be enrolled with. Track status from submission through approval.', action: 'navigateTo(\'applications\')' },
-    { title: 'Run Exclusion Screening', icon: '&#128737;', desc: 'Screen all providers against OIG/SAM exclusion databases to ensure compliance. This is required for most payer contracts.', action: 'navigateTo(\'exclusions\')' },
-    { title: 'You\'re All Set!', icon: '&#127881;', desc: 'Your workspace is ready. Explore the Compliance Center for scoring, PSV for verification, and Continuous Monitoring for real-time alerts. You can always access the setup guide from Settings.', action: null },
-  ];
-
+  // Internal state
   let currentStep = 0;
+  const totalSteps = 4;
+  const ob = {
+    orgName: '', orgPhone: '', orgStreet: '', orgCity: '', orgState: '', orgZip: '',
+    provFirst: '', provLast: '', provNpi: '', provCreds: '', provSpecialty: '', provTaxonomy: '',
+    selectedPayers: [],
+    npiResult: null,
+  };
 
+  // Pre-populate org name from agency if available
+  (async () => {
+    try {
+      const agency = await store.getAgency();
+      if (agency && agency.name && !ob.orgName) {
+        ob.orgName = agency.name;
+        const el = overlay.querySelector('#ob-org-name');
+        if (el && !el.value) el.value = agency.name;
+      }
+      if (agency && agency.phone && !ob.orgPhone) {
+        ob.orgPhone = agency.phone;
+        const el = overlay.querySelector('#ob-org-phone');
+        if (el && !el.value) el.value = agency.phone;
+      }
+    } catch (e) { /* ignore */ }
+  })();
+
+  // ── Helpers ──
+  const _esc = (s) => { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; };
+  const _id = (elId) => overlay.querySelector('#' + elId);
+  const _val = (elId) => { const el = _id(elId); return el ? el.value.trim() : ''; };
+
+  // Get top must_have payers
+  function getTopPayers() {
+    const catalog = typeof PAYER_CATALOG !== 'undefined' ? PAYER_CATALOG : [];
+    const mustHave = catalog.filter(p => p.tags && (p.tags.includes('must_have') || p.tags.includes('high_volume')));
+    const seen = new Set();
+    const result = [];
+    for (const p of mustHave) {
+      const key = p.name.toLowerCase();
+      if (!seen.has(key)) { seen.add(key); result.push(p); }
+      if (result.length >= 12) break;
+    }
+    if (result.length < 10) {
+      for (const p of catalog) {
+        const key = p.name.toLowerCase();
+        if (!seen.has(key)) { seen.add(key); result.push(p); }
+        if (result.length >= 10) break;
+      }
+    }
+    return result;
+  }
+
+  // ── Render ──
   function renderStep() {
-    const step = steps[currentStep];
-    const isFirst = currentStep === 0;
-    const isLast = currentStep === steps.length - 1;
-    const progress = ((currentStep) / (steps.length - 1)) * 100;
+    const progress = ((currentStep + 1) / totalSteps) * 100;
+    const dots = Array.from({ length: totalSteps }, (_, i) =>
+      `<div style="width:${i === currentStep ? '24px' : '8px'};height:8px;border-radius:4px;background:${i <= currentStep ? 'var(--brand-600)' : 'var(--gray-200)'};transition:all 0.3s;"></div>`
+    ).join('');
+    const stepLabel = `Step ${currentStep + 1} of ${totalSteps}`;
 
-    overlay.innerHTML = `
-      <div style="width:90%;max-width:520px;background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">
-        <!-- Progress bar -->
-        <div style="height:4px;background:var(--gray-100);"><div style="height:100%;width:${progress}%;background:var(--brand-600);transition:width 0.3s ease;border-radius:2px;"></div></div>
+    let content = '';
+    let footerHtml = '';
 
-        <div style="padding:32px;">
-          <!-- Step indicator -->
-          <div style="display:flex;justify-content:center;gap:6px;margin-bottom:24px;">
-            ${steps.map((_, i) => `<div style="width:${i === currentStep ? '24px' : '8px'};height:8px;border-radius:4px;background:${i <= currentStep ? 'var(--brand-600)' : 'var(--gray-200)'};transition:all 0.3s;"></div>`).join('')}
-          </div>
-
-          <!-- Content -->
-          <div style="text-align:center;">
-            <div style="font-size:48px;margin-bottom:16px;">${step.icon}</div>
-            <h2 style="margin:0 0 12px;font-size:22px;color:var(--gray-900);">${step.title}</h2>
-            <p style="margin:0 0 24px;font-size:14px;color:var(--gray-600);line-height:1.6;">${step.desc}</p>
-          </div>
-
-          <!-- Checklist (on welcome step) -->
-          ${isFirst ? `<div style="text-align:left;background:var(--gray-50);border-radius:8px;padding:16px;margin-bottom:20px;">
-            <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--gray-500);margin-bottom:8px;">Setup Checklist</div>
-            ${['Add providers & NPI numbers', 'Enter state licenses & DEA registrations', 'Create payer enrollment applications', 'Run OIG/SAM exclusion screening', 'Set up follow-up tasks & reminders'].map(item => `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;color:var(--gray-700);">
-              <div style="width:18px;height:18px;border-radius:4px;border:2px solid var(--gray-300);flex-shrink:0;"></div> ${item}
-            </div>`).join('')}
-          </div>` : ''}
-
-          <!-- Actions -->
-          <div style="display:flex;justify-content:${isFirst ? 'center' : 'space-between'};gap:12px;${isFirst ? '' : ''}">
-            ${!isFirst ? `<button onclick="document.getElementById('setup-wizard-overlay')._prev()" class="btn" style="min-width:100px;">&#8592; Back</button>` : ''}
-            <div style="display:flex;gap:8px;">
-              ${!isLast ? `<button onclick="document.getElementById('setup-wizard-overlay')._dismiss()" class="btn" style="font-size:12px;color:var(--gray-400);">Skip Setup</button>` : ''}
-              ${isLast ?
-                `<button onclick="document.getElementById('setup-wizard-overlay')._dismiss()" class="btn btn-primary" style="min-width:160px;">Start Using Credentik</button>` :
-                step.action ?
-                  `<button onclick="${step.action};document.getElementById('setup-wizard-overlay')._dismiss()" class="btn" style="min-width:100px;">Go There</button>
-                   <button onclick="document.getElementById('setup-wizard-overlay')._next()" class="btn btn-primary" style="min-width:100px;">Next &#8594;</button>` :
-                  `<button onclick="document.getElementById('setup-wizard-overlay')._next()" class="btn btn-primary" style="min-width:160px;">${isFirst ? 'Get Started &#8594;' : 'Next &#8594;'}</button>`
-              }
+    // ────────── STEP 1: Welcome & Organization ──────────
+    if (currentStep === 0) {
+      content = `
+        <div style="text-align:center;margin-bottom:20px;">
+          <div style="font-size:48px;margin-bottom:12px;">&#128075;</div>
+          <h2 style="margin:0 0 8px;font-size:22px;color:var(--gray-900);">Welcome to Credentik</h2>
+          <p style="margin:0;font-size:14px;color:var(--gray-600);line-height:1.6;">
+            Credentik helps you manage provider credentialing, payer enrollments, and compliance tracking
+            &mdash; all in one place. Let&rsquo;s get your workspace set up in a few quick steps.
+          </p>
+        </div>
+        <div style="background:var(--gray-50);border-radius:12px;padding:20px;margin-bottom:16px;">
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--gray-500);margin-bottom:12px;">Organization Details</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div style="grid-column:1/-1;">
+              <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">Organization Name *</label>
+              <input type="text" class="form-control" id="ob-org-name" value="${_esc(ob.orgName)}" placeholder="Your agency or practice name">
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">Phone</label>
+              <input type="tel" class="form-control" id="ob-org-phone" value="${_esc(ob.orgPhone)}" placeholder="(555) 555-5555">
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">State</label>
+              <select class="form-control" id="ob-org-state">
+                <option value="">Select state</option>
+                ${(typeof STATES !== 'undefined' ? STATES : []).map(s => `<option value="${_esc(s.code || s.abbreviation)}" ${ob.orgState === (s.code || s.abbreviation) ? 'selected' : ''}>${_esc(s.name || s.code)}</option>`).join('')}
+              </select>
+            </div>
+            <div style="grid-column:1/-1;">
+              <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">Street Address</label>
+              <input type="text" class="form-control" id="ob-org-street" value="${_esc(ob.orgStreet)}" placeholder="123 Main St (optional)">
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">City</label>
+              <input type="text" class="form-control" id="ob-org-city" value="${_esc(ob.orgCity)}" placeholder="City (optional)">
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">ZIP</label>
+              <input type="text" class="form-control" id="ob-org-zip" value="${_esc(ob.orgZip)}" placeholder="ZIP (optional)">
             </div>
           </div>
         </div>
+        <div style="text-align:left;background:var(--brand-50,#eff6ff);border:1px solid var(--brand-100,#dbeafe);border-radius:8px;padding:14px;font-size:13px;color:var(--brand-700);">
+          <strong>What we&rsquo;ll set up:</strong>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;margin-top:8px;">
+            ${['Organization profile', 'Your first provider', 'Target payers', 'First applications'].map(item => `
+              <div style="display:flex;align-items:center;gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--brand-600)" stroke-width="2"><polyline points="3 8 7 12 13 4"/></svg>
+                ${item}
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+      footerHtml = `
+        <button id="ob-skip-btn" class="btn" style="font-size:12px;color:var(--gray-400);">Skip Setup</button>
+        <button id="ob-next-btn" class="btn btn-primary" style="min-width:160px;">Get Started &#8594;</button>`;
+    }
+
+    // ────────── STEP 2: Add First Provider ──────────
+    else if (currentStep === 1) {
+      content = `
+        <div style="text-align:center;margin-bottom:20px;">
+          <div style="font-size:48px;margin-bottom:12px;">&#128100;</div>
+          <h2 style="margin:0 0 8px;font-size:22px;color:var(--gray-900);">Add Your First Provider</h2>
+          <p style="margin:0;font-size:14px;color:var(--gray-600);line-height:1.6;">
+            Enter the provider&rsquo;s NPI to auto-fill their details, or type them manually.
+          </p>
+        </div>
+        <div style="background:var(--gray-50);border-radius:12px;padding:16px;margin-bottom:16px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:6px;">NPI Lookup</label>
+          <div style="display:flex;gap:8px;">
+            <input type="text" class="form-control" id="ob-npi-lookup" value="${_esc(ob.provNpi)}" placeholder="Enter 10-digit NPI" style="flex:1;font-size:15px;letter-spacing:0.5px;" maxlength="10">
+            <button class="btn btn-primary" id="ob-npi-btn" style="height:40px;white-space:nowrap;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg> Lookup
+            </button>
+          </div>
+          <div id="ob-npi-result" style="display:none;margin-top:10px;"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">First Name *</label>
+            <input type="text" class="form-control" id="ob-prov-first" value="${_esc(ob.provFirst)}" placeholder="First name">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">Last Name *</label>
+            <input type="text" class="form-control" id="ob-prov-last" value="${_esc(ob.provLast)}" placeholder="Last name">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">Credentials</label>
+            <input type="text" class="form-control" id="ob-prov-creds" value="${_esc(ob.provCreds)}" placeholder="e.g. DNP, PMHNP-BC">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">Specialty</label>
+            <input type="text" class="form-control" id="ob-prov-specialty" value="${_esc(ob.provSpecialty)}" placeholder="e.g. Psychiatric Mental Health">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">NPI</label>
+            <input type="text" class="form-control" id="ob-prov-npi" value="${_esc(ob.provNpi)}" placeholder="10-digit NPI" maxlength="10">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">Taxonomy</label>
+            <input type="text" class="form-control" id="ob-prov-taxonomy" value="${_esc(ob.provTaxonomy)}" placeholder="e.g. 2084P0800X">
+          </div>
+        </div>`;
+      footerHtml = `
+        <button id="ob-back-btn" class="btn" style="min-width:100px;">&#8592; Back</button>
+        <div style="display:flex;gap:8px;">
+          <button id="ob-skip-step-btn" class="btn" style="font-size:12px;color:var(--gray-400);">Skip for now</button>
+          <button id="ob-next-btn" class="btn btn-primary" style="min-width:120px;">Next &#8594;</button>
+        </div>`;
+    }
+
+    // ────────── STEP 3: Select Target Payers ──────────
+    else if (currentStep === 2) {
+      const topPayers = getTopPayers();
+      content = `
+        <div style="text-align:center;margin-bottom:20px;">
+          <div style="font-size:48px;margin-bottom:12px;">&#127974;</div>
+          <h2 style="margin:0 0 8px;font-size:22px;color:var(--gray-900);">Select Target Payers</h2>
+          <p style="margin:0;font-size:14px;color:var(--gray-600);line-height:1.6;">
+            Select the insurance companies you want to credential with. These are the most common payers.
+          </p>
+        </div>
+        <div style="max-height:320px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:12px;margin-bottom:12px;">
+          ${topPayers.map(p => {
+            const checked = ob.selectedPayers.some(sp => String(sp.id) === String(p.id));
+            const tagHtml = (p.tags || []).filter(t => t === 'must_have' || t === 'high_volume' || t === 'caqh_accepts').map(t => {
+              const def = PAYER_TAG_DEFS[t];
+              return def ? `<span style="display:inline-block;font-size:10px;padding:1px 6px;border-radius:4px;background:${def.bg};color:${def.color};margin-left:4px;">${def.label}</span>` : '';
+            }).join('');
+            return `
+            <label style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--gray-100);cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''">
+              <input type="checkbox" class="ob-payer-cb" value="${_esc(String(p.id))}" data-name="${_esc(p.name)}" ${checked ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--brand-600);flex-shrink:0;">
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:14px;color:var(--gray-900);">${_esc(p.name)}${tagHtml}</div>
+                <div style="font-size:12px;color:var(--gray-500);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_esc(p.category || '')}${p.states && p.states[0] !== 'ALL' ? ' &middot; ' + p.states.slice(0, 5).join(', ') : ' &middot; Nationwide'}</div>
+              </div>
+            </label>`;
+          }).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:13px;color:var(--gray-500);" id="ob-payer-count">${ob.selectedPayers.length} payer(s) selected</span>
+          <div style="display:flex;gap:6px;">
+            <button id="ob-payer-all-btn" class="btn btn-sm">Select All</button>
+            <button id="ob-payer-none-btn" class="btn btn-sm">Clear</button>
+          </div>
+        </div>`;
+      footerHtml = `
+        <button id="ob-back-btn" class="btn" style="min-width:100px;">&#8592; Back</button>
+        <div style="display:flex;gap:8px;">
+          <button id="ob-skip-step-btn" class="btn" style="font-size:12px;color:var(--gray-400);">Skip for now</button>
+          <button id="ob-next-btn" class="btn btn-primary" style="min-width:120px;">Next &#8594;</button>
+        </div>`;
+    }
+
+    // ────────── STEP 4: Confirm & Create ──────────
+    else if (currentStep === 3) {
+      const provName = [ob.provFirst, ob.provLast].filter(Boolean).join(' ') || 'your provider';
+      const hasProvider = ob.provFirst && ob.provLast;
+      const hasPayers = ob.selectedPayers.length > 0;
+      const canCreate = hasProvider && hasPayers;
+
+      content = `
+        <div style="text-align:center;margin-bottom:20px;">
+          <div style="font-size:48px;margin-bottom:12px;">${canCreate ? '&#127881;' : '&#9989;'}</div>
+          <h2 style="margin:0 0 8px;font-size:22px;color:var(--gray-900);">${canCreate ? 'Ready to Launch' : 'You\'re All Set!'}</h2>
+          <p style="margin:0;font-size:14px;color:var(--gray-600);line-height:1.6;">
+            ${canCreate
+              ? 'We will create <strong>' + ob.selectedPayers.length + ' application(s)</strong> for <strong>' + _esc(provName) + '</strong> to get you started right away.'
+              : 'Your workspace is configured. You can add providers and applications at any time from the dashboard.'}
+          </p>
+        </div>
+        <div style="background:var(--gray-50);border-radius:12px;padding:20px;margin-bottom:16px;">
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--gray-500);margin-bottom:12px;">Setup Summary</div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:28px;height:28px;border-radius:8px;background:${ob.orgName ? 'var(--success-50)' : 'var(--gray-100)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                ${ob.orgName ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#16a34a" stroke-width="2.5"><polyline points="3 8 7 12 13 4"/></svg>' : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--gray-400)" stroke-width="2"><line x1="4" y1="8" x2="12" y2="8"/></svg>'}
+              </div>
+              <div style="flex:1;">
+                <div style="font-weight:600;font-size:13px;color:var(--gray-900);">Organization</div>
+                <div style="font-size:12px;color:var(--gray-500);">${ob.orgName ? _esc(ob.orgName) : 'Not configured'}</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:28px;height:28px;border-radius:8px;background:${hasProvider ? 'var(--success-50)' : 'var(--gray-100)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                ${hasProvider ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#16a34a" stroke-width="2.5"><polyline points="3 8 7 12 13 4"/></svg>' : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--gray-400)" stroke-width="2"><line x1="4" y1="8" x2="12" y2="8"/></svg>'}
+              </div>
+              <div style="flex:1;">
+                <div style="font-weight:600;font-size:13px;color:var(--gray-900);">Provider</div>
+                <div style="font-size:12px;color:var(--gray-500);">${hasProvider ? _esc(provName) + (ob.provNpi ? ' (NPI: ' + _esc(ob.provNpi) + ')' : '') : 'Skipped'}</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:28px;height:28px;border-radius:8px;background:${hasPayers ? 'var(--success-50)' : 'var(--gray-100)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                ${hasPayers ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#16a34a" stroke-width="2.5"><polyline points="3 8 7 12 13 4"/></svg>' : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--gray-400)" stroke-width="2"><line x1="4" y1="8" x2="12" y2="8"/></svg>'}
+              </div>
+              <div style="flex:1;">
+                <div style="font-weight:600;font-size:13px;color:var(--gray-900);">Target Payers</div>
+                <div style="font-size:12px;color:var(--gray-500);">${hasPayers ? ob.selectedPayers.length + ' payer(s) selected' : 'None selected'}</div>
+              </div>
+            </div>
+            ${canCreate ? `
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:28px;height:28px;border-radius:8px;background:var(--brand-50);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--brand-600)" stroke-width="2"><path d="M8 3v10M3 8h10"/></svg>
+              </div>
+              <div style="flex:1;">
+                <div style="font-weight:600;font-size:13px;color:var(--gray-900);">Applications</div>
+                <div style="font-size:12px;color:var(--gray-500);">${ob.selectedPayers.length} application(s) will be created</div>
+              </div>
+            </div>` : ''}
+          </div>
+        </div>
+        <div id="ob-creation-status" style="display:none;text-align:center;padding:12px;font-size:13px;color:var(--brand-700);background:var(--brand-50);border-radius:8px;margin-bottom:12px;"></div>`;
+      footerHtml = `
+        <button id="ob-back-btn" class="btn" style="min-width:100px;">&#8592; Back</button>
+        <button id="ob-finish-btn" class="btn btn-primary" style="min-width:180px;">
+          ${canCreate ? 'Create Applications & Finish' : 'Go to Dashboard'}
+        </button>`;
+    }
+
+    // ── Assemble the modal ──
+    overlay.innerHTML = `
+      <div style="width:90%;max-width:560px;background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;max-height:92vh;display:flex;flex-direction:column;">
+        <div style="height:4px;background:var(--gray-100);flex-shrink:0;"><div style="height:100%;width:${progress}%;background:var(--brand-600);transition:width 0.3s ease;border-radius:2px;"></div></div>
+        <div style="padding:28px 32px;overflow-y:auto;flex:1;">
+          <div style="display:flex;justify-content:center;gap:6px;margin-bottom:6px;">${dots}</div>
+          <div style="text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:var(--gray-400);margin-bottom:20px;">${stepLabel}</div>
+          ${content}
+        </div>
+        <div style="padding:16px 32px;border-top:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-shrink:0;">
+          ${footerHtml}
+        </div>
       </div>
     `;
+    bindStepEvents();
   }
 
-  overlay._next = () => { if (currentStep < steps.length - 1) { currentStep++; renderStep(); } };
-  overlay._prev = () => { if (currentStep > 0) { currentStep--; renderStep(); } };
-  overlay._dismiss = () => { localStorage.setItem('credentik_setup_dismissed', '1'); overlay.remove(); };
+  // ── Event bindings per step ──
+  function bindStepEvents() {
+    const skipBtn = _id('ob-skip-btn');
+    const skipStepBtn = _id('ob-skip-step-btn');
+    const nextBtn = _id('ob-next-btn');
+    const backBtn = _id('ob-back-btn');
+    const finishBtn = _id('ob-finish-btn');
+    const npiBtn = _id('ob-npi-btn');
+    const npiInput = _id('ob-npi-lookup');
+    const payerAllBtn = _id('ob-payer-all-btn');
+    const payerNoneBtn = _id('ob-payer-none-btn');
+
+    if (skipBtn) skipBtn.addEventListener('click', dismiss);
+    if (skipStepBtn) skipStepBtn.addEventListener('click', () => { saveCurrentStepData(); currentStep++; renderStep(); });
+    if (backBtn) backBtn.addEventListener('click', () => { saveCurrentStepData(); currentStep--; renderStep(); });
+    if (nextBtn) nextBtn.addEventListener('click', () => { if (validateStep()) { saveCurrentStepData(); currentStep++; renderStep(); } });
+    if (finishBtn) finishBtn.addEventListener('click', finishOnboarding);
+
+    if (npiBtn) npiBtn.addEventListener('click', doNpiLookup);
+    if (npiInput) npiInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doNpiLookup(); } });
+
+    if (payerAllBtn) payerAllBtn.addEventListener('click', () => {
+      overlay.querySelectorAll('.ob-payer-cb').forEach(cb => { cb.checked = true; });
+      updatePayerCount();
+    });
+    if (payerNoneBtn) payerNoneBtn.addEventListener('click', () => {
+      overlay.querySelectorAll('.ob-payer-cb').forEach(cb => { cb.checked = false; });
+      updatePayerCount();
+    });
+    overlay.querySelectorAll('.ob-payer-cb').forEach(cb => {
+      cb.addEventListener('change', updatePayerCount);
+    });
+  }
+
+  function updatePayerCount() {
+    const count = overlay.querySelectorAll('.ob-payer-cb:checked').length;
+    const el = _id('ob-payer-count');
+    if (el) el.textContent = count + ' payer(s) selected';
+  }
+
+  function validateStep() {
+    if (currentStep === 0) {
+      const name = _val('ob-org-name');
+      if (!name) {
+        showToast('Please enter your organization name');
+        const el = _id('ob-org-name');
+        if (el) { el.focus(); el.style.borderColor = '#ef4444'; setTimeout(() => { el.style.borderColor = ''; }, 2000); }
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function saveCurrentStepData() {
+    if (currentStep === 0) {
+      ob.orgName = _val('ob-org-name');
+      ob.orgPhone = _val('ob-org-phone');
+      ob.orgStreet = _val('ob-org-street');
+      ob.orgCity = _val('ob-org-city');
+      ob.orgState = (_id('ob-org-state') || {}).value || '';
+      ob.orgZip = _val('ob-org-zip');
+    } else if (currentStep === 1) {
+      ob.provFirst = _val('ob-prov-first');
+      ob.provLast = _val('ob-prov-last');
+      ob.provNpi = _val('ob-prov-npi');
+      ob.provCreds = _val('ob-prov-creds');
+      ob.provSpecialty = _val('ob-prov-specialty');
+      ob.provTaxonomy = _val('ob-prov-taxonomy');
+    } else if (currentStep === 2) {
+      ob.selectedPayers = [];
+      overlay.querySelectorAll('.ob-payer-cb:checked').forEach(cb => {
+        ob.selectedPayers.push({ id: cb.value, name: cb.dataset.name });
+      });
+    }
+  }
+
+  // ── NPI Lookup ──
+  async function doNpiLookup() {
+    const npiInput = _id('ob-npi-lookup');
+    const resultDiv = _id('ob-npi-result');
+    const btn = _id('ob-npi-btn');
+    if (!npiInput || !resultDiv) return;
+
+    const npi = npiInput.value.trim();
+    if (!/^\d{10}$/.test(npi)) {
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = '<div style="padding:8px 12px;background:#fef3c7;border-radius:8px;font-size:13px;color:#92400e;">Enter a valid 10-digit NPI number.</div>';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0;border-width:2px;"></div>';
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<div style="text-align:center;padding:8px;color:var(--gray-500);font-size:13px;">Looking up NPI...</div>';
+
+    try {
+      const prov = await taxonomyApi.lookupNPI(npi);
+      if (!prov) {
+        resultDiv.innerHTML = '<div style="padding:8px 12px;background:#fef3c7;border-radius:8px;font-size:13px;color:#92400e;">No provider found for NPI ' + _esc(npi) + '.</div>';
+        return;
+      }
+      ob.npiResult = prov;
+      resultDiv.innerHTML = `
+        <div style="padding:12px;background:var(--success-50,#f0fdf4);border:1px solid var(--success-100,#dcfce7);border-radius:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+            <div>
+              <div style="font-weight:700;font-size:14px;color:var(--gray-900);">${_esc((prov.prefix ? prov.prefix + ' ' : '') + (prov.firstName || prov.first_name || '') + ' ' + (prov.lastName || prov.last_name || ''))}${prov.credential ? ', ' + _esc(prov.credential) : ''}</div>
+              <div style="font-size:12px;color:var(--gray-600);margin-top:2px;">NPI: ${_esc(prov.npi || npi)} &middot; ${_esc(prov.taxonomyDesc || prov.taxonomy_desc || '')}</div>
+              <div style="font-size:12px;color:var(--gray-600);">${_esc(prov.city || '')}${prov.state ? ', ' + _esc(prov.state) : ''}</div>
+            </div>
+            <button class="btn btn-primary btn-sm" id="ob-npi-fill-btn" style="flex-shrink:0;">Auto-Fill</button>
+          </div>
+        </div>`;
+      const fillBtn = _id('ob-npi-fill-btn');
+      if (fillBtn) fillBtn.addEventListener('click', () => {
+        const p = ob.npiResult;
+        if (!p) return;
+        const set = (fId, val) => { const el = _id(fId); if (el && val) el.value = val; };
+        set('ob-prov-first', p.firstName || p.first_name);
+        set('ob-prov-last', p.lastName || p.last_name);
+        set('ob-prov-creds', p.credential || p.credentials);
+        set('ob-prov-npi', p.npi);
+        set('ob-prov-specialty', p.taxonomyDesc || p.taxonomy_desc || p.specialty);
+        set('ob-prov-taxonomy', p.taxonomyCode || p.taxonomy_code || p.taxonomy);
+        set('ob-npi-lookup', p.npi);
+        resultDiv.style.display = 'none';
+        showToast('Provider data auto-filled from NPI Registry');
+      });
+    } catch (err) {
+      resultDiv.innerHTML = '<div style="padding:8px 12px;background:#fee2e2;border-radius:8px;font-size:13px;color:#991b1b;">Lookup failed: ' + _esc(err.message) + '</div>';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg> Lookup';
+    }
+  }
+
+  // ── Finish: save data and create applications ──
+  async function finishOnboarding() {
+    saveCurrentStepData();
+    const finishBtn = _id('ob-finish-btn');
+    const statusDiv = _id('ob-creation-status');
+    if (finishBtn) { finishBtn.disabled = true; finishBtn.textContent = 'Setting up...'; }
+    if (statusDiv) { statusDiv.style.display = 'block'; statusDiv.textContent = 'Saving organization profile...'; }
+
+    try {
+      // 1. Save organization profile
+      if (ob.orgName) {
+        try {
+          const agencyData = { name: ob.orgName };
+          if (ob.orgPhone) agencyData.phone = ob.orgPhone;
+          if (ob.orgStreet) agencyData.address_street = ob.orgStreet;
+          if (ob.orgCity) agencyData.address_city = ob.orgCity;
+          if (ob.orgState) agencyData.address_state = ob.orgState;
+          if (ob.orgZip) agencyData.address_zip = ob.orgZip;
+          await store.updateAgency(agencyData);
+          const sidebarName = document.getElementById('sidebar-agency-name');
+          if (sidebarName) sidebarName.textContent = ob.orgName;
+        } catch (e) { console.error('[Onboarding] Failed to update agency:', e); }
+      }
+
+      // 2. Create provider
+      let createdProviderId = null;
+      if (ob.provFirst && ob.provLast) {
+        if (statusDiv) statusDiv.textContent = 'Creating provider...';
+        try {
+          const provData = {
+            firstName: ob.provFirst,
+            lastName: ob.provLast,
+            npi: ob.provNpi || '',
+            credentials: ob.provCreds || '',
+            specialty: ob.provSpecialty || '',
+            taxonomy: ob.provTaxonomy || '',
+            active: true,
+          };
+          const result = await store.create('providers', provData);
+          createdProviderId = result?.id || result?.data?.id || null;
+        } catch (e) { console.error('[Onboarding] Failed to create provider:', e); }
+      }
+
+      // 3. Create applications
+      let appsCreated = 0;
+      if (createdProviderId && ob.selectedPayers.length > 0) {
+        if (statusDiv) statusDiv.textContent = 'Creating applications...';
+        for (const payer of ob.selectedPayers) {
+          try {
+            await store.create('applications', {
+              providerId: createdProviderId,
+              payerId: payer.id,
+              payerName: payer.name,
+              status: 'not_started',
+              type: 'individual',
+              wave: 1,
+              state: ob.orgState || '',
+              notes: 'Created during onboarding setup',
+            });
+            appsCreated++;
+          } catch (e) { console.error('[Onboarding] Failed to create app for payer:', payer.name, e); }
+        }
+      }
+
+      // Mark complete
+      localStorage.setItem('credentik_onboarding_complete', '1');
+      localStorage.setItem('credentik_setup_dismissed', '1');
+
+      if (appsCreated > 0) {
+        const provDispName = [ob.provFirst, ob.provLast].filter(Boolean).join(' ');
+        showToast(appsCreated + ' application(s) created for ' + provDispName);
+      } else {
+        showToast('Onboarding complete! Welcome to Credentik.');
+      }
+
+      overlay.remove();
+      await navigateTo('dashboard');
+    } catch (err) {
+      console.error('[Onboarding] Error:', err);
+      if (statusDiv) { statusDiv.textContent = 'Error: ' + (err.message || 'Something went wrong'); statusDiv.style.color = '#991b1b'; statusDiv.style.background = '#fee2e2'; }
+      if (finishBtn) { finishBtn.disabled = false; finishBtn.textContent = 'Try Again'; }
+    }
+  }
+
+  function dismiss() {
+    localStorage.setItem('credentik_setup_dismissed', '1');
+    overlay.remove();
+  }
 
   renderStep();
   document.body.appendChild(overlay);
