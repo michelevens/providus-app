@@ -10439,7 +10439,11 @@ function handleNppesProxy(payload) {
     window._selectedBillingClientId = id;
     navigateTo('billing-client-detail');
   },
-  openBsClientModal(editData) {
+  async openBsClientModal(editData) {
+    // Ensure orgs are loaded for autocomplete
+    if (!window._bsOrgs || !window._bsOrgs.length) {
+      try { window._bsOrgs = await store.getOrganizations(); } catch (e) { window._bsOrgs = []; }
+    }
     const modal = document.getElementById('bs-client-modal');
     document.getElementById('bs-client-modal-title').textContent = editData ? 'Edit Billing Client' : 'Add Billing Client';
     document.getElementById('bs-client-edit-id').value = editData?.id || '';
@@ -10504,13 +10508,28 @@ function handleNppesProxy(payload) {
   filterBsOrgDropdown(q) {
     const dd = document.getElementById('bs-client-org-dropdown');
     const orgs = window._bsOrgs || [];
-    if (!dd || !orgs.length) return;
+    if (!dd || !orgs.length) { if (!orgs.length) store.getOrganizations().then(o => { window._bsOrgs = o || []; }).catch(() => {}); return; }
     q = (q || '').toLowerCase();
     const matches = q.length > 0 ? orgs.filter(o => ((o.name||'')+(o.dba||'')).toLowerCase().includes(q)).slice(0,8) : orgs.slice(0,8);
     if (!matches.length) { dd.style.display = 'none'; return; }
-    dd.innerHTML = matches.map(o => `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--gray-100);" onmousedown="document.getElementById('bs-client-org').value='${escAttr(o.name||o.dba||'')}';document.getElementById('bs-client-org-id').value='${o.id}';document.getElementById('bs-client-org-dropdown').style.display='none';">${escHtml(o.name||o.dba||'')}</div>`).join('');
+    dd.innerHTML = matches.map(o => `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;" onmousedown="window.app.selectBsOrg(${o.id})"><span><strong>${escHtml(o.name||o.dba||'')}</strong></span>${o.state ? '<span style="font-size:11px;color:var(--gray-400);">'+escHtml(o.state)+'</span>' : ''}</div>`).join('');
     dd.style.display = 'block';
     document.getElementById('bs-client-org').addEventListener('blur', () => { setTimeout(() => { dd.style.display = 'none'; }, 200); }, { once: true });
+  },
+  selectBsOrg(orgId) {
+    const orgs = window._bsOrgs || [];
+    const org = orgs.find(o => o.id === orgId);
+    if (!org) return;
+    document.getElementById('bs-client-org').value = org.name || org.dba || '';
+    document.getElementById('bs-client-org-id').value = org.id;
+    document.getElementById('bs-client-org-dropdown').style.display = 'none';
+    // Auto-fill contact info from org if fields are empty
+    const contactEl = document.getElementById('bs-client-contact');
+    const emailEl = document.getElementById('bs-client-email');
+    const phoneEl = document.getElementById('bs-client-phone');
+    if (contactEl && !contactEl.value) contactEl.value = org.contactName || org.contact_name || org.primaryContact || org.primary_contact || '';
+    if (emailEl && !emailEl.value) emailEl.value = org.contactEmail || org.contact_email || org.email || '';
+    if (phoneEl && !phoneEl.value) phoneEl.value = org.contactPhone || org.contact_phone || org.phone || '';
   },
 
   // Billing Tasks
