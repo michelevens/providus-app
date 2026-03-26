@@ -1210,7 +1210,7 @@ async function navigateTo(page) {
     case 'compliance':
       pageTitle.textContent = 'Compliance Center';
       pageSubtitle.textContent = 'Compliance scoring, risk matrix, and audit exports';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.exportAuditPacket()">Audit Packet</button> <button class="btn" onclick="window.app.generateComplianceReport()">Refresh</button> <button class="btn" onclick="window.app.exportComplianceData()">Export</button>' + printBtn;
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.exportAuditPacket()">Audit Packet</button> <button class="btn" onclick="window.app.generateComplianceReportPDF()">Export PDF</button> <button class="btn" onclick="window.app.generateComplianceReport()">Refresh</button> <button class="btn" onclick="window.app.exportComplianceData()">Export</button>' + printBtn;
       await renderCompliancePage();
       break;
     case 'psv':
@@ -1240,7 +1240,7 @@ async function navigateTo(page) {
     case 'provider-profile':
       pageTitle.textContent = 'Provider Profile';
       pageSubtitle.textContent = 'Comprehensive provider credentialing profile';
-      pageActions.innerHTML = printBtn;
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.generateCredentialingReport(window._selectedProviderId)">Download PDF</button> ' + printBtn;
       await renderProviderProfilePage(window._selectedProviderId);
       break;
     case 'provider-printout':
@@ -6401,6 +6401,112 @@ function saveAutomationRule()                { _page('admin').then(m => m.saveAu
 function deleteAutomationRule(id)            { _page('admin').then(m => m.deleteAutomationRule(id)); }
 function toggleAutomationRule(id)            { _page('admin').then(m => m.toggleAutomationRule(id)); }
 
+// ─── PDF Report Generation ───
+function _reportStyles(){return '* { margin:0; padding:0; box-sizing:border-box; } body { font-family:"Segoe UI",system-ui,-apple-system,sans-serif; color:#1a1a2e; line-height:1.5; padding:32px; max-width:900px; margin:0 auto; } .report-header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px solid #0891b2; padding-bottom:16px; margin-bottom:24px; } .report-header h1 { font-size:22px; font-weight:800; color:#0891b2; margin-bottom:4px; } .report-header .subtitle { font-size:13px; color:#64748b; } .report-header .agency { text-align:right; font-size:12px; color:#64748b; } .report-header .agency strong { display:block; font-size:14px; color:#1a1a2e; } .section { margin-bottom:28px; page-break-inside:avoid; } .section h2 { font-size:15px; font-weight:700; color:#1e293b; border-bottom:1px solid #e2e8f0; padding-bottom:6px; margin-bottom:12px; } .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 24px; margin-bottom:16px; } .info-item { font-size:13px; } .info-item .label { font-weight:600; color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:0.3px; } .info-item .value { color:#1e293b; font-weight:500; } table { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:8px; } th { background:#f1f5f9; color:#475569; font-weight:700; text-align:left; padding:8px 10px; font-size:11px; text-transform:uppercase; letter-spacing:0.3px; border-bottom:2px solid #e2e8f0; } td { padding:7px 10px; border-bottom:1px solid #f1f5f9; color:#334155; } tr:nth-child(even) { background:#f8fafc; } .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; } .badge-green { background:#dcfce7; color:#166534; } .badge-yellow { background:#fef9c3; color:#854d0e; } .badge-red { background:#fee2e2; color:#991b1b; } .badge-blue { background:#dbeafe; color:#1e40af; } .badge-gray { background:#f1f5f9; color:#475569; } .score-circle { display:inline-flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:50%; font-size:20px; font-weight:800; color:#fff; } .score-high { background:#16a34a; } .score-mid { background:#d97706; } .score-low { background:#dc2626; } .checklist-item { display:flex; align-items:center; gap:6px; font-size:12px; padding:3px 0; } .check-yes { color:#16a34a; font-weight:700; } .check-no { color:#dc2626; font-weight:700; } .report-footer { margin-top:32px; padding-top:12px; border-top:1px solid #e2e8f0; font-size:11px; color:#94a3b8; display:flex; justify-content:space-between; } @media print { body { padding:16px; } .no-print { display:none; } } @page { margin:0.5in; }';}
+function _pdfEsc(str){return (str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function _statusBadge(status){var s=(status||'').toLowerCase();if(['active','approved','credentialed','clear','healthy'].includes(s))return '<span class="badge badge-green">'+_pdfEsc(status)+'</span>';if(['pending','in progress','submitted','under review','in-progress'].includes(s))return '<span class="badge badge-blue">'+_pdfEsc(status)+'</span>';if(['expired','denied','terminated','excluded','critical'].includes(s))return '<span class="badge badge-red">'+_pdfEsc(status)+'</span>';if(['expiring','at risk','warning','inactive'].includes(s))return '<span class="badge badge-yellow">'+_pdfEsc(status)+'</span>';return '<span class="badge badge-gray">'+_pdfEsc(status||'N/A')+'</span>';}
+function _openReportWindow(title,bodyHtml){var win=window.open('','_blank');if(!win){showToast('Pop-up blocked — please allow pop-ups for this site','error');return;}win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+_pdfEsc(title)+'</title><style>'+_reportStyles()+'</style></head><body>'+bodyHtml+'</body></html>');win.document.close();setTimeout(function(){win.focus();win.print();},400);}
+async function generateCredentialingReport(providerId){
+  if(!providerId){showToast('No provider selected');return;}
+  showToast('Generating credentialing report...');
+  try{
+    const[provider,licenses,apps,orgs,exclusions]=await Promise.all([store.getOne('providers',providerId),store.getAll('licenses'),store.getAll('applications'),store.getAll('organizations'),store.getAll('exclusions').catch(function(){return[];})]);
+    if(!provider){showToast('Provider not found','error');return;}
+    var org=orgs[0]||{};var agencyName=org.name||'Credentik Agency';var now=new Date();var nowStr=now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+    var provName=((provider.firstName||'')+' '+(provider.lastName||'')).trim()||'Unknown Provider';
+    var provLicenses=licenses.filter(function(l){return(l.providerId||l.provider_id)===providerId;});
+    var provApps=apps.filter(function(a){return(a.providerId||a.provider_id)===providerId;});
+    var provExcl=Array.isArray(exclusions)?exclusions.filter(function(e){return(e.providerId||e.provider_id)===providerId;}):[];
+    var today=new Date();var in90=new Date(Date.now()+90*86400000);
+    var score=100;
+    var expiredLic=provLicenses.filter(function(l){var exp=l.expirationDate||l.expiration_date;return exp&&new Date(exp)<today;});
+    var expiringLic=provLicenses.filter(function(l){var exp=l.expirationDate||l.expiration_date;return exp&&new Date(exp)>=today&&new Date(exp)<=in90;});
+    var hasExcl=provExcl.some(function(e){return e.status==='excluded'||e.result==='excluded';});
+    if(expiredLic.length>0)score-=expiredLic.length*20;if(hasExcl)score-=30;if(expiringLic.length>0)score-=expiringLic.length*10;if(provLicenses.length===0)score-=15;
+    score=Math.max(0,Math.min(100,score));
+    var scoreClass=score>=85?'score-high':score>=60?'score-mid':'score-low';
+    var scoreLabel=score>=85?'Healthy':score>=60?'At Risk':'Critical';
+    var allDocs={};provApps.forEach(function(a){var docs=a.documentChecklist||{};Object.entries(docs).forEach(function(entry){if(entry[1]&&entry[1].completed)allDocs[entry[0]]=true;});});
+    var docTotal=CRED_DOCUMENTS.length;var docComplete=CRED_DOCUMENTS.filter(function(d){return allDocs[d.id];}).length;
+    var licRows=provLicenses.map(function(l){var exp=l.expirationDate||l.expiration_date||'';var isExpired=exp&&new Date(exp)<today;var isExpiring=exp&&!isExpired&&new Date(exp)<=in90;var st=isExpired?'Expired':isExpiring?'Expiring':(l.status||'Active');return '<tr><td>'+_pdfEsc(l.state||'')+'</td><td>'+_pdfEsc(l.licenseNumber||l.license_number||'')+'</td><td>'+_pdfEsc(l.licenseType||l.license_type||'')+'</td><td>'+_statusBadge(st)+'</td><td>'+_pdfEsc(l.issueDate||l.issue_date||'')+'</td><td>'+_pdfEsc(exp)+'</td><td>'+(l.compactState?'Yes':'No')+'</td></tr>';}).join('');
+    var appRows=provApps.map(function(a){return '<tr><td>'+_pdfEsc(a.payerName||a.payer_name||'')+'</td><td>'+_pdfEsc(a.state||'')+'</td><td>'+_statusBadge(a.status||'')+'</td><td>'+_pdfEsc(a.submittedDate||a.submitted_date||'')+'</td><td>'+_pdfEsc(a.effectiveDate||a.effective_date||'')+'</td></tr>';}).join('');
+    var docRows=CRED_DOCUMENTS.map(function(d){return '<tr><td>'+_pdfEsc(d.label)+'</td><td>'+_pdfEsc(d.category)+'</td><td>'+(allDocs[d.id]?'<span class="badge badge-green">Complete</span>':'<span class="badge badge-gray">Missing</span>')+'</td></tr>';}).join('');
+    var html='<div class="report-header"><div><h1>Credentialing Report</h1><div class="subtitle">'+_pdfEsc(provName)+' &mdash; '+_pdfEsc(provider.credentials||'')+(provider.specialty?' | '+_pdfEsc(provider.specialty):'')+'</div></div><div class="agency"><strong>'+_pdfEsc(agencyName)+'</strong>Generated: '+_pdfEsc(nowStr)+'</div></div>'+
+      '<div class="section"><h2>Provider Information</h2><div class="info-grid">'+
+      '<div class="info-item"><div class="label">Full Name</div><div class="value">'+_pdfEsc(provName)+'</div></div>'+
+      '<div class="info-item"><div class="label">Credentials</div><div class="value">'+_pdfEsc(provider.credentials||'N/A')+'</div></div>'+
+      '<div class="info-item"><div class="label">NPI</div><div class="value">'+_pdfEsc(provider.npi||'N/A')+'</div></div>'+
+      '<div class="info-item"><div class="label">Specialty</div><div class="value">'+_pdfEsc(provider.specialty||'N/A')+'</div></div>'+
+      '<div class="info-item"><div class="label">Email</div><div class="value">'+_pdfEsc(provider.email||'N/A')+'</div></div>'+
+      '<div class="info-item"><div class="label">Phone</div><div class="value">'+_pdfEsc(provider.phone||'N/A')+'</div></div>'+
+      '<div class="info-item"><div class="label">Taxonomy</div><div class="value">'+_pdfEsc(provider.taxonomy||'N/A')+'</div></div>'+
+      '<div class="info-item"><div class="label">CAQH ID</div><div class="value">'+_pdfEsc(provider.caqhId||provider.caqh_id||'N/A')+'</div></div>'+
+      '</div></div>'+
+      '<div class="section"><h2>Compliance Score</h2><div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;"><div class="score-circle '+scoreClass+'">'+score+'</div><div><div style="font-size:16px;font-weight:700;">'+scoreLabel+'</div><div style="font-size:12px;color:#64748b;">'+expiredLic.length+' expired | '+expiringLic.length+' expiring soon | '+provLicenses.length+' total licenses</div></div></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;">'+
+      '<div class="checklist-item"><span class="'+(provLicenses.length>0?'check-yes':'check-no')+'">'+(provLicenses.length>0?'&#10003;':'&#10007;')+'</span> Active state license on file</div>'+
+      '<div class="checklist-item"><span class="'+(provider.npi?'check-yes':'check-no')+'">'+(provider.npi?'&#10003;':'&#10007;')+'</span> NPI number verified</div>'+
+      '<div class="checklist-item"><span class="'+(expiredLic.length===0?'check-yes':'check-no')+'">'+(expiredLic.length===0?'&#10003;':'&#10007;')+'</span> No expired licenses</div>'+
+      '<div class="checklist-item"><span class="'+(!hasExcl?'check-yes':'check-no')+'">'+(!hasExcl?'&#10003;':'&#10007;')+'</span> Exclusion screening clear</div>'+
+      '<div class="checklist-item"><span class="'+(provider.credentials?'check-yes':'check-no')+'">'+(provider.credentials?'&#10003;':'&#10007;')+'</span> Credentials documented</div>'+
+      '<div class="checklist-item"><span class="'+(docComplete>=docTotal*0.8?'check-yes':'check-no')+'">'+(docComplete>=docTotal*0.8?'&#10003;':'&#10007;')+'</span> Documents &ge; 80% complete ('+docComplete+'/'+docTotal+')</div>'+
+      '</div></div>'+
+      '<div class="section"><h2>License Summary</h2>'+(provLicenses.length>0?'<table><thead><tr><th>State</th><th>License #</th><th>Type</th><th>Status</th><th>Issue Date</th><th>Expiration</th><th>Compact</th></tr></thead><tbody>'+licRows+'</tbody></table>':'<p style="color:#94a3b8;font-size:13px;">No licenses on file.</p>')+'</div>'+
+      '<div class="section"><h2>Application / Payer Summary</h2>'+(provApps.length>0?'<table><thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th><th>Effective Date</th></tr></thead><tbody>'+appRows+'</tbody></table>':'<p style="color:#94a3b8;font-size:13px;">No applications on file.</p>')+'</div>'+
+      '<div class="section"><h2>Document Status</h2><table><thead><tr><th>Document</th><th>Category</th><th>Status</th></tr></thead><tbody>'+docRows+'</tbody></table></div>'+
+      '<div class="report-footer"><span>Generated by Credentik &mdash; '+_pdfEsc(nowStr)+'</span><span>Confidential &mdash; '+_pdfEsc(agencyName)+'</span></div>';
+    _openReportWindow('Credentialing Report - '+provName,html);
+    showToast('Report ready — use Save as PDF in the print dialog');
+  }catch(e){showToast('Report failed: '+e.message,'error');}
+}
+async function generateComplianceReportPDF(){
+  showToast('Generating compliance PDF...');
+  try{
+    const[providers,licenses,apps,orgs,exclusions]=await Promise.all([store.getAll('providers'),store.getAll('licenses'),store.getAll('applications'),store.getAll('organizations'),store.getAll('exclusions').catch(function(){return[];})]);
+    var org=orgs[0]||{};var agencyName=org.name||'Credentik Agency';var now=new Date();var nowStr=now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});var today=new Date();var in90=new Date(Date.now()+90*86400000);
+    var providerRows=providers.map(function(p){var pLic=licenses.filter(function(l){return(l.providerId||l.provider_id)===p.id;});var expCount=pLic.filter(function(l){var e=l.expirationDate||l.expiration_date;return e&&new Date(e)<today;}).length;var e30=pLic.filter(function(l){var e=l.expirationDate||l.expiration_date;return e&&new Date(e)>=today&&new Date(e)<=new Date(Date.now()+30*86400000);}).length;var pExcl=Array.isArray(exclusions)?exclusions.filter(function(x){return(x.providerId||x.provider_id)===p.id;}):[];var hExcl=pExcl.some(function(x){return x.status==='excluded'||x.result==='excluded';});var sc=100;if(expCount>0)sc-=expCount*20;if(hExcl)sc-=30;if(e30>0)sc-=e30*10;if(pLic.length===0)sc-=15;sc=Math.max(0,Math.min(100,sc));var st=sc>=85?'Healthy':sc>=60?'At Risk':'Critical';return{name:((p.firstName||'')+' '+(p.lastName||'')).trim(),npi:p.npi||'',specialty:p.specialty||'',score:sc,status:st,licenses:pLic.length,expired:expCount};});
+    var avgScore=providerRows.length>0?Math.round(providerRows.reduce(function(s,r){return s+r.score;},0)/providerRows.length):0;
+    var healthyCount=providerRows.filter(function(r){return r.status==='Healthy';}).length;var atRiskCount=providerRows.filter(function(r){return r.status==='At Risk';}).length;var criticalCount=providerRows.filter(function(r){return r.status==='Critical';}).length;
+    var expiringLicenses=licenses.filter(function(l){var e=l.expirationDate||l.expiration_date;return e&&new Date(e)>=today&&new Date(e)<=in90;}).map(function(l){var prov=providers.find(function(p){return p.id===(l.providerId||l.provider_id);});var pn=prov?((prov.firstName||'')+' '+(prov.lastName||'')).trim():'Unknown';var e=new Date(l.expirationDate||l.expiration_date);return{provName:pn,state:l.state||'',num:l.licenseNumber||l.license_number||'',expDate:(l.expirationDate||l.expiration_date),days:Math.round((e-today)/86400000)};}).sort(function(a,b){return a.days-b.days;});
+    var pendingApps=apps.filter(function(a){var st=(a.status||'').toLowerCase();return['pending','submitted','in progress','in-progress','under review'].includes(st);});
+    var exclCount=Array.isArray(exclusions)?exclusions.length:0;var exclClear=Array.isArray(exclusions)?exclusions.filter(function(x){return(x.status||x.result||'').toLowerCase()==='clear';}).length:0;var exclFlagged=Array.isArray(exclusions)?exclusions.filter(function(x){return['excluded','flagged'].includes((x.status||x.result||'').toLowerCase());}).length:0;
+    var scoreClass=avgScore>=85?'score-high':avgScore>=60?'score-mid':'score-low';
+    var provTableRows=providerRows.map(function(r){return '<tr><td>'+_pdfEsc(r.name)+'</td><td>'+_pdfEsc(r.npi)+'</td><td>'+_pdfEsc(r.specialty)+'</td><td><strong>'+r.score+'</strong></td><td>'+_statusBadge(r.status)+'</td><td>'+r.licenses+'</td><td>'+(r.expired>0?'<span class="badge badge-red">'+r.expired+'</span>':'0')+'</td></tr>';}).join('');
+    var expLicRows=expiringLicenses.map(function(l){return '<tr><td>'+_pdfEsc(l.provName)+'</td><td>'+_pdfEsc(l.state)+'</td><td>'+_pdfEsc(l.num)+'</td><td>'+_pdfEsc(l.expDate)+'</td><td>'+l.days+'</td><td>'+(l.days<=30?'<span class="badge badge-red">Urgent</span>':'<span class="badge badge-yellow">Warning</span>')+'</td></tr>';}).join('');
+    var pendingRows=pendingApps.map(function(a){var prov=providers.find(function(p){return p.id===(a.providerId||a.provider_id);});var pn=prov?((prov.firstName||'')+' '+(prov.lastName||'')).trim():'';return '<tr><td>'+_pdfEsc(a.payerName||a.payer_name||'')+'</td><td>'+_pdfEsc(a.state||'')+'</td><td>'+_pdfEsc(pn)+'</td><td>'+_statusBadge(a.status||'')+'</td><td>'+_pdfEsc(a.submittedDate||a.submitted_date||'')+'</td></tr>';}).join('');
+    var html='<div class="report-header"><div><h1>Compliance Report</h1><div class="subtitle">Organization-wide credentialing compliance overview</div></div><div class="agency"><strong>'+_pdfEsc(agencyName)+'</strong>Generated: '+_pdfEsc(nowStr)+'</div></div>'+
+      '<div class="section"><h2>Overview</h2><div style="display:flex;gap:24px;align-items:center;margin-bottom:16px;flex-wrap:wrap;"><div style="text-align:center;"><div class="score-circle '+scoreClass+'">'+avgScore+'</div><div style="font-size:11px;color:#64748b;margin-top:4px;">Avg Score</div></div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;flex:1;"><div style="background:#dcfce7;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#166534;">'+healthyCount+'</div><div style="font-size:11px;color:#166534;font-weight:600;">Healthy</div></div><div style="background:#fef9c3;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#854d0e;">'+atRiskCount+'</div><div style="font-size:11px;color:#854d0e;font-weight:600;">At Risk</div></div><div style="background:#fee2e2;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#991b1b;">'+criticalCount+'</div><div style="font-size:11px;color:#991b1b;font-weight:600;">Critical</div></div></div></div>'+
+      '<div class="info-grid"><div class="info-item"><div class="label">Total Providers</div><div class="value">'+providers.length+'</div></div><div class="info-item"><div class="label">Total Licenses</div><div class="value">'+licenses.length+'</div></div><div class="info-item"><div class="label">Active Applications</div><div class="value">'+apps.length+'</div></div><div class="info-item"><div class="label">Exclusion Screenings</div><div class="value">'+exclCount+' ('+exclClear+' clear, '+exclFlagged+' flagged)</div></div></div></div>'+
+      '<div class="section"><h2>Provider Compliance Scores</h2><table><thead><tr><th>Provider</th><th>NPI</th><th>Specialty</th><th>Score</th><th>Status</th><th>Licenses</th><th>Expired</th></tr></thead><tbody>'+provTableRows+'</tbody></table></div>'+
+      '<div class="section"><h2>Expiring Licenses (Next 90 Days)</h2>'+(expiringLicenses.length>0?'<table><thead><tr><th>Provider</th><th>State</th><th>License #</th><th>Expiration</th><th>Days Left</th><th>Severity</th></tr></thead><tbody>'+expLicRows+'</tbody></table>':'<p style="color:#16a34a;font-size:13px;font-weight:600;">No licenses expiring in the next 90 days.</p>')+'</div>'+
+      '<div class="section"><h2>Pending Applications</h2>'+(pendingApps.length>0?'<table><thead><tr><th>Payer</th><th>State</th><th>Provider</th><th>Status</th><th>Submitted</th></tr></thead><tbody>'+pendingRows+'</tbody></table>':'<p style="color:#94a3b8;font-size:13px;">No pending applications.</p>')+'</div>'+
+      '<div class="section"><h2>Exclusion Screening Status</h2><div class="info-grid"><div class="info-item"><div class="label">Total Screenings</div><div class="value">'+exclCount+'</div></div><div class="info-item"><div class="label">Clear</div><div class="value" style="color:#16a34a;font-weight:700;">'+exclClear+'</div></div><div class="info-item"><div class="label">Flagged / Excluded</div><div class="value" style="color:'+(exclFlagged>0?'#dc2626':'#16a34a')+';font-weight:700;">'+exclFlagged+'</div></div><div class="info-item"><div class="label">Last Updated</div><div class="value">'+_pdfEsc(nowStr)+'</div></div></div></div>'+
+      '<div class="report-footer"><span>Generated by Credentik &mdash; '+_pdfEsc(nowStr)+'</span><span>Confidential &mdash; '+_pdfEsc(agencyName)+'</span></div>';
+    _openReportWindow('Compliance Report - '+agencyName,html);
+    showToast('Compliance report ready — use Save as PDF in the print dialog');
+  }catch(e){showToast('Report failed: '+e.message,'error');}
+}
+async function generatePayerReport(providerId){
+  if(!providerId){showToast('No provider selected');return;}
+  showToast('Generating payer report...');
+  try{
+    const[provider,apps,orgs]=await Promise.all([store.getOne('providers',providerId),store.getAll('applications'),store.getAll('organizations')]);
+    if(!provider){showToast('Provider not found','error');return;}
+    var org=orgs[0]||{};var agencyName=org.name||'Credentik Agency';var now=new Date();var nowStr=now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+    var provName=((provider.firstName||'')+' '+(provider.lastName||'')).trim()||'Unknown Provider';
+    var provApps=apps.filter(function(a){return(a.providerId||a.provider_id)===providerId;});
+    var statusCounts={};provApps.forEach(function(a){var s=a.status||'Unknown';statusCounts[s]=(statusCounts[s]||0)+1;});
+    var statusItems=Object.entries(statusCounts).map(function(entry){return '<div class="info-item"><div class="label">'+_pdfEsc(entry[0])+'</div><div class="value">'+entry[1]+'</div></div>';}).join('');
+    var appRows=provApps.map(function(a){return '<tr><td>'+_pdfEsc(a.payerName||a.payer_name||'')+'</td><td>'+_pdfEsc(a.state||'')+'</td><td>'+_statusBadge(a.status||'')+'</td><td>'+_pdfEsc(a.submittedDate||a.submitted_date||'')+'</td><td>'+_pdfEsc(a.effectiveDate||a.effective_date||'')+'</td><td>'+_pdfEsc(a.providerNumber||a.provider_number||a.payerProviderId||'')+'</td></tr>';}).join('');
+    var html='<div class="report-header"><div><h1>Payer Enrollment Report</h1><div class="subtitle">'+_pdfEsc(provName)+' &mdash; '+_pdfEsc(provider.credentials||'')+' | NPI: '+_pdfEsc(provider.npi||'N/A')+'</div></div><div class="agency"><strong>'+_pdfEsc(agencyName)+'</strong>Generated: '+_pdfEsc(nowStr)+'</div></div>'+
+      '<div class="section"><h2>Enrollment Summary</h2><div class="info-grid"><div class="info-item"><div class="label">Total Applications</div><div class="value">'+provApps.length+'</div></div><div class="info-item"><div class="label">Provider</div><div class="value">'+_pdfEsc(provName)+'</div></div>'+statusItems+'</div></div>'+
+      '<div class="section"><h2>Application Details</h2>'+(provApps.length>0?'<table><thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th><th>Effective Date</th><th>Provider ID</th></tr></thead><tbody>'+appRows+'</tbody></table>':'<p style="color:#94a3b8;font-size:13px;">No payer applications on file.</p>')+'</div>'+
+      '<div class="report-footer"><span>Generated by Credentik &mdash; '+_pdfEsc(nowStr)+'</span><span>Confidential &mdash; '+_pdfEsc(agencyName)+'</span></div>';
+    _openReportWindow('Payer Report - '+provName,html);
+    showToast('Payer report ready — use Save as PDF in the print dialog');
+  }catch(e){showToast('Report failed: '+e.message,'error');}
+}
+
 // ─── Public API (exposed to window for onclick handlers) ───
 
 window.app = {
@@ -10214,6 +10320,11 @@ function handleNppesProxy(payload) {
       resultDiv.innerHTML = `<div class="alert alert-danger">Import failed: ${escHtml(e.message)}</div>`;
     }
   },
+
+  // ── PDF Report Generation ──
+  generateCredentialingReport(providerId) { return generateCredentialingReport(providerId); },
+  generateComplianceReportPDF() { return generateComplianceReportPDF(); },
+  generatePayerReport(providerId) { return generatePayerReport(providerId); },
 
   // ── Compliance Center ──
   async generateComplianceReport() {
