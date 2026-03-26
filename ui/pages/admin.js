@@ -13,9 +13,42 @@ async function renderAuditTrail() {
     return;
   }
 
-  let entries = [];
-  try { const result = await store.getAuditLog(); entries = Array.isArray(result) ? result : (result?.data || result?.entries || []); } catch {}
-  if (!Array.isArray(entries)) entries = [];
+  let rawEntries = [];
+  try { const result = await store.getAuditLog(); rawEntries = Array.isArray(result) ? result : (result?.data || result?.entries || []); } catch {}
+  if (!Array.isArray(rawEntries)) rawEntries = [];
+
+  // Normalize backend fields (auditable_type/auditable_id/old_values/new_values) to frontend fields
+  const entries = rawEntries.map(e => {
+    // Extract collection name from auditable_type (e.g. "App\\Models\\Application" → "Application")
+    const auditType = e.auditable_type || e.auditableType || '';
+    const collection = e.collection || auditType.split('\\').pop() || '';
+    // Build changes diff from old_values / new_values
+    let changes = e.changes || null;
+    if (!changes) {
+      const oldVals = e.old_values || e.oldValues || {};
+      const newVals = e.new_values || e.newValues || {};
+      if (oldVals && newVals && (Object.keys(oldVals).length > 0 || Object.keys(newVals).length > 0)) {
+        changes = {};
+        const allKeys = new Set([...Object.keys(oldVals), ...Object.keys(newVals)]);
+        for (const key of allKeys) {
+          if (String(oldVals[key] ?? '') !== String(newVals[key] ?? '')) {
+            changes[key] = { from: oldVals[key] ?? null, to: newVals[key] ?? null };
+          }
+        }
+        if (Object.keys(changes).length === 0) changes = null;
+      }
+    }
+    return {
+      ...e,
+      timestamp: e.timestamp || e.created_at || e.createdAt || '',
+      user_name: e.user_name || e.userName || e.user_email || e.userEmail || (e.user?.name) || (e.user?.email) || '',
+      user_role: e.user_role || e.userRole || (e.user?.role) || '',
+      action: e.action || 'update',
+      collection,
+      record_id: e.record_id || e.recordId || e.auditable_id || e.auditableId || '',
+      changes,
+    };
+  });
 
   // Filters
   const collections = [...new Set(entries.map(e => e.collection).filter(Boolean))].sort();
