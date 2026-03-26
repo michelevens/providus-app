@@ -668,7 +668,7 @@ async function applyOrgBranding() {
       localStorage.setItem('credentik_org_branding', JSON.stringify(branding));
     }
   } catch (e) {
-    console.warn('Failed to load org branding:', e);
+    // Branding endpoint may not be deployed yet — silently ignore
   }
 }
 
