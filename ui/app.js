@@ -11264,7 +11264,7 @@ function handleNppesProxy(payload) {
   orgDetailTab(btn, tabId) {
     btn.closest('.tabs').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
-    ['od-providers', 'od-applications', 'od-contacts'].forEach(id => {
+    ['od-providers', 'od-applications', 'od-locations', 'od-contacts'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.toggle('hidden', id !== tabId);
     });
@@ -14692,11 +14692,12 @@ async function renderOrgDetailPage(orgId) {
 
   body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div><div style="margin-top:12px;color:var(--gray-500);font-size:13px;">Loading organization...</div></div>';
 
-  let o = {}, providers = [], licenses = [], apps = [];
+  let o = {}, providers = [], licenses = [], apps = [], facilities = [];
   try { o = await store.getOne('organizations', orgId); } catch {}
   try { providers = (await store.getAll('providers')).filter(p => (p.organizationId || p.orgId) == orgId); } catch {}
   try { licenses = await store.getAll('licenses'); } catch {}
   try { apps = await store.getAll('applications'); } catch {}
+  try { facilities = (await store.getAll('facilities')).filter(f => (f.organizationId || f.organization_id || f.orgId) == orgId); } catch {}
 
   if (!o || !o.id) { body.innerHTML = '<div class="empty-state"><h3>Organization not found</h3></div>'; return; }
 
@@ -14761,6 +14762,7 @@ async function renderOrgDetailPage(orgId) {
       <div class="stat-card odv2-stat"><div class="label">Licenses</div><div class="value" style="color:var(--brand-600);">${orgLicenses.length}</div></div>
       <div class="stat-card odv2-stat"><div class="label">Licensed States</div><div class="value">${licensedStates.length}</div></div>
       <div class="stat-card odv2-stat"><div class="label">Applications</div><div class="value">${orgApps.length}</div></div>
+      <div class="stat-card odv2-stat"><div class="label">Locations</div><div class="value">${facilities.length}</div></div>
       <div class="stat-card odv2-stat"><div class="label">Est. Monthly Rev</div><div class="value" style="color:var(--green);">$${estRevenue.toLocaleString()}</div></div>
     </div>
 
@@ -14768,6 +14770,7 @@ async function renderOrgDetailPage(orgId) {
     <div class="tabs" style="margin-bottom:16px;">
       <button class="tab active" onclick="window.app.orgDetailTab(this, 'od-providers')">Providers (${providers.length})</button>
       <button class="tab" onclick="window.app.orgDetailTab(this, 'od-applications')">Applications (${orgApps.length})</button>
+      <button class="tab" onclick="window.app.orgDetailTab(this, 'od-locations')">Locations (${facilities.length})</button>
       <button class="tab" onclick="window.app.orgDetailTab(this, 'od-contacts')">Contacts (${orgContacts.length})</button>
     </div>
 
@@ -14818,6 +14821,38 @@ async function renderOrgDetailPage(orgId) {
                       <td><span class="badge badge-${a.status}">${(a.status || '').replace(/_/g, ' ')}</span></td>
                       <td>${groupBadge(a.wave)}</td>
                       <td class="text-sm">${formatDateDisplay(a.submittedDate || a.submitted_date)}</td>
+                    </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+      </div>
+    </div>
+
+    <!-- Locations Tab -->
+    <div id="od-locations" class="hidden">
+      <div class="card">
+        <div class="card-header">
+          <h3>Practice Locations</h3>
+          <button class="btn btn-gold btn-sm" onclick="window.app.openFacilityModal()">+ Add Location</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${facilities.length === 0 ? '<div class="empty-state" style="padding:30px;"><p>No practice locations for this organization.</p></div>' : `
+            <table>
+              <thead><tr><th>Name</th><th>Address</th><th>Phone</th><th>NPI</th><th>Type</th><th>Status</th></tr></thead>
+              <tbody>
+                ${facilities.map(f => {
+                  const addr = [f.addressStreet || f.address_street || f.street || '', f.addressCity || f.address_city || f.city || '', f.addressState || f.address_state || f.state || '', f.addressZip || f.address_zip || f.zip || ''].filter(Boolean).join(', ');
+                  const fStatus = f.status || 'active';
+                  return `
+                    <tr>
+                      <td><strong>${escHtml(f.name || f.facilityName || f.facility_name || '—')}</strong></td>
+                      <td class="text-sm">${escHtml(addr || '—')}</td>
+                      <td class="text-sm">${escHtml(f.phone || '—')}</td>
+                      <td><code style="color:var(--brand-700);">${escHtml(f.npi || '—')}</code></td>
+                      <td class="text-sm">${escHtml(f.type || f.facilityType || f.facility_type || '—')}</td>
+                      <td><span class="badge badge-${fStatus === 'active' ? 'approved' : 'inactive'}">${fStatus}</span></td>
                     </tr>`;
                 }).join('')}
               </tbody>
