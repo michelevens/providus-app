@@ -12686,7 +12686,8 @@ async function viewActivityLog(applicationId) {
 
   const app = await store.getOne('applications', applicationId);
   const payer = app ? (getPayerById(app.payerId) || { name: app.payerName }) : {};
-  const logs = store.query('activity_logs', { applicationId })
+  const _allLogs = await store.getAll('activity-logs').catch(() => []);
+  const logs = (Array.isArray(_allLogs) ? _allLogs : []).filter(l => String(l.applicationId || l.application_id) === String(applicationId))
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
 
   title.textContent = `Activity Log — ${payer.name || 'Unknown'} (${app ? app.state : ''})`;
@@ -12946,10 +12947,12 @@ async function renderApplicationTimeline(appId) {
   if (!app) return;
 
   const payer = getPayerById(app.payerId) || { name: app.payerName };
-  const logs = store.query('activity_logs', { applicationId: appId })
+  const allLogs = await store.getAll('activity-logs').catch(() => []);
+  const logs = (Array.isArray(allLogs) ? allLogs : []).filter(l => String(l.applicationId || l.application_id) === String(appId))
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  const followups = store.query('followups', { applicationId: appId })
-    .sort((a, b) => (b.dueDate || '').localeCompare(a.dueDate || ''));
+  const allFollowups = await store.getAll('followups').catch(() => []);
+  const followups = (Array.isArray(allFollowups) ? allFollowups : []).filter(f => String(f.applicationId || f.application_id) === String(appId))
+    .sort((a, b) => (b.dueDate || b.due_date || '').localeCompare(a.dueDate || a.due_date || ''));
   const tasks = (await store.getAll('tasks')).filter(t => (t.linkedApplicationId || t.linkedAppId) === appId);
 
   const typeIcons = { call: '&#128222;', email: '&#9993;', portal_check: '&#128187;', status_change: '&#9889;', document: '&#128196;', note: '&#128221;' };
@@ -14995,11 +14998,12 @@ async function openNewMessage(opts = {}) {
         </div>
         <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
           <button class="btn" onclick="document.getElementById('new-msg-modal').classList.remove('active')">Cancel</button>
-          <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+          <button class="btn btn-primary" onclick="window._credentikSendMessage()">Send</button>
         </div>
       </div>
     </div>`;
     document.body.insertAdjacentHTML('beforeend', modalHtml);
+    window._credentikSendMessage = sendMessage;
   }
   document.getElementById('msg-reply-thread').value = '';
   document.getElementById('msg-context-type').value = opts.contextType || '';
@@ -15051,7 +15055,7 @@ async function sendMessage() {
     });
     showToast('Message sent');
     document.getElementById('new-msg-modal').classList.remove('active');
-    await renderMessagesPage();
+    if (currentPage === 'messages') await renderMessagesPage();
   } catch (e) { showToast('Error: ' + e.message); }
 }
 
