@@ -278,7 +278,7 @@ async function renderFundingFoundations() {
     { name: 'Hogg Foundation for Mental Health', focus: 'Mental health services (Texas)', amount: '$50K–$250K', cycle: 'Biannual', deadline: '2026-05-15' },
     { name: 'NAMI Local Affiliate Grants', focus: 'Mental health advocacy & support', amount: '$5K–$25K', cycle: 'Annual', deadline: '2026-06-30' },
     { name: 'Substance Abuse & MH Services Foundation', focus: 'SUD & MH treatment access', amount: '$25K–$100K', cycle: 'Quarterly', deadline: 'Rolling' },
-    { name: 'Blue Cross Blue Shield Foundation', focus: 'Behavioral health integration', amount: '$50K–$200K', cycle: 'Annual', deadline: '2026-09-01' },
+    { name: 'BCBS Foundation', focus: 'Behavioral health integration', amount: '$50K–$200K', cycle: 'Annual', deadline: '2026-09-01' },
     { name: 'Wellcome Trust Mental Health', focus: 'Mental health research & innovation', amount: '$100K–$1M', cycle: 'Annual', deadline: '2026-07-01' },
   ];
 

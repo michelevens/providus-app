@@ -59,12 +59,12 @@ export const SUPPLEMENTAL_PAYERS = [
   { id: 144, name: 'BCBS of Rhode Island',             category: 'bcbs_independent', parentOrg: 'BCBS of Rhode Island', states: ['RI'], notes: 'Independent BCBS licensee in RI.', tags: ['caqh_accepts', 'behavioral_health'] },
   { id: 145, name: 'BCBS of Hawaii',                   category: 'bcbs_independent', parentOrg: 'HMSA (Hawaii Medical Service Association)', states: ['HI'], notes: 'HMSA operates as BCBS of Hawaii. Dominant insurer in HI.', tags: ['caqh_accepts', 'behavioral_health'] },
   { id: 146, name: 'CareFirst BCBS',                   category: 'bcbs_independent', parentOrg: 'CareFirst Inc.',       states: ['MD', 'DC', 'VA'], notes: 'BCBS licensee for MD, DC, and Northern VA. Major mid-Atlantic plan.', tags: ['caqh_accepts', 'behavioral_health', 'high_volume'] },
-  { id: 148, name: 'Capital BlueCross',                category: 'bcbs_independent', parentOrg: 'Capital BlueCross',    states: ['PA'], notes: 'BCBS licensee for central PA and Lehigh Valley region.', tags: ['caqh_accepts', 'behavioral_health'] },
+  { id: 148, name: 'Capital BCBS',                     category: 'bcbs_independent', parentOrg: 'Capital BCBS',         states: ['PA'], notes: 'BCBS licensee for central PA and Lehigh Valley region.', tags: ['caqh_accepts', 'behavioral_health'] },
   { id: 149, name: 'BCBS of Western New York',         category: 'bcbs_independent', parentOrg: 'Highmark Health',      states: ['NY'], notes: 'Highmark-affiliated BCBS for western NY (Buffalo area).', tags: ['caqh_accepts', 'behavioral_health'] },
   { id: 150, name: 'Excellus BCBS',                    category: 'bcbs_independent', parentOrg: 'Lifetime Healthcare Companies', states: ['NY'], notes: 'BCBS licensee for upstate/central NY (Rochester, Syracuse, Utica).', tags: ['caqh_accepts', 'behavioral_health', 'high_volume'] },
-  { id: 151, name: 'BlueCross BlueShield of Kansas City', category: 'bcbs_independent', parentOrg: 'Blue KC',           states: ['MO', 'KS'], notes: 'BCBS licensee for greater KC metro area (both MO and KS sides).', tags: ['caqh_accepts', 'behavioral_health'] },
+  { id: 151, name: 'BCBS of Kansas City', category: 'bcbs_independent', parentOrg: 'Blue KC',           states: ['MO', 'KS'], notes: 'BCBS licensee for greater KC metro area (both MO and KS sides).', tags: ['caqh_accepts', 'behavioral_health'] },
   { id: 152, name: 'BCBS of Arkansas',                 category: 'bcbs_independent', parentOrg: 'Arkansas BCBS',        states: ['AR'], notes: 'Independent BCBS licensee. Dominant insurer in AR.', tags: ['caqh_accepts', 'behavioral_health'] },
-  { id: 153, name: 'Blue Cross of Idaho',              category: 'bcbs_independent', parentOrg: 'Blue Cross of Idaho',  states: ['ID'], notes: 'Independent BCBS licensee in ID.', tags: ['caqh_accepts', 'behavioral_health'] },
+  { id: 153, name: 'BCBS of Idaho',                    category: 'bcbs_independent', parentOrg: 'BCBS of Idaho',        states: ['ID'], notes: 'Independent BCBS licensee in ID.', tags: ['caqh_accepts', 'behavioral_health'] },
 
   // --- BCBS Anthem/Elevance (states not yet in catalog) ---
   { id: 160, name: 'Anthem BCBS of Colorado',          category: 'bcbs_anthem', parentOrg: 'Elevance Health',           states: ['CO'], notes: 'Elevance BCBS licensee in CO. Credential via Availity/Anthem portal.', tags: ['caqh_accepts', 'behavioral_health', 'availity_enrolled', 'high_volume', 'telehealth_friendly'] },
@@ -89,12 +89,12 @@ export const SUPPLEMENTAL_PAYERS = [
 
   // --- BCBS Highmark (states not yet broken out) ---
   { id: 185, name: 'Highmark BCBS of Delaware',        category: 'bcbs_highmark', parentOrg: 'Highmark Health',         states: ['DE'], notes: 'Highmark operates BCBS in DE.', tags: ['caqh_accepts', 'behavioral_health', 'high_volume'] },
-  { id: 186, name: 'Highmark Blue Cross Blue Shield WV', category: 'bcbs_highmark', parentOrg: 'Highmark Health',       states: ['WV'], notes: 'Highmark operates BCBS in WV.', tags: ['caqh_accepts', 'behavioral_health', 'high_volume'] },
+  { id: 186, name: 'Highmark BCBS WV', category: 'bcbs_highmark', parentOrg: 'Highmark Health',       states: ['WV'], notes: 'Highmark operates BCBS in WV.', tags: ['caqh_accepts', 'behavioral_health', 'high_volume'] },
 
   // --- Remaining BCBS ---
   { id: 190, name: 'BCBS of South Dakota (Wellmark)',   category: 'bcbs_independent', parentOrg: 'Wellmark Inc.',        states: ['SD'], notes: 'Wellmark operates as BCBS in both IA and SD. IA already in catalog as Wellmark BCBS.', tags: ['caqh_accepts', 'behavioral_health'] },
   { id: 191, name: 'BCBS of Mississippi',              category: 'bcbs_independent', parentOrg: 'BCBS of Mississippi',  states: ['MS'], notes: 'Independent BCBS licensee. Dominant insurer in MS.', tags: ['caqh_accepts', 'behavioral_health'] },
-  { id: 192, name: 'Blue Cross and Blue Shield of Alaska', category: 'bcbs_independent', parentOrg: 'Premera Blue Cross', states: ['AK'], notes: 'Operated by Premera. BCBS licensee in AK.', tags: ['caqh_accepts', 'behavioral_health'] },
+  { id: 192, name: 'BCBS of Alaska',                   category: 'bcbs_independent', parentOrg: 'Premera BCBS',        states: ['AK'], notes: 'Operated by Premera. BCBS licensee in AK.', tags: ['caqh_accepts', 'behavioral_health'] },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 5. STATE MEDICAID MANAGED CARE ORGANIZATIONS (MCOs)
