@@ -1233,14 +1233,14 @@ class Store {
         const cacheKey = 'org_branding';
         const cached = this._getCache(cacheKey);
         if (cached) return cached;
-        const result = await this._fetch(`${CONFIG.API_URL}/api/organizations/branding`);
+        const result = await this._fetch(`${CONFIG.API_URL}/organizations/branding`);
         const data = result.data || result;
         this._setCache(cacheKey, data);
         return data;
     }
 
     async updateOrgBranding(data) {
-        const result = await this._fetch(`${CONFIG.API_URL}/api/organizations/branding`, {
+        const result = await this._fetch(`${CONFIG.API_URL}/organizations/branding`, {
             method: 'PUT',
             body: JSON.stringify(data),
         });
@@ -1251,12 +1251,12 @@ class Store {
     // ── API Keys ──
 
     async getApiKeys() {
-        const result = await this._fetch(`${CONFIG.API_URL}/api/api-keys`);
+        const result = await this._fetch(`${CONFIG.API_URL}/api-keys`);
         return this._snakeToCamel(result.data || result);
     }
 
     async createApiKey(data) {
-        const result = await this._fetch(`${CONFIG.API_URL}/api/api-keys`, {
+        const result = await this._fetch(`${CONFIG.API_URL}/api-keys`, {
             method: 'POST',
             body: JSON.stringify(this._camelToSnake(data)),
         });
@@ -1264,7 +1264,7 @@ class Store {
     }
 
     async revokeApiKey(id) {
-        const result = await this._fetch(`${CONFIG.API_URL}/api/api-keys/${id}`, {
+        const result = await this._fetch(`${CONFIG.API_URL}/api-keys/${id}`, {
             method: 'DELETE',
         });
         return result.data || result;
@@ -1273,12 +1273,12 @@ class Store {
     // ── Webhooks (API-backed) ──
 
     async getWebhooks() {
-        const result = await this._fetch(`${CONFIG.API_URL}/api/webhooks`);
+        const result = await this._fetch(`${CONFIG.API_URL}/webhooks`);
         return this._snakeToCamel(result.data || result);
     }
 
     async createWebhook(data) {
-        const result = await this._fetch(`${CONFIG.API_URL}/api/webhooks`, {
+        const result = await this._fetch(`${CONFIG.API_URL}/webhooks`, {
             method: 'POST',
             body: JSON.stringify(this._camelToSnake(data)),
         });
@@ -1286,7 +1286,7 @@ class Store {
     }
 
     async updateWebhook(id, data) {
-        const result = await this._fetch(`${CONFIG.API_URL}/api/webhooks/${id}`, {
+        const result = await this._fetch(`${CONFIG.API_URL}/webhooks/${id}`, {
             method: 'PUT',
             body: JSON.stringify(this._camelToSnake(data)),
         });
@@ -1294,14 +1294,14 @@ class Store {
     }
 
     async deleteWebhook(id) {
-        const result = await this._fetch(`${CONFIG.API_URL}/api/webhooks/${id}`, {
+        const result = await this._fetch(`${CONFIG.API_URL}/webhooks/${id}`, {
             method: 'DELETE',
         });
         return result.data || result;
     }
 
     async testWebhook(id) {
-        const result = await this._fetch(`${CONFIG.API_URL}/api/webhooks/${id}/test`, {
+        const result = await this._fetch(`${CONFIG.API_URL}/webhooks/${id}/test`, {
             method: 'POST',
         });
         return this._snakeToCamel(result.data || result);
