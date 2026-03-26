@@ -90,6 +90,9 @@
               <a href="#" onclick="toggleAuthView('forgot');return false;" style="font-size:13px;color:#0891b2;text-decoration:none;">Forgot password?</a>
               <span style="font-size:13px;color:#6b7280;">No account? <a href="#" onclick="toggleAuthView('register');return false;" style="color:#0891b2;text-decoration:none;font-weight:600;">Sign up</a></span>
             </div>
+            <div style="text-align:center;margin-top:12px;">
+              <a href="#" onclick="toggleAuthView('pricing');return false;" style="font-size:13px;color:#67e8f9;text-decoration:none;font-weight:500;">View Pricing &rarr;</a>
+            </div>
 
             <!-- Demo Accounts -->
             <div class="demo-accounts">
@@ -236,6 +239,155 @@
     </div><!-- end auth-box -->
   </div><!-- end auth-form-panel -->
   </div><!-- end auth-split -->
+
+  <!-- Pricing Page -->
+  <div id="pricing-view" style="display:none;width:100%;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);overflow-y:auto;padding:0;">
+    <style>
+      #pricing-view *{box-sizing:border-box}
+      .pricing-nav{display:flex;justify-content:space-between;align-items:center;max-width:1200px;margin:0 auto;padding:24px 32px}
+      .pricing-nav-logo{display:flex;align-items:center;gap:12px;color:#fff;font-weight:800;font-size:22px;letter-spacing:-0.03em}
+      .pricing-nav-back{color:#67e8f9;font-size:14px;text-decoration:none;font-weight:500;transition:color 0.2s}
+      .pricing-nav-back:hover{color:#fff}
+      .pricing-hero{text-align:center;padding:48px 32px 32px;max-width:720px;margin:0 auto}
+      .pricing-hero h1{font-size:44px;font-weight:800;color:#fff;letter-spacing:-0.04em;margin:0 0 16px;line-height:1.1}
+      .pricing-hero p{font-size:18px;color:rgba(255,255,255,0.6);line-height:1.6;margin:0}
+      .pricing-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;max-width:1120px;margin:40px auto 0;padding:0 32px}
+      .pricing-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:32px;display:flex;flex-direction:column;transition:transform 0.2s,border-color 0.2s}
+      .pricing-card:hover{transform:translateY(-4px);border-color:rgba(8,145,178,0.4)}
+      .pricing-card.featured{border-color:#0891b2;background:rgba(8,145,178,0.08);position:relative}
+      .pricing-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#0891b2;color:#fff;font-size:12px;font-weight:700;padding:4px 16px;border-radius:20px;text-transform:uppercase;letter-spacing:0.05em}
+      .pricing-tier{font-size:15px;font-weight:600;color:#67e8f9;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px}
+      .pricing-price{font-size:48px;font-weight:800;color:#fff;letter-spacing:-0.04em;line-height:1}
+      .pricing-price span{font-size:16px;font-weight:500;color:rgba(255,255,255,0.5)}
+      .pricing-desc{font-size:14px;color:rgba(255,255,255,0.5);margin:12px 0 24px;line-height:1.5}
+      .pricing-features{list-style:none;padding:0;margin:0 0 32px;flex:1}
+      .pricing-features li{font-size:14px;color:rgba(255,255,255,0.75);padding:8px 0;display:flex;align-items:flex-start;gap:10px;line-height:1.4}
+      .pricing-features li::before{content:"\2713";color:#0891b2;font-weight:700;flex-shrink:0;margin-top:1px}
+      .pricing-cta{display:block;width:100%;padding:14px;border-radius:10px;font-size:15px;font-weight:600;text-align:center;cursor:pointer;transition:all 0.2s;border:none;text-decoration:none}
+      .pricing-cta-primary{background:#0891b2;color:#fff}
+      .pricing-cta-primary:hover{background:#0e7490}
+      .pricing-cta-outline{background:transparent;color:#67e8f9;border:1px solid rgba(255,255,255,0.15)}
+      .pricing-cta-outline:hover{border-color:#0891b2;background:rgba(8,145,178,0.1)}
+      .pricing-table-wrap{max-width:1120px;margin:64px auto 0;padding:0 32px 64px}
+      .pricing-table-title{font-size:24px;font-weight:700;color:#fff;text-align:center;margin-bottom:32px;letter-spacing:-0.02em}
+      .pricing-table{width:100%;border-collapse:collapse}
+      .pricing-table th,.pricing-table td{padding:14px 20px;text-align:left;font-size:14px;border-bottom:1px solid rgba(255,255,255,0.06)}
+      .pricing-table th{color:rgba(255,255,255,0.5);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:0.05em}
+      .pricing-table th:not(:first-child),.pricing-table td:not(:first-child){text-align:center}
+      .pricing-table td{color:rgba(255,255,255,0.7)}
+      .pricing-table td:first-child{color:rgba(255,255,255,0.85);font-weight:500}
+      .pricing-table tr:hover td{background:rgba(255,255,255,0.02)}
+      .pricing-check{color:#0891b2;font-weight:700}
+      .pricing-dash{color:rgba(255,255,255,0.2)}
+      @media(max-width:900px){
+        .pricing-cards{grid-template-columns:1fr;max-width:440px}
+        .pricing-hero h1{font-size:32px}
+        .pricing-table-wrap{overflow-x:auto}
+        .pricing-table{min-width:600px}
+      }
+      @media(max-width:600px){
+        .pricing-nav{padding:16px 20px}
+        .pricing-hero{padding:32px 20px 24px}
+        .pricing-cards{padding:0 20px}
+        .pricing-table-wrap{padding:0 20px 48px}
+      }
+    </style>
+
+    <!-- Nav -->
+    <nav class="pricing-nav">
+      <div class="pricing-nav-logo">
+        <svg width="32" height="32" viewBox="0 0 56 56" fill="none"><rect width="56" height="56" rx="14" fill="#0891b2"/><path d="M16 20h8c3.3 0 6 2.7 6 6s-2.7 6-6 6h-8V20z" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M34 20v12l4 4" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Credentik
+      </div>
+      <a href="#" class="pricing-nav-back" onclick="toggleAuthView('login');return false;">&larr; Back to Sign In</a>
+    </nav>
+
+    <!-- Hero -->
+    <section class="pricing-hero">
+      <h1>Credentialing, simplified.</h1>
+      <p>Automate provider enrollment, track compliance in real time, and eliminate the spreadsheet chaos. Plans that scale with your organization.</p>
+    </section>
+
+    <!-- Cards -->
+    <div class="pricing-cards">
+      <!-- Starter -->
+      <div class="pricing-card">
+        <div class="pricing-tier">Starter</div>
+        <div class="pricing-price">$49<span>/mo</span></div>
+        <div class="pricing-desc">For small practices getting started with modern credentialing.</div>
+        <ul class="pricing-features">
+          <li>Up to 5 providers</li>
+          <li>1 user seat</li>
+          <li>Basic compliance tracking</li>
+          <li>License expiration alerts</li>
+          <li>Email support</li>
+        </ul>
+        <button class="pricing-cta pricing-cta-outline" onclick="toggleAuthView('register');return false;">Start Free Trial</button>
+      </div>
+      <!-- Professional -->
+      <div class="pricing-card featured">
+        <div class="pricing-badge">Most Popular</div>
+        <div class="pricing-tier">Professional</div>
+        <div class="pricing-price">$149<span>/mo</span></div>
+        <div class="pricing-desc">For growing organizations that need full compliance coverage.</div>
+        <ul class="pricing-features">
+          <li>Up to 25 providers</li>
+          <li>5 user seats</li>
+          <li>Full compliance + exclusion screening</li>
+          <li>CAQH integration</li>
+          <li>Automated enrollment workflows</li>
+          <li>Priority support</li>
+        </ul>
+        <button class="pricing-cta pricing-cta-primary" onclick="toggleAuthView('register');return false;">Start Free Trial</button>
+      </div>
+      <!-- Enterprise -->
+      <div class="pricing-card">
+        <div class="pricing-tier">Enterprise</div>
+        <div class="pricing-price">$349<span>/mo</span></div>
+        <div class="pricing-desc">For large agencies needing full control and custom integrations.</div>
+        <ul class="pricing-features">
+          <li>Unlimited providers</li>
+          <li>Unlimited user seats</li>
+          <li>White-label branding</li>
+          <li>API access</li>
+          <li>Dedicated account manager</li>
+          <li>Custom integrations</li>
+        </ul>
+        <button class="pricing-cta pricing-cta-outline" onclick="toggleAuthView('register');return false;">Start Free Trial</button>
+      </div>
+    </div>
+
+    <!-- Feature Comparison Table -->
+    <div class="pricing-table-wrap">
+      <h2 class="pricing-table-title">Feature Comparison</h2>
+      <table class="pricing-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Starter</th>
+            <th>Professional</th>
+            <th>Enterprise</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Provider profiles</td><td>Up to 5</td><td>Up to 25</td><td>Unlimited</td></tr>
+          <tr><td>User seats</td><td>1</td><td>5</td><td>Unlimited</td></tr>
+          <tr><td>License tracking</td><td class="pricing-check">&#10003;</td><td class="pricing-check">&#10003;</td><td class="pricing-check">&#10003;</td></tr>
+          <tr><td>Expiration alerts</td><td class="pricing-check">&#10003;</td><td class="pricing-check">&#10003;</td><td class="pricing-check">&#10003;</td></tr>
+          <tr><td>Exclusion screening (OIG/SAM)</td><td class="pricing-dash">&mdash;</td><td class="pricing-check">&#10003;</td><td class="pricing-check">&#10003;</td></tr>
+          <tr><td>CAQH integration</td><td class="pricing-dash">&mdash;</td><td class="pricing-check">&#10003;</td><td class="pricing-check">&#10003;</td></tr>
+          <tr><td>Enrollment workflows</td><td class="pricing-dash">&mdash;</td><td class="pricing-check">&#10003;</td><td class="pricing-check">&#10003;</td></tr>
+          <tr><td>Multi-state management</td><td class="pricing-dash">&mdash;</td><td class="pricing-check">&#10003;</td><td class="pricing-check">&#10003;</td></tr>
+          <tr><td>White-label branding</td><td class="pricing-dash">&mdash;</td><td class="pricing-dash">&mdash;</td><td class="pricing-check">&#10003;</td></tr>
+          <tr><td>API access</td><td class="pricing-dash">&mdash;</td><td class="pricing-dash">&mdash;</td><td class="pricing-check">&#10003;</td></tr>
+          <tr><td>Custom integrations</td><td class="pricing-dash">&mdash;</td><td class="pricing-dash">&mdash;</td><td class="pricing-check">&#10003;</td></tr>
+          <tr><td>Dedicated account manager</td><td class="pricing-dash">&mdash;</td><td class="pricing-dash">&mdash;</td><td class="pricing-check">&#10003;</td></tr>
+          <tr><td>Support</td><td>Email</td><td>Priority</td><td>Dedicated</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div><!-- end pricing-view -->
+
   </div><!-- end auth-gate -->
 
   <!-- Main App (hidden until authenticated) -->
@@ -1032,6 +1184,22 @@
     </div>
   </div>
 
+  <!-- Public Share View (shown via #share/TOKEN) -->
+  <div id="share-portal" style="display:none;">
+    <div class="auth-gate" style="display:flex;min-height:100vh;background:#f8fafc;">
+      <div style="max-width:720px;width:100%;margin:24px auto;padding:0 16px;">
+        <div id="share-loading" style="text-align:center;padding:3rem;"><div class="spinner"></div><p style="color:#64748b;margin-top:12px;">Loading credentialing progress...</p></div>
+        <div id="share-invalid" style="display:none;text-align:center;padding:3rem;">
+          <div style="font-size:48px;margin-bottom:16px;">&#128274;</div>
+          <h2 style="color:#1e293b;">Share Link Not Found</h2>
+          <p style="color:#64748b;">This share link is invalid, has expired, or has not been configured yet.</p>
+          <a href="#" onclick="location.href=location.pathname;return false;" style="color:#0891b2;font-size:14px;">Go to Credentik &rarr;</a>
+        </div>
+        <div id="share-content" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div class="toast" id="toast" role="alert" aria-live="polite"></div>
 
@@ -1505,6 +1673,16 @@
     let _inviteToken2 = null;
 
     function toggleAuthView(view) {
+      const authSplit = document.querySelector('.auth-split');
+      const pricingView = document.getElementById('pricing-view');
+      if (view === 'pricing') {
+        if (authSplit) authSplit.style.display = 'none';
+        if (pricingView) pricingView.style.display = '';
+        return;
+      }
+      // Show auth-split, hide pricing
+      if (authSplit) authSplit.style.display = '';
+      if (pricingView) pricingView.style.display = 'none';
       ['login-view','register-view','forgot-view','reset-view','invite-view'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
