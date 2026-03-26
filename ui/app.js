@@ -11027,13 +11027,13 @@ function handleNppesProxy(payload) {
     if (!carrier) { showToast('Insurance carrier is required'); return; }
     try {
       await store.createProviderMalpractice(providerId, {
-        insuranceCarrier: carrier,
-        carrier,
-        policyNumber: document.getElementById('mal-policy')?.value?.trim() || '',
-        coverageAmount: getPresetValue('mal-coverage'),
-        coverage: getPresetValue('mal-coverage'),
-        effectiveDate: document.getElementById('mal-effective')?.value || '',
-        expirationDate: document.getElementById('mal-expiration')?.value || '',
+        carrier_name: carrier,
+        policy_number: document.getElementById('mal-policy')?.value?.trim() || '',
+        coverage_type: 'occurrence',
+        per_incident_amount: null,
+        aggregate_amount: null,
+        effective_date: document.getElementById('mal-effective')?.value || null,
+        expiration_date: document.getElementById('mal-expiration')?.value || null,
       });
       showToast('Malpractice policy added');
       document.getElementById('malpractice-modal').classList.remove('active');
