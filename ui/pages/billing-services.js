@@ -84,7 +84,7 @@ async function renderBillingServicesPage() {
   try { clients = await store.getBillingClients(); } catch (e) { console.error('Billing clients error:', e); }
   try { tasks = await store.getBillingTasks(); } catch (e) { console.error('Billing tasks error:', e); }
   try { activities = await store.getBillingActivities({ limit: 50 }); } catch (e) { console.error('Billing activities error:', e); }
-  try { orgs = await store.getOrganizations(); } catch (e) {}
+  try { orgs = await store.getAll('organizations'); } catch (e) {}
 
   if (!Array.isArray(clients)) clients = [];
   if (!Array.isArray(tasks)) tasks = [];

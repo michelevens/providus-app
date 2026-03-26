@@ -10442,7 +10442,7 @@ function handleNppesProxy(payload) {
   async openBsClientModal(editData) {
     // Ensure orgs are loaded for autocomplete
     if (!window._bsOrgs || !window._bsOrgs.length) {
-      try { window._bsOrgs = await store.getOrganizations(); } catch (e) { window._bsOrgs = []; }
+      try { window._bsOrgs = await store.getAll('organizations'); } catch (e) { window._bsOrgs = []; }
     }
     const modal = document.getElementById('bs-client-modal');
     document.getElementById('bs-client-modal-title').textContent = editData ? 'Edit Billing Client' : 'Add Billing Client';
@@ -10508,7 +10508,7 @@ function handleNppesProxy(payload) {
   filterBsOrgDropdown(q) {
     const dd = document.getElementById('bs-client-org-dropdown');
     const orgs = window._bsOrgs || [];
-    if (!dd || !orgs.length) { if (!orgs.length) store.getOrganizations().then(o => { window._bsOrgs = o || []; }).catch(() => {}); return; }
+    if (!dd || !orgs.length) { if (!orgs.length) store.getAll('organizations').then(o => { window._bsOrgs = o || []; }).catch(() => {}); return; }
     q = (q || '').toLowerCase();
     const matches = q.length > 0 ? orgs.filter(o => ((o.name||'')+(o.dba||'')).toLowerCase().includes(q)).slice(0,8) : orgs.slice(0,8);
     if (!matches.length) { dd.style.display = 'none'; return; }
