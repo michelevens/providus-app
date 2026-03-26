@@ -950,6 +950,172 @@ function renderApiDocsPage() {
   `;
 }
 
+// ─── Notification Settings & Log ───
+
+const NOTIFICATION_TYPES = {
+  status_change: { label: 'Status Change', icon: '🔄', color: '#2563eb' },
+  expiration_warning: { label: 'Expiration Warning', icon: '⏰', color: '#d97706' },
+  document_needed: { label: 'Document Request', icon: '📄', color: '#7c3aed' },
+  welcome: { label: 'Welcome', icon: '👋', color: '#059669' },
+  milestone: { label: 'Milestone', icon: '🏆', color: '#0891b2' },
+  followup_created: { label: 'Follow-up Created', icon: '📅', color: '#dc2626' },
+  weekly_summary: { label: 'Weekly Summary', icon: '📊', color: '#6366f1' },
+};
+
+async function renderNotificationSettingsPage() {
+  const body = document.getElementById('page-body');
+
+  let prefs = {};
+  try { prefs = await store.getNotificationPreferences(); } catch { prefs = store._getDefaultNotificationPreferences(); }
+
+  let logs = [];
+  try {
+    const result = await store.getNotificationLog();
+    logs = Array.isArray(result) ? result : (result?.data || []);
+  } catch {}
+
+  const sent = logs.filter(l => l.status === 'sent' || l.status === 'delivered').length;
+  const failed = logs.filter(l => l.status === 'failed' || l.status === 'bounced').length;
+
+  body.innerHTML = `
+    <style>
+      .notif-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px;}
+      .notif-stat{background:var(--surface-card,#fff);border-radius:16px;padding:18px 16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}
+      .notif-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
+      .notif-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+      .notif-stat-val{font-size:28px;font-weight:800;line-height:1;}
+      .notif-stat-lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:6px;}
+      .notif-tabs{display:flex;gap:0;border-bottom:2px solid var(--gray-200);margin-bottom:20px;}
+      .notif-tabs .notif-tab{background:none;border:none;padding:10px 18px;font-size:13px;font-weight:600;color:var(--gray-500);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color 0.15s,border-color 0.15s;}
+      .notif-tabs .notif-tab:hover{color:var(--gray-700);}
+      .notif-tabs .notif-tab.active{color:var(--brand-600);border-bottom-color:var(--brand-600);}
+      .notif-toggle{position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;}
+      .notif-toggle input{opacity:0;width:0;height:0;position:absolute;}
+      .notif-toggle .slider{position:absolute;inset:0;background:var(--gray-300);border-radius:12px;transition:0.2s;}
+      .notif-toggle .slider::before{content:'';position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;left:3px;top:3px;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);}
+      .notif-toggle input:checked+.slider{background:var(--brand-600,#0891b2);}
+      .notif-toggle input:checked+.slider::before{transform:translateX(20px);}
+      .notif-pref-row{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--gray-100);}
+      .notif-pref-row:last-child{border-bottom:none;}
+      .notif-pref-info{flex:1;}
+      .notif-pref-title{font-size:14px;font-weight:600;color:var(--gray-800);}
+      .notif-pref-desc{font-size:12px;color:var(--gray-500);margin-top:2px;}
+      .notif-log-badge{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;}
+    </style>
+
+    <div class="notif-stats">
+      <div class="notif-stat"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#0891b2,#06b6d4);"></div><div class="notif-stat-val" style="color:var(--brand-600);">${logs.length}</div><div class="notif-stat-lbl">Total Sent</div></div>
+      <div class="notif-stat"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#10b981,#34d399);"></div><div class="notif-stat-val" style="color:#10b981;">${sent}</div><div class="notif-stat-lbl">Delivered</div></div>
+      <div class="notif-stat"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#ef4444,#f87171);"></div><div class="notif-stat-val" style="color:#ef4444;">${failed}</div><div class="notif-stat-lbl">Failed</div></div>
+      <div class="notif-stat"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#8b5cf6,#a78bfa);"></div><div class="notif-stat-val" style="color:#8b5cf6;">${Object.keys(NOTIFICATION_TYPES).length}</div><div class="notif-stat-lbl">Notification Types</div></div>
+    </div>
+
+    <div class="notif-tabs">
+      <button class="notif-tab active" onclick="window.app.notifTab(this, 'notif-settings')">Settings</button>
+      <button class="notif-tab" onclick="window.app.notifTab(this, 'notif-log')">Notification Log</button>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="notif-settings">
+      <div class="card" style="border-radius:16px;">
+        <div class="card-header"><h3>Email Notification Preferences</h3></div>
+        <div class="card-body">
+          <div style="margin-bottom:20px;">
+            <label style="font-size:13px;font-weight:600;color:var(--gray-700);display:block;margin-bottom:6px;">Default Recipient Email</label>
+            <input type="email" class="form-control" id="notif-recipient-email" value="${escHtml(prefs.recipientEmail || '')}" placeholder="notifications@yourpractice.com" style="max-width:400px;">
+            <div style="font-size:11px;color:var(--gray-400);margin-top:4px;">Emails are sent via Resend. Leave blank to use the agency admin email.</div>
+          </div>
+
+          <div class="notif-pref-row">
+            <div class="notif-pref-info">
+              <div class="notif-pref-title">Application Status Changes</div>
+              <div class="notif-pref-desc">Send email when an application status changes (submitted, approved, denied, etc.)</div>
+            </div>
+            <label class="notif-toggle"><input type="checkbox" id="notif-pref-status" ${prefs.statusChanges ? 'checked' : ''}><span class="slider"></span></label>
+          </div>
+
+          <div class="notif-pref-row">
+            <div class="notif-pref-info">
+              <div class="notif-pref-title">License Expiration Warnings</div>
+              <div class="notif-pref-desc">Send email before license expiration</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <select class="form-control" id="notif-pref-exp-days" style="width:auto;">
+                <option value="0" ${!prefs.licenseExpirationDays ? 'selected' : ''}>Off</option>
+                <option value="30" ${prefs.licenseExpirationDays === 30 ? 'selected' : ''}>30 days</option>
+                <option value="60" ${prefs.licenseExpirationDays === 60 ? 'selected' : ''}>60 days</option>
+                <option value="90" ${prefs.licenseExpirationDays === 90 ? 'selected' : ''}>90 days</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="notif-pref-row">
+            <div class="notif-pref-info">
+              <div class="notif-pref-title">Document Requests</div>
+              <div class="notif-pref-desc">Notify provider when additional documents are needed for their application</div>
+            </div>
+            <label class="notif-toggle"><input type="checkbox" id="notif-pref-docs" ${prefs.documentRequests ? 'checked' : ''}><span class="slider"></span></label>
+          </div>
+
+          <div class="notif-pref-row">
+            <div class="notif-pref-info">
+              <div class="notif-pref-title">Weekly Summary Digest</div>
+              <div class="notif-pref-desc">Send a weekly summary of credentialing activity every Monday morning</div>
+            </div>
+            <label class="notif-toggle"><input type="checkbox" id="notif-pref-weekly" ${prefs.weeklySummary ? 'checked' : ''}><span class="slider"></span></label>
+          </div>
+
+          <div style="margin-top:20px;display:flex;gap:10px;">
+            <button class="btn btn-primary" onclick="window.app.saveNotificationPreferences()">Save Preferences</button>
+            <button class="btn" onclick="window.app.sendTestNotification()">Send Test Email</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notification Log Tab -->
+    <div id="notif-log" class="hidden">
+      <div class="card" style="border-radius:16px;overflow:hidden;">
+        <div class="card-header">
+          <h3>Notification History</h3>
+          <button class="btn btn-sm" onclick="window.app.refreshNotificationLog()">Refresh</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:160px;">Date</th>
+                <th style="width:120px;">Type</th>
+                <th>Recipient</th>
+                <th>Subject</th>
+                <th style="width:90px;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${logs.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted);">No notifications sent yet. Notifications will appear here as they are triggered.</td></tr>' : ''}
+              ${logs.slice(0, 100).map(n => {
+                const typeInfo = NOTIFICATION_TYPES[n.type] || { label: n.type || 'Unknown', icon: '📧', color: '#6b7280' };
+                const statusColor = n.status === 'sent' || n.status === 'delivered' ? '#10b981' : n.status === 'failed' || n.status === 'bounced' ? '#ef4444' : '#6b7280';
+                const statusBg = n.status === 'sent' || n.status === 'delivered' ? 'rgba(16,185,129,0.1)' : n.status === 'failed' || n.status === 'bounced' ? 'rgba(239,68,68,0.1)' : 'rgba(107,114,128,0.1)';
+                return `<tr>
+                  <td>
+                    <div style="font-size:12px;">${n.createdAt || n.sentAt ? new Date(n.createdAt || n.sentAt).toLocaleString() : '-'}</div>
+                  </td>
+                  <td><span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:${typeInfo.color};">${typeInfo.icon} ${escHtml(typeInfo.label)}</span></td>
+                  <td style="font-size:12px;">${escHtml(n.recipientEmail || n.recipientName || '-')}</td>
+                  <td style="font-size:12px;">${escHtml(n.subject || '-')}</td>
+                  <td><span class="notif-log-badge" style="background:${statusBg};color:${statusColor};">${escHtml(n.status || 'pending')}</span></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+          ${logs.length > 100 ? `<div style="padding:12px;text-align:center;font-size:12px;color:var(--text-muted);">Showing first 100 of ${logs.length} notifications</div>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 export {
   renderAuditTrail,
   renderAdminPanel,
@@ -962,4 +1128,5 @@ export {
   toggleAutomationRule,
   renderFaqPage,
   renderApiDocsPage,
+  renderNotificationSettingsPage,
 };
