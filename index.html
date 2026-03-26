@@ -439,34 +439,13 @@
           </span> Follow-ups
           <span class="badge" id="followup-badge" style="display:none;">0</span>
         </button>
-        <button class="nav-item" data-page="tasks">
-          <span class="icon">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>
-          </span> Tasks
-          <span class="badge" id="task-badge" style="display:none;">0</span>
-        </button>
-        <button class="nav-item" data-page="messages" data-min-role="staff">
-          <span class="icon">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h12a1 1 0 011 1v7a1 1 0 01-1 1H5l-3 3v-11a1 1 0 011-1z"/><path d="M5 5h6M5 7.5h4"/></svg>
-          </span> Messages
-          <span class="badge" id="msg-badge" style="display:none;">0</span>
-        </button>
-        <button class="nav-item" data-page="communications" data-min-role="organization">
-          <span class="icon">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h12a1 1 0 011 1v7a1 1 0 01-1 1H5l-3 3v-11a1 1 0 011-1z"/></svg>
-          </span> Communications
-        </button>
-        <button class="nav-item" data-page="kanban" data-min-role="organization">
-          <span class="icon">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2" width="4" height="12" rx="1"/><rect x="6" y="2" width="4" height="8" rx="1"/><rect x="10.5" y="2" width="4" height="10" rx="1"/></svg>
-          </span> Kanban Board
-        </button>
-        <button class="nav-item" data-page="calendar" data-min-role="organization">
-          <span class="icon">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5"/><path d="M1.5 6.5h13"/><path d="M5 1v3"/><path d="M11 1v3"/></svg>
-          </span> Calendar
-        </button>
 
+        <div class="nav-section">Healthcare Billing</div>
+        <button class="nav-item" data-page="billing-services" data-min-role="agency">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12v10H2z"/><path d="M2 6h12"/><path d="M5 9h2M5 11h4"/><circle cx="12" cy="10" r="2"/></svg>
+          </span> Billing Services
+        </button>
 
         <div class="nav-section">Compliance</div>
         <button class="nav-item" data-page="licenses">
@@ -494,39 +473,61 @@
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
           </span> Continuous Monitoring
         </button>
+
+        <div class="nav-section">Workspace</div>
+        <button class="nav-item" data-page="tasks">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>
+          </span> Tasks
+          <span class="badge" id="task-badge" style="display:none;">0</span>
+        </button>
+        <button class="nav-item" data-page="kanban" data-min-role="organization">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2" width="4" height="12" rx="1"/><rect x="6" y="2" width="4" height="8" rx="1"/><rect x="10.5" y="2" width="4" height="10" rx="1"/></svg>
+          </span> Kanban Board
+        </button>
+        <button class="nav-item" data-page="calendar" data-min-role="organization">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5"/><path d="M1.5 6.5h13"/><path d="M5 1v3"/><path d="M11 1v3"/></svg>
+          </span> Calendar
+        </button>
+        <button class="nav-item" data-page="messages" data-min-role="staff">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h12a1 1 0 011 1v7a1 1 0 01-1 1H5l-3 3v-11a1 1 0 011-1z"/><path d="M5 5h6M5 7.5h4"/></svg>
+          </span> Messages
+          <span class="badge" id="msg-badge" style="display:none;">0</span>
+        </button>
+        <button class="nav-item" data-page="communications" data-min-role="organization">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h12a1 1 0 011 1v7a1 1 0 01-1 1H5l-3 3v-11a1 1 0 011-1z"/></svg>
+          </span> Communications
+        </button>
+
+        <div class="nav-section">Analytics & Strategy</div>
         <button class="nav-item" data-page="bottleneck" data-min-role="staff">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H2l5 5.5V12l2 1.5V7.5L14 2z"/></svg>
           </span> Pipeline Analytics
-        </button>
-
-        <div class="nav-section">Healthcare Billing</div>
-        <button class="nav-item" data-page="billing-services" data-min-role="agency">
-          <span class="icon">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12v10H2z"/><path d="M2 6h12"/><path d="M5 9h2M5 11h4"/><circle cx="12" cy="10" r="2"/></svg>
-          </span> Billing Services
-        </button>
-
-        <div class="nav-section">Strategy</div>
-        <button class="nav-item" data-page="policies" data-min-role="agency">
-          <span class="icon">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5C5 1.5 2.5 3 2.5 3v5.5c0 3 5.5 6 5.5 6s5.5-3 5.5-6V3s-2.5-1.5-5.5-1.5z"/></svg>
-          </span> State Policies
-        </button>
-        <button class="nav-item" data-page="coverage" data-min-role="agency">
-          <span class="icon">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="13" height="13" rx="1"/><path d="M1.5 5.5h13"/><path d="M5.5 1.5v13"/><path d="M9.5 1.5v13"/><path d="M1.5 9.5h13"/></svg>
-          </span> Coverage Matrix
         </button>
         <button class="nav-item" data-page="forecast" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13l4-5 3 2 5-7"/><path d="M11 3h3v3"/></svg>
           </span> Revenue Forecast
         </button>
+        <button class="nav-item" data-page="coverage" data-min-role="agency">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="13" height="13" rx="1"/><path d="M1.5 5.5h13"/><path d="M5.5 1.5v13"/><path d="M9.5 1.5v13"/><path d="M1.5 9.5h13"/></svg>
+          </span> Coverage Matrix
+        </button>
         <button class="nav-item" data-page="reimbursement" data-min-role="agency">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M6 6.5c0-1 .8-1.5 2-1.5s2 .5 2 1.5c0 1.5-2 1.5-2 2.5"/><circle cx="8" cy="11.5" r="0.5" fill="currentColor"/></svg>
           </span> Reimbursement
+        </button>
+        <button class="nav-item" data-page="policies" data-min-role="agency">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5C5 1.5 2.5 3 2.5 3v5.5c0 3 5.5 6 5.5 6s5.5-3 5.5-6V3s-2.5-1.5-5.5-1.5z"/></svg>
+          </span> State Policies
         </button>
         <button class="nav-item" data-page="renewal-calendar" data-min-role="agency">
           <span class="icon">
