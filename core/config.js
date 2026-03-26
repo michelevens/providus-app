@@ -26,6 +26,7 @@ const CONFIG = {
         tasks: '/tasks',
         strategies: '/strategies',
         payer_plans: '/payer-plans',
+        facilities: '/facilities',
     },
 
     // Reference data endpoints (public, no auth needed)
