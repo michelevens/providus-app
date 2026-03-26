@@ -283,6 +283,185 @@ export const SUPPLEMENTAL_PAYERS = [
   { id: 493, name: 'PHCS (Private Healthcare Systems)', category: 'other',   parentOrg: 'MultiPlan Corporation',        states: ['ALL'], notes: 'Part of MultiPlan network. Some payers still reference PHCS for credentialing.', tags: ['high_volume', 'fast_credentialing'] },
   { id: 494, name: 'Zelis (formerly Stratose/HST)',    category: 'other',    parentOrg: 'Zelis Healthcare',              states: ['ALL'], notes: 'Network access / claims management. Some BH providers credential through Zelis network.', tags: ['high_volume', 'fast_credentialing'] },
   { id: 495, name: 'Imagine Health',                   category: 'other',    parentOrg: 'Imagine Health',                states: ['ALL'], notes: 'Narrow-network plan sold to self-insured employers. Credentials BH providers directly.', tags: ['high_volume', 'fast_credentialing'] },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 10. ADDITIONAL STATE PAYERS — REGIONAL, BCBS, MEDICAID MCOs
+  //     Fills remaining gaps for all 50 states relevant to BH credentialing.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ─── Alabama ───
+  { id: 500, name: 'BCBS of Alabama',                   category: 'bcbs_independent', parentOrg: 'BCBS of Alabama',           states: ['AL'], notes: 'Dominant insurer in AL. Independent BCBS licensee.', tags: ['caqh_accepts', 'behavioral_health', 'must_have', 'high_volume'] },
+  { id: 501, name: 'UnitedHealthcare Community Plan AL', category: 'medicaid_mco', parentOrg: 'UnitedHealth Group',            states: ['AL'], notes: 'AL Medicaid MCO.', tags: ['behavioral_health', 'medicaid_prerequisite', 'telehealth_friendly'] },
+  { id: 502, name: 'Alabama Medicaid (fee-for-service)', category: 'other', parentOrg: 'Alabama Medicaid Agency',              states: ['AL'], notes: 'AL Medicaid is primarily FFS with some managed care. Direct enrollment required for BH providers.', tags: ['behavioral_health', 'medicaid_prerequisite'] },
+
+  // ─── Arizona (additions) ───
+  { id: 505, name: 'Banner University Health Plans',     category: 'regional', parentOrg: 'Banner Health',                     states: ['AZ'], notes: 'Banner Health system plan. Commercial and Medicare Advantage in AZ.', tags: ['behavioral_health', 'telehealth_friendly', 'growing_market'] },
+  { id: 506, name: 'Mercy Care',                         category: 'medicaid_mco', parentOrg: 'Aetna / CVS Health',            states: ['AZ'], notes: 'Major AZ AHCCCS (Medicaid) MCO. Managed by Aetna. Covers behavioral health and RBHA services.', tags: ['behavioral_health', 'substance_use', 'medicaid_prerequisite', 'must_have', 'high_volume'] },
+
+  // ─── Arkansas (additions) ───
+  { id: 510, name: 'QualChoice Health Insurance',        category: 'regional', parentOrg: 'QualChoice',                        states: ['AR'], notes: 'Regional commercial insurer in AR. Second-largest commercial plan after BCBS AR.', tags: ['behavioral_health', 'caqh_accepts'] },
+
+  // ─── Colorado (additions) ───
+  { id: 515, name: 'Denver Health Medical Plan',         category: 'regional', parentOrg: 'Denver Health',                     states: ['CO'], notes: 'Denver Health system Medicaid and commercial plan. Major safety-net provider.', tags: ['behavioral_health', 'medicaid_prerequisite'] },
+  { id: 516, name: 'Rocky Mountain Health Plans',        category: 'regional', parentOrg: 'UnitedHealth Group',                states: ['CO'], notes: 'Western CO regional plan. Acquired by UHC. Commercial and Medicare products.', tags: ['behavioral_health', 'telehealth_friendly', 'caqh_accepts'] },
+
+  // ─── Connecticut (additions) ───
+  { id: 520, name: 'ConnectiCare',                       category: 'regional', parentOrg: 'EmblemHealth',                      states: ['CT'], notes: 'Major CT commercial plan. Owned by EmblemHealth. ACA marketplace and employer plans.', tags: ['behavioral_health', 'caqh_accepts', 'high_volume'] },
+
+  // ─── Delaware (additions) ───
+  { id: 525, name: 'AmeriHealth Caritas Delaware',       category: 'medicaid_mco', parentOrg: 'AmeriHealth Caritas',            states: ['DE'], notes: 'DE Medicaid MCO. Diamond State Health Plan.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+
+  // ─── Florida (additions) ───
+  { id: 530, name: 'Simply Healthcare Plans',            category: 'medicaid_mco', parentOrg: 'Elevance Health',               states: ['FL'], notes: 'FL Medicaid MCO (Anthem/Elevance). One of the largest Medicaid plans in FL.', tags: ['behavioral_health', 'medicaid_prerequisite', 'high_volume', 'substance_use'] },
+  { id: 531, name: 'Sunshine Health',                    category: 'medicaid_mco', parentOrg: 'Centene Corporation',            states: ['FL'], notes: 'FL Medicaid MCO (Centene). Major Statewide Medicaid Managed Care plan.', tags: ['behavioral_health', 'medicaid_prerequisite', 'high_volume', 'substance_use'] },
+  { id: 532, name: 'WellCare of Florida',                category: 'medicaid_mco', parentOrg: 'Centene Corporation',            states: ['FL'], notes: 'FL Medicaid and Medicare plan (Centene/WellCare brand). Distinct from Staywell.', tags: ['behavioral_health', 'medicaid_prerequisite', 'medicare_advantage', 'substance_use'] },
+
+  // ─── Hawaii ───
+  { id: 535, name: 'HMSA (Hawaii Medical Service Association)', category: 'bcbs_independent', parentOrg: 'HMSA',               states: ['HI'], notes: 'BCBS licensee in HI. Dominant insurer covering ~50% of HI population.', tags: ['caqh_accepts', 'behavioral_health', 'must_have', 'high_volume'] },
+  { id: 536, name: 'AlohaCare',                          category: 'medicaid_mco', parentOrg: 'AlohaCare',                     states: ['HI'], notes: 'HI Medicaid (QUEST) MCO. Community-based non-profit health plan.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+  { id: 537, name: 'UnitedHealthcare Community Plan HI', category: 'medicaid_mco', parentOrg: 'UnitedHealth Group',             states: ['HI'], notes: 'UHC Medicaid managed care (QUEST) in HI.', tags: ['behavioral_health', 'medicaid_prerequisite', 'telehealth_friendly'] },
+
+  // ─── Idaho (additions) ───
+  { id: 540, name: 'Regence BCBS of Idaho',              category: 'bcbs_independent', parentOrg: 'Cambia Health Solutions',    states: ['ID'], notes: 'Regence operates BCBS in ID. Major commercial insurer.', tags: ['caqh_accepts', 'behavioral_health', 'high_volume'] },
+  { id: 541, name: 'Molina Healthcare of Idaho',         category: 'medicaid_mco', parentOrg: 'Molina Healthcare',              states: ['ID'], notes: 'ID Medicaid managed care plan.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+
+  // ─── Illinois (additions) ───
+  { id: 545, name: 'BCBS of Illinois',                   category: 'bcbs_independent', parentOrg: 'HCSC',                      states: ['IL'], notes: 'HCSC division. Largest insurer in IL. BCBS licensee.', tags: ['caqh_accepts', 'behavioral_health', 'must_have', 'high_volume'] },
+  { id: 546, name: 'Molina Healthcare of Illinois',      category: 'medicaid_mco', parentOrg: 'Molina Healthcare',              states: ['IL'], notes: 'IL Medicaid managed care plan.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+
+  // ─── Indiana (additions) ───
+  { id: 550, name: 'CareSource Indiana',                 category: 'medicaid_mco', parentOrg: 'CareSource',                    states: ['IN'], notes: 'IN Medicaid MCO (Hoosier Healthwise / HIP).', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+
+  // ─── Iowa ───
+  { id: 555, name: 'Amerigroup Iowa',                    category: 'medicaid_mco', parentOrg: 'Elevance Health',               states: ['IA'], notes: 'IA Medicaid MCO under Elevance.', tags: ['behavioral_health', 'medicaid_prerequisite'] },
+  { id: 556, name: 'Iowa Total Care',                    category: 'medicaid_mco', parentOrg: 'Centene Corporation',            states: ['IA'], notes: 'IA Medicaid MCO (Centene).', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+
+  // ─── Kansas (additions) ───
+  { id: 560, name: 'Aetna Better Health of Kansas',      category: 'medicaid_mco', parentOrg: 'CVS Health / Aetna',             states: ['KS'], notes: 'KS Medicaid MCO (KanCare).', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+
+  // ─── Kentucky (additions) ───
+  { id: 565, name: 'Passport Health Plan',               category: 'medicaid_mco', parentOrg: 'Molina Healthcare',              states: ['KY'], notes: 'KY Medicaid MCO. Originally community-based, now operated by Molina.', tags: ['behavioral_health', 'medicaid_prerequisite', 'high_volume', 'substance_use'] },
+  { id: 566, name: 'Humana CareSource Kentucky',        category: 'medicaid_mco', parentOrg: 'Humana / CareSource',            states: ['KY'], notes: 'KY Medicaid MCO. Joint venture between Humana and CareSource.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+
+  // ─── Maryland (additions) ───
+  { id: 570, name: 'Priority Partners',                  category: 'medicaid_mco', parentOrg: 'Johns Hopkins HealthCare',       states: ['MD'], notes: 'MD Medicaid MCO. Johns Hopkins-affiliated. Large BH panel.', tags: ['behavioral_health', 'medicaid_prerequisite', 'high_volume', 'substance_use'] },
+  { id: 571, name: 'Amerigroup Maryland',                category: 'medicaid_mco', parentOrg: 'Elevance Health',                states: ['MD'], notes: 'MD Medicaid MCO under Elevance.', tags: ['behavioral_health', 'medicaid_prerequisite'] },
+  { id: 572, name: 'Maryland Physicians Care',           category: 'medicaid_mco', parentOrg: 'Centene Corporation',            states: ['MD'], notes: 'MD Medicaid MCO (Centene).', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+  { id: 573, name: 'Jai Medical Systems',                category: 'medicaid_mco', parentOrg: 'Jai Medical Systems',            states: ['MD'], notes: 'MD Medicaid MCO. Smaller community-based plan in Baltimore area.', tags: ['behavioral_health', 'medicaid_prerequisite'] },
+
+  // ─── Massachusetts ───
+  { id: 575, name: 'BCBS of Massachusetts',              category: 'bcbs_independent', parentOrg: 'BCBS of MA',                 states: ['MA'], notes: 'Dominant insurer in MA. Independent BCBS licensee.', tags: ['caqh_accepts', 'behavioral_health', 'must_have', 'high_volume'] },
+  { id: 576, name: 'Tufts Health Plan',                  category: 'regional', parentOrg: 'Point32Health',                      states: ['MA', 'RI'], notes: 'Major MA commercial plan. Now under Point32Health with Harvard Pilgrim.', tags: ['behavioral_health', 'caqh_accepts', 'high_volume'] },
+  { id: 577, name: 'Harvard Pilgrim Health Care',        category: 'regional', parentOrg: 'Point32Health',                      states: ['MA', 'NH', 'ME', 'CT'], notes: 'New England regional plan. Under Point32Health.', tags: ['behavioral_health', 'caqh_accepts', 'high_volume'] },
+  { id: 578, name: 'BMC HealthNet Plan',                 category: 'medicaid_mco', parentOrg: 'Boston Medical Center',          states: ['MA'], notes: 'MA MassHealth (Medicaid) MCO. Safety-net focused.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+  { id: 579, name: 'Fallon Health',                      category: 'regional', parentOrg: 'Fallon Health',                      states: ['MA'], notes: 'Central MA regional plan. Commercial, Medicare, and MassHealth products.', tags: ['behavioral_health', 'caqh_accepts'] },
+
+  // ─── Maine (additions) ───
+  { id: 582, name: 'Harvard Pilgrim ME',                 category: 'regional', parentOrg: 'Point32Health',                      states: ['ME'], notes: 'Harvard Pilgrim products in ME market. Credential via Point32Health.', tags: ['behavioral_health', 'caqh_accepts'] },
+
+  // ─── Michigan (additions) ───
+  { id: 585, name: 'Priority Health',                    category: 'regional', parentOrg: 'Spectrum Health (Corewell)',          states: ['MI'], notes: 'Major MI commercial plan. Affiliated with Corewell Health (Spectrum). Commercial and Medicare.', tags: ['behavioral_health', 'caqh_accepts', 'high_volume'] },
+
+  // ─── Minnesota ───
+  { id: 590, name: 'HealthPartners',                     category: 'regional', parentOrg: 'HealthPartners',                    states: ['MN', 'WI'], notes: 'Major MN health plan and care system. Commercial, Medicare, Medicaid.', tags: ['behavioral_health', 'caqh_accepts', 'high_volume'] },
+  { id: 591, name: 'Hennepin Health',                    category: 'medicaid_mco', parentOrg: 'Hennepin Healthcare',            states: ['MN'], notes: 'Hennepin County (Minneapolis) Medicaid MCO. Safety-net focused.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+  { id: 592, name: 'UCare Minnesota',                    category: 'regional', parentOrg: 'UCare',                              states: ['MN'], notes: 'MN non-profit health plan. Medicaid, Medicare, and individual products.', tags: ['behavioral_health', 'medicaid_prerequisite', 'caqh_accepts'] },
+
+  // ─── Mississippi (additions) ───
+  { id: 595, name: 'UnitedHealthcare Community Plan MS', category: 'medicaid_mco', parentOrg: 'UnitedHealth Group',              states: ['MS'], notes: 'UHC Medicaid managed care (MSCAN) in MS.', tags: ['behavioral_health', 'medicaid_prerequisite', 'telehealth_friendly'] },
+
+  // ─── Missouri (additions) ───
+  { id: 598, name: 'Missouri Care',                      category: 'medicaid_mco', parentOrg: 'WellCare / Centene',             states: ['MO'], notes: 'MO Medicaid MCO (WellCare/Centene brand). MO HealthNet managed care.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+
+  // ─── Montana (additions) ───
+  { id: 600, name: 'Montana Health Co-Op',               category: 'regional', parentOrg: 'Montana Health Co-Op',               states: ['MT'], notes: 'MT ACA co-op plan. One of few surviving ACA co-ops. Individual and small group market.', tags: ['behavioral_health', 'growing_market'] },
+
+  // ─── Nebraska (additions) ───
+  { id: 603, name: 'Nebraska Total Care',                category: 'medicaid_mco', parentOrg: 'Centene Corporation',             states: ['NE'], notes: 'NE Medicaid MCO (Centene). Heritage Health managed care.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+
+  // ─── Nevada (additions) ───
+  { id: 606, name: 'Health Plan of Nevada',              category: 'regional', parentOrg: 'UnitedHealth Group',                  states: ['NV'], notes: 'UHC-owned HMO in NV. Major commercial and Medicare plan. Separate credentialing from UHC.', tags: ['behavioral_health', 'caqh_accepts', 'high_volume'] },
+  { id: 607, name: 'Hometown Health',                    category: 'regional', parentOrg: 'Renown Health',                       states: ['NV'], notes: 'Northern NV (Reno area) regional plan. Affiliated with Renown Health system.', tags: ['behavioral_health', 'caqh_accepts'] },
+
+  // ─── New Hampshire (additions) ───
+  { id: 610, name: 'Well Sense Health Plan',             category: 'medicaid_mco', parentOrg: 'Boston Medical Center',           states: ['NH'], notes: 'NH Medicaid MCO. BMC HealthNet affiliate operating in NH.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+
+  // ─── New Jersey (additions) ───
+  { id: 613, name: 'Horizon BCBS of New Jersey',        category: 'bcbs_independent', parentOrg: 'Horizon BCBS NJ',              states: ['NJ'], notes: 'Dominant insurer in NJ. Independent BCBS licensee. Commercial, Medicare, Medicaid.', tags: ['caqh_accepts', 'behavioral_health', 'must_have', 'high_volume'] },
+  { id: 614, name: 'AmeriHealth New Jersey',             category: 'regional', parentOrg: 'AmeriHealth Caritas / IBC',           states: ['NJ'], notes: 'NJ commercial plan affiliated with Independence Blue Cross.', tags: ['behavioral_health', 'caqh_accepts'] },
+
+  // ─── New Mexico (additions) ───
+  { id: 617, name: 'True Health New Mexico',             category: 'regional', parentOrg: 'True Health New Mexico',              states: ['NM'], notes: 'NM ACA marketplace plan. Smaller regional insurer.', tags: ['behavioral_health', 'growing_market'] },
+
+  // ─── New York (additions) ───
+  { id: 620, name: 'Healthfirst',                        category: 'regional', parentOrg: 'Healthfirst',                        states: ['NY'], notes: 'Largest Medicaid managed care plan in NY. Also commercial and Medicare. Major NYC-area plan.', tags: ['behavioral_health', 'medicaid_prerequisite', 'must_have', 'high_volume'] },
+  { id: 621, name: 'Fidelis Care',                       category: 'medicaid_mco', parentOrg: 'Centene Corporation',             states: ['NY'], notes: 'Major NY Medicaid and Medicare plan. Acquired by Centene. Statewide coverage.', tags: ['behavioral_health', 'medicaid_prerequisite', 'must_have', 'high_volume', 'substance_use'] },
+  { id: 622, name: 'EmblemHealth',                       category: 'regional', parentOrg: 'EmblemHealth',                        states: ['NY'], notes: 'Major NYC-area commercial plan (GHI + HIP merged). Also owns ConnectiCare.', tags: ['behavioral_health', 'caqh_accepts', 'high_volume'] },
+  { id: 623, name: 'MVP Health Care',                    category: 'regional', parentOrg: 'MVP Health Care',                     states: ['NY', 'VT'], notes: 'Upstate NY and VT regional plan. Commercial, Medicare, and Medicaid products.', tags: ['behavioral_health', 'caqh_accepts'] },
+
+  // ─── North Carolina (additions) ───
+  { id: 626, name: 'BCBS of North Carolina',             category: 'bcbs_independent', parentOrg: 'BCBS of NC',                  states: ['NC'], notes: 'Dominant insurer in NC. Independent BCBS licensee.', tags: ['caqh_accepts', 'behavioral_health', 'must_have', 'high_volume'] },
+  { id: 627, name: 'WellCare of North Carolina',        category: 'medicaid_mco', parentOrg: 'Centene Corporation',              states: ['NC'], notes: 'NC Medicaid managed care (Centene/WellCare). Launched with NC Medicaid transformation.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+  { id: 628, name: 'Healthy Blue NC',                    category: 'medicaid_mco', parentOrg: 'Elevance Health / BCBS NC',       states: ['NC'], notes: 'NC Medicaid MCO. Joint venture between Elevance and BCBS NC.', tags: ['behavioral_health', 'medicaid_prerequisite'] },
+
+  // ─── North Dakota (additions) ───
+  { id: 631, name: 'Medica North Dakota',                category: 'regional', parentOrg: 'Medica',                              states: ['ND'], notes: 'Medica individual and group products in ND market.', tags: ['behavioral_health', 'caqh_accepts'] },
+
+  // ─── Ohio (additions) ───
+  { id: 634, name: 'CareSource Ohio',                    category: 'medicaid_mco', parentOrg: 'CareSource',                      states: ['OH'], notes: 'OH Medicaid MCO. Largest Medicaid plan in OH. Also marketplace and Medicare.', tags: ['behavioral_health', 'medicaid_prerequisite', 'must_have', 'high_volume', 'substance_use'] },
+  { id: 635, name: 'Paramount Health Care',              category: 'regional', parentOrg: 'ProMedica',                           states: ['OH'], notes: 'NW Ohio (Toledo area) regional plan. Affiliated with ProMedica health system.', tags: ['behavioral_health', 'caqh_accepts'] },
+  { id: 636, name: 'Medical Mutual of Ohio',             category: 'regional', parentOrg: 'Medical Mutual of Ohio',              states: ['OH'], notes: 'Oldest and one of largest OH-only health insurers. Major commercial plan.', tags: ['behavioral_health', 'caqh_accepts', 'high_volume'] },
+
+  // ─── Oklahoma (additions) ───
+  { id: 639, name: 'SoonerCare (OK Medicaid)',           category: 'other', parentOrg: 'Oklahoma Health Care Authority',          states: ['OK'], notes: 'OK Medicaid program. Primarily fee-for-service. Direct enrollment required.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+  { id: 640, name: 'CommunityCare Oklahoma',             category: 'regional', parentOrg: 'CommunityCare',                       states: ['OK'], notes: 'Tulsa-area HMO. Major employer-group plan in NE Oklahoma.', tags: ['behavioral_health', 'caqh_accepts'] },
+
+  // ─── Pennsylvania (additions) ───
+  { id: 643, name: 'Highmark BCBS Pennsylvania',        category: 'bcbs_highmark', parentOrg: 'Highmark Health',                 states: ['PA'], notes: 'Highmark operates BCBS in western PA and select eastern PA markets. Major PA insurer.', tags: ['caqh_accepts', 'behavioral_health', 'must_have', 'high_volume'] },
+  { id: 644, name: 'UPMC Health Plan',                   category: 'regional', parentOrg: 'UPMC',                                states: ['PA'], notes: 'UPMC system commercial and Medicare plan. Major competitor to Highmark in western PA.', tags: ['behavioral_health', 'caqh_accepts', 'high_volume'] },
+
+  // ─── South Carolina (additions) ───
+  { id: 647, name: 'BCBS of South Carolina',             category: 'bcbs_independent', parentOrg: 'BCBS of SC',                  states: ['SC'], notes: 'Dominant insurer in SC. Independent BCBS licensee.', tags: ['caqh_accepts', 'behavioral_health', 'must_have', 'high_volume'] },
+  { id: 648, name: 'Select Health of South Carolina',   category: 'medicaid_mco', parentOrg: 'AmeriHealth Caritas',              states: ['SC'], notes: 'SC Medicaid MCO.', tags: ['behavioral_health', 'medicaid_prerequisite'] },
+  { id: 649, name: 'Molina Healthcare of South Carolina', category: 'medicaid_mco', parentOrg: 'Molina Healthcare',              states: ['SC'], notes: 'SC Medicaid managed care plan.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+
+  // ─── South Dakota (additions) ───
+  { id: 652, name: 'Avera Health Plans',                 category: 'regional', parentOrg: 'Avera Health',                        states: ['SD'], notes: 'SD health system plan. Commercial and Medicare products.', tags: ['behavioral_health', 'caqh_accepts'] },
+
+  // ─── Tennessee (additions) ───
+  { id: 655, name: 'BCBS of Tennessee',                  category: 'bcbs_independent', parentOrg: 'BCBS of TN',                  states: ['TN'], notes: 'Dominant insurer in TN. Independent BCBS licensee. Also operates BlueCare TennCare MCO.', tags: ['caqh_accepts', 'behavioral_health', 'must_have', 'high_volume'] },
+  { id: 656, name: 'BlueCare Tennessee',                 category: 'medicaid_mco', parentOrg: 'BCBS of TN',                      states: ['TN'], notes: 'BCBS of TN Medicaid (TennCare) MCO. Major TennCare plan.', tags: ['behavioral_health', 'medicaid_prerequisite', 'high_volume'] },
+
+  // ─── Texas (additions) ───
+  { id: 659, name: 'Superior Health Plan',               category: 'medicaid_mco', parentOrg: 'Centene Corporation',              states: ['TX'], notes: 'TX Medicaid MCO (Centene). Largest STAR/STAR+PLUS plan in TX.', tags: ['behavioral_health', 'medicaid_prerequisite', 'must_have', 'high_volume', 'substance_use'] },
+  { id: 660, name: 'Sendero Health Plans',               category: 'regional', parentOrg: 'Sendero Health Plans',                states: ['TX'], notes: 'Central TX (Austin area) ACA marketplace plan. Community-based non-profit.', tags: ['behavioral_health', 'growing_market'] },
+  { id: 661, name: 'Scott & White Health Plan',          category: 'regional', parentOrg: 'Baylor Scott & White Health',         states: ['TX'], notes: 'Central TX health system plan. Commercial and Medicare. Affiliated with Baylor Scott & White.', tags: ['behavioral_health', 'caqh_accepts'] },
+  { id: 662, name: 'Community First Health Plans',       category: 'regional', parentOrg: 'University Health System (SA)',        states: ['TX'], notes: 'San Antonio area health plan. Affiliated with University Health System.', tags: ['behavioral_health', 'medicaid_prerequisite'] },
+
+  // ─── Utah (additions) ───
+  { id: 665, name: 'Molina Healthcare of Utah',          category: 'medicaid_mco', parentOrg: 'Molina Healthcare',               states: ['UT'], notes: 'UT Medicaid managed care plan.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+  { id: 666, name: 'Regence BCBS of Utah',               category: 'bcbs_independent', parentOrg: 'Cambia Health Solutions',     states: ['UT'], notes: 'Regence operates BCBS in UT. Commercial and Medicare products.', tags: ['caqh_accepts', 'behavioral_health', 'high_volume'] },
+
+  // ─── Vermont (additions) ───
+  { id: 669, name: 'MVP Health Care Vermont',            category: 'regional', parentOrg: 'MVP Health Care',                      states: ['VT'], notes: 'MVP products in VT market. Commercial and Medicare.', tags: ['behavioral_health', 'caqh_accepts'] },
+
+  // ─── Virginia (additions) ───
+  { id: 672, name: 'Optima Health',                      category: 'regional', parentOrg: 'Sentara Healthcare',                   states: ['VA'], notes: 'VA regional plan affiliated with Sentara. Commercial, Medicare, and Medicaid in Hampton Roads and beyond.', tags: ['behavioral_health', 'caqh_accepts', 'high_volume'] },
+  { id: 673, name: 'Virginia Premier Health Plan',       category: 'medicaid_mco', parentOrg: 'Sentara Healthcare',               states: ['VA'], notes: 'VA Medicaid MCO. Now Sentara Health Plans. Major VA Medicaid plan.', tags: ['behavioral_health', 'medicaid_prerequisite', 'high_volume'] },
+
+  // ─── Washington (additions) ───
+  { id: 676, name: 'Community Health Plan of Washington', category: 'medicaid_mco', parentOrg: 'CHPW',                           states: ['WA'], notes: 'WA Apple Health (Medicaid) MCO. Non-profit community health plan.', tags: ['behavioral_health', 'medicaid_prerequisite', 'substance_use'] },
+  { id: 677, name: 'Premera BCBS of Washington',        category: 'bcbs_independent', parentOrg: 'Premera Blue Cross',           states: ['WA'], notes: 'BCBS licensee in WA. Major commercial insurer. Separate from Regence.', tags: ['caqh_accepts', 'behavioral_health', 'must_have', 'high_volume'] },
+
+  // ─── West Virginia (additions) ───
+  { id: 680, name: 'The Health Plan (WV)',               category: 'regional', parentOrg: 'The Health Plan',                      states: ['WV', 'OH'], notes: 'WV/OH regional plan. Commercial and Medicare products in northern WV and eastern OH.', tags: ['behavioral_health', 'caqh_accepts'] },
+  { id: 681, name: 'UniCare West Virginia',              category: 'medicaid_mco', parentOrg: 'Elevance Health',                  states: ['WV'], notes: 'WV Medicaid MCO. Managed by Elevance/Anthem subsidiary.', tags: ['behavioral_health', 'medicaid_prerequisite'] },
+
+  // ─── Wisconsin (additions) ───
+  { id: 684, name: 'Network Health Wisconsin',           category: 'regional', parentOrg: 'Network Health',                       states: ['WI'], notes: 'WI regional plan. Commercial and Medicare products.', tags: ['behavioral_health', 'caqh_accepts'] },
+
+  // ─── Wyoming (additions) ───
+  { id: 687, name: 'WINhealth',                          category: 'regional', parentOrg: 'WINhealth Partners',                   states: ['WY'], notes: 'WY-only commercial health plan. ACA marketplace and employer plans.', tags: ['behavioral_health', 'growing_market'] },
 ];
 
 // ── Summary Statistics ──
@@ -294,8 +473,9 @@ export const SUPPLEMENTAL_PAYERS = [
 // Medicare Advantage:                   4 payers (ids 450-453)
 // Workers Comp / Networks:              4 payers (ids 470-473)
 // PPO Networks / Other:                 4 payers (ids 491-495)
+// Additional 50-state payers:         ~80 payers (ids 500-687)
 // ──────────────────────────────────────────────
-// TOTAL:                             ~141 new payers (after removing duplicates with existing catalog)
+// TOTAL:                             ~221 payers (after removing duplicates with existing catalog)
 
 // ── Browser Console Seed (optional — persists to backend) ──
 // To persist these payers to the API, run in browser console:
