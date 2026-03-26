@@ -5590,14 +5590,17 @@ async function renderSettings() {
             <!-- Logo -->
             <div class="auth-field" style="margin:0;">
               <label>Logo</label>
-              <div style="display:flex;gap:8px;align-items:center;">
-                <input type="text" id="branding-logo-url" class="form-control" placeholder="https://example.com/logo.png" style="flex:1;" oninput="window.app.previewBrandingLogo()">
-                <label style="cursor:pointer;background:var(--brand-600);color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;white-space:nowrap;">
-                  Upload
-                  <input type="file" accept="image/*" style="display:none;" onchange="window.app.uploadBrandingLogo(this)">
-                </label>
-              </div>
-              <div style="font-size:11px;color:var(--gray-400);margin-top:4px;">Upload an image or paste a URL. Max 200KB.</div>
+              <input type="hidden" id="branding-logo-url">
+              <label style="cursor:pointer;display:flex;align-items:center;gap:12px;padding:16px;border:2px dashed var(--gray-300);border-radius:12px;transition:border-color 0.15s;" onmouseover="this.style.borderColor='var(--brand-500)'" onmouseout="this.style.borderColor='var(--gray-300)'">
+                <div id="branding-logo-thumb" style="width:48px;height:48px;border-radius:10px;background:var(--gray-100);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">
+                  <span style="color:var(--gray-400);font-size:20px;">+</span>
+                </div>
+                <div>
+                  <div style="font-weight:600;font-size:13px;color:var(--gray-700);">Click to upload logo</div>
+                  <div style="font-size:11px;color:var(--gray-400);">PNG, JPG, SVG — max 200KB</div>
+                </div>
+                <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;" onchange="window.app.uploadBrandingLogo(this)">
+              </label>
             </div>
             <!-- Primary Color -->
             <div class="auth-field" style="margin:0;">
@@ -8983,7 +8986,11 @@ function handleNppesProxy(payload) {
           document.getElementById('branding-accent-color').value = branding.accentColor;
           document.getElementById('branding-accent-color-picker').value = branding.accentColor;
         }
-        if (branding.logoUrl) document.getElementById('branding-logo-url').value = branding.logoUrl;
+        if (branding.logoUrl) {
+          document.getElementById('branding-logo-url').value = branding.logoUrl;
+          const thumb = document.getElementById('branding-logo-thumb');
+          if (thumb) thumb.innerHTML = '<img src="' + branding.logoUrl.replace(/"/g, '&quot;') + '" style="width:100%;height:100%;object-fit:cover;">';
+        }
         if (branding.emailFooter) document.getElementById('branding-email-footer').value = branding.emailFooter;
         if (branding.customDomain) document.getElementById('branding-custom-domain').value = branding.customDomain;
         // Update preview
@@ -9022,6 +9029,8 @@ function handleNppesProxy(payload) {
     reader.onload = (e) => {
       const dataUrl = e.target.result;
       document.getElementById('branding-logo-url').value = dataUrl;
+      const thumb = document.getElementById('branding-logo-thumb');
+      if (thumb) thumb.innerHTML = '<img src="' + dataUrl + '" style="width:100%;height:100%;object-fit:cover;">';
       this.previewBrandingLogo();
       showToast('Logo loaded — click Save to apply');
     };
