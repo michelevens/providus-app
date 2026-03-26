@@ -38,6 +38,124 @@ function initPlacesAutocomplete(inputId, { streetId, cityId, stateId, zipId } = 
   });
 }
 
+// ─── Subscription Usage Cache ───
+let _subscriptionCache = null;
+let _subscriptionCacheTime = 0;
+const SUBSCRIPTION_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function _getCachedSubscription() {
+  const now = Date.now();
+  if (_subscriptionCache && (now - _subscriptionCacheTime) < SUBSCRIPTION_CACHE_TTL) {
+    return _subscriptionCache;
+  }
+  try {
+    _subscriptionCache = await store.getSubscriptionStatus();
+    _subscriptionCacheTime = now;
+  } catch (e) {
+    console.warn('Failed to fetch subscription status:', e);
+    _subscriptionCache = null;
+  }
+  return _subscriptionCache;
+}
+
+function _renderUsageBanner(warnings) {
+  // Remove existing banner
+  const existing = document.getElementById('usage-banner');
+  if (existing) existing.remove();
+
+  if (!warnings || warnings.length === 0) return;
+
+  // Check sessionStorage dismissals
+  const dismissed = JSON.parse(sessionStorage.getItem('_usageBannerDismissed') || '[]');
+  const activeWarnings = warnings.filter(w => !dismissed.includes(w.key));
+  if (activeWarnings.length === 0) return;
+
+  // Show the highest severity warning (100% > 80%)
+  const critical = activeWarnings.find(w => w.atLimit);
+  const warn = critical || activeWarnings[0];
+
+  const isCritical = !!warn.atLimit;
+  const bgColor = isCritical ? 'var(--red, #dc3545)' : 'var(--gold, #d4a017)';
+  const textColor = isCritical ? '#fff' : '#1a1a1a';
+
+  const banner = document.createElement('div');
+  banner.id = 'usage-banner';
+  banner.style.cssText = `background:${bgColor};color:${textColor};padding:10px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;font-weight:600;border-radius:8px;margin-bottom:12px;`;
+  banner.innerHTML = `
+    <span>${_escBannerHtml(warn.message)}</span>
+    <span style="display:flex;gap:8px;flex-shrink:0;">
+      <button onclick="window.app.navigateTo('billing');window._billingTab='subscription';" style="background:${isCritical ? '#fff' : 'var(--brand-800,#1a365d)'};color:${isCritical ? 'var(--red,#dc3545)' : '#fff'};border:none;padding:5px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">Upgrade Now</button>
+      <button onclick="this.closest('#usage-banner').remove();try{var d=JSON.parse(sessionStorage.getItem('_usageBannerDismissed')||'[]');d.push('${warn.key}');sessionStorage.setItem('_usageBannerDismissed',JSON.stringify(d));}catch(e){}" style="background:transparent;border:1px solid ${textColor};color:${textColor};padding:5px 10px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;opacity:0.8;">Dismiss</button>
+    </span>
+  `;
+
+  const pageBody = document.getElementById('page-body');
+  if (pageBody && pageBody.parentNode) {
+    pageBody.parentNode.insertBefore(banner, pageBody);
+  }
+}
+
+function _escBannerHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+async function checkUsageWarnings() {
+  const sub = await _getCachedSubscription();
+  if (!sub) return;
+
+  const usage = sub.usage || {};
+  const limits = sub.limits || {};
+  const planName = sub.planTier || sub.plan_tier || 'starter';
+  const planLabel = planName.charAt(0).toUpperCase() + planName.slice(1);
+
+  const warnings = [];
+
+  const resources = [
+    { key: 'providers', label: 'providers', used: usage.providers || 0, limit: limits.providers },
+    { key: 'users', label: 'team members', used: usage.users || 0, limit: limits.users },
+    { key: 'applications', label: 'applications', used: usage.applications || 0, limit: limits.applications },
+  ];
+
+  for (const r of resources) {
+    if (!r.limit || r.limit === -1) continue; // unlimited
+    const pct = r.used / r.limit;
+    if (pct >= 1) {
+      warnings.push({
+        key: r.key + '-limit',
+        atLimit: true,
+        resource: r.key,
+        message: `You've reached the ${r.label} limit on your ${planLabel} plan. Upgrade to add more ${r.label}.`,
+      });
+    } else if (pct >= 0.8) {
+      warnings.push({
+        key: r.key + '-warning',
+        atLimit: false,
+        resource: r.key,
+        message: `You're using ${r.used} of ${r.limit} ${r.label} on your ${planLabel} plan. Upgrade for more.`,
+      });
+    }
+  }
+
+  _renderUsageBanner(warnings);
+}
+
+async function _checkResourceLimit(resourceKey, label) {
+  const sub = await _getCachedSubscription();
+  if (!sub) return true; // allow if we can't check
+  const usage = sub.usage || {};
+  const limits = sub.limits || {};
+  const limit = limits[resourceKey];
+  if (!limit || limit === -1) return true; // unlimited
+  const used = usage[resourceKey] || 0;
+  if (used >= limit) {
+    const planName = sub.planTier || sub.plan_tier || 'starter';
+    const planLabel = planName.charAt(0).toUpperCase() + planName.slice(1);
+    showToast(`You've reached the ${label} limit (${used}/${limit}) on your ${planLabel} plan. Upgrade to add more.`, 'error');
+    return false;
+  }
+  return true;
+}
+
 // ─── Global Error & Offline Handlers ───
 
 window.addEventListener('unhandledrejection', (event) => {
@@ -523,13 +641,13 @@ export async function initApp() {
   await navigateTo('dashboard');
   await updateNotificationBell();
 
-  // First-run setup wizard for new accounts
+  // First-run onboarding for new agency accounts
   if (userLevel >= 3) {
     try {
       const providers = await store.getAll('providers');
       if (!providers || providers.length === 0) {
-        if (!localStorage.getItem('credentik_setup_dismissed')) {
-          showSetupWizard();
+        if (!localStorage.getItem('credentik_onboarding_complete') && !localStorage.getItem('credentik_setup_dismissed')) {
+          showAgencyOnboarding();
         }
       }
     } catch {}
@@ -1138,6 +1256,9 @@ async function navigateTo(page) {
     default:
       pageBody.innerHTML = '<div class="empty-state"><h3>Page not found</h3></div>';
   }
+
+  // Check usage warnings after page render (non-blocking)
+  checkUsageWarnings().catch(() => {});
 }
 
 // ─── My Account ───
@@ -3977,6 +4098,12 @@ async function renderProviders() {
 }
 
 async function openProviderModal(id) {
+  // Block new provider creation if at plan limit (allow editing existing)
+  if (!id) {
+    const allowed = await _checkResourceLimit('providers', 'provider');
+    if (!allowed) return;
+  }
+
   const modal = document.getElementById('prov-modal');
   const title = document.getElementById('prov-modal-title');
   const form = document.getElementById('prov-modal-form');
@@ -4087,8 +4214,16 @@ window.saveProvider = async function() {
     await store.update('providers', id, data);
     showToast('Provider updated');
   } else {
-    await store.create('providers', data);
+    const created = await store.create('providers', data);
+    _subscriptionCache = null; // Invalidate cache so usage counts refresh
     showToast('Provider added');
+    // Fire automation rules for new provider
+    const newProvId = created?.id || null;
+    if (newProvId) {
+      workflow.processAutomationRules('provider.created', {
+        providerId: newProvId, provider: { ...data, id: newProvId },
+      }).catch(err => console.warn('[Automation] provider-created trigger error:', err));
+    }
   }
 
   closeProvModal();
@@ -8414,7 +8549,11 @@ function handleNppesProxy(payload) {
   },
 
   // ── User Management ───────────────────────────────────────
-  inviteUser() {
+  async inviteUser() {
+    // Check user limit before opening invite modal
+    const allowed = await _checkResourceLimit('users', 'team member');
+    if (!allowed) return;
+
     ['invite-first-name','invite-last-name','invite-email','invite-password'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
@@ -8520,6 +8659,7 @@ function handleNppesProxy(payload) {
         organization_id: organizationId ? parseInt(organizationId) : null,
         provider_id: providerId ? parseInt(providerId) : null,
       });
+      _subscriptionCache = null; // Invalidate cache so usage counts refresh
       showToast('User created successfully');
       document.getElementById('invite-user-modal')?.classList.remove('active');
       await renderUsersStub();
@@ -10468,6 +10608,10 @@ function handleNppesProxy(payload) {
       showToast(`Moved to ${newStatus.replace(/_/g, ' ')}`);
       // Fire-and-forget notification for status change
       _triggerStatusChangeNotification(appId, newStatus).catch(() => {});
+      // Fire automation rules for status change
+      workflow.processAutomationRules('application.status_changed', {
+        appId, oldStatus: '', newStatus, application: null,
+      }).catch(err => console.warn('[Automation] kanban trigger error:', err));
       await renderKanbanBoard();
     } catch (e) {
       showToast('Cannot transition: ' + (e.message || 'Invalid status change'));
@@ -11080,6 +11224,12 @@ window.saveApplication = async function() {
     }
     await store.update('applications', id, data);
     showToast('Application updated');
+    // Fire automation rules if status changed via edit form
+    if (existing && existing.status !== data.status) {
+      workflow.processAutomationRules('application.status_changed', {
+        appId: id, oldStatus: existing.status, newStatus: data.status, application: { ...existing, ...data },
+      }).catch(err => console.warn('[Automation] edit-status trigger error:', err));
+    }
   } else {
     const created = await store.create('applications', data);
     if (created && created.id) {
@@ -11091,6 +11241,10 @@ window.saveApplication = async function() {
           outcome: 'Application created',
         });
       } catch (e) { console.error('Failed to log creation:', e); }
+      // Fire automation rules for new application
+      workflow.processAutomationRules('application.created', {
+        appId: created.id, application: created,
+      }).catch(err => console.warn('[Automation] app-created trigger error:', err));
     }
     showToast('Application added');
   }
