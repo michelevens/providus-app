@@ -7,6 +7,7 @@ const { store, auth, CONFIG, workflow, escHtml, escAttr, formatDateDisplay, toHe
         renderPayerTags, sortArrow, timeAgo,
         renderDocumentVersioning, getDocVersionBadge, getDocExpiryHtml, openSignatureModal,
         PAYER_CATALOG, STATES, APPLICATION_STATUSES, PAYER_TAG_DEFS,
+        PAYER_SLA_DEFAULTS, getPayerSLA,
         CRED_DOCUMENTS,
         PRESET_INSTITUTIONS, PRESET_DEGREES, PRESET_FIELDS_OF_STUDY,
         PRESET_BOARDS, PRESET_MALPRACTICE_CARRIERS, PRESET_COVERAGE_AMOUNTS,
@@ -1491,24 +1492,46 @@ async function renderProviderProfilePage(providerId) {
         </div>
       </div>
 
-      <!-- In-Progress Applications -->
+      <!-- In-Progress Applications with SLA Tracking -->
       ${pendingApps.length > 0 ? '<div class="card" style="border-radius:16px;overflow:hidden;margin-bottom:20px;">' +
         '<div class="card-header"><h3 style="color:#f59e0b;">&#9203; In Progress ('+pendingApps.length+')</h3></div>' +
-        '<div class="card-body" style="padding:0;"><table><thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th><th>Days Pending</th><th>Tags</th></tr></thead><tbody>' +
+        '<div class="card-body" style="padding:0;"><table><thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th><th>SLA Progress</th><th>Timeline</th></tr></thead><tbody>' +
         pendingApps.map(a => {
           const payer = getPayerById(a.payerId) || {};
           const payerName = payer.name || a.payerName || a.payer_name || (typeof a.payer === 'object' && a.payer ? a.payer.name : a.payer) || '—';
           const submitted = a.submittedDate || a.submitted_date || a.created_at || a.createdAt;
-          const daysPending = submitted ? Math.floor((new Date() - new Date(submitted)) / 86400000) : '—';
+          const daysPending = submitted ? Math.floor((new Date() - new Date(submitted)) / 86400000) : null;
           const statusLabel = a.status === 'in_review' ? 'In Review' : a.status === 'pending_info' ? 'Info Needed' : a.status === 'gathering_docs' ? 'Gathering Docs' : (a.status || 'Pending');
           const statusColor = a.status === 'pending_info' ? '#f59e0b' : '#3b82f6';
+          const sla = getPayerSLA(payerName);
+          const elapsed = daysPending || 0;
+          const slaPct = sla.avgDays > 0 ? elapsed / sla.avgDays : 0;
+          const barPct = Math.min(100, Math.round((elapsed / sla.maxDays) * 100));
+          const isOverdue = elapsed > sla.maxDays;
+          const isAtRisk = !isOverdue && slaPct > 0.75;
+          const barColor = isOverdue ? '#EF4444' : isAtRisk ? '#F59E0B' : '#10B981';
+          const slaLabel = isOverdue ? 'OVERDUE' : isAtRisk ? 'AT RISK' : 'On Track';
+          const slaBadgeBg = isOverdue ? '#FEE2E2' : isAtRisk ? '#FEF3C7' : '#D1FAE5';
+          const slaBadgeColor = isOverdue ? '#EF4444' : isAtRisk ? '#F59E0B' : '#065f46';
           return '<tr>' +
             '<td><strong>' + escHtml(payerName) + '</strong></td>' +
             '<td>' + escHtml(a.state || '—') + '</td>' +
             '<td><span class="badge" style="background:' + statusColor + '22;color:' + statusColor + ';font-size:10px;font-weight:600;padding:3px 8px;border-radius:12px;">' + escHtml(statusLabel) + '</span></td>' +
             '<td>' + fmtDate(submitted) + '</td>' +
-            '<td>' + (typeof daysPending === 'number' ? '<strong>' + daysPending + '</strong> days' : '—') + '</td>' +
-            '<td>' + renderPayerTags(payer.tags || []) + '</td>' +
+            '<td style="min-width:180px;">' +
+              '<div style="display:flex;align-items:center;gap:8px;">' +
+                '<div style="flex:1;height:8px;border-radius:4px;background:#f3f4f6;overflow:hidden;">' +
+                  '<div style="height:100%;width:' + barPct + '%;background:' + barColor + ';border-radius:4px;transition:width 0.3s;"></div>' +
+                '</div>' +
+                '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;background:' + slaBadgeBg + ';color:' + slaBadgeColor + ';white-space:nowrap;">' + slaLabel + '</span>' +
+              '</div>' +
+              '<div style="font-size:10px;color:var(--gray-500);margin-top:3px;">Elapsed: <strong>' + (daysPending !== null ? daysPending + 'd' : '—') + '</strong> &middot; Expected: ~' + sla.avgDays + 'd</div>' +
+            '</td>' +
+            '<td style="font-size:11px;color:var(--gray-500);white-space:nowrap;">' +
+              '<div>Min: ' + sla.minDays + 'd</div>' +
+              '<div>Avg: ' + sla.avgDays + 'd</div>' +
+              '<div>Max: ' + sla.maxDays + 'd</div>' +
+            '</td>' +
           '</tr>';
         }).join('') +
         '</tbody></table></div></div>' : ''}
