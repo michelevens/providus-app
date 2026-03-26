@@ -1933,7 +1933,7 @@
       try {
         const res = await fetch('https://api.credentik.com/api/auth/login', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify({ email, password })
         });
         const data = await res.json();
@@ -1977,7 +1977,7 @@
       try {
         const res = await fetch('https://api.credentik.com/api/auth/register', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify({ agency_name: agency, first_name: firstName, last_name: lastName, email, password, password_confirmation: confirm })
         });
         const data = await res.json();
