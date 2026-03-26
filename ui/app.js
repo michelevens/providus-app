@@ -1273,6 +1273,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderCalendarPage();
       break;
+    case 'bottleneck':
+      pageTitle.textContent = 'Pipeline Analytics';
+      pageSubtitle.textContent = 'Identify bottlenecks and optimize credentialing speed';
+      pageActions.innerHTML = printBtn;
+      await renderBottleneckAnalysis();
+      break;
     case 'admin':
       pageTitle.textContent = 'Super Admin';
       pageSubtitle.textContent = 'Manage all agencies and system settings';
@@ -6357,6 +6363,7 @@ async function renderFaqPage()               { (await _page('admin')).renderFaqP
 async function renderAutomationsPage()       { (await _page('admin')).renderAutomationsPage(); }
 async function renderApiDocsPage()           { (await _page('admin')).renderApiDocsPage(); }
 async function renderNotificationSettingsPage() { (await _page('admin')).renderNotificationSettingsPage(); }
+async function renderBottleneckAnalysis()    { (await _page('admin')).renderBottleneckAnalysis(); }
 async function renderProviderDashboard(u)    { (await _page('provider-profile')).renderProviderDashboard(u); }
 async function renderProviderProfilePage(id) { (await _page('provider-profile')).renderProviderProfilePage(id); }
 async function renderProviderPrintout(id)    { (await _page('provider-profile')).renderProviderPrintout(id); }
@@ -11451,6 +11458,25 @@ function handleNppesProxy(payload) {
   refreshEmbedSnippets() {
     // Just show toast — snippets are regenerated on re-render
     showToast('Widget settings updated');
+  },
+
+  // ─── Pipeline Analytics (Bottleneck) ───
+  async nudgeStuckApp(appId, provName, payerName) {
+    try {
+      await store.create('tasks', {
+        title: `Follow up: ${provName} / ${payerName} — application stalled`,
+        category: 'followup',
+        priority: 'high',
+        dueDate: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0],
+        linkableType: 'application',
+        linkableId: appId,
+        linkedApplicationId: appId,
+        status: 'pending',
+      });
+      showToast('Follow-up task created for ' + provName);
+    } catch (e) {
+      showToast('Failed to create nudge task: ' + e.message, 'error');
+    }
   },
 };
 

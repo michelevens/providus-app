@@ -7,12 +7,83 @@ const { store, auth, CONFIG, workflow, escHtml, escAttr, formatDateDisplay, toHe
         renderPayerTags, sortArrow, timeAgo,
         renderDocumentVersioning, getDocVersionBadge, getDocExpiryHtml, openSignatureModal,
         PAYER_CATALOG, STATES, APPLICATION_STATUSES, PAYER_TAG_DEFS,
-        PAYER_SLA_DEFAULTS, getPayerSLA,
+        PAYER_SLA_DEFAULTS, getPayerSLA, analyzeHistoricalTimelines,
         CRED_DOCUMENTS,
         PRESET_INSTITUTIONS, PRESET_DEGREES, PRESET_FIELDS_OF_STUDY,
         PRESET_BOARDS, PRESET_MALPRACTICE_CARRIERS, PRESET_COVERAGE_AMOUNTS,
         PRESET_EMPLOYERS, PRESET_POSITIONS, PRESET_CME_PROVIDERS,
         PRESET_CME_COURSES } = window._credentik;
+
+// ─── Predictive Timeline Analytics ───
+
+/**
+ * predictApplicationTimeline — estimates how long an application will take
+ * based on historical data for the same payer and SLA fallbacks.
+ * @param {Object} app - The application to predict
+ * @param {Array} allApps - All applications (for historical analysis)
+ * @param {Object} payerSLA - Result of getPayerSLA() for this payer
+ * @returns {{ predictedDays, confidence, basedOn, estimatedApprovalDate, riskLevel }}
+ */
+function predictApplicationTimeline(app, allApps, payerSLA) {
+  const payerName = app.payerName || app.payer_name || (typeof app.payer === 'object' && app.payer ? app.payer.name : '') || '';
+  const appState = app.state || '';
+  const appSpecialty = app.specialty || app.providerSpecialty || '';
+
+  // Find completed apps for the same payer
+  const completed = allApps.filter(a => {
+    if (a.status !== 'approved' && a.status !== 'credentialed') return false;
+    const aPayer = a.payerName || a.payer_name || (typeof a.payer === 'object' && a.payer ? a.payer.name : '') || '';
+    return aPayer === payerName;
+  });
+
+  // Calculate actual days for completed apps
+  const historicalDays = [];
+  const stateMatchDays = [];
+  const specMatchDays = [];
+  completed.forEach(a => {
+    const submitted = a.submittedDate || a.submitted_date || a.created_at || a.createdAt;
+    const approved = a.effectiveDate || a.effective_date || a.approvedDate || a.approved_date || a.updatedAt || a.updated_at;
+    if (!submitted || !approved) return;
+    const days = Math.floor((new Date(approved) - new Date(submitted)) / 86400000);
+    if (days <= 0 || days > 730) return;
+    historicalDays.push(days);
+    if (appState && a.state === appState) stateMatchDays.push(days);
+    const aSpec = a.specialty || a.providerSpecialty || '';
+    if (appSpecialty && aSpec === appSpecialty) specMatchDays.push(days);
+  });
+
+  let predictedDays, confidence, basedOn;
+
+  if (historicalDays.length >= 5) {
+    // High confidence — use state/specialty refinement if available
+    const pool = stateMatchDays.length >= 3 ? stateMatchDays : specMatchDays.length >= 3 ? specMatchDays : historicalDays;
+    predictedDays = Math.round(pool.reduce((s, d) => s + d, 0) / pool.length);
+    confidence = 'high';
+    basedOn = pool.length + ' completed ' + payerName + ' applications' + (pool === stateMatchDays ? ' (state match)' : pool === specMatchDays ? ' (specialty match)' : '');
+  } else if (historicalDays.length >= 2) {
+    predictedDays = Math.round(historicalDays.reduce((s, d) => s + d, 0) / historicalDays.length);
+    confidence = 'medium';
+    basedOn = historicalDays.length + ' completed ' + payerName + ' applications';
+  } else {
+    predictedDays = payerSLA.avgDays;
+    confidence = 'low';
+    basedOn = 'Payer SLA defaults (' + payerSLA.avgDays + 'd avg)';
+  }
+
+  // Calculate estimated approval date
+  const submitted = app.submittedDate || app.submitted_date || app.created_at || app.createdAt;
+  let estimatedApprovalDate = null;
+  let riskLevel = 'on-track';
+  if (submitted) {
+    const submittedDate = new Date(submitted);
+    estimatedApprovalDate = new Date(submittedDate.getTime() + predictedDays * 86400000);
+    const elapsed = Math.floor((new Date() - submittedDate) / 86400000);
+    if (elapsed > predictedDays * 1.2) riskLevel = 'delayed';
+    else if (elapsed > predictedDays * 0.75) riskLevel = 'at-risk';
+  }
+
+  return { predictedDays, confidence, basedOn, estimatedApprovalDate, riskLevel };
+}
 
 async function renderProviderDashboard(user) {
   const body = document.getElementById('page-body');
@@ -1038,6 +1109,57 @@ async function renderProviderProfilePage(providerId) {
           </table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No licenses on file.</div>'}
         </div>
       </div>
+
+      <!-- Timeline Predictions -->
+      ${(() => {
+        const pendApps = provApps.filter(a => ['submitted','in_review','pending_info','gathering_docs','pending','new'].includes(a.status));
+        if (pendApps.length === 0) return '';
+        const predictions = pendApps.map(a => {
+          const payer = getPayerById(a.payerId) || {};
+          const payerName = payer.name || a.payerName || a.payer_name || '';
+          const sla = getPayerSLA(payerName);
+          return { app: a, payerName: payerName || 'Unknown', ...predictApplicationTimeline(a, provApps, sla) };
+        }).sort((a, b) => (a.estimatedApprovalDate || new Date(9999,0)) - (b.estimatedApprovalDate || new Date(9999,0)));
+        const nextApproval = predictions[0];
+        const onTrack = predictions.filter(p => p.riskLevel === 'on-track').length;
+        const atRisk = predictions.filter(p => p.riskLevel === 'at-risk').length;
+        const delayed = predictions.filter(p => p.riskLevel === 'delayed').length;
+        const totalHistorical = provApps.filter(a => a.status === 'approved' || a.status === 'credentialed').length;
+        const confDot = (c) => c === 'high' ? '#10B981' : c === 'medium' ? '#F59E0B' : '#9CA3AF';
+        const rClr = (r) => r === 'delayed' ? '#EF4444' : r === 'at-risk' ? '#F59E0B' : '#10B981';
+        const rBg = (r) => r === 'delayed' ? '#FEE2E2' : r === 'at-risk' ? '#FEF3C7' : '#D1FAE5';
+        const rLbl = (r) => r === 'delayed' ? 'Delayed' : r === 'at-risk' ? 'At Risk' : 'On Track';
+        return '<div class="card" style="margin-top:16px;border-radius:16px;overflow:hidden;border-left:3px solid #6366f1;">' +
+          '<div class="card-header"><h3 style="color:#6366f1;">&#128338; Timeline Predictions</h3></div>' +
+          '<div class="card-body">' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">' +
+              '<div style="padding:14px;border-radius:12px;background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.06));border:1px solid rgba(99,102,241,0.15);">' +
+                '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray-500);margin-bottom:6px;">Next Expected Approval</div>' +
+                '<div style="font-size:16px;font-weight:700;color:#6366f1;">' + escHtml(nextApproval.payerName) + '</div>' +
+                (nextApproval.estimatedApprovalDate ? '<div style="font-size:13px;color:var(--gray-700);margin-top:2px;">' + nextApproval.estimatedApprovalDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) + '</div>' : '') +
+                '<div style="display:flex;align-items:center;gap:4px;margin-top:6px;"><span style="width:7px;height:7px;border-radius:50%;background:' + confDot(nextApproval.confidence) + ';display:inline-block;"></span><span style="font-size:10px;color:var(--gray-500);text-transform:capitalize;">' + nextApproval.confidence + ' confidence</span></div>' +
+              '</div>' +
+              '<div style="padding:14px;border-radius:12px;background:var(--gray-50);border:1px solid var(--gray-200);">' +
+                '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray-500);margin-bottom:6px;">Timeline Health</div>' +
+                '<div style="display:flex;gap:12px;margin-top:8px;">' +
+                  (onTrack > 0 ? '<div style="text-align:center;"><div style="font-size:20px;font-weight:800;color:#10B981;">' + onTrack + '</div><div style="font-size:10px;color:var(--gray-500);">On Track</div></div>' : '') +
+                  (atRisk > 0 ? '<div style="text-align:center;"><div style="font-size:20px;font-weight:800;color:#F59E0B;">' + atRisk + '</div><div style="font-size:10px;color:var(--gray-500);">At Risk</div></div>' : '') +
+                  (delayed > 0 ? '<div style="text-align:center;"><div style="font-size:20px;font-weight:800;color:#EF4444;">' + delayed + '</div><div style="font-size:10px;color:var(--gray-500);">Delayed</div></div>' : '') +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+            predictions.map(function(p) {
+              var dateStr = p.estimatedApprovalDate ? p.estimatedApprovalDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+              return '<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--gray-100);">' +
+                '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;color:var(--gray-800);">' + escHtml(p.payerName) + '</div><div style="font-size:10px;color:var(--gray-500);">' + escHtml(p.app.state || '') + ' &middot; ~' + p.predictedDays + ' days</div></div>' +
+                '<div style="font-size:12px;font-weight:600;color:' + rClr(p.riskLevel) + ';">' + dateStr + '</div>' +
+                '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:' + rBg(p.riskLevel) + ';color:' + rClr(p.riskLevel) + ';">' + rLbl(p.riskLevel) + '</span>' +
+                '<span style="display:inline-flex;align-items:center;gap:3px;" title="' + escAttr(p.basedOn) + '"><span style="width:6px;height:6px;border-radius:50%;background:' + confDot(p.confidence) + ';display:inline-block;"></span></span>' +
+              '</div>';
+            }).join('') +
+            '<div style="margin-top:12px;font-size:10px;color:var(--gray-400);font-style:italic;">Based on ' + totalHistorical + ' historical application' + (totalHistorical !== 1 ? 's' : '') + ' and payer SLA data. Predictions are estimates, not guarantees.</div>' +
+          '</div></div>';
+      })()}
     </div>
 
     <!-- Education Tab -->
@@ -1492,10 +1614,10 @@ async function renderProviderProfilePage(providerId) {
         </div>
       </div>
 
-      <!-- In-Progress Applications with SLA Tracking -->
+      <!-- In-Progress Applications with SLA Tracking & Predictions -->
       ${pendingApps.length > 0 ? '<div class="card" style="border-radius:16px;overflow:hidden;margin-bottom:20px;">' +
         '<div class="card-header"><h3 style="color:#f59e0b;">&#9203; In Progress ('+pendingApps.length+')</h3></div>' +
-        '<div class="card-body" style="padding:0;"><table><thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th><th>SLA Progress</th><th>Timeline</th></tr></thead><tbody>' +
+        '<div class="card-body" style="padding:0;"><table><thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th><th>SLA Progress</th><th>Predicted Approval</th><th>Timeline</th></tr></thead><tbody>' +
         pendingApps.map(a => {
           const payer = getPayerById(a.payerId) || {};
           const payerName = payer.name || a.payerName || a.payer_name || (typeof a.payer === 'object' && a.payer ? a.payer.name : a.payer) || '—';
@@ -1513,6 +1635,12 @@ async function renderProviderProfilePage(providerId) {
           const slaLabel = isOverdue ? 'OVERDUE' : isAtRisk ? 'AT RISK' : 'On Track';
           const slaBadgeBg = isOverdue ? '#FEE2E2' : isAtRisk ? '#FEF3C7' : '#D1FAE5';
           const slaBadgeColor = isOverdue ? '#EF4444' : isAtRisk ? '#F59E0B' : '#065f46';
+          const pred = predictApplicationTimeline(a, provApps, sla);
+          const predDateStr = pred.estimatedApprovalDate ? pred.estimatedApprovalDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+          const confDotColor = pred.confidence === 'high' ? '#10B981' : pred.confidence === 'medium' ? '#F59E0B' : '#9CA3AF';
+          const riskClr = pred.riskLevel === 'delayed' ? '#EF4444' : pred.riskLevel === 'at-risk' ? '#F59E0B' : '#10B981';
+          const riskBg = pred.riskLevel === 'delayed' ? '#FEE2E2' : pred.riskLevel === 'at-risk' ? '#FEF3C7' : '#D1FAE5';
+          const riskLbl = pred.riskLevel === 'delayed' ? 'Delayed' : pred.riskLevel === 'at-risk' ? 'At Risk' : 'On Track';
           return '<tr>' +
             '<td><strong>' + escHtml(payerName) + '</strong></td>' +
             '<td>' + escHtml(a.state || '—') + '</td>' +
@@ -1526,6 +1654,15 @@ async function renderProviderProfilePage(providerId) {
                 '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;background:' + slaBadgeBg + ';color:' + slaBadgeColor + ';white-space:nowrap;">' + slaLabel + '</span>' +
               '</div>' +
               '<div style="font-size:10px;color:var(--gray-500);margin-top:3px;">Elapsed: <strong>' + (daysPending !== null ? daysPending + 'd' : '—') + '</strong> &middot; Expected: ~' + sla.avgDays + 'd</div>' +
+            '</td>' +
+            '<td style="min-width:150px;">' +
+              '<div style="font-weight:600;font-size:12px;color:' + riskClr + ';">' + predDateStr + '</div>' +
+              '<div style="display:flex;align-items:center;gap:4px;margin-top:3px;">' +
+                '<span style="width:7px;height:7px;border-radius:50%;background:' + confDotColor + ';display:inline-block;" title="' + escAttr(pred.basedOn) + '"></span>' +
+                '<span style="font-size:10px;color:var(--gray-500);text-transform:capitalize;">' + pred.confidence + '</span>' +
+                '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px;background:' + riskBg + ';color:' + riskClr + ';margin-left:4px;">' + riskLbl + '</span>' +
+              '</div>' +
+              '<div style="font-size:9px;color:var(--gray-400);margin-top:2px;" title="' + escAttr(pred.basedOn) + '">~' + pred.predictedDays + 'd est.</div>' +
             '</td>' +
             '<td style="font-size:11px;color:var(--gray-500);white-space:nowrap;">' +
               '<div>Min: ' + sla.minDays + 'd</div>' +
