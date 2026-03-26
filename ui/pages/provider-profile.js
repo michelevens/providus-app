@@ -278,17 +278,121 @@ async function renderProviderDashboard(user) {
         </div>`;
       })()}
 
-      <!-- My Documents -->
-      <div class="card pdv2-card">
-        <div class="card-header"><h3>My Documents (${documents.length})</h3></div>
-        <div class="card-body" style="padding:0;">
-          ${documents.length > 0 ? `<table><thead><tr><th>Document</th><th>Type</th><th>Status</th></tr></thead><tbody>
-            ${documents.map(d => `<tr>
-              <td>${escHtml(d.documentName || d.document_name || d.name || '—')}</td>
-              <td>${escHtml((d.documentType || d.document_type || d.type || '—').replace(/_/g, ' '))}</td>
-              <td><span class="badge badge-${d.status === 'verified' || d.status === 'received' ? 'approved' : d.status === 'missing' ? 'denied' : 'pending'}">${escHtml(d.status || 'pending')}</span></td>
-            </tr>`).join('')}
-          </tbody></table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No documents uploaded.</div>'}
+      <!-- My Documents — Self-Service Upload -->
+      <div class="card pdv2-card" style="grid-column:1/-1;">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+          <h3>My Documents</h3>
+          <span style="font-size:12px;color:var(--gray-500);">${documents.length} uploaded &middot; ${CRED_DOCUMENTS.length} required</span>
+        </div>
+        <div class="card-body" style="padding:8px 16px;">
+          ${(() => {
+            const categories = [...new Set(CRED_DOCUMENTS.map(d => d.category))];
+            const docsByType = {};
+            documents.forEach(d => {
+              const t = d.documentType || d.document_type || d.type || '';
+              if (!docsByType[t]) docsByType[t] = [];
+              docsByType[t].push(d);
+            });
+            const catIcons = { Provider: '&#128100;', License: '&#128196;', Education: '&#127891;', Insurance: '&#128737;', Billing: '&#128176;', Compliance: '&#9989;', Payer: '&#127970;' };
+            return categories.map(cat => {
+              const catDocs = CRED_DOCUMENTS.filter(d => d.category === cat);
+              const catUploaded = catDocs.filter(d => docsByType[d.id]?.length > 0).length;
+              return `
+              <div style="margin-bottom:14px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                  <span style="font-size:14px;">${catIcons[cat] || '&#128196;'}</span>
+                  <strong style="font-size:13px;">${cat}</strong>
+                  <span style="font-size:11px;color:var(--gray-400);">${catUploaded}/${catDocs.length}</span>
+                  <div style="flex:1;height:3px;background:var(--gray-200);border-radius:2px;overflow:hidden;">
+                    <div style="width:${catDocs.length > 0 ? Math.round(catUploaded / catDocs.length * 100) : 0}%;height:100%;background:${catUploaded === catDocs.length ? 'var(--green)' : 'var(--brand-500)'};border-radius:2px;"></div>
+                  </div>
+                </div>
+                ${catDocs.map(cd => {
+                  const uploaded = docsByType[cd.id] || [];
+                  const latest = uploaded.length > 0 ? uploaded[uploaded.length - 1] : null;
+                  const isExpired = latest && (latest.expirationDate || latest.expiration_date) && new Date(latest.expirationDate || latest.expiration_date) < today;
+                  const statusLabel = latest ? (isExpired ? 'expired' : (latest.status || 'pending')) : 'missing';
+                  const statusClass = (statusLabel === 'verified' || statusLabel === 'received') ? 'approved' : (statusLabel === 'missing' || statusLabel === 'expired') ? 'denied' : 'pending';
+                  const hasFile = latest && (latest.filePath || latest.file_path);
+                  return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray-50);">
+                    <div style="width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;${latest ? (isExpired ? 'background:#fef2f2;color:var(--red);' : 'background:#dcfce7;color:#16a34a;') : 'background:var(--gray-100);color:var(--gray-400);'}">${latest ? (isExpired ? '&#9888;' : '&#10003;') : '&#8943;'}</div>
+                    <div style="flex:1;min-width:0;">
+                      <div style="font-size:13px;font-weight:${latest ? '500' : '600'};color:${latest ? 'var(--gray-700)' : 'var(--text-primary)'};">${cd.label}</div>
+                      ${latest ? `<div style="font-size:11px;color:var(--gray-500);">Uploaded ${formatDateDisplay(latest.receivedDate || latest.received_date || latest.createdAt || latest.created_at)}${isExpired ? ' — <span style="color:var(--red);font-weight:600;">EXPIRED</span>' : (latest.expirationDate || latest.expiration_date) ? ' — Exp: ' + formatDateDisplay(latest.expirationDate || latest.expiration_date) : ''}</div>` : '<div style="font-size:11px;color:var(--gray-400);">Not yet uploaded</div>'}
+                    </div>
+                    <span class="badge badge-${statusClass}" style="font-size:10px;">${statusLabel}</span>
+                    ${hasFile ? `<button class="btn btn-sm" onclick="window.app.downloadDocument('${providerId}', ${latest.id})" style="padding:2px 8px;font-size:11px;">View</button>` : ''}
+                    <button class="btn btn-sm ${latest ? '' : 'btn-primary'}" onclick="window._credentik._providerUploadDoc('${providerId}', '${cd.id}', '${escAttr(cd.label)}')" style="padding:2px 8px;font-size:11px;">${latest ? (isExpired ? 'Replace' : 'Replace') : 'Upload'}</button>
+                  </div>`;
+                }).join('')}
+              </div>`;
+            }).join('');
+          })()}
+          ${(() => {
+            const knownTypes = new Set(CRED_DOCUMENTS.map(d => d.id));
+            const extraDocs = documents.filter(d => !knownTypes.has(d.documentType || d.document_type || d.type));
+            if (extraDocs.length === 0) return '';
+            return `<div style="margin-top:14px;border-top:1px solid var(--gray-200);padding-top:10px;">
+              <strong style="font-size:13px;color:var(--gray-600);">Other Documents</strong>
+              ${extraDocs.map(d => {
+                const hasFile = d.filePath || d.file_path;
+                return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray-50);">
+                  <div style="width:24px;height:24px;border-radius:6px;background:#dcfce7;color:#16a34a;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;">&#10003;</div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;">${escHtml(d.documentName || d.document_name || d.name || '—')}</div>
+                    <div style="font-size:11px;color:var(--gray-500);">${escHtml((d.documentType || d.document_type || d.type || '').replace(/_/g, ' '))}</div>
+                  </div>
+                  <span class="badge badge-${d.status === 'verified' || d.status === 'received' ? 'approved' : d.status === 'expired' ? 'denied' : 'pending'}" style="font-size:10px;">${escHtml(d.status || 'pending')}</span>
+                  ${hasFile ? `<button class="btn btn-sm" onclick="window.app.downloadDocument('${providerId}', ${d.id})" style="padding:2px 8px;font-size:11px;">View</button>` : ''}
+                </div>`;
+              }).join('')}
+            </div>`;
+          })()}
+          <div style="margin-top:14px;display:flex;gap:8px;">
+            <button class="btn btn-primary" onclick="window._credentik._providerUploadDoc('${providerId}', '', '')">
+              &#43; Upload New Document
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Provider Document Upload Modal -->
+      <div class="modal-overlay" id="provider-doc-upload-modal">
+        <div class="modal" style="max-width:500px;">
+          <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <h3 id="provider-doc-upload-title">Upload Document</h3>
+            <button class="btn btn-sm" onclick="document.getElementById('provider-doc-upload-modal').classList.remove('active')">&times;</button>
+          </div>
+          <div class="modal-body" style="padding:1rem;">
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Document Type *</label>
+              <select id="provider-doc-upload-type" class="form-control">
+                <option value="">Select type...</option>
+                ${CRED_DOCUMENTS.map(d => `<option value="${d.id}">${escHtml(d.label)}</option>`).join('')}
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Document Name *</label>
+              <input type="text" id="provider-doc-upload-name" class="form-control" placeholder="e.g. NY Medical License 2026">
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">File * <span style="color:var(--gray-400);font-size:11px;">(PDF, JPG, PNG — max 20MB)</span></label>
+              <input type="file" id="provider-doc-upload-file" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.tif,.tiff">
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Expiration Date</label>
+              <input type="date" id="provider-doc-upload-expiry" class="form-control">
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Notes</label>
+              <textarea id="provider-doc-upload-notes" class="form-control" rows="2" placeholder="Optional notes..."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:1rem;">
+            <button class="btn" onclick="document.getElementById('provider-doc-upload-modal').classList.remove('active')">Cancel</button>
+            <button class="btn btn-primary" id="provider-doc-upload-save-btn">Upload</button>
+          </div>
         </div>
       </div>
 
@@ -344,6 +448,62 @@ async function renderProviderDashboard(user) {
       <button class="btn" onclick="window.app.openProviderPrintout('${providerId}')" style="margin-left:8px;">Credential Sheet</button>
     </div>` : ''}
   `;
+
+  // ── Provider self-service upload handler ──
+  window._credentik._providerUploadDoc = function(provId, docTypeId, docLabel) {
+    const modal = document.getElementById('provider-doc-upload-modal');
+    if (!modal) return;
+    // Reset fields
+    ['provider-doc-upload-type','provider-doc-upload-name','provider-doc-upload-file','provider-doc-upload-expiry','provider-doc-upload-notes'].forEach(f => {
+      const el = document.getElementById(f); if (el) el.value = '';
+    });
+    // Pre-fill if a specific doc type was clicked
+    const typeSelect = document.getElementById('provider-doc-upload-type');
+    if (docTypeId && typeSelect) {
+      typeSelect.value = docTypeId;
+    }
+    const nameInput = document.getElementById('provider-doc-upload-name');
+    if (docLabel && nameInput) {
+      nameInput.value = docLabel;
+    }
+    const titleEl = document.getElementById('provider-doc-upload-title');
+    if (titleEl) titleEl.textContent = docLabel ? 'Upload ' + docLabel : 'Upload Document';
+    modal.classList.add('active');
+
+    // Wire save button
+    const saveBtn = document.getElementById('provider-doc-upload-save-btn');
+    if (saveBtn) {
+      const newBtn = saveBtn.cloneNode(true);
+      saveBtn.parentNode.replaceChild(newBtn, saveBtn);
+      newBtn.addEventListener('click', async function() {
+        const docType = document.getElementById('provider-doc-upload-type')?.value;
+        const docName = document.getElementById('provider-doc-upload-name')?.value?.trim();
+        const fileInput = document.getElementById('provider-doc-upload-file');
+        const file = fileInput?.files?.[0];
+        if (!docType) { showToast('Please select a document type'); return; }
+        if (!docName) { showToast('Please enter a document name'); return; }
+        if (!file) { showToast('Please select a file to upload'); return; }
+        if (file.size > 20 * 1024 * 1024) { showToast('File must be under 20MB'); return; }
+
+        newBtn.disabled = true; newBtn.textContent = 'Uploading...';
+        try {
+          await store.uploadProviderDocument(
+            provId, file, docType, docName,
+            document.getElementById('provider-doc-upload-expiry')?.value || null,
+            document.getElementById('provider-doc-upload-notes')?.value?.trim() || null
+          );
+          showToast('Document uploaded successfully');
+          modal.classList.remove('active');
+          // Refresh the provider dashboard
+          await renderProviderDashboard(user);
+        } catch (e) {
+          showToast('Upload failed: ' + e.message);
+        } finally {
+          newBtn.disabled = false; newBtn.textContent = 'Upload';
+        }
+      });
+    }
+  };
 }
 
 async function renderProviderPrintout(providerId) {
@@ -775,7 +935,10 @@ async function renderProviderProfilePage(providerId) {
         <div class="cp-meta-row">
           <span>Taxonomy: <code>${escHtml(provider.taxonomyCode || provider.taxonomy_code || provider.taxonomy || '---')}</code></span>
         </div>
-        <a class="cp-edit-link" onclick="window.app.switchProfileTab('overview')">Edit Profile</a>
+        <div style="display:flex;gap:12px;align-items:center;margin-top:4px;">
+          <a class="cp-edit-link" onclick="window.app.switchProfileTab('overview')">Edit Profile</a>
+          <a class="cp-edit-link" onclick="window.app.generatePublicShareLink(${providerId})" style="color:var(--brand-500,#0891b2);">&#128279; Share Progress</a>
+        </div>
       </div>
 
       <!-- Center: Completion Ring -->
