@@ -1241,14 +1241,14 @@ class Store {
         const cacheKey = 'org_branding';
         const cached = this._getCache(cacheKey);
         if (cached) return cached;
-        const result = await this._fetch(`${CONFIG.API_URL}/organizations/branding`);
+        const result = await this._fetch(`${CONFIG.API_URL}/agency/branding`);
         const data = result.data || result;
         this._setCache(cacheKey, data);
         return data;
     }
 
     async updateOrgBranding(data) {
-        const result = await this._fetch(`${CONFIG.API_URL}/organizations/branding`, {
+        const result = await this._fetch(`${CONFIG.API_URL}/agency/branding`, {
             method: 'PUT',
             body: JSON.stringify(data),
         });
