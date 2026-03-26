@@ -6951,7 +6951,7 @@ window.app = {
         <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Select Payer</label>
         <select id="xfac-payer" class="form-control" style="width:100%;">
           <option value="">Select payer...</option>
-          ${PAYER_CATALOG.map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('')}
+          ${[...PAYER_CATALOG].sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('')}
         </select>
       </div>
       <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Select Practice Locations (${facilities.length} available)</label>
@@ -12092,7 +12092,7 @@ async function openApplicationModal(id) {
         <label>Payer</label>
         <select class="form-control" id="field-payer">
           <option value="">Select payer...</option>
-          ${PAYER_CATALOG.map(p => `<option value="${p.id}" ${String(existPayerId) == String(p.id) ? 'selected' : ''}>${p.name}</option>`).join('')}
+          ${[...PAYER_CATALOG].sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(p => `<option value="${p.id}" ${String(existPayerId) == String(p.id) ? 'selected' : ''}>${p.name}</option>`).join('')}
         </select>
       </div>
     </div>
