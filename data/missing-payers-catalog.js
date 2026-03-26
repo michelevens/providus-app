@@ -96,6 +96,12 @@ export const SUPPLEMENTAL_PAYERS = [
   { id: 191, name: 'BCBS of Mississippi',              category: 'bcbs_independent', parentOrg: 'BCBS of Mississippi',  states: ['MS'], notes: 'Independent BCBS licensee. Dominant insurer in MS.', tags: ['caqh_accepts', 'behavioral_health'] },
   { id: 192, name: 'BCBS of Alaska',                   category: 'bcbs_independent', parentOrg: 'Premera BCBS',        states: ['AK'], notes: 'Operated by Premera. BCBS licensee in AK.', tags: ['caqh_accepts', 'behavioral_health'] },
 
+  // ─── New Mexico ───
+  { id: 193, name: 'Presbyterian Health Plan',         category: 'regional', parentOrg: 'Presbyterian Healthcare Services', states: ['NM'], notes: 'Largest health plan in New Mexico. Offers commercial, Medicare Advantage, and Centennial Care (Medicaid). Major payer for behavioral health in NM.', tags: ['must_have', 'high_volume', 'behavioral_health', 'substance_use', 'telehealth_friendly', 'caqh_accepts'] },
+  { id: 194, name: 'Presbyterian Centennial Care',     category: 'medicaid_mco', parentOrg: 'Presbyterian Healthcare Services', states: ['NM'], notes: 'Presbyterian\'s Medicaid managed care plan under NM Centennial Care 2.0. Covers behavioral health, SUD, and telehealth.', tags: ['behavioral_health', 'substance_use', 'telehealth_friendly', 'medicaid_prerequisite', 'high_volume'] },
+  { id: 195, name: 'Western Sky Community Care',       category: 'medicaid_mco', parentOrg: 'Centene Corporation', states: ['NM'], notes: 'Centene\'s Medicaid MCO in NM under Centennial Care 2.0.', tags: ['behavioral_health', 'substance_use', 'telehealth_friendly', 'medicaid_prerequisite'] },
+  { id: 196, name: 'Blue Cross Blue Shield of NM',     category: 'bcbs_independent', parentOrg: 'HCSC', states: ['NM'], notes: 'BCBS licensee for NM. Operated by Health Care Service Corporation (HCSC).', tags: ['must_have', 'high_volume', 'caqh_accepts', 'behavioral_health', 'telehealth_friendly'] },
+
   // ═══════════════════════════════════════════════════════════════════════════
   // 5. STATE MEDICAID MANAGED CARE ORGANIZATIONS (MCOs)
   //    Behavioral health providers frequently credential with state Medicaid

@@ -446,6 +446,9 @@ const PAYER_TAG_MAP = {
   'BCBS of Georgia':      ['high_volume','caqh_accepts','behavioral_health'],
   'BCBS of Texas':        ['must_have','high_volume','caqh_accepts','behavioral_health'],
   // ─── Regional ───
+  'Presbyterian Health Plan': ['must_have','high_volume','behavioral_health','substance_use','telehealth_friendly','caqh_accepts'],
+  'Presbyterian Centennial Care': ['behavioral_health','substance_use','telehealth_friendly','medicaid_prerequisite','high_volume'],
+  'Western Sky Community Care': ['behavioral_health','substance_use','telehealth_friendly','medicaid_prerequisite'],
   'Moda Health':          ['telehealth_friendly','behavioral_health','fast_credentialing'],
   'Providence Health Plan': ['telehealth_friendly','behavioral_health','high_volume'],
   'AvMed':                ['behavioral_health','telehealth_friendly'],
