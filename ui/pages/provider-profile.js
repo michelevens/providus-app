@@ -1551,6 +1551,9 @@ async function renderProviderProfilePage(providerId) {
 
     <!-- Payers Tab -->
     <div class="profile-tab-content" id="tab-payers" style="display:none;">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+        <button class="btn btn-sm" onclick="window.app.generatePayerReport('${provider.id}')" style="border-radius:8px;">Export Payer Report</button>
+      </div>
       ${(() => {
         const allPayers = typeof PAYER_CATALOG !== 'undefined' ? PAYER_CATALOG : [];
         // Group apps by status
