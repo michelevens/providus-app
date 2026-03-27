@@ -16,27 +16,70 @@ import taxonomyApi from '../core/taxonomy-api.js';
 // Lazy-loaded to avoid blocking initial render (53KB file)
 let SUPPLEMENTAL_PAYERS = [];
 
-// ─── Google Places Autocomplete ───
+// ─── Address Autocomplete (OpenStreetMap Nominatim — free, no API key) ───
 
+let _addrDebounce = null;
 function initPlacesAutocomplete(inputId, { streetId, cityId, stateId, zipId } = {}) {
-  if (!window.google?.maps?.places) return;
   const input = document.getElementById(inputId);
   if (!input || input._placesInit) return;
   input._placesInit = true;
-  const autocomplete = new google.maps.places.Autocomplete(input, {
-    types: ['address'], componentRestrictions: { country: 'us' }
+
+  // Create dropdown
+  let dd = input.parentElement.querySelector('.addr-dropdown');
+  if (!dd) {
+    dd = document.createElement('div');
+    dd.className = 'addr-dropdown';
+    dd.style.cssText = 'display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#fff;border:1px solid var(--gray-200);border-radius:0 0 8px 8px;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.12);';
+    input.parentElement.style.position = 'relative';
+    input.parentElement.appendChild(dd);
+  }
+
+  input.addEventListener('input', () => {
+    clearTimeout(_addrDebounce);
+    const q = input.value.trim();
+    if (q.length < 3) { dd.style.display = 'none'; return; }
+    _addrDebounce = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=us&limit=6&q=${encodeURIComponent(q)}`, {
+          headers: { 'Accept': 'application/json' }
+        });
+        const results = await res.json();
+        if (!results.length) { dd.style.display = 'none'; return; }
+        dd.innerHTML = results.map((r, i) => {
+          const a = r.address || {};
+          const street = [a.house_number, a.road].filter(Boolean).join(' ');
+          const city = a.city || a.town || a.village || a.hamlet || '';
+          const state = a.state || '';
+          const zip = a.postcode || '';
+          return `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--gray-100);line-height:1.4;"
+            onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='#fff'"
+            data-street="${street.replace(/"/g,'&quot;')}" data-city="${city.replace(/"/g,'&quot;')}" data-state="${state.replace(/"/g,'&quot;')}" data-zip="${zip.replace(/"/g,'&quot;')}"
+            onclick="window._selectAddress(this,'${inputId}','${streetId||''}','${cityId||''}','${stateId||''}','${zipId||''}')">
+            <strong>${street || r.display_name.split(',')[0]}</strong><br>
+            <span style="font-size:12px;color:var(--gray-500);">${[city, state, zip].filter(Boolean).join(', ')}</span>
+          </div>`;
+        }).join('');
+        dd.style.display = 'block';
+      } catch (e) { dd.style.display = 'none'; }
+    }, 300);
   });
-  autocomplete.addListener('place_changed', () => {
-    const place = autocomplete.getPlace();
-    if (!place.address_components) return;
-    const get = (type) => (place.address_components.find(c => c.types.includes(type)) || {}).short_name || '';
-    const street = `${get('street_number')} ${get('route')}`.trim();
-    if (streetId) { const el = document.getElementById(streetId); if (el) el.value = street; }
-    if (cityId) { const el = document.getElementById(cityId); if (el) el.value = get('locality') || get('sublocality'); }
-    if (stateId) { const el = document.getElementById(stateId); if (el) el.value = get('administrative_area_level_1'); }
-    if (zipId) { const el = document.getElementById(zipId); if (el) el.value = get('postal_code'); }
-  });
+
+  input.addEventListener('blur', () => { setTimeout(() => { dd.style.display = 'none'; }, 200); });
 }
+
+window._selectAddress = function(el, inputId, streetId, cityId, stateId, zipId) {
+  const street = el.dataset.street || '';
+  const city = el.dataset.city || '';
+  const state = el.dataset.state || '';
+  const zip = el.dataset.zip || '';
+  const input = document.getElementById(inputId);
+  if (input) input.value = street;
+  if (streetId) { const e = document.getElementById(streetId); if (e) e.value = street; }
+  if (cityId) { const e = document.getElementById(cityId); if (e) e.value = city; }
+  if (stateId) { const e = document.getElementById(stateId); if (e) e.value = state; }
+  if (zipId) { const e = document.getElementById(zipId); if (e) e.value = zip; }
+  const dd = el.parentElement; if (dd) dd.style.display = 'none';
+};
 
 // ─── Subscription Usage Cache ───
 let _subscriptionCache = null;
@@ -9538,6 +9581,8 @@ function handleNppesProxy(payload) {
       const statusEl = document.getElementById('fac-status'); if (statusEl) statusEl.value = 'active';
     }
     modal.classList.add('active');
+    // Init address autocomplete
+    setTimeout(() => initPlacesAutocomplete('fac-address', { streetId: 'fac-address', cityId: 'fac-city', stateId: 'fac-state', zipId: 'fac-zip' }), 100);
   },
   async editFacility(id) {
     try {
@@ -15014,6 +15059,8 @@ async function openOrgModal(orgId) {
     </div>
   `;
   modal.classList.add('active');
+  // Init address autocomplete on org street field
+  setTimeout(() => initPlacesAutocomplete('org-street', { streetId: 'org-street', cityId: 'org-city', stateId: 'org-state', zipId: 'org-zip' }), 100);
 }
 
 async function openOrgContactForm(orgId, contactId) {
