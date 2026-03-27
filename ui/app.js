@@ -9519,8 +9519,15 @@ function handleNppesProxy(payload) {
     window._selectedFacilityId = id;
     navigateTo('facility-detail');
   },
-  openFacilityModal(id) {
-    const modal = document.getElementById('facility-modal');
+  async openFacilityModal(id) {
+    let modal = document.getElementById('facility-modal');
+    if (!modal) {
+      // Modal not in DOM — navigate to facilities page first
+      await navigateTo('facilities');
+      await new Promise(r => setTimeout(r, 300));
+      modal = document.getElementById('facility-modal');
+      if (!modal) { showToast('Could not open facility modal'); return; }
+    }
     const title = document.getElementById('facility-modal-title');
     document.getElementById('fac-edit-id').value = id || '';
     title.textContent = id ? 'Edit Facility' : 'Add Facility';
