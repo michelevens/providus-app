@@ -86,6 +86,8 @@ async function renderBillingServicesPage() {
   try { tasks = await store.getBillingTasks(); } catch (e) {}
   try { activities = await store.getBillingActivities({ limit: 100 }); } catch (e) {}
   try { financials = await store.getBillingFinancials({}); } catch (e) {}
+  let claimStats = {};
+  try { claimStats = await store.getRcmClaimStats(); } catch (e) {}
   try { orgs = await store.getAll('organizations'); } catch (e) {}
 
   if (!Array.isArray(clients)) clients = [];
@@ -142,10 +144,13 @@ async function renderBillingServicesPage() {
     return (today - d) > 7 * 86400000;
   });
 
-  // Total revenue numbers
-  const totalBilled = financials.reduce((s, f) => s + (f.amountBilled || f.amount_billed || 0), 0);
-  const totalCollected = financials.reduce((s, f) => s + (f.amountCollected || f.amount_collected || 0), 0);
-  const totalDenied = financials.reduce((s, f) => s + (f.deniedAmount || f.denied_amount || 0), 0);
+  // Total revenue numbers — prefer financials if present, fall back to claim stats
+  const finBilled = financials.reduce((s, f) => s + (f.amountBilled || f.amount_billed || 0), 0);
+  const finCollected = financials.reduce((s, f) => s + (f.amountCollected || f.amount_collected || 0), 0);
+  const finDenied = financials.reduce((s, f) => s + (f.deniedAmount || f.denied_amount || 0), 0);
+  const totalBilled = finBilled || claimStats.total_charged || claimStats.totalCharged || 0;
+  const totalCollected = finCollected || claimStats.total_paid || claimStats.totalPaid || 0;
+  const totalDenied = finDenied || claimStats.total_denied_amount || claimStats.totalDeniedAmount || 0;
   const collectionRate = totalBilled > 0 ? ((totalCollected / totalBilled) * 100).toFixed(1) : '0.0';
   const denialRate = totalBilled > 0 ? ((totalDenied / totalBilled) * 100).toFixed(1) : '0.0';
 
