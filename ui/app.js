@@ -4095,8 +4095,10 @@ async function renderCoverageMatrix() {
           const gaps = [];
           allMatrixPayers.forEach(payer => {
             const stateMap = coverageMap[payer.id] || {};
+            const payerStates = payer.states || [];
+            const servesAll = payerStates.includes('ALL') || payerStates.length === 0;
             licensedStates.forEach(s => {
-              if (!stateMap[s]) {
+              if (!stateMap[s] && (servesAll || payerStates.includes(s))) {
                 const pol = getLivePolicyByState(s);
                 gaps.push({ payer: payer.name, payerCat: payer.category, state: s, readiness: pol ? pol.readinessScore : 0 });
               }
