@@ -2303,7 +2303,7 @@ async function renderDashboard() {
         preds.map(function(p) {
           var ds = p.estimatedApproval.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
           var rs = p.daysRemaining > 0 ? p.daysRemaining + 'd remaining' : Math.abs(p.daysRemaining) + 'd past expected';
-          return '<tr style="border-bottom:1px solid var(--gray-100);"><td style="padding:10px;font-weight:600;color:var(--gray-800);">' + escHtml(p.providerName || '\u2014') + '</td><td style="padding:10px;color:var(--gray-700);">' + escHtml(p.payerName) + '</td><td style="padding:10px;color:var(--gray-500);">' + escHtml(p.state || '\u2014') + '</td><td style="padding:10px;"><div style="font-weight:600;color:var(--gray-800);">' + ds + '</div><div style="font-size:10px;color:var(--gray-500);">' + rs + '</div></td><td style="padding:10px;"><span style="display:inline-flex;align-items:center;gap:5px;" title="' + escAttr(p.basedOn) + '"><span style="width:8px;height:8px;border-radius:50%;background:' + cDot(p.confidence) + ';display:inline-block;"></span><span style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:capitalize;">' + p.confidence + '</span></span></td><td style="padding:10px;"><span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;background:' + rBg(p.riskLevel) + ';color:' + rClr(p.riskLevel) + ';">' + rLbl(p.riskLevel) + '</span></td></tr>';
+          return '<tr style="border-bottom:1px solid var(--gray-100);cursor:pointer;" onclick="window.app.viewApplicationDetail(\'' + p.appId + '\')"><td style="padding:10px;font-weight:600;color:var(--gray-800);">' + escHtml(p.providerName || '\u2014') + '</td><td style="padding:10px;color:var(--gray-700);">' + escHtml(p.payerName) + '</td><td style="padding:10px;color:var(--gray-500);">' + escHtml(p.state || '\u2014') + '</td><td style="padding:10px;"><div style="font-weight:600;color:var(--gray-800);">' + ds + '</div><div style="font-size:10px;color:var(--gray-500);">' + rs + '</div></td><td style="padding:10px;"><span style="display:inline-flex;align-items:center;gap:5px;" title="' + escAttr(p.basedOn) + '"><span style="width:8px;height:8px;border-radius:50%;background:' + cDot(p.confidence) + ';display:inline-block;"></span><span style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:capitalize;">' + p.confidence + '</span></span></td><td style="padding:10px;"><span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;background:' + rBg(p.riskLevel) + ';color:' + rClr(p.riskLevel) + ';">' + rLbl(p.riskLevel) + '</span></td></tr>';
         }).join('') +
         '</tbody></table></div><div style="margin-top:10px;font-size:10px;color:var(--gray-400);font-style:italic;">Predictions based on historical application data and payer SLA patterns. Not a guarantee of approval timing.</div></div>';
     })()}
@@ -2910,7 +2910,7 @@ async function renderAppTable(prefetchedApps = null) {
       const providerObj = a.providerId ? allProviders?.find(p => p.id === a.providerId) : null;
       const provName = providerObj ? `${providerObj.firstName} ${providerObj.lastName}` : '';
 
-      return `<div class="v2-apps-card">
+      return `<div class="v2-apps-card" style="cursor:pointer;" onclick="window.app.viewApplicationDetail('${a.id}')">
         <div class="v2-apps-card-accent" style="background:${statusObj.color};"></div>
         <div class="v2-apps-card-body">
           <div class="v2-apps-card-top">
@@ -3075,7 +3075,7 @@ async function renderFollowupTable(title, followups, showAction, accentColor) {
               const isOverdue = fu.dueDate && fu.dueDate < todayStr && !fu.completedDate;
               const isDueToday = fu.dueDate === todayStr && !fu.completedDate;
               const rowClass = isOverdue ? 'v2-fu-row-overdue' : isDueToday ? 'v2-fu-row-today' : (showAction ? 'v2-fu-row-upcoming' : '');
-              return `<tr class="${isOverdue ? 'overdue' : ''} ${rowClass}">
+              return `<tr class="${isOverdue ? 'overdue' : ''} ${rowClass}" style="cursor:pointer;" onclick="window.app.viewApplicationDetail('${fu.applicationId || fu.application_id || ''}')">
                 <td><strong>${payer.name || 'Unknown'}</strong> — ${app ? getStateName(app.state) : ''}</td>
                 <td style="${isOverdue ? 'color:var(--red);font-weight:600;' : isDueToday ? 'color:var(--warning-500);font-weight:600;' : ''}">${formatDateDisplay(fu.dueDate)}</td>
                 <td>${fu.type || '-'}</td>
