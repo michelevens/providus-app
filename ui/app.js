@@ -10841,9 +10841,8 @@ function handleNppesProxy(payload) {
       const imported = result.imported || 0;
       const errors = result.errors || [];
       document.getElementById('claim-import-modal').classList.remove('active');
-      showToast(`${imported} claims imported successfully${errors.length ? ` (${errors.length} errors)` : ''}`);
-      // Refresh
-      if (currentPage === 'revenue-cycle' || currentPage === 'rcm') await renderRevenueCyclePage();
+      showToast(`${imported} claims imported successfully${errors.length ? ` (${errors.length} errors)` : ''}. Refresh to see updated data.`);
+      // Don't re-render — it causes page crash. User clicks tab or refreshes.
     } catch (e) {
       showToast('Import failed: ' + (e.message || 'Unknown error'));
       console.error('Import error:', e);
