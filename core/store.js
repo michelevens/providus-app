@@ -10,6 +10,9 @@ class Store {
         this.activeAgencyId = null; // SuperAdmin agency override
         // Scope selector: filter all data by org or provider
         this._scope = { type: 'all', orgId: null, providerId: null, orgName: '', providerName: '' };
+        // Auto-purge expired cache and check version on startup
+        this._checkCacheVersion();
+        this._purgeExpiredCache();
     }
 
     // ── Scope selector ──
@@ -216,6 +219,36 @@ class Store {
         Object.keys(localStorage)
             .filter(k => k.startsWith(CONFIG.CACHE_PREFIX))
             .forEach(k => localStorage.removeItem(k));
+    }
+
+    // Auto-purge expired entries from localStorage on startup
+    _purgeExpiredCache() {
+        try {
+            const now = Date.now();
+            Object.keys(localStorage)
+                .filter(k => k.startsWith(CONFIG.CACHE_PREFIX))
+                .forEach(k => {
+                    try {
+                        const item = JSON.parse(localStorage.getItem(k));
+                        if (!item || !item.ts || now - item.ts > CONFIG.CACHE_TTL) {
+                            localStorage.removeItem(k);
+                        }
+                    } catch { localStorage.removeItem(k); }
+                });
+        } catch {}
+    }
+
+    // Version-based cache bust — clears all cache when app version changes
+    _checkCacheVersion() {
+        const vKey = CONFIG.CACHE_PREFIX + '_version';
+        const currentVersion = CONFIG.APP_VERSION || '0';
+        try {
+            const storedVersion = localStorage.getItem(vKey);
+            if (storedVersion !== currentVersion) {
+                this.clearCache();
+                localStorage.setItem(vKey, currentVersion);
+            }
+        } catch {}
     }
 
     // Request deduplication — share in-flight GET promises
@@ -1104,25 +1137,25 @@ class Store {
     async getRcmClaimStats() { return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/stats`)).data || {}; }
     async getRcmClaims(params = {}) { const q = new URLSearchParams(params).toString(); const r = await this._fetch(`${CONFIG.API_URL}/rcm/claims${q ? '?' + q : ''}`); return r.data?.data || r.data || []; }
     async getRcmClaim(id) { return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`)).data || {}; }
-    async createRcmClaim(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/claims`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
-    async updateRcmClaim(id, data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; }
-    async deleteRcmClaim(id) { return this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`, { method: 'DELETE' }); }
+    async createRcmClaim(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async updateRcmClaim(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async deleteRcmClaim(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`, { method: 'DELETE' }); this.clearCache(); return r; }
 
     async getRcmDenialStats() { return (await this._fetch(`${CONFIG.API_URL}/rcm/denials/stats`)).data || {}; }
     async getRcmDenials(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/denials${q ? '?' + q : ''}`)).data || []; }
-    async createRcmDenial(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/denials`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
-    async updateRcmDenial(id, data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/denials/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; }
-    async deleteRcmDenial(id) { return this._fetch(`${CONFIG.API_URL}/rcm/denials/${id}`, { method: 'DELETE' }); }
+    async createRcmDenial(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/denials`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async updateRcmDenial(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/denials/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async deleteRcmDenial(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/denials/${id}`, { method: 'DELETE' }); this.clearCache(); return r; }
 
     async getRcmPayments(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/payments${q ? '?' + q : ''}`)).data || []; }
-    async createRcmPayment(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/payments`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
-    async updateRcmPayment(id, data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/payments/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; }
-    async deleteRcmPayment(id) { return this._fetch(`${CONFIG.API_URL}/rcm/payments/${id}`, { method: 'DELETE' }); }
+    async createRcmPayment(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payments`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async updateRcmPayment(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payments/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async deleteRcmPayment(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/payments/${id}`, { method: 'DELETE' }); this.clearCache(); return r; }
 
     async getRcmCharges(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/charges${q ? '?' + q : ''}`)).data || []; }
-    async createRcmCharge(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/charges`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
-    async updateRcmCharge(id, data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/charges/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; }
-    async deleteRcmCharge(id) { return this._fetch(`${CONFIG.API_URL}/rcm/charges/${id}`, { method: 'DELETE' }); }
+    async createRcmCharge(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/charges`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async updateRcmCharge(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/charges/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async deleteRcmCharge(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/charges/${id}`, { method: 'DELETE' }); this.clearCache(); return r; }
 
     async getRcmArAging() { return (await this._fetch(`${CONFIG.API_URL}/rcm/ar-aging`)).data || {}; }
 
@@ -1139,14 +1172,18 @@ class Store {
     }
     async createBillingClient(data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-clients`, { method: 'POST', body: JSON.stringify(data) });
+        this.clearCache();
         return result.data || result;
     }
     async updateBillingClient(id, data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-clients/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        this.clearCache();
         return result.data || result;
     }
     async deleteBillingClient(id) {
-        return this._fetch(`${CONFIG.API_URL}/billing-clients/${id}`, { method: 'DELETE' });
+        const r = await this._fetch(`${CONFIG.API_URL}/billing-clients/${id}`, { method: 'DELETE' });
+        this.clearCache();
+        return r;
     }
     async getBillingClientStats() {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-clients/stats`);
@@ -1161,14 +1198,18 @@ class Store {
     }
     async createBillingTask(data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-tasks`, { method: 'POST', body: JSON.stringify(data) });
+        this.clearCache();
         return result.data || result;
     }
     async updateBillingTask(id, data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        this.clearCache();
         return result.data || result;
     }
     async deleteBillingTask(id) {
-        return this._fetch(`${CONFIG.API_URL}/billing-tasks/${id}`, { method: 'DELETE' });
+        const r = await this._fetch(`${CONFIG.API_URL}/billing-tasks/${id}`, { method: 'DELETE' });
+        this.clearCache();
+        return r;
     }
 
     // Billing activity log (what work was done, when, by whom)
@@ -1179,14 +1220,18 @@ class Store {
     }
     async createBillingActivity(data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-activities`, { method: 'POST', body: JSON.stringify(data) });
+        this.clearCache();
         return result.data || result;
     }
     async updateBillingActivity(id, data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-activities/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        this.clearCache();
         return result.data || result;
     }
     async deleteBillingActivity(id) {
-        return this._fetch(`${CONFIG.API_URL}/billing-activities/${id}`, { method: 'DELETE' });
+        const r = await this._fetch(`${CONFIG.API_URL}/billing-activities/${id}`, { method: 'DELETE' });
+        this.clearCache();
+        return r;
     }
 
     // Billing financial summaries (claims, collections, denials per org/provider)
@@ -1197,10 +1242,12 @@ class Store {
     }
     async createBillingFinancial(data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-financials`, { method: 'POST', body: JSON.stringify(data) });
+        this.clearCache();
         return result.data || result;
     }
     async updateBillingFinancial(id, data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-financials/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        this.clearCache();
         return result.data || result;
     }
 

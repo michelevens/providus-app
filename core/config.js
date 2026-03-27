@@ -1,7 +1,7 @@
 // Credentik App Configuration
 const CONFIG = {
     APP_NAME: 'Credentik',
-    APP_VERSION: '3.0.0',
+    APP_VERSION: '3.1.0',
 
     // API Configuration
     API_URL: 'https://api.credentik.com/api',
