@@ -241,6 +241,7 @@ async function renderRcmPage() {
             <button class="btn btn-sm" onclick="window.app.openClaimImportModal()" style="font-size:12px;">
               <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M7 10V2M3.5 5.5L7 2l3.5 3.5"/><path d="M1.5 10v2a1 1 0 001 1h9a1 1 0 001-1v-2"/></svg>Import CSV
             </button>
+            <button class="btn btn-sm" onclick="window.app.exportClaimsCSV()" style="font-size:12px;">Export CSV</button>
             <select id="rcm-claim-status" class="form-control" style="width:130px;height:34px;font-size:13px;" onchange="window.app.filterRcmClaims()"><option value="">All</option>${CLAIM_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select>
             <select id="rcm-claim-client" class="form-control" style="width:170px;height:34px;font-size:13px;" onchange="window.app.filterRcmClaims()"><option value="">All Clients</option>${clients.map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}</select>
           </div>
@@ -358,6 +359,8 @@ async function renderRcmPage() {
       <div class="card rcm-card rcm-table">
         <div class="card-header"><h3>Denial Queue</h3>
           <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm" onclick="window.app.escalateDenials()" style="font-size:12px;color:#f59e0b;">Escalate Urgent</button>
+            <button class="btn btn-sm" onclick="window.app.exportDenialsCSV()" style="font-size:12px;">Export CSV</button>
             <select id="rcm-denial-status" class="form-control" style="width:140px;height:34px;font-size:13px;" onchange="window.app.filterRcmDenials()"><option value="">All</option>${DENIAL_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select>
             <select id="rcm-denial-cat" class="form-control" style="width:160px;height:34px;font-size:13px;" onchange="window.app.filterRcmDenials()"><option value="">All Categories</option>${DENIAL_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join('')}</select>
           </div>
@@ -599,6 +602,10 @@ async function renderClaimDetail(claimId) {
   const denials = claim.denials || [];
   const payments = (claim.paymentAllocations || claim.payment_allocations || []);
   const serviceLines = claim.serviceLines || claim.service_lines || [];
+  const followups = claim.followups || [];
+  let claimFollowups = [];
+  try { claimFollowups = await store.getFollowups({ claim_id: claimId }); } catch (e) {}
+  if (!Array.isArray(claimFollowups)) claimFollowups = [];
   const isDenied = claim.status === 'denied' || claim.status === 'appealed';
   const daysInAR = claim.dateOfService || claim.date_of_service ? Math.floor((new Date() - new Date(claim.dateOfService || claim.date_of_service)) / 86400000) : 0;
 
@@ -753,6 +760,31 @@ async function renderClaimDetail(claimId) {
           </tr>`).join('')}
         </tbody>
       </table>` : '<div style="padding:24px;text-align:center;color:var(--gray-400);">No payments posted yet.</div>'}
+    </div>
+
+    <!-- Payer Follow-Up Log -->
+    <div class="cd-section">
+      <div class="cd-sh">
+        <h4>Payer Follow-Up Log (${claimFollowups.length})</h4>
+        <button class="btn btn-sm" onclick="window.app.openFollowupModal(${claim.id})">+ Log Call</button>
+      </div>
+      ${claimFollowups.length > 0 ? `<table>
+        <thead><tr><th>Date</th><th>Method</th><th>Payer Rep</th><th>Ref #</th><th>Outcome</th><th>Follow-Up</th><th>Notes</th></tr></thead>
+        <tbody>
+          ${claimFollowups.map(f => {
+            const outcomeColors = { resolved: 'var(--green)', escalated: '#f97316', denied: 'var(--red)', resubmit: '#3b82f6', pending: 'var(--gray-500)', no_answer: 'var(--gray-400)' };
+            return `<tr>
+              <td class="text-sm">${formatDateDisplay(f.createdAt || f.created_at) || '—'}</td>
+              <td><span style="font-size:11px;padding:2px 6px;background:var(--gray-100);border-radius:4px;">${f.contact_method || f.contactMethod || 'phone'}</span></td>
+              <td class="text-sm">${escHtml(f.payer_rep || f.payerRep || '—')}</td>
+              <td style="font-family:monospace;font-size:11px;">${escHtml(f.reference_number || f.referenceNumber || '—')}</td>
+              <td><span style="font-size:11px;font-weight:600;color:${outcomeColors[f.outcome] || 'var(--gray-500)'};">${f.outcome || 'pending'}</span></td>
+              <td class="text-sm">${f.followup_date || f.followupDate ? formatDateDisplay(f.followup_date || f.followupDate) : '—'}</td>
+              <td class="text-sm" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">${escHtml(f.notes || '')}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>` : '<div style="padding:24px;text-align:center;color:var(--gray-400);">No follow-up calls logged yet. Click "+ Log Call" to record a payer contact.</div>'}
     </div>
 
     <!-- Notes -->

@@ -11083,6 +11083,87 @@ function handleNppesProxy(payload) {
     try { await store.deleteRcmCharge(id); showToast('Charge deleted'); await renderRcmPage(); } catch (e) { showToast('Error: ' + e.message); }
   },
 
+  // ── RCM Phase 2 Handlers ──
+  async exportClaimsCSV() {
+    try {
+      const data = await store.exportClaims();
+      if (!data || data.length === 0) { showToast('No claims to export'); return; }
+      const headers = Object.keys(data[0]);
+      const csv = [headers.join(','), ...data.map(r => headers.map(h => `"${(r[h] ?? '').toString().replace(/"/g, '""')}"`).join(','))].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `claims_export_${new Date().toISOString().split('T')[0]}.csv`; a.click();
+      showToast(`Exported ${data.length} claims`);
+    } catch (e) { showToast('Export error: ' + e.message); }
+  },
+  async exportDenialsCSV() {
+    try {
+      const data = await store.exportDenials();
+      if (!data || data.length === 0) { showToast('No denials to export'); return; }
+      const headers = Object.keys(data[0]);
+      const csv = [headers.join(','), ...data.map(r => headers.map(h => `"${(r[h] ?? '').toString().replace(/"/g, '""')}"`).join(','))].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `denials_export_${new Date().toISOString().split('T')[0]}.csv`; a.click();
+      showToast(`Exported ${data.length} denials`);
+    } catch (e) { showToast('Export error: ' + e.message); }
+  },
+  async escalateDenials() {
+    try {
+      const r = await store.escalateDenials();
+      showToast(r.escalated > 0 ? `${r.escalated} denial(s) escalated to urgent with follow-up tasks created` : 'No denials need escalation right now');
+      await renderRcmPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async openFollowupModal(claimId) {
+    const html = `<div class="modal-overlay active" id="followup-modal">
+      <div class="modal" style="max-width:500px;">
+        <div class="modal-header"><h3>Log Payer Follow-Up</h3><button class="modal-close" onclick="document.getElementById('followup-modal').remove()">&times;</button></div>
+        <div class="modal-body">
+          <input type="hidden" id="fu-claim-id" value="${claimId}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Contact Method</label><select id="fu-method" class="form-control"><option value="phone">Phone</option><option value="portal">Portal</option><option value="fax">Fax</option><option value="email">Email</option><option value="mail">Mail</option></select></div>
+            <div class="auth-field" style="margin:0;"><label>Payer Rep Name</label><input type="text" id="fu-rep" class="form-control" placeholder="Name of person you spoke with"></div>
+            <div class="auth-field" style="margin:0;"><label>Reference / Ticket #</label><input type="text" id="fu-ref" class="form-control" placeholder="Call reference number"></div>
+            <div class="auth-field" style="margin:0;"><label>Outcome</label><select id="fu-outcome" class="form-control"><option value="pending">Pending</option><option value="resolved">Resolved</option><option value="escalated">Escalated</option><option value="denied">Denied</option><option value="resubmit">Resubmit</option><option value="no_answer">No Answer</option></select></div>
+            <div class="auth-field" style="margin:0;"><label>Next Follow-Up Date</label><input type="date" id="fu-date" class="form-control"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Notes *</label><textarea id="fu-notes" class="form-control" rows="3" placeholder="What was discussed, what was promised, next steps..." style="resize:vertical;"></textarea></div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('followup-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveFollowup()">Save Follow-Up</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  async saveFollowup() {
+    const notes = document.getElementById('fu-notes')?.value?.trim();
+    if (!notes) { showToast('Notes are required'); return; }
+    try {
+      await store.createFollowup({
+        claim_id: document.getElementById('fu-claim-id').value,
+        contact_method: document.getElementById('fu-method').value,
+        payer_rep: document.getElementById('fu-rep').value.trim(),
+        reference_number: document.getElementById('fu-ref').value.trim(),
+        outcome: document.getElementById('fu-outcome').value,
+        followup_date: document.getElementById('fu-date').value || null,
+        notes,
+      });
+      document.getElementById('followup-modal')?.remove();
+      showToast('Follow-up logged');
+      // Refresh claim detail
+      const claimId = document.getElementById('fu-claim-id')?.value;
+      if (claimId) { const { renderClaimDetail } = await import('./pages/rcm.js'); await renderClaimDetail(claimId); }
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async generateClientReport(clientId, period) {
+    try {
+      const r = await store.generateClientReport({ billing_client_id: clientId, period });
+      showToast('Report generated');
+      return r;
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+
   // ── Billing Services Management ──
   bsTab(btn, tabId) {
     window._bsTab = tabId;

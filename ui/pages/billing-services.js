@@ -86,8 +86,10 @@ async function renderBillingServicesPage() {
   try { tasks = await store.getBillingTasks(); } catch (e) {}
   try { activities = await store.getBillingActivities({ limit: 100 }); } catch (e) {}
   try { financials = await store.getBillingFinancials({}); } catch (e) {}
-  let claimStats = {};
+  let claimStats = {}, workQueues = {}, denialRisk = {};
   try { claimStats = await store.getRcmClaimStats(); } catch (e) {}
+  try { workQueues = await store.getWorkQueues(); } catch (e) {}
+  try { denialRisk = await store.getDenialRiskAnalysis(); } catch (e) {}
   try { orgs = await store.getAll('organizations'); } catch (e) {}
 
   if (!Array.isArray(clients)) clients = [];
@@ -348,6 +350,71 @@ async function renderBillingServicesPage() {
           ${activities.length === 0 ? '<div style="text-align:center;padding:1rem;color:var(--gray-400);">No activity yet</div>' : ''}
         </div>
       </div>
+
+      <!-- Smart Work Queues -->
+      ${(workQueues.counts || {}).ar_followup || (workQueues.counts || {}).denials || (workQueues.counts || {}).followups_due ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+        <!-- AR Follow-Up Queue -->
+        ${(workQueues.ar_followup || []).length > 0 ? `
+        <div class="card bs-card">
+          <div class="card-header"><h3 style="color:#f59e0b;">AR Follow-Up Queue (${workQueues.counts.ar_followup})</h3></div>
+          <div class="card-body" style="padding:0;"><table style="font-size:13px;">
+            <thead><tr><th>Claim</th><th>Patient</th><th>Payer</th><th style="text-align:right;">Balance</th><th>Days</th></tr></thead>
+            <tbody>${(workQueues.ar_followup || []).slice(0, 10).map(c => {
+              const days = Math.floor((new Date() - new Date(c.date_of_service || c.dateOfService)) / 86400000);
+              return `<tr style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
+                <td><strong style="font-family:monospace;font-size:11px;color:var(--brand-600);">${escHtml(c.claim_number || c.claimNumber || '')}</strong></td>
+                <td class="text-sm">${escHtml(c.patient_name || c.patientName || '')}</td>
+                <td class="text-sm">${escHtml(c.payer_name || c.payerName || '')}</td>
+                <td style="text-align:right;color:var(--red);font-weight:600;">${_fmtMoney(c.balance)}</td>
+                <td style="font-weight:700;color:${days > 90 ? 'var(--red)' : days > 60 ? '#f97316' : '#f59e0b'};">${days}d</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table></div>
+        </div>` : ''}
+
+        <!-- Denial Queue -->
+        ${(workQueues.denial_queue || []).length > 0 ? `
+        <div class="card bs-card">
+          <div class="card-header"><h3 style="color:#ef4444;">Denial Queue (${workQueues.counts.denials})</h3></div>
+          <div class="card-body" style="padding:0;"><table style="font-size:13px;">
+            <thead><tr><th>Claim</th><th>Category</th><th style="text-align:right;">Amount</th><th>Deadline</th><th>Priority</th></tr></thead>
+            <tbody>${(workQueues.denial_queue || []).slice(0, 10).map(d => {
+              const claim = d.claim || {};
+              const deadline = d.appeal_deadline || d.appealDeadline || '';
+              const isOverdue = deadline && new Date(deadline) < new Date();
+              return `<tr style="${isOverdue ? 'background:#fef2f2;' : ''}cursor:pointer;" onclick="window.app.viewClaimDetail(${claim.id})">
+                <td><strong style="font-family:monospace;font-size:11px;">${escHtml(claim.claim_number || claim.claimNumber || '')}</strong></td>
+                <td class="text-sm">${escHtml(d.denial_category || d.denialCategory || '')}</td>
+                <td style="text-align:right;color:var(--red);font-weight:600;">${_fmtMoney(d.denied_amount || d.deniedAmount)}</td>
+                <td style="font-size:11px;${isOverdue ? 'color:var(--red);font-weight:700;' : ''}">${deadline ? formatDateDisplay(deadline) : '—'}${isOverdue ? ' !' : ''}</td>
+                <td><span style="font-size:11px;font-weight:600;color:${d.priority === 'urgent' ? 'var(--red)' : d.priority === 'high' ? '#f97316' : 'var(--gray-500)'};">${d.priority || 'normal'}</span></td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table></div>
+        </div>` : ''}
+      </div>` : ''}
+
+      <!-- AI Denial Risk Analysis -->
+      ${(denialRisk.risk_factors || []).length > 0 ? `
+      <div class="card bs-card" style="margin-top:16px;">
+        <div class="card-header"><h3 style="color:#8b5cf6;">AI Denial Risk Analysis</h3><span style="font-size:11px;color:var(--gray-400);">Overall: ${denialRisk.overall_denial_rate || 0}% denial rate</span></div>
+        <div class="card-body" style="padding:14px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+            ${(denialRisk.payer_denial_rates || []).slice(0, 6).map(p => `
+              <div style="padding:8px 14px;background:${p.denial_rate > 20 ? '#fef2f2' : p.denial_rate > 10 ? '#fffbeb' : '#f0fdf4'};border-radius:10px;text-align:center;min-width:100px;">
+                <div style="font-size:18px;font-weight:800;color:${p.denial_rate > 20 ? 'var(--red)' : p.denial_rate > 10 ? '#f59e0b' : 'var(--green)'};">${p.denial_rate}%</div>
+                <div style="font-size:11px;color:var(--gray-600);font-weight:500;">${escHtml(p.payer || '')}</div>
+                <div style="font-size:10px;color:var(--gray-400);">${p.denied}/${p.total_claims} denied</div>
+              </div>
+            `).join('')}
+          </div>
+          <div style="border-top:1px solid var(--gray-100);padding-top:10px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-500);margin-bottom:6px;">Recommendations</div>
+            ${(denialRisk.recommendations || []).map(r => `<div style="font-size:13px;padding:4px 0;color:var(--gray-600);">&#8226; ${escHtml(r)}</div>`).join('')}
+          </div>
+        </div>
+      </div>` : ''}
     </div>
 
     <!-- ═══ CLIENTS TAB ═══ -->
