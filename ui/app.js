@@ -1258,22 +1258,18 @@ async function navigateTo(page) {
       await renderContractDetail(window._selectedContractId);
       break;
     case 'billing-services':
-      pageTitle.textContent = 'Billing Services';
-      pageSubtitle.textContent = 'Manage medical billing for client organizations';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openBsClientModal()">+ Add Client</button> <button class="btn btn-sm btn-primary" onclick="window.app.openBsTaskModal()">+ Add Task</button> <button class="btn btn-sm" onclick="window.app.openBsActivityModal()">+ Log Activity</button>' + printBtn;
-      await renderBillingServicesPage();
+    case 'rcm':
+    case 'revenue-cycle':
+      pageTitle.textContent = 'Revenue Cycle';
+      pageSubtitle.textContent = 'Clients, claims, denials, payments, charges, A/R';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openBsClientModal()">+ Add Client</button> <button class="btn btn-sm btn-primary" onclick="window.app.openRcmClaimModal()">+ New Claim</button> <button class="btn btn-sm" onclick="window.app.openRcmPaymentModal()">+ Post Payment</button>' + printBtn;
+      await renderRevenueCyclePage();
       break;
     case 'billing-client-detail':
       pageTitle.textContent = 'Billing Client';
       pageSubtitle.textContent = '';
       pageActions.innerHTML = printBtn;
       await renderBillingClientDetail(window._selectedBillingClientId);
-      break;
-    case 'rcm':
-      pageTitle.textContent = 'Revenue Cycle Management';
-      pageSubtitle.textContent = 'Claims, denials, payments, charge capture, A/R aging';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openRcmClaimModal()">+ New Claim</button> <button class="btn btn-sm btn-primary" onclick="window.app.openRcmPaymentModal()">+ Post Payment</button> <button class="btn btn-sm" onclick="window.app.openRcmDenialModal()">+ Track Denial</button>' + printBtn;
-      await renderRcmPage();
       break;
     case 'invoice-detail':
       pageTitle.textContent = 'Invoice Detail';
@@ -6458,6 +6454,7 @@ async function renderContractDetail(id)      { (await _page('billing')).renderCo
 async function renderBillingServicesPage()   { (await _page('billing-services')).renderBillingServicesPage(); }
 async function renderBillingClientDetail(id) { (await _page('billing-services')).renderBillingClientDetail(id); }
 async function renderRcmPage()              { (await _page('rcm')).renderRcmPage(); }
+async function renderRevenueCyclePage()     { (await _page('revenue-cycle')).renderRevenueCyclePage(); }
 async function renderExclusionsPage()        { (await _page('compliance')).renderExclusionsPage(); }
 async function renderCompliancePage()        { (await _page('compliance')).renderCompliancePage(); }
 async function renderPSVPage()               { (await _page('compliance')).renderPSVPage(); }
@@ -10496,6 +10493,19 @@ function handleNppesProxy(payload) {
   generateComplianceReportPDF() { return generateComplianceReportPDF(); },
   generatePayerReport(providerId) { return generatePayerReport(providerId); },
 
+  // ── Revenue Cycle (unified) ──
+  async rcSwitchTab(tab) {
+    window._rcTab = tab;
+    document.querySelectorAll('.rc-tab').forEach(t => t.classList.toggle('active', t.textContent.trim().toLowerCase().replace(/\//g, '').replace(/a\/r aging/i, 'ar').replace(/ /g, '') === tab || t.onclick?.toString().includes("'" + tab + "'")));
+    // Re-highlight active tab
+    document.querySelectorAll('.rc-tab').forEach(t => {
+      const match = t.getAttribute('onclick')?.match(/'(\w+)'/);
+      if (match) t.classList.toggle('active', match[1] === tab);
+    });
+    const { _renderRcTabContent } = await import('./pages/revenue-cycle.js');
+    await _renderRcTabContent(tab);
+  },
+
   // ── RCM: Claims, Denials, Payments, Charges ──
   rcmTab(btn, tabId) {
     window._rcmTab = tabId;
@@ -10881,7 +10891,7 @@ function handleNppesProxy(payload) {
       else await store.createBillingTask(data);
       document.getElementById('bs-task-modal').classList.remove('active');
       showToast(editId ? 'Task updated' : 'Task created');
-      if (currentPage === 'billing-services') await renderBillingServicesPage();
+      if (currentPage === 'billing-services' || currentPage === 'revenue-cycle') await renderRevenueCyclePage();
       else if (currentPage === 'billing-client-detail') await renderBillingClientDetail(window._selectedBillingClientId);
     } catch (e) { showToast('Error: ' + e.message); }
   },
@@ -10889,7 +10899,7 @@ function handleNppesProxy(payload) {
     try {
       await store.updateBillingTask(id, { status: 'completed' });
       showToast('Task completed');
-      if (currentPage === 'billing-services') await renderBillingServicesPage();
+      if (currentPage === 'billing-services' || currentPage === 'revenue-cycle') await renderRevenueCyclePage();
       else if (currentPage === 'billing-client-detail') await renderBillingClientDetail(window._selectedBillingClientId);
     } catch (e) { showToast('Error: ' + e.message); }
   },
@@ -10898,7 +10908,7 @@ function handleNppesProxy(payload) {
     try {
       await store.deleteBillingTask(id);
       showToast('Task deleted');
-      if (currentPage === 'billing-services') await renderBillingServicesPage();
+      if (currentPage === 'billing-services' || currentPage === 'revenue-cycle') await renderRevenueCyclePage();
       else if (currentPage === 'billing-client-detail') await renderBillingClientDetail(window._selectedBillingClientId);
     } catch (e) { showToast('Error: ' + e.message); }
   },
@@ -10949,7 +10959,7 @@ function handleNppesProxy(payload) {
       await store.createBillingActivity(data);
       document.getElementById('bs-activity-modal').classList.remove('active');
       showToast('Activity logged');
-      if (currentPage === 'billing-services') await renderBillingServicesPage();
+      if (currentPage === 'billing-services' || currentPage === 'revenue-cycle') await renderRevenueCyclePage();
       else if (currentPage === 'billing-client-detail') await renderBillingClientDetail(window._selectedBillingClientId);
     } catch (e) { showToast('Error: ' + e.message); }
   },
@@ -10958,7 +10968,7 @@ function handleNppesProxy(payload) {
     try {
       await store.deleteBillingActivity(id);
       showToast('Activity deleted');
-      if (currentPage === 'billing-services') await renderBillingServicesPage();
+      if (currentPage === 'billing-services' || currentPage === 'revenue-cycle') await renderRevenueCyclePage();
       else if (currentPage === 'billing-client-detail') await renderBillingClientDetail(window._selectedBillingClientId);
     } catch (e) { showToast('Error: ' + e.message); }
   },
@@ -15463,7 +15473,7 @@ async function renderOrgDetailPage(orgId) {
             }).join('')}</tbody>
           </table></div>
         </div>` : ''}
-      ` : `<div class="empty-state" style="padding:30px;"><p>No billing services configured for this organization.</p><p style="margin-top:8px;"><button class="btn btn-primary btn-sm" onclick="window.app.navigateTo('billing-services')">Set Up Billing Services</button></p></div>`}
+      ` : `<div class="empty-state" style="padding:30px;"><p>No billing services configured for this organization.</p><p style="margin-top:8px;"><button class="btn btn-primary btn-sm" onclick="window.app.navigateTo('revenue-cycle')">Set Up Billing Services</button></p></div>`}
     </div>
 
     <!-- Contacts Tab -->

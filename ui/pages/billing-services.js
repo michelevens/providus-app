@@ -702,7 +702,7 @@ async function renderBillingClientDetail(clientId) {
   if (pageTitle) pageTitle.textContent = orgName;
   if (pageSubtitle) pageSubtitle.textContent = 'Billing Services — ' + platform;
   if (pageActions) pageActions.innerHTML = `
-    <button class="btn btn-sm" onclick="window.app.navigateTo('billing-services')">&larr; All Clients</button>
+    <button class="btn btn-sm" onclick="window.app.navigateTo('revenue-cycle')">&larr; All Clients</button>
     <button class="btn btn-sm btn-primary" onclick="window.app.openBsTaskModal(${client.id})">+ Task</button>
     <button class="btn btn-sm btn-gold" onclick="window.app.openBsActivityModal(${client.id})">+ Log Activity</button>
     <button class="btn btn-sm" onclick="window.app.generateBillingInvoice(${client.id})">Generate Invoice</button>
