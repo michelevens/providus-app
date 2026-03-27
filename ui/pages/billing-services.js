@@ -144,13 +144,16 @@ async function renderBillingServicesPage() {
     return (today - d) > 7 * 86400000;
   });
 
-  // Total revenue numbers — prefer financials if present, fall back to claim stats
+  // Total revenue numbers — prefer claim stats (real data), fall back to financials
+  const claimBilled = claimStats.total_charged || claimStats.totalCharged || 0;
+  const claimCollected = claimStats.total_paid || claimStats.totalPaid || 0;
+  const claimDenied = claimStats.total_denied_amount || claimStats.totalDeniedAmount || 0;
   const finBilled = financials.reduce((s, f) => s + (f.amountBilled || f.amount_billed || 0), 0);
   const finCollected = financials.reduce((s, f) => s + (f.amountCollected || f.amount_collected || 0), 0);
   const finDenied = financials.reduce((s, f) => s + (f.deniedAmount || f.denied_amount || 0), 0);
-  const totalBilled = finBilled || claimStats.total_charged || claimStats.totalCharged || 0;
-  const totalCollected = finCollected || claimStats.total_paid || claimStats.totalPaid || 0;
-  const totalDenied = finDenied || claimStats.total_denied_amount || claimStats.totalDeniedAmount || 0;
+  const totalBilled = claimBilled || finBilled;
+  const totalCollected = claimCollected || finCollected;
+  const totalDenied = claimDenied || finDenied;
   const collectionRate = totalBilled > 0 ? ((totalCollected / totalBilled) * 100).toFixed(1) : '0.0';
   const denialRate = totalBilled > 0 ? ((totalDenied / totalBilled) * 100).toFixed(1) : '0.0';
 

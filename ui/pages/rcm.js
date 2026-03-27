@@ -246,20 +246,21 @@ async function renderRcmPage() {
           </div>
         </div>
         <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
-          <thead><tr><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Balance</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Pt Resp</th><th style="text-align:right;">Balance</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="rcm-claims-tbody">
-            ${claims.map(c => `<tr class="rcm-claim-row" data-status="${c.status}" data-client="${c.billingClientId || c.billing_client_id || ''}">
-              <td><strong style="font-family:monospace;font-size:12px;">${escHtml(c.claimNumber || c.claim_number || '')}</strong></td>
+            ${claims.map(c => `<tr class="rcm-claim-row" data-status="${c.status}" data-client="${c.billingClientId || c.billing_client_id || ''}" style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
+              <td><strong style="font-family:monospace;font-size:12px;color:var(--brand-600);">${escHtml(c.claimNumber || c.claim_number || '')}</strong></td>
               <td class="text-sm">${escHtml(c.patientName || c.patient_name || '—')}</td>
               <td class="text-sm">${escHtml(c.payerName || c.payer_name || '—')}</td>
               <td class="text-sm">${formatDateDisplay(c.dateOfService || c.date_of_service)}</td>
               <td style="text-align:right;">${_fm(c.totalCharges || c.total_charges)}</td>
               <td style="text-align:right;color:var(--green);font-weight:600;">${_fm(c.totalPaid || c.total_paid)}</td>
+              <td style="text-align:right;color:#7c3aed;">${_fm(c.patientResponsibility || c.patient_responsibility)}</td>
               <td style="text-align:right;${(c.balance || 0) > 0 ? 'color:var(--red);font-weight:600;' : ''}">${_fm(c.balance)}</td>
               <td>${_claimBadge(c.status)}</td>
-              <td><button class="btn btn-sm" onclick="window.app.editRcmClaim(${c.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteRcmClaim(${c.id})">Del</button></td>
+              <td><button class="btn btn-sm" onclick="event.stopPropagation();window.app.editRcmClaim(${c.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="event.stopPropagation();window.app.deleteRcmClaim(${c.id})">Del</button></td>
             </tr>`).join('')}
-            ${claims.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No claims yet. Click "+ New Claim" to create one.</td></tr>' : ''}
+            ${claims.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--gray-500);">No claims yet. Click "+ New Claim" to create one.</td></tr>' : ''}
           </tbody>
         </table></div></div>
       </div>
@@ -586,4 +587,181 @@ const IMPORT_FIELDS = [
   { key: '', label: '— Skip this column —', required: false },
 ];
 
-export { renderRcmPage, CLAIM_STATUSES, DENIAL_CATEGORIES, DENIAL_STATUSES, CPT_CODES, ICD_CODES, IMPORT_FIELDS };
+// ─── Claim Detail View ───
+async function renderClaimDetail(claimId) {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  let claim;
+  try { claim = await store.getRcmClaim(claimId); } catch (e) { showToast('Claim not found'); return; }
+  if (!claim) { showToast('Claim not found'); return; }
+
+  const denials = claim.denials || [];
+  const payments = (claim.paymentAllocations || claim.payment_allocations || []);
+  const serviceLines = claim.serviceLines || claim.service_lines || [];
+  const isDenied = claim.status === 'denied' || claim.status === 'appealed';
+  const daysInAR = claim.dateOfService || claim.date_of_service ? Math.floor((new Date() - new Date(claim.dateOfService || claim.date_of_service)) / 86400000) : 0;
+
+  body.innerHTML = `
+    <style>
+      .cd-back{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--gray-500);cursor:pointer;margin-bottom:12px;font-weight:600;}
+      .cd-back:hover{color:var(--brand-600);}
+      .cd-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px;}
+      .cd-title{font-size:22px;font-weight:800;color:var(--text-color);}
+      .cd-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--gray-500);margin-top:4px;}
+      .cd-meta span{display:flex;align-items:center;gap:4px;}
+      .cd-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;}
+      .cd-card{background:white;border-radius:14px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+      .cd-card h4{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin:0 0 10px;}
+      .cd-field{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--gray-100);font-size:13px;}
+      .cd-field:last-child{border:none;}
+      .cd-field .label{color:var(--gray-500);}
+      .cd-field .value{font-weight:600;color:var(--text-color);}
+      .cd-section{background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,0.06);margin-bottom:16px;overflow:hidden;}
+      .cd-section .cd-sh{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--gray-100);}
+      .cd-section .cd-sh h4{margin:0;font-size:14px;font-weight:700;}
+      .cd-section table{width:100%;border-collapse:collapse;font-size:13px;}
+      .cd-section table th{text-align:left;padding:8px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);background:var(--gray-50);}
+      .cd-section table td{padding:8px 14px;border-top:1px solid var(--gray-100);}
+      .cd-timeline{padding:18px;}
+      .cd-tl-item{display:flex;gap:12px;padding-bottom:16px;position:relative;}
+      .cd-tl-item:not(:last-child)::before{content:'';position:absolute;left:9px;top:22px;bottom:0;width:2px;background:var(--gray-200);}
+      .cd-tl-dot{width:20px;height:20px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:white;font-weight:700;}
+      .cd-tl-content{flex:1;}
+      .cd-tl-title{font-size:13px;font-weight:600;}
+      .cd-tl-date{font-size:11px;color:var(--gray-400);margin-top:2px;}
+      @media(max-width:768px){.cd-grid{grid-template-columns:1fr;}}
+    </style>
+
+    <div class="cd-back" onclick="window.app.rcSwitchTab('claims')">← Back to Claims</div>
+
+    <div class="cd-header">
+      <div>
+        <div class="cd-title">${escHtml(claim.claimNumber || claim.claim_number || '')} ${_claimBadge(claim.status)}</div>
+        <div class="cd-meta">
+          <span><strong>${escHtml(claim.patientName || claim.patient_name || '')}</strong></span>
+          <span>${escHtml(claim.payerName || claim.payer_name || '')}</span>
+          <span>DOS: ${formatDateDisplay(claim.dateOfService || claim.date_of_service)}</span>
+          <span>${daysInAR}d in A/R</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sm" onclick="window.app.editRcmClaim(${claim.id})">Edit Claim</button>
+        ${isDenied ? `<button class="btn btn-sm btn-primary" onclick="window.app.openRcmDenialModal({claimId:${claim.id},claim_id:${claim.id}})">+ Track Denial</button>` : ''}
+        <button class="btn btn-sm" onclick="window.app.openRcmPaymentModal({claimId:${claim.id}})">+ Post Payment</button>
+      </div>
+    </div>
+
+    <!-- Financial Summary Cards -->
+    <div class="cd-grid">
+      <div class="cd-card">
+        <h4>Financial Summary</h4>
+        <div class="cd-field"><span class="label">Total Charges</span><span class="value">${_fm(claim.totalCharges || claim.total_charges)}</span></div>
+        <div class="cd-field"><span class="label">Allowed Amount</span><span class="value">${_fm(claim.totalAllowed || claim.total_allowed)}</span></div>
+        <div class="cd-field"><span class="label">Paid</span><span class="value" style="color:var(--green);">${_fm(claim.totalPaid || claim.total_paid)}</span></div>
+        <div class="cd-field"><span class="label">Adjustments</span><span class="value">${_fm(claim.adjustments)}</span></div>
+        <div class="cd-field"><span class="label">Patient Resp.</span><span class="value" style="color:#7c3aed;">${_fm(claim.patientResponsibility || claim.patient_responsibility)}</span></div>
+        <div class="cd-field"><span class="label">Balance</span><span class="value" style="color:${(claim.balance || 0) > 0 ? 'var(--red)' : 'var(--green)'};">${_fm(claim.balance)}</span></div>
+      </div>
+      <div class="cd-card">
+        <h4>Claim Details</h4>
+        <div class="cd-field"><span class="label">Claim Type</span><span class="value">${claim.claimType || claim.claim_type || '837P'}</span></div>
+        <div class="cd-field"><span class="label">Provider</span><span class="value">${escHtml(claim.providerName || claim.provider_name || '—')}</span></div>
+        <div class="cd-field"><span class="label">Member ID</span><span class="value">${escHtml(claim.patientMemberId || claim.patient_member_id || '—')}</span></div>
+        <div class="cd-field"><span class="label">Authorization #</span><span class="value">${escHtml(claim.authorizationNumber || claim.authorization_number || '—')}</span></div>
+        <div class="cd-field"><span class="label">Submission</span><span class="value">${claim.submissionMethod || claim.submission_method || '—'}</span></div>
+        <div class="cd-field"><span class="label">Payer ID</span><span class="value" style="font-family:monospace;font-size:11px;">${escHtml(claim.payerIdNumber || claim.payer_id_number || '—')}</span></div>
+      </div>
+      <div class="cd-card">
+        <h4>Timeline</h4>
+        <div class="cd-field"><span class="label">Submitted</span><span class="value">${formatDateDisplay(claim.submittedDate || claim.submitted_date) || '—'}</span></div>
+        <div class="cd-field"><span class="label">Acknowledged</span><span class="value">${formatDateDisplay(claim.acknowledgedDate || claim.acknowledged_date) || '—'}</span></div>
+        <div class="cd-field"><span class="label">Adjudicated</span><span class="value">${formatDateDisplay(claim.adjudicatedDate || claim.adjudicated_date) || '—'}</span></div>
+        <div class="cd-field"><span class="label">Paid</span><span class="value">${formatDateDisplay(claim.paidDate || claim.paid_date) || '—'}</span></div>
+        <div class="cd-field"><span class="label">Check #</span><span class="value">${escHtml(claim.checkNumber || claim.check_number || '—')}</span></div>
+        <div class="cd-field"><span class="label">Days in A/R</span><span class="value" style="color:${daysInAR > 90 ? 'var(--red)' : daysInAR > 30 ? '#f59e0b' : 'var(--green)'};">${daysInAR}d</span></div>
+      </div>
+    </div>
+
+    <!-- Service Lines -->
+    ${serviceLines.length > 0 ? `
+    <div class="cd-section">
+      <div class="cd-sh"><h4>Service Lines (${serviceLines.length})</h4></div>
+      <table>
+        <thead><tr><th>#</th><th>CPT</th><th>Description</th><th>Modifiers</th><th>ICD</th><th>Units</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th>Status</th></tr></thead>
+        <tbody>
+          ${serviceLines.map(sl => `<tr>
+            <td>${sl.lineNumber || sl.line_number || ''}</td>
+            <td><strong style="font-family:monospace;">${escHtml(sl.cptCode || sl.cpt_code || '')}</strong></td>
+            <td class="text-sm">${escHtml(sl.cptDescription || sl.cpt_description || '')}</td>
+            <td class="text-sm">${escHtml(sl.modifiers || '')}</td>
+            <td class="text-sm">${escHtml(sl.icdCodes || sl.icd_codes || '')}</td>
+            <td>${sl.units || 1}</td>
+            <td style="text-align:right;">${_fm(sl.charges)}</td>
+            <td style="text-align:right;color:var(--green);">${_fm(sl.paidAmount || sl.paid_amount)}</td>
+            <td>${sl.status ? _claimBadge(sl.status) : '—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : ''}
+
+    <!-- Denials -->
+    <div class="cd-section">
+      <div class="cd-sh">
+        <h4>Denials & Appeals (${denials.length})</h4>
+        <button class="btn btn-sm btn-primary" onclick="window.app.openRcmDenialModal({claimId:${claim.id},claim_id:${claim.id}})">+ Track Denial</button>
+      </div>
+      ${denials.length > 0 ? `<table>
+        <thead><tr><th>Category</th><th>Reason</th><th>Code</th><th style="text-align:right;">Amount</th><th>Appeal Deadline</th><th>Priority</th><th>Status</th><th style="text-align:right;">Recovered</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${denials.map(d => {
+            const cat = DENIAL_CATEGORIES.find(x => x.value === (d.denialCategory || d.denial_category));
+            const deadline = d.appealDeadline || d.appeal_deadline || '';
+            const isOverdue = deadline && new Date(deadline) < new Date() && !['resolved_won','resolved_lost','resolved_partial','written_off'].includes(d.status);
+            return `<tr style="${isOverdue ? 'background:#fef2f2;' : ''}">
+              <td><span style="font-size:11px;padding:2px 8px;background:var(--gray-100);border-radius:4px;">${escHtml(cat ? cat.label : (d.denialCategory || d.denial_category || ''))}</span></td>
+              <td class="text-sm" style="max-width:200px;">${escHtml(d.denialReason || d.denial_reason || '')}</td>
+              <td style="font-family:monospace;font-size:11px;">${escHtml(d.denialCode || d.denial_code || '—')}</td>
+              <td style="text-align:right;color:var(--red);font-weight:600;">${_fm(d.deniedAmount || d.denied_amount)}</td>
+              <td style="font-size:12px;${isOverdue ? 'color:var(--red);font-weight:700;' : ''}">${deadline ? formatDateDisplay(deadline) : '—'}${isOverdue ? ' ⚠' : ''}</td>
+              <td><span style="font-size:11px;font-weight:600;color:${d.priority === 'urgent' ? 'var(--red)' : d.priority === 'high' ? '#f97316' : 'var(--gray-500)'};">${d.priority || 'normal'}</span></td>
+              <td>${_denialBadge(d.status)}</td>
+              <td style="text-align:right;color:var(--green);font-weight:600;">${_fm(d.recoveredAmount || d.recovered_amount)}</td>
+              <td><button class="btn btn-sm" onclick="window.app.editRcmDenial(${d.id})">Edit</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>` : `<div style="padding:24px;text-align:center;color:var(--gray-400);">${isDenied ? 'No denial records tracked yet. Click "+ Track Denial" to start the appeal process.' : 'No denials on this claim.'}</div>`}
+    </div>
+
+    <!-- Payments -->
+    <div class="cd-section">
+      <div class="cd-sh">
+        <h4>Payment History (${payments.length})</h4>
+        <button class="btn btn-sm" onclick="window.app.openRcmPaymentModal({claimId:${claim.id}})">+ Post Payment</button>
+      </div>
+      ${payments.length > 0 ? `<table>
+        <thead><tr><th>Date</th><th style="text-align:right;">Charged</th><th style="text-align:right;">Allowed</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Adjustment</th><th style="text-align:right;">Pt Resp</th></tr></thead>
+        <tbody>
+          ${payments.map(p => `<tr>
+            <td class="text-sm">${formatDateDisplay(p.createdAt || p.created_at) || '—'}</td>
+            <td style="text-align:right;">${_fm(p.chargedAmount || p.charged_amount)}</td>
+            <td style="text-align:right;">${_fm(p.allowedAmount || p.allowed_amount)}</td>
+            <td style="text-align:right;color:var(--green);font-weight:600;">${_fm(p.paidAmount || p.paid_amount)}</td>
+            <td style="text-align:right;">${_fm(p.adjustmentAmount || p.adjustment_amount)}</td>
+            <td style="text-align:right;color:#7c3aed;">${_fm(p.patientResponsibility || p.patient_responsibility)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : '<div style="padding:24px;text-align:center;color:var(--gray-400);">No payments posted yet.</div>'}
+    </div>
+
+    <!-- Notes -->
+    ${claim.notes ? `
+    <div class="cd-section">
+      <div class="cd-sh"><h4>Notes</h4></div>
+      <div style="padding:14px 18px;font-size:13px;color:var(--gray-600);white-space:pre-wrap;">${escHtml(claim.notes)}</div>
+    </div>` : ''}
+  `;
+}
+
+export { renderRcmPage, renderClaimDetail, CLAIM_STATUSES, DENIAL_CATEGORIES, DENIAL_STATUSES, CPT_CODES, ICD_CODES, IMPORT_FIELDS };

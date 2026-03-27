@@ -10497,7 +10497,13 @@ function handleNppesProxy(payload) {
   // ── Revenue Cycle (unified) ──
   async rcSwitchTab(tab) {
     window._rcTab = tab;
+    window._claimDetailId = null;
     await renderRevenueCyclePage();
+  },
+  async viewClaimDetail(id) {
+    window._claimDetailId = id;
+    const { renderClaimDetail } = await import('./pages/rcm.js');
+    await renderClaimDetail(id);
   },
 
   // ── Claim CSV Import ──
