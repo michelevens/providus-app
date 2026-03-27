@@ -6455,6 +6455,7 @@ async function renderBillingServicesPage()   { (await _page('billing-services'))
 async function renderBillingClientDetail(id) { (await _page('billing-services')).renderBillingClientDetail(id); }
 async function renderRcmPage()              { (await _page('rcm')).renderRcmPage(); }
 async function renderRevenueCyclePage()     { (await _page('revenue-cycle')).renderRevenueCyclePage(); }
+// renderBillingClientDetail still loaded from billing-services via revenue-cycle re-export
 async function renderExclusionsPage()        { (await _page('compliance')).renderExclusionsPage(); }
 async function renderCompliancePage()        { (await _page('compliance')).renderCompliancePage(); }
 async function renderPSVPage()               { (await _page('compliance')).renderPSVPage(); }
@@ -10494,11 +10495,9 @@ function handleNppesProxy(payload) {
   generatePayerReport(providerId) { return generatePayerReport(providerId); },
 
   // ── Revenue Cycle (unified) ──
-  rcSwitchTab(tab) {
+  async rcSwitchTab(tab) {
     window._rcTab = tab;
-    // CSS-only switch — instant, no re-fetching
-    document.querySelectorAll('.rc-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-    document.querySelectorAll('.rc-tab-content').forEach(el => el.classList.toggle('active', el.id === 'rc-tab-' + tab));
+    await renderRevenueCyclePage();
   },
 
   // ── RCM: Claims, Denials, Payments, Charges ──
