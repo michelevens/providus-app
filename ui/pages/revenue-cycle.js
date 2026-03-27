@@ -65,7 +65,7 @@ async function renderRevenueCyclePage() {
   const tabBar = `
     <style>
       .rc-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--gray-200);overflow-x:auto;}
-      .rc-tab{padding:10px 14px;font-size:13px;font-weight:600;color:var(--gray-500);cursor:pointer;border:none;background:none;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all 0.15s;}
+      .rc-tab{padding:8px 10px;font-size:12px;font-weight:600;color:var(--gray-500);cursor:pointer;border:none;background:none;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all 0.15s;}
       .rc-tab:hover{color:var(--brand-600);background:var(--gray-50);}
       .rc-tab.active{color:var(--brand-600);border-bottom-color:var(--brand-600);}
     </style>
