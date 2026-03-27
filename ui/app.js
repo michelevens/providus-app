@@ -1029,6 +1029,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderApplications();
       break;
+    case 'application-detail':
+      pageTitle.textContent = 'Application Detail';
+      pageSubtitle.textContent = '';
+      pageActions.innerHTML = printBtn;
+      await renderApplicationDetailPage(window._selectedApplicationId);
+      break;
     case 'followups':
       pageTitle.textContent = 'Follow-ups';
       pageSubtitle.textContent = 'Pending and overdue follow-up tasks';
@@ -2852,7 +2858,7 @@ async function renderAppTable(prefetchedApps = null) {
       const facObj = a.facilityId ? facMap[a.facilityId] : null;
       const facilityName = facObj ? facObj.name : '';
 
-      return `<tr onclick="window.app.viewTimeline('${a.id}')" style="cursor:pointer;">
+      return `<tr onclick="window.app.viewApplicationDetail('${a.id}')" style="cursor:pointer;">
         <td onclick="event.stopPropagation();"><input type="checkbox" class="app-checkbox" data-app-id="${a.id}" onchange="window.app.onBulkCheckChange()"></td>
         <td>
           <span style="font-family:monospace;font-size:10px;color:var(--brand-600);">${toHexId(a.id)}</span>
@@ -2877,7 +2883,7 @@ async function renderAppTable(prefetchedApps = null) {
             <button class="btn btn-sm" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';" title="Actions" style="padding:4px 8px;">&#8943;</button>
             <div style="display:none;position:absolute;right:0;top:100%;z-index:50;background:#fff;border:1px solid var(--gray-200);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:4px;min-width:130px;">
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.openLogEntry('${a.id}')">Log Activity</button>
-              <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.viewTimeline('${a.id}')">Timeline</button>
+              <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.viewApplicationDetail('${a.id}')">Timeline</button>
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.openDocChecklist('${a.id}')">Documents</button>
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.editApplication('${a.id}')">Edit</button>
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--brand-600);" onclick="window.app.requestDocument('${a.providerId}','${escAttr((allProviders?.find(p=>p.id===a.providerId)||{}).firstName||'')}','${a.id}')">Request Doc</button>
@@ -8597,6 +8603,10 @@ window.app = {
   viewTimeline(appId) {
     renderApplicationTimeline(appId);
   },
+  viewApplicationDetail(appId) {
+    window._selectedApplicationId = appId;
+    navigateTo('application-detail');
+  },
 
   // ─── New Tool Actions ───
 
@@ -13430,6 +13440,197 @@ async function renderApplicationTimeline(appId) {
   `;
 
   modal.classList.add('active');
+}
+
+// ─── Application Detail Page (dedicated) ───
+
+async function renderApplicationDetailPage(appId) {
+  const body = document.getElementById('page-body');
+  if (!appId) { body.innerHTML = '<div class="empty-state"><h3>Application not found</h3></div>'; return; }
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  let app = {};
+  try { app = await store.getOne('applications', appId); } catch {}
+  if (!app || !app.id) { body.innerHTML = '<div class="empty-state"><h3>Application not found</h3></div>'; return; }
+
+  const payer = getPayerById(app.payerId) || { name: app.payerName || app.payer_name || '—' };
+  let provider = {};
+  try { provider = await store.getOne('providers', app.providerId || app.provider_id); } catch {}
+  const provName = provider ? `${provider.firstName || provider.first_name || ''} ${provider.lastName || provider.last_name || ''}`.trim() : '—';
+
+  let logs = [], followups = [], tasks = [], facilities = [];
+  try { logs = (await store.getAll('activity-logs')).filter(l => String(l.applicationId || l.application_id) === String(appId)).sort((a, b) => (b.date || '').localeCompare(a.date || '')); } catch {}
+  try { followups = (await store.getAll('followups')).filter(f => String(f.applicationId || f.application_id) === String(appId)).sort((a, b) => (b.dueDate || b.due_date || '').localeCompare(a.dueDate || a.due_date || '')); } catch {}
+  try { tasks = (await store.getAll('tasks')).filter(t => (t.linkedApplicationId || t.linkedAppId || t.linked_application_id) == appId); } catch {}
+  try { facilities = await store.getAll('facilities'); } catch {}
+
+  const status = app.status || 'new';
+  const statusColors = APPLICATION_STATUSES || {};
+  const sc = statusColors[status] || { color: '#6B7280', bg: '#F3F4F6' };
+  const type = app.type || app.applicationType || 'individual';
+  const typeLabels = { individual: 'Individual', group: 'Group', both: 'Both', location_addition: 'Location Addition', recredentialing: 'Recredentialing' };
+  const wave = app.wave || app.group;
+  const facility = facilities.find(f => f.id == (app.facilityId || app.facility_id));
+  const submittedDate = app.submittedDate || app.submitted_date || app.createdAt || app.created_at || '';
+  const effectiveDate = app.effectiveDate || app.effective_date || '';
+  const statusDate = app.statusChangedDate || app.status_changed_date || '';
+  const daysSince = statusDate ? Math.floor((new Date() - new Date(statusDate)) / 86400000) : submittedDate ? Math.floor((new Date() - new Date(submittedDate)) / 86400000) : 0;
+
+  // Document checklist
+  const docChecklist = app.documentChecklist || app.document_checklist || {};
+  const totalDocs = Object.keys(docChecklist).length;
+  const completedDocs = Object.values(docChecklist).filter(v => v === true || v?.completed).length;
+  const docPct = totalDocs > 0 ? Math.round((completedDocs / totalDocs) * 100) : 0;
+
+  const pageTitle = document.getElementById('page-title');
+  const pageSubtitle = document.getElementById('page-subtitle');
+  const pageActions = document.getElementById('page-actions');
+  if (pageTitle) pageTitle.textContent = `${payer.name || '—'} — ${app.state || '—'}`;
+  if (pageSubtitle) pageSubtitle.textContent = provName;
+  if (pageActions) pageActions.innerHTML = `
+    <button class="btn btn-sm" onclick="window.app.navigateTo('applications')">&larr; All Applications</button>
+    <button class="btn btn-sm btn-primary" onclick="window.app.openLogEntry('${appId}')">+ Log Activity</button>
+    <button class="btn btn-sm" onclick="window.app.openDocChecklist('${appId}')">Documents</button>
+    <button class="btn btn-sm" onclick="window.app.editApplication('${appId}')">Edit</button>
+    <button class="btn btn-sm no-print" onclick="window.app.printPage()">Print</button>
+  `;
+
+  body.innerHTML = `
+    <style>
+      .apd-stat{background:var(--surface-card,#fff);border-radius:16px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}
+      .apd-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
+      .apd-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}
+      .apd-stat .value{font-size:24px;font-weight:800;line-height:1.1;}
+      .apd-stat .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;}
+      .apd-card{border-radius:16px!important;overflow:hidden;}
+    </style>
+
+    <!-- Header Card -->
+    <div class="card apd-card" style="border-top:3px solid ${sc.color || 'var(--brand-600)'};margin-bottom:20px;">
+      <div class="card-body">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+          <div>
+            <div style="font-size:22px;font-weight:800;color:var(--gray-900);">${escHtml(payer.name || '—')}</div>
+            <div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap;font-size:13px;color:var(--gray-600);">
+              <span>Provider: <strong>${escHtml(provName)}</strong></span>
+              <span>State: <strong>${escHtml(app.state || '—')}</strong></span>
+              <span>Type: <strong>${escHtml(typeLabels[type] || type)}</strong></span>
+              ${wave ? `<span>Group: <strong>${typeof getGroupDef === 'function' ? getGroupDef(wave).label : wave}</strong></span>` : ''}
+              ${facility ? `<span>Facility: <strong>${escHtml(facility.name || '')}</strong></span>` : ''}
+            </div>
+            <div style="display:flex;gap:12px;margin-top:4px;font-size:13px;color:var(--gray-500);">
+              ${app.enrollmentId || app.enrollment_id ? `<span>Enrollment ID: <strong style="font-family:monospace;">${escHtml(app.enrollmentId || app.enrollment_id)}</strong></span>` : ''}
+              ${app.applicationRef || app.application_ref ? `<span>Ref: <strong>${escHtml(app.applicationRef || app.application_ref)}</strong></span>` : ''}
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <span class="badge" style="background:${sc.bg || '#f3f4f6'};color:${sc.color || '#6b7280'};font-size:13px;padding:6px 14px;border-radius:8px;font-weight:700;">${status.replace(/_/g, ' ')}</span>
+            <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">${daysSince} days in status</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;margin-bottom:20px;">
+      <div class="apd-stat"><div class="label">Submitted</div><div class="value" style="font-size:16px;">${submittedDate ? formatDateDisplay(submittedDate) : '—'}</div></div>
+      <div class="apd-stat"><div class="label">Effective Date</div><div class="value" style="font-size:16px;color:${effectiveDate ? 'var(--green)' : 'var(--gray-400)'};">${effectiveDate ? formatDateDisplay(effectiveDate) : 'Pending'}</div></div>
+      <div class="apd-stat"><div class="label">Est. Monthly Rev</div><div class="value" style="color:var(--green);">$${Number(app.estMonthlyRevenue || app.est_monthly_revenue || 0).toLocaleString()}</div></div>
+      <div class="apd-stat"><div class="label">Documents</div><div class="value">${completedDocs}/${totalDocs} <span style="font-size:12px;color:${docPct >= 100 ? 'var(--green)' : 'var(--gold)'};">(${docPct}%)</span></div></div>
+      <div class="apd-stat"><div class="label">Activities</div><div class="value">${logs.length}</div></div>
+      <div class="apd-stat"><div class="label">Follow-ups</div><div class="value">${followups.filter(f => !f.completedDate && !f.completed_date).length} <span style="font-size:12px;color:var(--gray-400);">open</span></div></div>
+    </div>
+
+    <!-- Payer Contact -->
+    ${(app.payerContactName || app.payer_contact_name || app.payerContactEmail || app.payer_contact_email) ? `
+    <div class="card apd-card" style="margin-bottom:16px;">
+      <div class="card-header"><h3>Payer Contact</h3></div>
+      <div class="card-body" style="padding:16px;">
+        <div style="display:flex;gap:24px;font-size:13px;">
+          ${app.payerContactName || app.payer_contact_name ? `<span>Name: <strong>${escHtml(app.payerContactName || app.payer_contact_name)}</strong></span>` : ''}
+          ${app.payerContactPhone || app.payer_contact_phone ? `<span>Phone: <strong>${escHtml(app.payerContactPhone || app.payer_contact_phone)}</strong></span>` : ''}
+          ${app.payerContactEmail || app.payer_contact_email ? `<span>Email: <a href="mailto:${escAttr(app.payerContactEmail || app.payer_contact_email)}">${escHtml(app.payerContactEmail || app.payer_contact_email)}</a></span>` : ''}
+        </div>
+      </div>
+    </div>` : ''}
+
+    <!-- Two columns: Timeline + Follow-ups/Tasks -->
+    <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;">
+      <!-- Activity Timeline -->
+      <div class="card apd-card">
+        <div class="card-header"><h3>Activity Timeline (${logs.length})</h3><button class="btn btn-sm btn-primary" onclick="window.app.openLogEntry('${appId}')">+ Log Activity</button></div>
+        <div class="card-body" style="padding:16px;">
+          ${logs.length > 0 ? logs.map(l => {
+            const typeIcons = { call: '&#128222;', email: '&#9993;', portal_check: '&#128187;', status_change: '&#9889;', document: '&#128196;', note: '&#128221;', fax: '&#128224;', comment: '&#128172;', other: '&#128221;' };
+            const typeLabels = { call: 'Phone Call', email: 'Email', portal_check: 'Portal Check', status_change: 'Status Change', document: 'Document', note: 'Note', fax: 'Fax', comment: 'Comment', other: 'Other' };
+            return `<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--gray-100);">
+              <div style="font-size:18px;flex-shrink:0;width:28px;text-align:center;">${typeIcons[l.type] || '&#128221;'}</div>
+              <div style="flex:1;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                  <strong style="font-size:13px;">${escHtml(typeLabels[l.type] || l.type || 'Note')}</strong>
+                  <span style="font-size:11px;color:var(--gray-400);">${formatDateDisplay(l.date || l.createdAt || l.created_at)}</span>
+                </div>
+                ${l.outcome || l.description ? `<div style="font-size:13px;color:var(--gray-700);margin-top:2px;">${escHtml(l.outcome || l.description || '')}</div>` : ''}
+                ${l.contactName || l.contact_name ? `<div style="font-size:11px;color:var(--gray-400);margin-top:2px;">Contact: ${escHtml(l.contactName || l.contact_name)}</div>` : ''}
+                ${l.refNumber || l.ref_number ? `<div style="font-size:11px;color:var(--gray-400);">Ref: ${escHtml(l.refNumber || l.ref_number)}</div>` : ''}
+                ${l.nextStep || l.next_step ? `<div style="font-size:12px;color:var(--brand-600);font-weight:600;margin-top:2px;">Next: ${escHtml(l.nextStep || l.next_step)}</div>` : ''}
+              </div>
+            </div>`;
+          }).join('') : '<div style="text-align:center;padding:2rem;color:var(--gray-400);">No activity logged yet. Click "+ Log Activity" to start tracking.</div>'}
+        </div>
+      </div>
+
+      <!-- Right Column: Follow-ups + Tasks + Notes -->
+      <div>
+        <!-- Follow-ups -->
+        <div class="card apd-card" style="margin-bottom:16px;">
+          <div class="card-header"><h3>Follow-ups (${followups.length})</h3></div>
+          <div class="card-body" style="padding:${followups.length ? '0' : '16px'};">
+            ${followups.length > 0 ? `<table><thead><tr><th>Due</th><th>Type</th><th>Status</th></tr></thead><tbody>
+              ${followups.map(f => {
+                const due = f.dueDate || f.due_date || '';
+                const completed = f.completedDate || f.completed_date;
+                const isOverdue = due && !completed && new Date(due) < new Date();
+                return `<tr style="${isOverdue ? 'background:#fef2f2;' : ''}${completed ? 'opacity:0.5;' : ''}">
+                  <td style="font-size:12px;${isOverdue ? 'color:var(--red);font-weight:600;' : ''}">${due ? formatDateDisplay(due) : '—'}${isOverdue ? ' OVERDUE' : ''}</td>
+                  <td style="font-size:12px;">${escHtml(f.type || '—')}</td>
+                  <td>${completed ? '<span class="badge badge-approved">Done</span>' : '<span class="badge badge-pending">Pending</span>'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody></table>` : '<div style="text-align:center;color:var(--gray-400);font-size:13px;">No follow-ups</div>'}
+          </div>
+        </div>
+
+        <!-- Tasks -->
+        <div class="card apd-card" style="margin-bottom:16px;">
+          <div class="card-header"><h3>Tasks (${tasks.length})</h3></div>
+          <div class="card-body" style="padding:${tasks.length ? '12px' : '16px'};">
+            ${tasks.length > 0 ? tasks.map(t => `
+              <div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--gray-100);">
+                <span style="font-size:16px;">${t.completed ? '&#9745;' : '&#9744;'}</span>
+                <span style="flex:1;font-size:13px;${t.completed ? 'text-decoration:line-through;opacity:0.5;' : ''}">${escHtml(t.title || '—')}</span>
+                ${t.dueDate || t.due_date ? `<span style="font-size:11px;color:var(--gray-400);">${formatDateDisplay(t.dueDate || t.due_date)}</span>` : ''}
+              </div>
+            `).join('') : '<div style="text-align:center;color:var(--gray-400);font-size:13px;">No linked tasks</div>'}
+          </div>
+        </div>
+
+        <!-- Assigned To -->
+        <div class="card apd-card" style="margin-bottom:16px;">
+          <div class="card-header"><h3>Assignment</h3></div>
+          <div class="card-body" style="padding:16px;">
+            <div style="font-size:13px;">
+              <div>Assigned to: <strong>${escHtml(app.assignedToName || app.assigned_to_name || (app.assignedTo || app.assigned_to ? 'Staff #' + (app.assignedTo || app.assigned_to) : 'Unassigned'))}</strong></div>
+              ${app.createdAt || app.created_at ? `<div style="margin-top:4px;color:var(--gray-400);">Created: ${formatDateDisplay(app.createdAt || app.created_at)}</div>` : ''}
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        ${app.notes ? `<div class="card apd-card"><div class="card-header"><h3>Notes</h3></div><div class="card-body" style="padding:16px;"><p style="white-space:pre-wrap;font-size:13px;color:var(--gray-600);margin:0;">${escHtml(app.notes)}</p></div></div>` : ''}
+      </div>
+    </div>
+  `;
 }
 
 // ─── Comment Thread for Application Timeline ───
