@@ -10513,7 +10513,7 @@ function handleNppesProxy(payload) {
         <div class="modal-header"><h3>Import Claims from CSV</h3><button class="modal-close" onclick="document.getElementById('claim-import-modal').classList.remove('active')">&times;</button></div>
         <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
           <div id="import-step-1">
-            <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px;">Upload a CSV file exported from your billing platform (Office Ally, Availity, Kareo, etc.). We'll help you map the columns.</p>
+            <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px;">Upload a CSV file exported from your billing platform (Office Ally, Availity, Kareo, etc.). We'll help you map the columns. <a href="samples/claims-import-sample.csv" download style="color:var(--brand-600);font-weight:600;">Download sample CSV</a></p>
             <div style="display:flex;gap:12px;margin-bottom:16px;">
               <select id="import-platform" class="form-control" style="width:200px;height:38px;" onchange="window.app.loadImportMapping()">
                 <option value="">Select platform...</option>

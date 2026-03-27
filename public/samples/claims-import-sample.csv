@@ -1,0 +1,11 @@
+Patient Name,Payer,Date of Service,CPT Code,ICD Code,Units,Charges,Paid,Provider,Member ID,Patient DOB,Status,Submitted Date,Paid Date,Auth Number,Place of Service,Notes
+John Smith,UnitedHealthcare,03/15/2026,90834,F41.1,1,120.00,0.00,Sarah Demo DNP,UHC-12345,05/12/1985,submitted,03/16/2026,,,11,Initial therapy session
+Jane Doe,Aetna,03/15/2026,90837,F32.1,1,160.00,0.00,Sarah Demo DNP,AET-67890,08/23/1990,submitted,03/16/2026,,,11,60-min psychotherapy
+Robert Williams,Cigna,03/14/2026,99213,F41.9,1,95.00,95.00,Sarah Demo DNP,CIG-11111,01/30/1978,paid,03/14/2026,03/25/2026,,11,Follow-up visit
+Emily Chen,BCBS of Florida,03/12/2026,90791,F43.10,1,250.00,0.00,Sarah Demo DNP,BCBS-22222,11/05/1995,denied,03/13/2026,,,11,Diagnostic evaluation - denied for no auth
+Michael Brown,UnitedHealthcare,03/10/2026,90834,F33.1,1,120.00,120.00,Sarah Demo DNP,UHC-33333,03/17/1982,paid,03/10/2026,03/22/2026,,11,Therapy session - paid in full
+Sarah Johnson,Aetna,03/08/2026,90847,F43.23,1,140.00,0.00,Sarah Demo DNP,AET-44444,07/09/1988,submitted,03/09/2026,,,11,Family therapy with patient
+David Lee,Cigna,03/05/2026,90837,F32.2,1,160.00,130.00,Sarah Demo DNP,CIG-55555,12/01/1975,partial,03/05/2026,03/20/2026,,11,60-min session - partial payment
+Lisa Garcia,BCBS of Florida,03/03/2026,99214,F90.2,1,135.00,0.00,Sarah Demo DNP,BCBS-66666,04/15/2010,submitted,03/04/2026,,,11,Established patient - ADHD follow-up
+James Wilson,UnitedHealthcare,03/01/2026,90832,F41.0,1,80.00,80.00,Sarah Demo DNP,UHC-77777,09/28/1970,paid,03/01/2026,03/15/2026,,11,30-min therapy - panic disorder
+Anna Martinez,Aetna,02/28/2026,96130,F84.0,1,170.00,0.00,Sarah Demo DNP,AET-88888,06/20/2015,submitted,03/01/2026,,,11,Psychological testing evaluation
