@@ -10,6 +10,89 @@ if (typeof window._rcmTab === 'undefined') window._rcmTab = 'claims';
 function _fm(n) { return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function _fk(n) { n = Number(n || 0); return n >= 1000 ? '$' + (n / 1000).toFixed(1) + 'k' : _fm(n); }
 
+// Common behavioral health CPT codes
+const CPT_CODES = [
+  { code: '90791', desc: 'Psychiatric diagnostic evaluation', rate: 250 },
+  { code: '90792', desc: 'Psychiatric diagnostic eval with medical services', rate: 300 },
+  { code: '90832', desc: 'Psychotherapy, 30 min', rate: 80 },
+  { code: '90834', desc: 'Psychotherapy, 45 min', rate: 120 },
+  { code: '90837', desc: 'Psychotherapy, 60 min', rate: 160 },
+  { code: '90838', desc: 'Psychotherapy, crisis, first 60 min', rate: 180 },
+  { code: '90839', desc: 'Psychotherapy, crisis, first 60 min', rate: 180 },
+  { code: '90840', desc: 'Psychotherapy, crisis, each add 30 min', rate: 90 },
+  { code: '90846', desc: 'Family psychotherapy w/o patient', rate: 130 },
+  { code: '90847', desc: 'Family psychotherapy with patient', rate: 140 },
+  { code: '90853', desc: 'Group psychotherapy', rate: 50 },
+  { code: '90863', desc: 'Pharmacologic management with psychotherapy', rate: 70 },
+  { code: '99202', desc: 'Office visit, new patient, 15-29 min', rate: 100 },
+  { code: '99203', desc: 'Office visit, new patient, 30-44 min', rate: 150 },
+  { code: '99204', desc: 'Office visit, new patient, 45-59 min', rate: 200 },
+  { code: '99205', desc: 'Office visit, new patient, 60-74 min', rate: 260 },
+  { code: '99211', desc: 'Office visit, established, 5 min', rate: 30 },
+  { code: '99212', desc: 'Office visit, established, 10-19 min', rate: 60 },
+  { code: '99213', desc: 'Office visit, established, 20-29 min', rate: 95 },
+  { code: '99214', desc: 'Office visit, established, 30-39 min', rate: 135 },
+  { code: '99215', desc: 'Office visit, established, 40-54 min', rate: 185 },
+  { code: '99354', desc: 'Prolonged service, first 30-74 min', rate: 120 },
+  { code: '99355', desc: 'Prolonged service, each add 30 min', rate: 60 },
+  { code: '96130', desc: 'Psychological testing evaluation', rate: 170 },
+  { code: '96131', desc: 'Psychological testing, each add hour', rate: 150 },
+  { code: '96136', desc: 'Psychological test admin by physician', rate: 90 },
+  { code: '96137', desc: 'Psychological test admin, each add 30 min', rate: 80 },
+  { code: '96156', desc: 'Health behavior assessment', rate: 85 },
+  { code: '96158', desc: 'Health behavior intervention, first 30 min', rate: 70 },
+  { code: '96159', desc: 'Health behavior intervention, each add 15 min', rate: 35 },
+  { code: 'H0031', desc: 'Mental health assessment', rate: 150 },
+  { code: 'H0032', desc: 'Mental health service plan development', rate: 120 },
+  { code: 'H0034', desc: 'Medication training/support', rate: 40 },
+  { code: 'H0035', desc: 'Mental health partial hospitalization', rate: 200 },
+  { code: 'H0036', desc: 'Community psychiatric supportive treatment', rate: 50 },
+  { code: 'H2011', desc: 'Crisis intervention service, per 15 min', rate: 45 },
+  { code: 'H2012', desc: 'Behavioral health day treatment, per hour', rate: 60 },
+  { code: 'H2014', desc: 'Skills training, per 15 min', rate: 25 },
+  { code: 'H2015', desc: 'Community support services, per 15 min', rate: 20 },
+  { code: 'H2017', desc: 'Psychosocial rehab, per 15 min', rate: 30 },
+  { code: 'H2019', desc: 'Therapeutic behavioral services, per 15 min', rate: 35 },
+  { code: 'T1017', desc: 'Targeted case management, per 15 min', rate: 25 },
+];
+
+// Common ICD-10 codes for behavioral health
+const ICD_CODES = [
+  { code: 'F31.9', desc: 'Bipolar disorder, unspecified' },
+  { code: 'F32.0', desc: 'Major depressive disorder, single, mild' },
+  { code: 'F32.1', desc: 'Major depressive disorder, single, moderate' },
+  { code: 'F32.2', desc: 'Major depressive disorder, single, severe' },
+  { code: 'F33.0', desc: 'Major depressive disorder, recurrent, mild' },
+  { code: 'F33.1', desc: 'Major depressive disorder, recurrent, moderate' },
+  { code: 'F33.2', desc: 'Major depressive disorder, recurrent, severe' },
+  { code: 'F41.0', desc: 'Panic disorder' },
+  { code: 'F41.1', desc: 'Generalized anxiety disorder' },
+  { code: 'F41.9', desc: 'Anxiety disorder, unspecified' },
+  { code: 'F42.2', desc: 'Mixed obsessional thoughts and acts' },
+  { code: 'F43.10', desc: 'Post-traumatic stress disorder, unspecified' },
+  { code: 'F43.12', desc: 'Post-traumatic stress disorder, chronic' },
+  { code: 'F43.20', desc: 'Adjustment disorder, unspecified' },
+  { code: 'F43.23', desc: 'Adjustment disorder with mixed anxiety and depressed mood' },
+  { code: 'F60.3', desc: 'Borderline personality disorder' },
+  { code: 'F84.0', desc: 'Autistic disorder' },
+  { code: 'F90.0', desc: 'ADHD, predominantly inattentive type' },
+  { code: 'F90.1', desc: 'ADHD, predominantly hyperactive type' },
+  { code: 'F90.2', desc: 'ADHD, combined type' },
+  { code: 'F90.9', desc: 'ADHD, unspecified' },
+  { code: 'F10.20', desc: 'Alcohol dependence, uncomplicated' },
+  { code: 'F11.20', desc: 'Opioid dependence, uncomplicated' },
+  { code: 'F12.20', desc: 'Cannabis dependence, uncomplicated' },
+  { code: 'F13.20', desc: 'Sedative dependence, uncomplicated' },
+  { code: 'F14.20', desc: 'Cocaine dependence, uncomplicated' },
+  { code: 'F15.20', desc: 'Stimulant dependence, uncomplicated' },
+  { code: 'F19.20', desc: 'Other psychoactive substance dependence' },
+  { code: 'F50.00', desc: 'Anorexia nervosa, unspecified' },
+  { code: 'F50.2', desc: 'Bulimia nervosa' },
+  { code: 'F50.81', desc: 'Binge eating disorder' },
+  { code: 'Z71.1', desc: 'Person with feared health complaint' },
+  { code: 'Z63.0', desc: 'Problems in relationship with spouse' },
+];
+
 const CLAIM_STATUSES = [
   { value: 'draft', label: 'Draft', color: '#6b7280', bg: '#f3f4f6' },
   { value: 'submitted', label: 'Submitted', color: '#8b5cf6', bg: '#ede9fe' },
@@ -60,7 +143,7 @@ async function renderRcmPage() {
   const body = document.getElementById('page-body');
   body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
 
-  let claims = [], denials = [], payments = [], charges = [], clients = [];
+  let claims = [], denials = [], payments = [], charges = [], clients = [], providers = [], payers = [];
   let claimStats = {}, denialStats = {}, arData = {};
 
   try { claimStats = await store.getRcmClaimStats(); } catch (e) {}
@@ -71,17 +154,23 @@ async function renderRcmPage() {
   try { charges = await store.getRcmCharges(); } catch (e) {}
   try { clients = await store.getBillingClients(); } catch (e) {}
   try { arData = await store.getRcmArAging(); } catch (e) {}
+  try { providers = await store.getAll('providers'); } catch (e) {}
+  try { payers = window.PAYER_CATALOG || []; } catch (e) {}
 
   if (!Array.isArray(claims)) claims = [];
   if (!Array.isArray(denials)) denials = [];
   if (!Array.isArray(payments)) payments = [];
   if (!Array.isArray(charges)) charges = [];
   if (!Array.isArray(clients)) clients = [];
+  if (!Array.isArray(providers)) providers = [];
+  if (!Array.isArray(payers)) payers = [];
   window._rcmClaims = claims;
   window._rcmDenials = denials;
   window._rcmPayments = payments;
   window._rcmCharges = charges;
   window._rcmClients = clients;
+  window._rcmProviders = providers;
+  window._rcmPayers = payers;
 
   const buckets = arData.buckets || {};
   const totalAR = arData.total_ar || arData.totalAr || 0;
@@ -181,9 +270,24 @@ async function renderRcmPage() {
         <div class="card-body" style="padding:14px;">
           <div style="display:grid;grid-template-columns:1fr 0.8fr 1fr 0.6fr 0.5fr 0.5fr 0.6fr 0.5fr auto;gap:8px;align-items:end;">
             <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Patient</label><input type="text" id="rcm-qc-patient" class="form-control" style="height:32px;font-size:12px;" placeholder="Patient name"></div>
-            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Payer</label><input type="text" id="rcm-qc-payer" class="form-control" style="height:32px;font-size:12px;" placeholder="Payer"></div>
-            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">CPT Code</label><input type="text" id="rcm-qc-cpt" class="form-control" style="height:32px;font-size:12px;" placeholder="99213"></div>
-            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">ICD-10</label><input type="text" id="rcm-qc-icd" class="form-control" style="height:32px;font-size:12px;" placeholder="F41.1"></div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Payer</label>
+              <select id="rcm-qc-payer" class="form-control" style="height:32px;font-size:12px;">
+                <option value="">—</option>
+                ${[...payers].sort((a,b) => (a.name||'').localeCompare(b.name||'')).slice(0,50).map(p => `<option value="${escAttr(p.name)}">${escHtml(p.name)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">CPT Code</label>
+              <select id="rcm-qc-cpt" class="form-control" style="height:32px;font-size:12px;" onchange="window.app.onCptSelect('rcm-qc-cpt','rcm-qc-amount')">
+                <option value="">Select...</option>
+                ${CPT_CODES.map(c => `<option value="${c.code}" data-rate="${c.rate}">${c.code} — ${c.desc}</option>`).join('')}
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">ICD-10</label>
+              <select id="rcm-qc-icd" class="form-control" style="height:32px;font-size:12px;">
+                <option value="">Select...</option>
+                ${ICD_CODES.map(c => `<option value="${c.code}">${c.code} — ${c.desc}</option>`).join('')}
+              </select>
+            </div>
             <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Units</label><input type="number" id="rcm-qc-units" class="form-control" style="height:32px;font-size:12px;" value="1" min="1"></div>
             <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Amount</label><input type="number" id="rcm-qc-amount" class="form-control" style="height:32px;font-size:12px;" step="0.01" placeholder="0.00"></div>
             <div class="auth-field" style="margin:0;"><label style="font-size:10px;">DOS</label><input type="date" id="rcm-qc-dos" class="form-control" style="height:32px;font-size:12px;" value="${new Date().toISOString().split('T')[0]}"></div>
@@ -375,8 +479,20 @@ async function renderRcmPage() {
             <div class="auth-field" style="margin:0;"><label>Claim Type</label><select id="rcm-claim-type" class="form-control"><option value="837P">Professional (837P)</option><option value="837I">Institutional (837I)</option><option value="837D">Dental (837D)</option></select></div>
             <div class="auth-field" style="margin:0;"><label>Patient Name *</label><input type="text" id="rcm-claim-patient" class="form-control" placeholder="Patient name"></div>
             <div class="auth-field" style="margin:0;"><label>Member ID</label><input type="text" id="rcm-claim-member" class="form-control" placeholder="Insurance member ID"></div>
-            <div class="auth-field" style="margin:0;"><label>Payer *</label><input type="text" id="rcm-claim-payer" class="form-control" placeholder="Insurance payer"></div>
-            <div class="auth-field" style="margin:0;"><label>Provider</label><input type="text" id="rcm-claim-provider" class="form-control" placeholder="Rendering provider"></div>
+            <div class="auth-field" style="margin:0;"><label>Payer *</label>
+              <select id="rcm-claim-payer" class="form-control">
+                <option value="">Select payer...</option>
+                ${[...payers].sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(p => `<option value="${escAttr(p.name)}">${escHtml(p.name)}</option>`).join('')}
+                <option value="__other__">Other (type manually)</option>
+              </select>
+              <input type="text" id="rcm-claim-payer-other" class="form-control" style="display:none;margin-top:4px;" placeholder="Enter payer name">
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Provider</label>
+              <select id="rcm-claim-provider" class="form-control">
+                <option value="">Select provider...</option>
+                ${providers.map(p => `<option value="${p.id}" data-name="${escAttr((p.firstName||p.first_name||'')+' '+(p.lastName||p.last_name||''))}">${escHtml((p.firstName||p.first_name||'')+' '+(p.lastName||p.last_name||''))} ${p.credentials ? '('+escHtml(p.credentials)+')' : ''}</option>`).join('')}
+              </select>
+            </div>
             <div class="auth-field" style="margin:0;"><label>Date of Service *</label><input type="date" id="rcm-claim-dos" class="form-control"></div>
             <div class="auth-field" style="margin:0;"><label>Total Charges</label><input type="number" id="rcm-claim-charges" class="form-control" step="0.01" placeholder="0.00"></div>
             <div class="auth-field" style="margin:0;"><label>Status</label><select id="rcm-claim-status-sel" class="form-control">${CLAIM_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select></div>
@@ -403,6 +519,12 @@ async function renderRcmPage() {
             <div class="auth-field" style="margin:0;"><label>Check/Trace #</label><input type="text" id="rcm-pay-check" class="form-control" placeholder="Check or trace number"></div>
             <div class="auth-field" style="margin:0;"><label>Payment Date *</label><input type="date" id="rcm-pay-date" class="form-control" value="${new Date().toISOString().split('T')[0]}"></div>
             <div class="auth-field" style="margin:0;"><label>Amount *</label><input type="number" id="rcm-pay-amount" class="form-control" step="0.01" min="0" placeholder="0.00"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Allocate to Claim (optional)</label>
+              <select id="rcm-pay-claim" class="form-control">
+                <option value="">No allocation — unposted payment</option>
+                ${claims.filter(c => c.status !== 'paid' && c.status !== 'voided').map(c => `<option value="${c.id}" data-balance="${c.balance || 0}">${escHtml(c.claimNumber || c.claim_number || '')} — ${escHtml(c.patientName || c.patient_name || '')} (${escHtml(c.payerName || c.payer_name || '')}) Balance: ${_fm(c.balance)}</option>`).join('')}
+              </select>
+            </div>
             <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Notes</label><textarea id="rcm-pay-notes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
           </div>
         </div>
@@ -434,4 +556,4 @@ async function renderRcmPage() {
   `;
 }
 
-export { renderRcmPage, CLAIM_STATUSES, DENIAL_CATEGORIES, DENIAL_STATUSES };
+export { renderRcmPage, CLAIM_STATUSES, DENIAL_CATEGORIES, DENIAL_STATUSES, CPT_CODES, ICD_CODES };

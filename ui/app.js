@@ -10529,8 +10529,19 @@ function handleNppesProxy(payload) {
     document.getElementById('rcm-claim-type').value = editData?.claimType || editData?.claim_type || '837P';
     document.getElementById('rcm-claim-patient').value = editData?.patientName || editData?.patient_name || '';
     document.getElementById('rcm-claim-member').value = editData?.patientMemberId || editData?.patient_member_id || '';
-    document.getElementById('rcm-claim-payer').value = editData?.payerName || editData?.payer_name || '';
-    document.getElementById('rcm-claim-provider').value = editData?.providerName || editData?.provider_name || '';
+    const payerSel = document.getElementById('rcm-claim-payer');
+    const payerOther = document.getElementById('rcm-claim-payer-other');
+    const payerVal = editData?.payerName || editData?.payer_name || '';
+    if (payerSel) {
+      const found = [...payerSel.options].some(o => o.value === payerVal);
+      if (found) { payerSel.value = payerVal; if (payerOther) payerOther.style.display = 'none'; }
+      else if (payerVal) { payerSel.value = '__other__'; if (payerOther) { payerOther.style.display = 'block'; payerOther.value = payerVal; } }
+      else { payerSel.value = ''; if (payerOther) payerOther.style.display = 'none'; }
+      payerSel.onchange = () => { if (payerOther) payerOther.style.display = payerSel.value === '__other__' ? 'block' : 'none'; };
+    }
+    const provSel = document.getElementById('rcm-claim-provider');
+    const provId = editData?.providerId || editData?.provider_id || '';
+    if (provSel && provId) provSel.value = provId;
     document.getElementById('rcm-claim-dos').value = editData?.dateOfService || editData?.date_of_service || '';
     document.getElementById('rcm-claim-charges').value = editData?.totalCharges || editData?.total_charges || '';
     document.getElementById('rcm-claim-status-sel').value = editData?.status || 'draft';
@@ -10543,16 +10554,29 @@ function handleNppesProxy(payload) {
   async editRcmClaim(id) {
     try { const c = (window._rcmClaims || []).find(x => x.id == id) || await store.getRcmClaim(id); this.openRcmClaimModal(c); } catch (e) { showToast('Error: ' + e.message); }
   },
+  onCptSelect(selectId, amountId) {
+    const sel = document.getElementById(selectId);
+    const amt = document.getElementById(amountId);
+    if (sel && amt && sel.selectedOptions[0]?.dataset?.rate) {
+      amt.value = sel.selectedOptions[0].dataset.rate;
+    }
+  },
   async saveRcmClaim() {
     const dos = document.getElementById('rcm-claim-dos').value;
     if (!dos) { showToast('Date of service is required'); return; }
+    const payerSel = document.getElementById('rcm-claim-payer');
+    const payerVal = payerSel?.value === '__other__' ? (document.getElementById('rcm-claim-payer-other')?.value?.trim() || '') : (payerSel?.value || '');
+    const provSel = document.getElementById('rcm-claim-provider');
+    const provName = provSel?.selectedOptions[0]?.dataset?.name || provSel?.value || '';
+    const provId = provSel?.value && provSel.value !== '' ? provSel.value : null;
     const data = {
       billing_client_id: document.getElementById('rcm-claim-client').value || null,
       claim_type: document.getElementById('rcm-claim-type').value,
       patient_name: document.getElementById('rcm-claim-patient').value.trim(),
       patient_member_id: document.getElementById('rcm-claim-member').value.trim(),
-      payer_name: document.getElementById('rcm-claim-payer').value.trim(),
-      provider_name: document.getElementById('rcm-claim-provider').value.trim(),
+      payer_name: payerVal,
+      provider_id: provId,
+      provider_name: provName.trim(),
       date_of_service: dos,
       total_charges: parseFloat(document.getElementById('rcm-claim-charges').value) || 0,
       status: document.getElementById('rcm-claim-status-sel').value,
@@ -10593,6 +10617,7 @@ function handleNppesProxy(payload) {
   async saveRcmPayment() {
     const amt = parseFloat(document.getElementById('rcm-pay-amount').value);
     if (!amt || amt <= 0) { showToast('Amount is required'); return; }
+    const claimId = document.getElementById('rcm-pay-claim')?.value || null;
     const data = {
       billing_client_id: document.getElementById('rcm-pay-client').value || null,
       payer_name: document.getElementById('rcm-pay-payer').value.trim(),
@@ -10602,6 +10627,9 @@ function handleNppesProxy(payload) {
       total_amount: amt,
       notes: document.getElementById('rcm-pay-notes').value.trim(),
     };
+    if (claimId) {
+      data.allocations = [{ claim_id: claimId, paid_amount: amt }];
+    }
     const editId = document.getElementById('rcm-pay-edit-id').value;
     try {
       if (editId) await store.updateRcmPayment(editId, data); else await store.createRcmPayment(data);
@@ -11580,7 +11608,7 @@ function handleNppesProxy(payload) {
   orgDetailTab(btn, tabId) {
     btn.closest('.tabs').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
-    ['od-providers', 'od-applications', 'od-locations', 'od-contacts'].forEach(id => {
+    ['od-providers', 'od-applications', 'od-locations', 'od-billing', 'od-contacts'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.toggle('hidden', id !== tabId);
     });
@@ -15206,6 +15234,19 @@ async function renderOrgDetailPage(orgId) {
   try { apps = await store.getAll('applications'); } catch {}
   try { facilities = await store.getAll('facilities'); } catch {}
 
+  // Load billing data for this org
+  let billingActivities = [], billingClient = null, billingFinancials = [];
+  try {
+    const allClients = await store.getBillingClients();
+    billingClient = (Array.isArray(allClients) ? allClients : []).find(c => (c.organizationId || c.organization_id) == orgId || (c.organizationName || c.organization_name || '') === (o.name || ''));
+    if (billingClient) {
+      try { billingActivities = await store.getBillingActivities({ billing_client_id: billingClient.id, limit: 20 }); } catch {}
+      try { billingFinancials = await store.getBillingFinancials({ billing_client_id: billingClient.id }); } catch {}
+    }
+  } catch {}
+  if (!Array.isArray(billingActivities)) billingActivities = [];
+  if (!Array.isArray(billingFinancials)) billingFinancials = [];
+
   if (!o || !o.id) { body.innerHTML = '<div class="empty-state"><h3>Organization not found</h3></div>'; return; }
 
   const orgLicenses = licenses.filter(l => providers.some(p => p.id == (l.providerId || l.provider_id)));
@@ -15278,6 +15319,7 @@ async function renderOrgDetailPage(orgId) {
       <button class="tab active" onclick="window.app.orgDetailTab(this, 'od-providers')">Providers (${providers.length})</button>
       <button class="tab" onclick="window.app.orgDetailTab(this, 'od-applications')">Applications (${orgApps.length})</button>
       <button class="tab" onclick="window.app.orgDetailTab(this, 'od-locations')">Locations (${facilities.length})</button>
+      <button class="tab" onclick="window.app.orgDetailTab(this, 'od-billing')">Billing${billingClient ? ' (' + billingActivities.length + ')' : ''}</button>
       <button class="tab" onclick="window.app.orgDetailTab(this, 'od-contacts')">Contacts (${orgContacts.length})</button>
     </div>
 
@@ -15367,6 +15409,61 @@ async function renderOrgDetailPage(orgId) {
           `}
         </div>
       </div>
+    </div>
+
+    <!-- Billing Tab (Client Portal View) -->
+    <div id="od-billing" class="hidden">
+      ${billingClient ? `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:16px;">
+          ${(() => {
+            const totals = { billed: 0, collected: 0, denied: 0, claims: 0 };
+            billingFinancials.forEach(f => {
+              totals.billed += f.amountBilled || f.amount_billed || 0;
+              totals.collected += f.amountCollected || f.amount_collected || 0;
+              totals.denied += f.deniedAmount || f.denied_amount || 0;
+              totals.claims += f.claimsSubmitted || f.claims_submitted || 0;
+            });
+            const rate = totals.billed > 0 ? ((totals.collected / totals.billed) * 100).toFixed(1) : '0.0';
+            return `
+              <div class="stat-card odv2-stat"><div class="label">Claims</div><div class="value">${totals.claims}</div></div>
+              <div class="stat-card odv2-stat"><div class="label">Billed</div><div class="value">$${totals.billed.toLocaleString()}</div></div>
+              <div class="stat-card odv2-stat"><div class="label">Collected</div><div class="value" style="color:var(--green);">$${totals.collected.toLocaleString()}</div></div>
+              <div class="stat-card odv2-stat"><div class="label">Denied</div><div class="value" style="color:var(--red);">$${totals.denied.toLocaleString()}</div></div>
+              <div class="stat-card odv2-stat"><div class="label">Collection Rate</div><div class="value" style="color:var(--brand-600);">${rate}%</div></div>
+            `;
+          })()}
+        </div>
+        <div class="card" style="border-radius:16px;margin-bottom:16px;">
+          <div class="card-header"><h3>Billing Activity</h3></div>
+          <div class="card-body" style="padding:12px 16px;">
+            ${billingActivities.length > 0 ? billingActivities.map(a => {
+              const type = a.activityType || a.activity_type || a.type || 'note';
+              const typeLabels = { claim_submitted: 'Claims Submitted', claim_followup: 'Claim Follow-up', denial_worked: 'Denial Worked', payment_posted: 'Payment Posted', eligibility_check: 'Eligibility Check', report_generated: 'Report Generated', note: 'Note' };
+              const amount = a.amount || 0;
+              return `<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--gray-100);font-size:13px;">
+                <div style="flex:1;">
+                  <strong>${escHtml(typeLabels[type] || type)}</strong>
+                  ${amount ? ` — <span style="color:var(--green);font-weight:600;">$${Number(amount).toLocaleString('en-US', {minimumFractionDigits:2})}</span>` : ''}
+                  <div style="font-size:12px;color:var(--gray-600);">${escHtml(a.notes || a.description || '')}</div>
+                </div>
+                <span style="font-size:11px;color:var(--gray-400);flex-shrink:0;">${formatDateDisplay(a.activityDate || a.activity_date || a.createdAt || a.created_at)}</span>
+              </div>`;
+            }).join('') : '<div style="text-align:center;padding:1rem;color:var(--gray-400);">No billing activity recorded</div>'}
+          </div>
+        </div>
+        ${billingFinancials.length > 0 ? `<div class="card" style="border-radius:16px;">
+          <div class="card-header"><h3>Monthly Financial Summary</h3></div>
+          <div class="card-body" style="padding:0;"><table>
+            <thead><tr><th>Period</th><th style="text-align:right;">Claims</th><th style="text-align:right;">Billed</th><th style="text-align:right;">Collected</th><th style="text-align:right;">Denied</th><th style="text-align:right;">Rate</th></tr></thead>
+            <tbody>${billingFinancials.map(f => {
+              const b = f.amountBilled || f.amount_billed || 0;
+              const c = f.amountCollected || f.amount_collected || 0;
+              const r = b > 0 ? ((c / b) * 100).toFixed(1) : '—';
+              return `<tr><td><strong>${escHtml(f.period || '—')}</strong></td><td style="text-align:right;">${f.claimsSubmitted || f.claims_submitted || 0}</td><td style="text-align:right;">$${b.toLocaleString()}</td><td style="text-align:right;color:var(--green);font-weight:600;">$${c.toLocaleString()}</td><td style="text-align:right;color:var(--red);">$${(f.deniedAmount || f.denied_amount || 0).toLocaleString()}</td><td style="text-align:right;font-weight:600;">${r}%</td></tr>`;
+            }).join('')}</tbody>
+          </table></div>
+        </div>` : ''}
+      ` : `<div class="empty-state" style="padding:30px;"><p>No billing services configured for this organization.</p><p style="margin-top:8px;"><button class="btn btn-primary btn-sm" onclick="window.app.navigateTo('billing-services')">Set Up Billing Services</button></p></div>`}
     </div>
 
     <!-- Contacts Tab -->
