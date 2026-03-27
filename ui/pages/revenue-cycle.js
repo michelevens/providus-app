@@ -11,6 +11,7 @@ export { CLAIM_STATUSES, DENIAL_CATEGORIES, DENIAL_STATUSES, CPT_CODES, ICD_CODE
 // Import renderers from sub-modules
 import { renderBillingServicesPage, renderBillingClientDetail } from './billing-services.js';
 import { renderRcmPage } from './rcm.js';
+import { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection } from './rcm-phase2.js';
 
 if (typeof window._rcTab === 'undefined') window._rcTab = 'dashboard';
 
@@ -23,16 +24,22 @@ async function renderRevenueCyclePage() {
   // Determine which sub-module to render based on tab
   const bsTabs = ['dashboard', 'clients', 'tasks', 'activity', 'financials'];
   const rcmTabs = ['claims', 'charges', 'denials', 'payments', 'ar'];
+  const phase2Tabs = ['fee-schedules', 'eligibility', 'statements'];
 
   // Set the sub-module tab state
   if (bsTabs.includes(tab)) {
     window._bsTab = tab;
-  } else {
+  } else if (rcmTabs.includes(tab)) {
     window._rcmTab = tab;
   }
 
   // Render the active sub-module directly into page-body
-  if (bsTabs.includes(tab)) {
+  if (phase2Tabs.includes(tab)) {
+    // Phase 2 tabs render directly into body
+    if (tab === 'fee-schedules') await renderFeeSchedulesTab(body);
+    else if (tab === 'eligibility') await renderEligibilityTab(body);
+    else if (tab === 'statements') await renderStatementsTab(body);
+  } else if (bsTabs.includes(tab)) {
     await renderBillingServicesPage();
   } else {
     await renderRcmPage();
@@ -70,6 +77,9 @@ async function renderRevenueCyclePage() {
       <button class="rc-tab ${tab === 'denials' ? 'active' : ''}" onclick="window.app.rcSwitchTab('denials')">Denials (${denialCount})</button>
       <button class="rc-tab ${tab === 'payments' ? 'active' : ''}" onclick="window.app.rcSwitchTab('payments')">Payments (${paymentCount})</button>
       <button class="rc-tab ${tab === 'ar' ? 'active' : ''}" onclick="window.app.rcSwitchTab('ar')">A/R Aging</button>
+      <button class="rc-tab ${tab === 'fee-schedules' ? 'active' : ''}" onclick="window.app.rcSwitchTab('fee-schedules')">Fee Schedules</button>
+      <button class="rc-tab ${tab === 'eligibility' ? 'active' : ''}" onclick="window.app.rcSwitchTab('eligibility')">Eligibility</button>
+      <button class="rc-tab ${tab === 'statements' ? 'active' : ''}" onclick="window.app.rcSwitchTab('statements')">Statements</button>
       <button class="rc-tab ${tab === 'tasks' ? 'active' : ''}" onclick="window.app.rcSwitchTab('tasks')">Tasks (${taskCount})</button>
       <button class="rc-tab ${tab === 'activity' ? 'active' : ''}" onclick="window.app.rcSwitchTab('activity')">Activity</button>
       <button class="rc-tab ${tab === 'financials' ? 'active' : ''}" onclick="window.app.rcSwitchTab('financials')">Financials</button>

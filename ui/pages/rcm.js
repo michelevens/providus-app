@@ -393,7 +393,9 @@ async function renderRcmPage() {
     <!-- ═══ PAYMENTS TAB ═══ -->
     <div id="rcm-payments" class="${window._rcmTab !== 'payments' ? 'hidden' : ''}">
       <div class="card rcm-card rcm-table">
-        <div class="card-header"><h3>Payments</h3></div>
+        <div class="card-header"><h3>Payments</h3>
+          <button class="btn btn-sm" onclick="window.app.openEraImportModal()" style="font-size:12px;">Import ERA/835</button>
+        </div>
         <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
           <thead><tr><th>Date</th><th>Payer</th><th>Type</th><th>Check/Trace #</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Posted</th><th style="text-align:right;">Remaining</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>

@@ -11163,6 +11163,201 @@ function handleNppesProxy(payload) {
       return r;
     } catch (e) { showToast('Error: ' + e.message); }
   },
+  // Fee Schedule modal
+  openFeeScheduleModal(editData) {
+    const html = `<div class="modal-overlay active" id="fee-schedule-modal">
+      <div class="modal" style="max-width:560px;">
+        <div class="modal-header"><h3>${editData ? 'Edit' : 'Add'} Fee Schedule</h3><button class="modal-close" onclick="document.getElementById('fee-schedule-modal').remove()">&times;</button></div>
+        <div class="modal-body">
+          <input type="hidden" id="fs-edit-id" value="${editData?.id || ''}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Payer Name *</label><input type="text" id="fs-payer" class="form-control" value="${editData?.payer_name || ''}" placeholder="e.g. Florida Blue"></div>
+            <div class="auth-field" style="margin:0;"><label>CPT Code *</label><input type="text" id="fs-cpt" class="form-control" value="${editData?.cpt_code || ''}" placeholder="e.g. 90837"></div>
+            <div class="auth-field" style="margin:0;"><label>Description</label><input type="text" id="fs-desc" class="form-control" value="${editData?.cpt_description || ''}" placeholder="Psychotherapy 60 min"></div>
+            <div class="auth-field" style="margin:0;"><label>Modifier</label><input type="text" id="fs-mod" class="form-control" value="${editData?.modifier || ''}" placeholder="e.g. 25"></div>
+            <div class="auth-field" style="margin:0;"><label>Contracted Rate *</label><input type="number" id="fs-rate" class="form-control" step="0.01" value="${editData?.contracted_rate || ''}" placeholder="0.00"></div>
+            <div class="auth-field" style="margin:0;"><label>Expected Allowed</label><input type="number" id="fs-allowed" class="form-control" step="0.01" value="${editData?.expected_allowed || ''}" placeholder="0.00"></div>
+            <div class="auth-field" style="margin:0;"><label>Plan Type</label><select id="fs-plan" class="form-control"><option value="">Any</option><option value="commercial" ${editData?.plan_type === 'commercial' ? 'selected' : ''}>Commercial</option><option value="medicare" ${editData?.plan_type === 'medicare' ? 'selected' : ''}>Medicare</option><option value="medicaid" ${editData?.plan_type === 'medicaid' ? 'selected' : ''}>Medicaid</option></select></div>
+            <div class="auth-field" style="margin:0;"><label>Effective Date</label><input type="date" id="fs-eff" class="form-control" value="${editData?.effective_date || ''}"></div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('fee-schedule-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveFeeSchedule()">Save</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  async editFeeSchedule(id) {
+    const s = (window._feeSchedules || []).find(x => x.id == id);
+    if (s) this.openFeeScheduleModal(s);
+  },
+  async saveFeeSchedule() {
+    const payer = document.getElementById('fs-payer').value.trim();
+    const cpt = document.getElementById('fs-cpt').value.trim();
+    const rate = parseFloat(document.getElementById('fs-rate').value);
+    if (!payer || !cpt || !rate) { showToast('Payer, CPT, and rate are required'); return; }
+    const data = { payer_name: payer, cpt_code: cpt, cpt_description: document.getElementById('fs-desc').value.trim(), modifier: document.getElementById('fs-mod').value.trim() || null, contracted_rate: rate, expected_allowed: parseFloat(document.getElementById('fs-allowed').value) || null, plan_type: document.getElementById('fs-plan').value || null, effective_date: document.getElementById('fs-eff').value || null };
+    const editId = document.getElementById('fs-edit-id').value;
+    try {
+      if (editId) await store.updateFeeSchedule(editId, data); else await store.createFeeSchedule(data);
+      document.getElementById('fee-schedule-modal')?.remove();
+      showToast(editId ? 'Fee schedule updated' : 'Fee schedule added');
+      window.app.rcSwitchTab('fee-schedules');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async deleteFeeSchedule(id) {
+    if (!await appConfirm('Delete this fee schedule?')) return;
+    try { await store.deleteFeeSchedule(id); showToast('Deleted'); window.app.rcSwitchTab('fee-schedules'); } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async runUnderpaymentDetection() {
+    try { const r = await store.detectUnderpayments(); showToast(r.flagged > 0 ? `${r.flagged} underpayment(s) flagged!` : 'No underpayments detected'); } catch (e) { showToast('Error: ' + e.message); }
+  },
+  // Eligibility modal
+  openEligibilityModal() {
+    const html = `<div class="modal-overlay active" id="elig-modal">
+      <div class="modal" style="max-width:500px;">
+        <div class="modal-header"><h3>Check Eligibility</h3><button class="modal-close" onclick="document.getElementById('elig-modal').remove()">&times;</button></div>
+        <div class="modal-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Patient Name *</label><input type="text" id="elig-patient" class="form-control" placeholder="Patient name"></div>
+            <div class="auth-field" style="margin:0;"><label>Date of Birth</label><input type="date" id="elig-dob" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Payer *</label><input type="text" id="elig-payer" class="form-control" placeholder="Insurance company"></div>
+            <div class="auth-field" style="margin:0;"><label>Member ID</label><input type="text" id="elig-member" class="form-control" placeholder="Insurance member ID"></div>
+            <div class="auth-field" style="margin:0;"><label>Provider NPI</label><input type="text" id="elig-npi" class="form-control" placeholder="10-digit NPI"></div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('elig-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveEligibilityCheck()">Check</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  async saveEligibilityCheck() {
+    const patient = document.getElementById('elig-patient').value.trim();
+    const payer = document.getElementById('elig-payer').value.trim();
+    if (!patient || !payer) { showToast('Patient and payer are required'); return; }
+    try {
+      await store.checkEligibility({ patient_name: patient, payer_name: payer, patient_dob: document.getElementById('elig-dob').value || null, member_id: document.getElementById('elig-member').value.trim() || null, provider_npi: document.getElementById('elig-npi').value.trim() || null });
+      document.getElementById('elig-modal')?.remove();
+      showToast('Eligibility check submitted');
+      window.app.rcSwitchTab('eligibility');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  // Patient Statement
+  async autoGenerateStatements() {
+    try { const r = await store.generatePatientStatements(); showToast(r.generated > 0 ? `${r.generated} statement(s) generated` : 'No claims with patient responsibility found'); window.app.rcSwitchTab('statements'); } catch (e) { showToast('Error: ' + e.message); }
+  },
+  openStatementModal() {
+    const html = `<div class="modal-overlay active" id="stmt-modal">
+      <div class="modal" style="max-width:500px;">
+        <div class="modal-header"><h3>Create Statement</h3><button class="modal-close" onclick="document.getElementById('stmt-modal').remove()">&times;</button></div>
+        <div class="modal-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Patient Name *</label><input type="text" id="stmt-patient" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Patient Email</label><input type="email" id="stmt-email" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Total Charges</label><input type="number" id="stmt-charges" class="form-control" step="0.01"></div>
+            <div class="auth-field" style="margin:0;"><label>Insurance Paid</label><input type="number" id="stmt-inspaid" class="form-control" step="0.01"></div>
+            <div class="auth-field" style="margin:0;"><label>Patient Balance *</label><input type="number" id="stmt-balance" class="form-control" step="0.01"></div>
+            <div class="auth-field" style="margin:0;"><label>Due Date</label><input type="date" id="stmt-due" class="form-control"></div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('stmt-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveStatement()">Save</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  async saveStatement() {
+    const patient = document.getElementById('stmt-patient').value.trim();
+    const balance = parseFloat(document.getElementById('stmt-balance').value);
+    if (!patient || !balance) { showToast('Patient name and balance are required'); return; }
+    try {
+      await store.createPatientStatement({ patient_name: patient, patient_email: document.getElementById('stmt-email').value.trim() || null, total_charges: parseFloat(document.getElementById('stmt-charges').value) || 0, insurance_paid: parseFloat(document.getElementById('stmt-inspaid').value) || 0, patient_balance: balance, due_date: document.getElementById('stmt-due').value || null, statement_date: new Date().toISOString().split('T')[0], status: 'draft' });
+      document.getElementById('stmt-modal')?.remove();
+      showToast('Statement created');
+      window.app.rcSwitchTab('statements');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  // ERA Import
+  openEraImportModal() {
+    const html = `<div class="modal-overlay active" id="era-modal">
+      <div class="modal" style="max-width:700px;">
+        <div class="modal-header"><h3>Import ERA/EOB (835 File)</h3><button class="modal-close" onclick="document.getElementById('era-modal').remove()">&times;</button></div>
+        <div class="modal-body">
+          <div class="auth-field" style="margin:0;"><label>Paste 835 ERA Content</label>
+            <textarea id="era-content" class="form-control" rows="10" style="resize:vertical;font-family:monospace;font-size:11px;" placeholder="Paste the 835 ERA/EOB file content here..."></textarea>
+          </div>
+          <div id="era-preview" style="margin-top:12px;"></div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('era-modal').remove()">Cancel</button>
+          <button class="btn btn-sm" onclick="window.app.parseEraPreview()">Parse & Preview</button>
+          <button class="btn btn-primary" id="era-post-btn" style="display:none;" onclick="window.app.postEraParsed()">Post Payments</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  async parseEraPreview() {
+    const content = document.getElementById('era-content')?.value?.trim();
+    if (!content) { showToast('Paste ERA content first'); return; }
+    try {
+      const result = await store.parseEra(content);
+      window._parsedEra = result;
+      const prev = document.getElementById('era-preview');
+      if (prev) {
+        prev.innerHTML = `<div style="background:var(--gray-50);padding:12px;border-radius:8px;font-size:13px;">
+          <strong>Payer:</strong> ${result.payer_name || '—'} | <strong>Check:</strong> ${result.check_number || '—'} | <strong>Total:</strong> $${(result.total_amount || 0).toFixed(2)} | <strong>Claims:</strong> ${result.claim_count || 0}
+          ${(result.claims || []).length > 0 ? '<table style="width:100%;margin-top:8px;font-size:12px;"><thead><tr><th>Claim #</th><th>Charged</th><th>Paid</th><th>Pt Resp</th></tr></thead><tbody>' + result.claims.map(c => `<tr><td>${c.claim_number}</td><td>$${c.charged_amount.toFixed(2)}</td><td style="color:var(--green);font-weight:600;">$${c.paid_amount.toFixed(2)}</td><td>$${(c.patient_responsibility || 0).toFixed(2)}</td></tr>`).join('') + '</tbody></table>' : ''}
+        </div>`;
+      }
+      document.getElementById('era-post-btn').style.display = '';
+      showToast(`Parsed ${result.claim_count} claims from ERA`);
+    } catch (e) { showToast('Parse error: ' + e.message); }
+  },
+  // Generate Report modal
+  openGenerateReportModal() {
+    const clients = window._bsClients || window._rcmClients || [];
+    const now = new Date();
+    const defaultPeriod = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    const html = `<div class="modal-overlay active" id="report-modal">
+      <div class="modal" style="max-width:400px;">
+        <div class="modal-header"><h3>Generate Client Report</h3><button class="modal-close" onclick="document.getElementById('report-modal').remove()">&times;</button></div>
+        <div class="modal-body">
+          <div class="auth-field" style="margin:0;margin-bottom:12px;"><label>Client *</label><select id="rpt-client" class="form-control">${clients.map(c => `<option value="${c.id}">${c.organizationName || c.organization_name || ''}</option>`).join('')}</select></div>
+          <div class="auth-field" style="margin:0;"><label>Period (YYYY-MM) *</label><input type="month" id="rpt-period" class="form-control" value="${defaultPeriod}"></div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('report-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveGenerateReport()">Generate</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  async saveGenerateReport() {
+    const clientId = document.getElementById('rpt-client').value;
+    const period = document.getElementById('rpt-period').value;
+    if (!clientId || !period) { showToast('Client and period are required'); return; }
+    try {
+      await store.generateClientReport({ billing_client_id: clientId, period });
+      document.getElementById('report-modal')?.remove();
+      showToast('Report generated');
+      window.app.rcSwitchTab('financials');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  importFeeScheduleCSV() {
+    showToast('Fee schedule CSV import — use the API endpoint POST /rcm/fee-schedules/bulk-import with an array of {payer_name, cpt_code, contracted_rate} objects.');
+  },
+  editStatement(id) {
+    showToast('Statement editing coming soon.');
+  },
 
   // ── Billing Services Management ──
   bsTab(btn, tabId) {

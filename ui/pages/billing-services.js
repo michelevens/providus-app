@@ -554,6 +554,7 @@ async function renderBillingServicesPage() {
     <!-- ═══ FINANCIALS TAB ═══ -->
     <div id="bs-financials" class="${window._bsTab !== 'financials' ? 'hidden' : ''}">
       ${_renderFinancialsTab(clients, financials, months)}
+      <div id="bs-client-reports-container"></div>
     </div>
 
     <!-- ═══ MODALS ═══ -->
@@ -749,6 +750,17 @@ function _renderFinancialsTab(clients, financials, months) {
       </div>
     </div>
   `;
+
+  // Async-load client reports into financials tab
+  (async () => {
+    const container = document.getElementById('bs-client-reports-container');
+    if (container) {
+      try {
+        const { renderClientReportsSection } = await import('./rcm-phase2.js');
+        container.innerHTML = await renderClientReportsSection();
+      } catch (e) { /* phase2 not loaded yet */ }
+    }
+  })();
 }
 
 // ─── Client Detail Page ───
