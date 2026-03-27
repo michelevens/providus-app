@@ -1,5 +1,5 @@
-const CACHE_NAME = 'credentik-v8';
-const API_CACHE = 'credentik-api-v1';
+const CACHE_NAME = 'credentik-v9';
+const API_CACHE = 'credentik-api-v2';
 const API_TTL = 60 * 60 * 1000; // 60 minutes
 const API_MAX_ENTRIES = 100;
 
@@ -23,20 +23,24 @@ const SHELL_FILES = [
   './ui/pages/compliance.js',
   './ui/pages/admin.js',
   './ui/pages/provider-profile.js',
+  './ui/pages/billing-services.js',
+  './ui/pages/rcm.js',
+  './ui/pages/rcm-phase2.js',
+  './ui/pages/revenue-cycle.js',
   './manifest.json',
 ];
 
 // API paths eligible for caching (GET only)
 const CACHEABLE_API = [
-  '/api/v1/providers',
-  '/api/v1/applications',
-  '/api/v1/contracts',
-  '/api/v1/tasks',
-  '/api/v1/payers',
-  '/api/v1/documents',
-  '/api/v1/licenses',
-  '/api/v1/notifications',
-  '/api/v1/dashboard',
+  '/api/providers',
+  '/api/applications',
+  '/api/contracts',
+  '/api/tasks',
+  '/api/payers',
+  '/api/documents',
+  '/api/licenses',
+  '/api/notifications',
+  '/api/dashboard',
 ];
 
 self.addEventListener('install', e => {
