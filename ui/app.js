@@ -10430,7 +10430,7 @@ function handleNppesProxy(payload) {
     window._bsTab = tabId;
     btn.closest('.tabs').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
-    ['bs-clients', 'bs-tasks', 'bs-activity', 'bs-financials'].forEach(id => {
+    ['bs-dashboard', 'bs-clients', 'bs-tasks', 'bs-activity', 'bs-financials'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.toggle('hidden', id !== 'bs-' + tabId);
     });
@@ -10696,6 +10696,54 @@ function handleNppesProxy(payload) {
       showToast('Financial summary saved');
       await renderBillingServicesPage();
     } catch (e) { showToast('Error: ' + e.message); }
+  },
+
+  // Quick Daily Activity Log (inline on Activity tab)
+  async saveQuickActivity() {
+    const clientId = document.getElementById('bs-quick-client')?.value;
+    const notes = document.getElementById('bs-quick-notes')?.value?.trim();
+    if (!clientId) { showToast('Please select a client'); return; }
+    if (!notes) { showToast('Please add notes'); return; }
+    const data = {
+      billing_client_id: clientId,
+      activity_type: document.getElementById('bs-quick-type').value,
+      payer_name: document.getElementById('bs-quick-payer')?.value?.trim() || '',
+      activity_date: new Date().toISOString().split('T')[0],
+      quantity: parseInt(document.getElementById('bs-quick-qty')?.value) || 1,
+      amount: parseFloat(document.getElementById('bs-quick-amount')?.value) || 0,
+      notes,
+    };
+    try {
+      await store.createBillingActivity(data);
+      showToast('Activity logged');
+      // Clear form
+      document.getElementById('bs-quick-notes').value = '';
+      document.getElementById('bs-quick-amount').value = '';
+      document.getElementById('bs-quick-qty').value = '1';
+      document.getElementById('bs-quick-payer').value = '';
+      await renderBillingServicesPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+
+  // Generate invoice from billing services work
+  async generateBillingInvoice(clientId) {
+    let client = null;
+    if (clientId) {
+      client = (window._bsClients || []).find(c => c.id == clientId);
+    }
+    // Navigate to billing page and open invoice modal pre-filled
+    window._billingTab = 'invoices';
+    await navigateTo('billing');
+    // Wait for page to render, then open modal
+    setTimeout(() => {
+      window.app.openInvoiceModal();
+      if (client) {
+        const orgEl = document.getElementById('inv-client');
+        if (orgEl) orgEl.value = client.organizationName || client.organization_name || client.orgName || '';
+        const emailEl = document.getElementById('inv-client-email');
+        if (emailEl) emailEl.value = client.contactEmail || client.contact_email || '';
+      }
+    }, 500);
   },
 
   // ── Compliance Center ──
@@ -16616,7 +16664,7 @@ async function renderFacilityDetailPage(facilityId) {
 if (typeof window._billingTab === 'undefined') window._billingTab = 'invoices';
 if (typeof window._invoiceLineItems === 'undefined') window._invoiceLineItems = [];
 if (typeof window._billingServices === 'undefined') window._billingServices = [];
-if (typeof window._bsTab === 'undefined') window._bsTab = 'clients';
+if (typeof window._bsTab === 'undefined') window._bsTab = 'dashboard';
 if (typeof window._bsClients === 'undefined') window._bsClients = [];
 if (typeof window._bsTasks === 'undefined') window._bsTasks = [];
 if (typeof window._bsActivities === 'undefined') window._bsActivities = [];
