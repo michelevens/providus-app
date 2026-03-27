@@ -1160,6 +1160,65 @@ class Store {
 
     async getRcmArAging() { return (await this._fetch(`${CONFIG.API_URL}/rcm/ar-aging`)).data || {}; }
 
+    // ── RCM Phase 2: Advanced Features ──
+    // Fee Schedules
+    async getFeeSchedules(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/fee-schedules${q ? '?' + q : ''}`)).data || []; }
+    async createFeeSchedule(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/fee-schedules`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async updateFeeSchedule(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/fee-schedules/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async deleteFeeSchedule(id) { await this._fetch(`${CONFIG.API_URL}/rcm/fee-schedules/${id}`, { method: 'DELETE' }); this.clearCache(); }
+    async bulkImportFeeSchedules(schedules) { return (await this._fetch(`${CONFIG.API_URL}/rcm/fee-schedules/bulk-import`, { method: 'POST', body: JSON.stringify({ schedules }) })); }
+
+    // Work Queues
+    async getWorkQueues() { return (await this._fetch(`${CONFIG.API_URL}/rcm/work-queues`)).data || {}; }
+
+    // Appeal Templates & Denial Workflow
+    async getAppealTemplates() { return (await this._fetch(`${CONFIG.API_URL}/rcm/appeal-templates`)).data || []; }
+    async createAppealTemplate(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/appeal-templates`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async updateAppealTemplate(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/appeal-templates/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async deleteAppealTemplate(id) { await this._fetch(`${CONFIG.API_URL}/rcm/appeal-templates/${id}`, { method: 'DELETE' }); this.clearCache(); }
+    async generateAppealLetter(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/denials/generate-appeal`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
+    async escalateDenials() { return (await this._fetch(`${CONFIG.API_URL}/rcm/denials/escalate`, { method: 'POST' })).data || {}; }
+
+    // Multi-Claim Payment Allocation
+    async batchAllocatePayment(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payments/batch-allocate`, { method: 'POST', body: JSON.stringify(data) })); this.clearCache(); return r.data || r; }
+
+    // Payer Follow-Up Tracking
+    async getFollowups(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/followups${q ? '?' + q : ''}`)).data || []; }
+    async createFollowup(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/followups`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async updateFollowup(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/followups/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async deleteFollowup(id) { await this._fetch(`${CONFIG.API_URL}/rcm/followups/${id}`, { method: 'DELETE' }); this.clearCache(); }
+
+    // Underpayment Detection
+    async detectUnderpayments() { return (await this._fetch(`${CONFIG.API_URL}/rcm/underpayments/detect`, { method: 'POST' })).data || {}; }
+    async getUnderpayments(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/underpayments${q ? '?' + q : ''}`)).data || []; }
+    async updateUnderpayment(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/underpayments/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+
+    // Export
+    async exportClaims(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/export/claims${q ? '?' + q : ''}`)).data || []; }
+    async exportDenials() { return (await this._fetch(`${CONFIG.API_URL}/rcm/export/denials`)).data || []; }
+
+    // Client Reports
+    async generateClientReport(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/client-reports/generate`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
+    async getClientReports(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/client-reports${q ? '?' + q : ''}`)).data || []; }
+
+    // Patient Statements
+    async getPatientStatements(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/patient-statements${q ? '?' + q : ''}`)).data || []; }
+    async createPatientStatement(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/patient-statements`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async updatePatientStatement(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/patient-statements/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async generatePatientStatements() { return (await this._fetch(`${CONFIG.API_URL}/rcm/patient-statements/generate`, { method: 'POST' })).data || {}; }
+
+    // Eligibility Verification
+    async getEligibilityChecks() { return (await this._fetch(`${CONFIG.API_URL}/rcm/eligibility`)).data || []; }
+    async checkEligibility(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/eligibility/check`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
+    async updateEligibilityCheck(id, data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/eligibility/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; }
+
+    // ERA/EOB Parsing
+    async parseEra(eraData) { return (await this._fetch(`${CONFIG.API_URL}/rcm/era/parse`, { method: 'POST', body: JSON.stringify({ era_data: eraData }) })).data || {}; }
+
+    // AI Denial Prevention
+    async getDenialRiskAnalysis() { return (await this._fetch(`${CONFIG.API_URL}/rcm/denial-risk`)).data || {}; }
+    async preSubmissionCheck(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/pre-submission-check`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
+
     // ── Billing Services Management ──
     // Client billing assignments (agency manages billing for org/provider)
     async getBillingClients(params = {}) {
