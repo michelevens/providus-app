@@ -10600,24 +10600,31 @@ function handleNppesProxy(payload) {
 
   renderColumnMapping(headers) {
     const IMPORT_FIELDS = [
-      { key: 'patient_name', label: 'Patient Name *' },
-      { key: 'payer_name', label: 'Payer / Insurance *' },
+      { key: 'patient_name', label: 'Patient Name (full)' },
+      { key: 'patient_first_name', label: 'Patient First Name' },
+      { key: 'patient_last_name', label: 'Patient Last Name' },
+      { key: 'payer_name', label: 'Payer / Insurance' },
       { key: 'date_of_service', label: 'Date of Service *' },
-      { key: 'total_charges', label: 'Charges / Billed' },
+      { key: 'date_of_service_end', label: 'Service End Date' },
+      { key: 'total_charges', label: 'Charges / Billed Amount' },
       { key: 'total_paid', label: 'Paid Amount' },
+      { key: 'patient_responsibility', label: 'Patient Responsibility' },
       { key: 'cpt_code', label: 'CPT Code' },
       { key: 'icd_codes', label: 'ICD / Diagnosis' },
-      { key: 'provider_name', label: 'Provider' },
+      { key: 'provider_name', label: 'Provider Name' },
+      { key: 'provider_npi', label: 'Provider NPI' },
       { key: 'patient_member_id', label: 'Member ID' },
       { key: 'patient_dob', label: 'Patient DOB' },
       { key: 'status', label: 'Claim Status' },
+      { key: 'payer_id_number', label: 'Claim Number (Payer)' },
+      { key: 'check_number', label: 'Check/EFT Number' },
       { key: 'submitted_date', label: 'Submitted Date' },
       { key: 'paid_date', label: 'Paid Date' },
       { key: 'denial_reason', label: 'Denial Reason' },
       { key: 'authorization_number', label: 'Auth Number' },
       { key: 'place_of_service', label: 'Place of Service' },
       { key: 'notes', label: 'Notes' },
-      { key: '', label: '— Skip —' },
+      { key: '', label: '— Skip this column —' },
     ];
 
     // Auto-match by header name similarity
@@ -10625,21 +10632,29 @@ function handleNppesProxy(payload) {
       const h = header.toLowerCase().replace(/[^a-z0-9]/g, '');
       const map = {
         'patientname': 'patient_name', 'patient': 'patient_name', 'name': 'patient_name', 'membername': 'patient_name',
+        'patientfirstname': 'patient_first_name', 'patientlastname': 'patient_last_name', 'firstname': 'patient_first_name', 'lastname': 'patient_last_name',
         'payer': 'payer_name', 'payername': 'payer_name', 'insurance': 'payer_name', 'carrier': 'payer_name', 'insurancename': 'payer_name',
         'dos': 'date_of_service', 'dateofservice': 'date_of_service', 'servicedate': 'date_of_service', 'fromdate': 'date_of_service',
+        'todate': 'date_of_service_end',
         'charges': 'total_charges', 'totalcharges': 'total_charges', 'billedamount': 'total_charges', 'billed': 'total_charges', 'amount': 'total_charges', 'chargeamount': 'total_charges',
         'paid': 'total_paid', 'totalpaid': 'total_paid', 'paidamount': 'total_paid', 'payment': 'total_paid',
+        'patientresponsibility': 'patient_responsibility',
         'cpt': 'cpt_code', 'cptcode': 'cpt_code', 'procedurecode': 'cpt_code', 'procedure': 'cpt_code', 'hcpcs': 'cpt_code',
         'icd': 'icd_codes', 'icdcode': 'icd_codes', 'diagnosis': 'icd_codes', 'diagnosiscode': 'icd_codes', 'dx': 'icd_codes',
         'provider': 'provider_name', 'providername': 'provider_name', 'rendering': 'provider_name', 'renderingprovider': 'provider_name', 'doctor': 'provider_name',
+        'billingprovidernpi': 'provider_npi', 'npi': 'provider_npi',
         'memberid': 'patient_member_id', 'subscriberid': 'patient_member_id', 'insuranceid': 'patient_member_id',
-        'dob': 'patient_dob', 'dateofbirth': 'patient_dob', 'birthdate': 'patient_dob',
+        'dob': 'patient_dob', 'dateofbirth': 'patient_dob', 'birthdate': 'patient_dob', 'patientbirthdate': 'patient_dob',
         'status': 'status', 'claimstatus': 'status',
+        'claimnumber': 'payer_id_number',
         'submitteddate': 'submitted_date', 'submitdate': 'submitted_date',
         'paiddate': 'paid_date', 'paymentdate': 'paid_date',
         'denialreason': 'denial_reason', 'denial': 'denial_reason', 'remark': 'denial_reason',
         'auth': 'authorization_number', 'authorizationnumber': 'authorization_number', 'authnumber': 'authorization_number',
         'pos': 'place_of_service', 'placeofservice': 'place_of_service',
+        'checkeftnumber': 'check_number', 'checknumber': 'check_number', 'eftnumber': 'check_number',
+        'patientaccountnumber': 'notes', 'productcodelineofbusiness': '',
+        'patientgender': '', 'providerid': '',
         'notes': 'notes', 'comments': 'notes', 'memo': 'notes',
       };
       return map[h] || '';
@@ -10698,20 +10713,53 @@ function handleNppesProxy(payload) {
           parsedDos = `${y.length === 2 ? '20' + y : y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
         }
       }
+      // Combine first + last name if separate columns
+      let patientName = get('patient_name');
+      if (!patientName) {
+        const first = get('patient_first_name');
+        const last = get('patient_last_name');
+        if (first || last) patientName = [first, last].filter(Boolean).join(' ');
+      }
+
+      // Payer name — if not mapped, use file name hint
+      let payerName = get('payer_name');
+      if (!payerName && window._importData?.file) {
+        // Try to extract payer from filename (e.g. "FLORIDA BLUE Claim Status...")
+        const fn = window._importData.file;
+        if (fn.toLowerCase().includes('florida blue')) payerName = 'Florida Blue';
+        else if (fn.toLowerCase().includes('aetna')) payerName = 'Aetna';
+        else if (fn.toLowerCase().includes('cigna')) payerName = 'Cigna';
+        else if (fn.toLowerCase().includes('united')) payerName = 'UnitedHealthcare';
+        else if (fn.toLowerCase().includes('bcbs')) payerName = 'BCBS';
+        else if (fn.toLowerCase().includes('anthem')) payerName = 'Anthem/Elevance';
+        else if (fn.toLowerCase().includes('humana')) payerName = 'Humana';
+      }
+
+      // Map status values from Availity format
+      let status = get('status').toLowerCase();
+      if (status === 'paid' || status === 'finalized') status = 'paid';
+      else if (status === 'denied' || status === 'rejected') status = 'denied';
+      else if (status === 'pending' || status === 'in process') status = 'pending';
+      else if (status === 'submitted' || status === 'accepted') status = 'submitted';
+      else status = status || 'submitted';
+
       claims.push({
-        patient_name: get('patient_name'),
-        payer_name: get('payer_name'),
+        patient_name: patientName,
+        payer_name: payerName,
         date_of_service: parsedDos,
         total_charges: parseFloat(get('total_charges').replace(/[$,]/g, '')) || 0,
         total_paid: parseFloat(get('total_paid').replace(/[$,]/g, '')) || 0,
+        patient_responsibility: parseFloat(get('patient_responsibility').replace(/[$,]/g, '')) || 0,
         cpt_code: get('cpt_code'),
         icd_codes: get('icd_codes'),
         provider_name: get('provider_name'),
         patient_member_id: get('patient_member_id'),
         patient_dob: get('patient_dob'),
-        status: get('status') || 'submitted',
+        status,
+        payer_id_number: get('payer_id_number'),
+        check_number: get('check_number'),
         submitted_date: get('submitted_date') || parsedDos,
-        paid_date: get('paid_date'),
+        paid_date: get('paid_date') || (status === 'paid' ? parsedDos : ''),
         denial_reason: get('denial_reason'),
         authorization_number: get('authorization_number'),
         place_of_service: get('place_of_service'),
