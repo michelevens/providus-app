@@ -10500,6 +10500,296 @@ function handleNppesProxy(payload) {
     await renderRevenueCyclePage();
   },
 
+  // ── Claim CSV Import ──
+  openClaimImportModal() {
+    let modal = document.getElementById('claim-import-modal');
+    if (modal) { modal.classList.add('active'); return; }
+    // Create modal
+    modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'claim-import-modal';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:900px;">
+        <div class="modal-header"><h3>Import Claims from CSV</h3><button class="modal-close" onclick="document.getElementById('claim-import-modal').classList.remove('active')">&times;</button></div>
+        <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
+          <div id="import-step-1">
+            <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px;">Upload a CSV file exported from your billing platform (Office Ally, Availity, Kareo, etc.). We'll help you map the columns.</p>
+            <div style="display:flex;gap:12px;margin-bottom:16px;">
+              <select id="import-platform" class="form-control" style="width:200px;height:38px;" onchange="window.app.loadImportMapping()">
+                <option value="">Select platform...</option>
+                <option value="office_ally">Office Ally</option>
+                <option value="availity">Availity</option>
+                <option value="kareo">Kareo</option>
+                <option value="athenahealth">Athenahealth</option>
+                <option value="simplepractice">SimplePractice</option>
+                <option value="therapynotes">TherapyNotes</option>
+                <option value="other">Other / Custom</option>
+              </select>
+              <select id="import-client" class="form-control" style="width:200px;height:38px;">
+                <option value="">Assign to client (optional)</option>
+                ${(window._rcmClients || window._bsClients || []).map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}
+              </select>
+            </div>
+            <div style="border:2px dashed var(--gray-300);border-radius:12px;padding:32px;text-align:center;cursor:pointer;transition:border-color 0.2s;" id="import-dropzone" onclick="document.getElementById('import-file').click()" ondragover="event.preventDefault();this.style.borderColor='var(--brand-600)'" ondragleave="this.style.borderColor='var(--gray-300)'" ondrop="event.preventDefault();this.style.borderColor='var(--gray-300)';window.app.handleImportFile(event.dataTransfer.files[0])">
+              <svg width="40" height="40" fill="none" stroke="var(--gray-400)" stroke-width="1.5" style="margin-bottom:8px;"><path d="M20 28V12M12 18l8-8 8 8"/><path d="M6 28v4a2 2 0 002 2h24a2 2 0 002-2v-4"/></svg>
+              <div style="font-size:14px;font-weight:600;color:var(--gray-600);">Drop CSV file here or click to browse</div>
+              <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">Supports .csv and .tsv files up to 10MB</div>
+            </div>
+            <input type="file" id="import-file" accept=".csv,.tsv,.txt" style="display:none;" onchange="window.app.handleImportFile(this.files[0])">
+          </div>
+          <div id="import-step-2" style="display:none;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <h4 style="margin:0;">Map Columns</h4>
+              <span id="import-file-info" style="font-size:12px;color:var(--gray-500);"></span>
+            </div>
+            <p style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">Match each CSV column to a claim field. Required fields are marked with *.</p>
+            <div id="import-mapping" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;"></div>
+            <button class="btn btn-primary" onclick="window.app.previewImport()" style="width:100%;">Preview Import</button>
+          </div>
+          <div id="import-step-3" style="display:none;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <h4 style="margin:0;">Preview (<span id="import-count">0</span> claims)</h4>
+              <button class="btn btn-sm" onclick="document.getElementById('import-step-3').style.display='none';document.getElementById('import-step-2').style.display='';">← Back to Mapping</button>
+            </div>
+            <div id="import-preview" style="max-height:400px;overflow:auto;border:1px solid var(--gray-200);border-radius:8px;"></div>
+            <div id="import-errors" style="margin-top:8px;"></div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('claim-import-modal').classList.remove('active')">Cancel</button>
+          <button class="btn btn-primary" id="import-submit-btn" style="display:none;" onclick="window.app.executeImport()">Import Claims</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.classList.add('active');
+  },
+
+  handleImportFile(file) {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { showToast('File too large (max 10MB)'); return; }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const delimiter = text.includes('\t') ? '\t' : ',';
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) { showToast('File is empty or has no data rows'); return; }
+
+      const headers = lines[0].split(delimiter).map(h => h.replace(/^"|"$/g, '').trim());
+      const rows = lines.slice(1).map(l => {
+        const vals = [];
+        let inQuote = false, current = '';
+        for (const ch of l) {
+          if (ch === '"') { inQuote = !inQuote; }
+          else if ((ch === delimiter.charAt(0)) && !inQuote) { vals.push(current.trim()); current = ''; }
+          else { current += ch; }
+        }
+        vals.push(current.trim());
+        return vals;
+      }).filter(r => r.some(v => v));
+
+      window._importData = { headers, rows, file: file.name };
+      document.getElementById('import-file-info').textContent = `${file.name} — ${headers.length} columns, ${rows.length} rows`;
+      window.app.renderColumnMapping(headers);
+      document.getElementById('import-step-1').style.display = 'none';
+      document.getElementById('import-step-2').style.display = '';
+    };
+    reader.readAsText(file);
+  },
+
+  renderColumnMapping(headers) {
+    const IMPORT_FIELDS = [
+      { key: 'patient_name', label: 'Patient Name *' },
+      { key: 'payer_name', label: 'Payer / Insurance *' },
+      { key: 'date_of_service', label: 'Date of Service *' },
+      { key: 'total_charges', label: 'Charges / Billed' },
+      { key: 'total_paid', label: 'Paid Amount' },
+      { key: 'cpt_code', label: 'CPT Code' },
+      { key: 'icd_codes', label: 'ICD / Diagnosis' },
+      { key: 'provider_name', label: 'Provider' },
+      { key: 'patient_member_id', label: 'Member ID' },
+      { key: 'patient_dob', label: 'Patient DOB' },
+      { key: 'status', label: 'Claim Status' },
+      { key: 'submitted_date', label: 'Submitted Date' },
+      { key: 'paid_date', label: 'Paid Date' },
+      { key: 'denial_reason', label: 'Denial Reason' },
+      { key: 'authorization_number', label: 'Auth Number' },
+      { key: 'place_of_service', label: 'Place of Service' },
+      { key: 'notes', label: 'Notes' },
+      { key: '', label: '— Skip —' },
+    ];
+
+    // Auto-match by header name similarity
+    const autoMatch = (header) => {
+      const h = header.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const map = {
+        'patientname': 'patient_name', 'patient': 'patient_name', 'name': 'patient_name', 'membername': 'patient_name',
+        'payer': 'payer_name', 'payername': 'payer_name', 'insurance': 'payer_name', 'carrier': 'payer_name', 'insurancename': 'payer_name',
+        'dos': 'date_of_service', 'dateofservice': 'date_of_service', 'servicedate': 'date_of_service', 'fromdate': 'date_of_service',
+        'charges': 'total_charges', 'totalcharges': 'total_charges', 'billedamount': 'total_charges', 'billed': 'total_charges', 'amount': 'total_charges', 'chargeamount': 'total_charges',
+        'paid': 'total_paid', 'totalpaid': 'total_paid', 'paidamount': 'total_paid', 'payment': 'total_paid',
+        'cpt': 'cpt_code', 'cptcode': 'cpt_code', 'procedurecode': 'cpt_code', 'procedure': 'cpt_code', 'hcpcs': 'cpt_code',
+        'icd': 'icd_codes', 'icdcode': 'icd_codes', 'diagnosis': 'icd_codes', 'diagnosiscode': 'icd_codes', 'dx': 'icd_codes',
+        'provider': 'provider_name', 'providername': 'provider_name', 'rendering': 'provider_name', 'renderingprovider': 'provider_name', 'doctor': 'provider_name',
+        'memberid': 'patient_member_id', 'subscriberid': 'patient_member_id', 'insuranceid': 'patient_member_id',
+        'dob': 'patient_dob', 'dateofbirth': 'patient_dob', 'birthdate': 'patient_dob',
+        'status': 'status', 'claimstatus': 'status',
+        'submitteddate': 'submitted_date', 'submitdate': 'submitted_date',
+        'paiddate': 'paid_date', 'paymentdate': 'paid_date',
+        'denialreason': 'denial_reason', 'denial': 'denial_reason', 'remark': 'denial_reason',
+        'auth': 'authorization_number', 'authorizationnumber': 'authorization_number', 'authnumber': 'authorization_number',
+        'pos': 'place_of_service', 'placeofservice': 'place_of_service',
+        'notes': 'notes', 'comments': 'notes', 'memo': 'notes',
+      };
+      return map[h] || '';
+    };
+
+    // Load saved mapping for selected platform
+    const platform = document.getElementById('import-platform')?.value;
+    let savedMapping = {};
+    try { savedMapping = JSON.parse(localStorage.getItem('credentik_import_mapping_' + platform) || '{}'); } catch {}
+
+    const container = document.getElementById('import-mapping');
+    container.innerHTML = headers.map((h, i) => {
+      const matched = savedMapping[h] || autoMatch(h);
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:${i % 2 === 0 ? 'var(--gray-50)' : '#fff'};border-radius:6px;">
+        <div style="flex:1;font-size:13px;font-weight:600;color:var(--gray-700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escAttr(h)}">${escHtml(h)}</div>
+        <svg width="16" height="16" fill="none" stroke="var(--gray-400)" stroke-width="2" style="flex-shrink:0;"><path d="M4 8h8M9 5l3 3-3 3"/></svg>
+        <select class="form-control import-col-map" data-col="${i}" style="flex:1;height:32px;font-size:12px;">
+          ${IMPORT_FIELDS.map(f => `<option value="${f.key}" ${matched === f.key ? 'selected' : ''}>${f.label}</option>`).join('')}
+        </select>
+      </div>`;
+    }).join('');
+  },
+
+  loadImportMapping() {
+    if (window._importData) {
+      this.renderColumnMapping(window._importData.headers);
+    }
+  },
+
+  previewImport() {
+    const { headers, rows } = window._importData || {};
+    if (!rows || !rows.length) { showToast('No data to preview'); return; }
+
+    // Build column mapping
+    const mapping = {};
+    document.querySelectorAll('.import-col-map').forEach(sel => {
+      if (sel.value) mapping[sel.value] = parseInt(sel.dataset.col);
+    });
+
+    // Validate required fields
+    if (mapping['date_of_service'] === undefined) { showToast('Date of Service column is required'); return; }
+
+    // Parse rows into claims
+    const claims = [];
+    const errors = [];
+    rows.forEach((row, i) => {
+      const get = (key) => mapping[key] !== undefined ? (row[mapping[key]] || '').trim() : '';
+      const dos = get('date_of_service');
+      if (!dos) { errors.push(`Row ${i + 1}: Missing date of service`); return; }
+      // Try to parse date
+      let parsedDos = dos;
+      if (dos.includes('/')) {
+        const parts = dos.split('/');
+        if (parts.length === 3) {
+          const [m, d, y] = parts;
+          parsedDos = `${y.length === 2 ? '20' + y : y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+      }
+      claims.push({
+        patient_name: get('patient_name'),
+        payer_name: get('payer_name'),
+        date_of_service: parsedDos,
+        total_charges: parseFloat(get('total_charges').replace(/[$,]/g, '')) || 0,
+        total_paid: parseFloat(get('total_paid').replace(/[$,]/g, '')) || 0,
+        cpt_code: get('cpt_code'),
+        icd_codes: get('icd_codes'),
+        provider_name: get('provider_name'),
+        patient_member_id: get('patient_member_id'),
+        patient_dob: get('patient_dob'),
+        status: get('status') || 'submitted',
+        submitted_date: get('submitted_date') || parsedDos,
+        paid_date: get('paid_date'),
+        denial_reason: get('denial_reason'),
+        authorization_number: get('authorization_number'),
+        place_of_service: get('place_of_service'),
+        notes: get('notes'),
+        billing_client_id: document.getElementById('import-client')?.value || null,
+      });
+    });
+
+    window._importClaims = claims;
+    document.getElementById('import-count').textContent = claims.length;
+
+    // Render preview table
+    const preview = document.getElementById('import-preview');
+    preview.innerHTML = `<table style="width:100%;font-size:12px;">
+      <thead><tr><th>#</th><th>Patient</th><th>Payer</th><th>DOS</th><th>CPT</th><th>Charges</th><th>Paid</th><th>Status</th></tr></thead>
+      <tbody>
+        ${claims.slice(0, 50).map((c, i) => `<tr>
+          <td>${i + 1}</td>
+          <td>${escHtml(c.patient_name || '—')}</td>
+          <td>${escHtml(c.payer_name || '—')}</td>
+          <td>${c.date_of_service}</td>
+          <td><code>${escHtml(c.cpt_code || '')}</code></td>
+          <td>$${c.total_charges.toFixed(2)}</td>
+          <td>$${c.total_paid.toFixed(2)}</td>
+          <td>${escHtml(c.status)}</td>
+        </tr>`).join('')}
+        ${claims.length > 50 ? `<tr><td colspan="8" style="text-align:center;color:var(--gray-500);">... and ${claims.length - 50} more</td></tr>` : ''}
+      </tbody>
+    </table>`;
+
+    if (errors.length) {
+      document.getElementById('import-errors').innerHTML = `<div style="padding:8px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:12px;color:#991b1b;">${errors.length} row(s) skipped: ${errors.slice(0, 5).join(', ')}${errors.length > 5 ? '...' : ''}</div>`;
+    } else {
+      document.getElementById('import-errors').innerHTML = '';
+    }
+
+    document.getElementById('import-step-2').style.display = 'none';
+    document.getElementById('import-step-3').style.display = '';
+    document.getElementById('import-submit-btn').style.display = '';
+
+    // Save column mapping for this platform
+    const platform = document.getElementById('import-platform')?.value;
+    if (platform) {
+      const savedMap = {};
+      document.querySelectorAll('.import-col-map').forEach(sel => {
+        const colIdx = parseInt(sel.dataset.col);
+        if (sel.value && window._importData.headers[colIdx]) {
+          savedMap[window._importData.headers[colIdx]] = sel.value;
+        }
+      });
+      try { localStorage.setItem('credentik_import_mapping_' + platform, JSON.stringify(savedMap)); } catch {}
+    }
+  },
+
+  async executeImport() {
+    const claims = window._importClaims;
+    if (!claims || !claims.length) { showToast('No claims to import'); return; }
+
+    const btn = document.getElementById('import-submit-btn');
+    btn.disabled = true;
+    btn.textContent = `Importing ${claims.length} claims...`;
+
+    try {
+      const result = await store.bulkImportClaims(claims);
+      const imported = result.imported || 0;
+      const errors = result.errors || [];
+      document.getElementById('claim-import-modal').classList.remove('active');
+      showToast(`${imported} claims imported successfully${errors.length ? ` (${errors.length} errors)` : ''}`);
+      // Refresh
+      if (currentPage === 'revenue-cycle' || currentPage === 'rcm') await renderRevenueCyclePage();
+    } catch (e) {
+      showToast('Import failed: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Import Claims';
+    }
+  },
+
   // ── RCM: Claims, Denials, Payments, Charges ──
   rcmTab(btn, tabId) {
     window._rcmTab = tabId;

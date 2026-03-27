@@ -238,6 +238,9 @@ async function renderRcmPage() {
       <div class="card rcm-card rcm-table">
         <div class="card-header"><h3>Claims</h3>
           <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm" onclick="window.app.openClaimImportModal()" style="font-size:12px;">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M7 10V2M3.5 5.5L7 2l3.5 3.5"/><path d="M1.5 10v2a1 1 0 001 1h9a1 1 0 001-1v-2"/></svg>Import CSV
+            </button>
             <select id="rcm-claim-status" class="form-control" style="width:130px;height:34px;font-size:13px;" onchange="window.app.filterRcmClaims()"><option value="">All</option>${CLAIM_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select>
             <select id="rcm-claim-client" class="form-control" style="width:170px;height:34px;font-size:13px;" onchange="window.app.filterRcmClaims()"><option value="">All Clients</option>${clients.map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}</select>
           </div>
@@ -556,4 +559,31 @@ async function renderRcmPage() {
   `;
 }
 
-export { renderRcmPage, CLAIM_STATUSES, DENIAL_CATEGORIES, DENIAL_STATUSES, CPT_CODES, ICD_CODES };
+// ─── Claim Import Modal (added to page body) ───
+// The modal HTML is appended by the openClaimImportModal handler in app.js
+// since it needs to work outside the rcm page render cycle.
+
+// Standard field names for column mapping
+const IMPORT_FIELDS = [
+  { key: 'patient_name', label: 'Patient Name', required: true },
+  { key: 'payer_name', label: 'Payer / Insurance', required: true },
+  { key: 'date_of_service', label: 'Date of Service', required: true },
+  { key: 'total_charges', label: 'Charges / Billed Amount', required: false },
+  { key: 'total_paid', label: 'Paid Amount', required: false },
+  { key: 'cpt_code', label: 'CPT Code', required: false },
+  { key: 'icd_codes', label: 'ICD / Diagnosis Code', required: false },
+  { key: 'provider_name', label: 'Provider / Rendering', required: false },
+  { key: 'patient_member_id', label: 'Member ID', required: false },
+  { key: 'patient_dob', label: 'Patient DOB', required: false },
+  { key: 'status', label: 'Claim Status', required: false },
+  { key: 'submitted_date', label: 'Submitted Date', required: false },
+  { key: 'paid_date', label: 'Paid Date', required: false },
+  { key: 'denial_reason', label: 'Denial Reason', required: false },
+  { key: 'authorization_number', label: 'Auth Number', required: false },
+  { key: 'place_of_service', label: 'Place of Service', required: false },
+  { key: 'facility_name', label: 'Facility', required: false },
+  { key: 'notes', label: 'Notes', required: false },
+  { key: '', label: '— Skip this column —', required: false },
+];
+
+export { renderRcmPage, CLAIM_STATUSES, DENIAL_CATEGORIES, DENIAL_STATUSES, CPT_CODES, ICD_CODES, IMPORT_FIELDS };

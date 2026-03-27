@@ -1140,6 +1140,7 @@ class Store {
     async createRcmClaim(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
     async updateRcmClaim(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
     async deleteRcmClaim(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`, { method: 'DELETE' }); this.clearCache(); return r; }
+    async bulkImportClaims(claims) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims/bulk-import`, { method: 'POST', body: JSON.stringify({ claims }) })); this.clearCache(); return r.data || r; }
 
     async getRcmDenialStats() { return (await this._fetch(`${CONFIG.API_URL}/rcm/denials/stats`)).data || {}; }
     async getRcmDenials(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/denials${q ? '?' + q : ''}`)).data || []; }
