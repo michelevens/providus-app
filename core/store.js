@@ -1157,6 +1157,7 @@ class Store {
     async createRcmCharge(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/charges`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
     async updateRcmCharge(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/charges/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
     async deleteRcmCharge(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/charges/${id}`, { method: 'DELETE' }); this.clearCache(); return r; }
+    async bulkImportCharges(charges) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/charges/bulk-import`, { method: 'POST', body: JSON.stringify({ charges }) }); this.clearCache(); return r.data || r; }
 
     async getRcmArAging() { return (await this._fetch(`${CONFIG.API_URL}/rcm/ar-aging`)).data || {}; }
 

@@ -11355,6 +11355,133 @@ function handleNppesProxy(payload) {
   importFeeScheduleCSV() {
     showToast('Fee schedule CSV import — use the API endpoint POST /rcm/fee-schedules/bulk-import with an array of {payer_name, cpt_code, contracted_rate} objects.');
   },
+  // Charge CSV Import
+  openChargeImportModal() {
+    const CHARGE_FIELDS = [
+      { key: 'patient_name', label: 'Patient Name' },
+      { key: 'payer_name', label: 'Payer / Insurance' },
+      { key: 'date_of_service', label: 'Date of Service *' },
+      { key: 'cpt_code', label: 'CPT Code *' },
+      { key: 'cpt_description', label: 'CPT Description' },
+      { key: 'modifiers', label: 'Modifiers' },
+      { key: 'icd_codes', label: 'ICD / Diagnosis' },
+      { key: 'units', label: 'Units' },
+      { key: 'charge_amount', label: 'Charge Amount' },
+      { key: 'allowed_amount', label: 'Allowed Amount' },
+      { key: 'provider_name', label: 'Provider Name' },
+      { key: 'place_of_service', label: 'Place of Service' },
+      { key: 'authorization_number', label: 'Auth Number' },
+      { key: 'notes', label: 'Notes' },
+      { key: '', label: '— Skip —' },
+    ];
+    window._chargeImportFields = CHARGE_FIELDS;
+    const html = `<div class="modal-overlay active" id="charge-import-modal">
+      <div class="modal" style="max-width:850px;">
+        <div class="modal-header"><h3>Import Charges from CSV</h3><button class="modal-close" onclick="document.getElementById('charge-import-modal').remove()">&times;</button></div>
+        <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
+          <div id="ci-step-1">
+            <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px;">Upload a CSV exported from Kareo, SimplePractice, TherapyNotes, or any EHR/EMR with charge data.</p>
+            <div style="display:flex;gap:12px;margin-bottom:16px;">
+              <select id="ci-client" class="form-control" style="width:200px;height:38px;">
+                <option value="">Assign to client (optional)</option>
+                ${(window._rcmClients || window._bsClients || []).map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}
+              </select>
+            </div>
+            <div style="border:2px dashed var(--gray-300);border-radius:12px;padding:32px;text-align:center;cursor:pointer;" onclick="document.getElementById('ci-file').click()">
+              <div style="font-size:14px;font-weight:600;color:var(--gray-600);">Drop CSV file here or click to browse</div>
+              <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">CPT codes + dates of service required</div>
+            </div>
+            <input type="file" id="ci-file" accept=".csv,.tsv,.txt" style="display:none;" onchange="window.app.handleChargeFile(this.files[0])">
+          </div>
+          <div id="ci-step-2" style="display:none;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <h4 style="margin:0;">Map Columns</h4>
+              <span id="ci-file-info" style="font-size:12px;color:var(--gray-500);"></span>
+            </div>
+            <div id="ci-mapping" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;"></div>
+            <button class="btn btn-primary" onclick="window.app.previewChargeImport()" style="width:100%;">Preview Import</button>
+          </div>
+          <div id="ci-step-3" style="display:none;">
+            <h4>Preview (<span id="ci-count">0</span> charges)</h4>
+            <div id="ci-preview" style="max-height:400px;overflow:auto;border:1px solid var(--gray-200);border-radius:8px;"></div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('charge-import-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" id="ci-submit-btn" style="display:none;" onclick="window.app.executeChargeImport()">Import Charges</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  handleChargeFile(file) {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { showToast('File too large'); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const delim = text.includes('\t') ? '\t' : ',';
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) { showToast('Empty file'); return; }
+      const headers = lines[0].split(delim).map(h => h.replace(/^"|"$/g, '').trim());
+      const rows = lines.slice(1).map(l => {
+        const vals = []; let inQ = false, cur = '';
+        for (const ch of l) { if (ch === '"') inQ = !inQ; else if (ch === delim[0] && !inQ) { vals.push(cur.trim()); cur = ''; } else cur += ch; }
+        vals.push(cur.trim()); return vals;
+      }).filter(r => r.some(v => v));
+      window._chargeImportData = { headers, rows, file: file.name };
+      document.getElementById('ci-file-info').textContent = `${file.name} — ${headers.length} cols, ${rows.length} rows`;
+      // Auto-map columns
+      const autoMap = (h) => { const k = h.toLowerCase().replace(/[^a-z0-9]/g, ''); const m = { patient: 'patient_name', patientname: 'patient_name', payer: 'payer_name', payername: 'payer_name', insurance: 'payer_name', dos: 'date_of_service', dateofservice: 'date_of_service', servicedate: 'date_of_service', cpt: 'cpt_code', cptcode: 'cpt_code', procedure: 'cpt_code', procedurecode: 'cpt_code', description: 'cpt_description', modifier: 'modifiers', modifiers: 'modifiers', icd: 'icd_codes', diagnosis: 'icd_codes', dx: 'icd_codes', units: 'units', qty: 'units', quantity: 'units', amount: 'charge_amount', charges: 'charge_amount', chargeamount: 'charge_amount', fee: 'charge_amount', allowed: 'allowed_amount', provider: 'provider_name', providername: 'provider_name', rendering: 'provider_name', pos: 'place_of_service', auth: 'authorization_number', notes: 'notes' }; return m[k] || ''; };
+      const FIELDS = window._chargeImportFields;
+      document.getElementById('ci-mapping').innerHTML = headers.map((h, i) => {
+        const matched = autoMap(h);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:${i % 2 === 0 ? 'var(--gray-50)' : '#fff'};border-radius:6px;">
+          <div style="flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(h)}</div>
+          <svg width="16" height="16" fill="none" stroke="var(--gray-400)" stroke-width="2"><path d="M4 8h8M9 5l3 3-3 3"/></svg>
+          <select class="form-control ci-col-map" data-col="${i}" style="flex:1;height:32px;font-size:12px;">
+            ${FIELDS.map(f => `<option value="${f.key}" ${matched === f.key ? 'selected' : ''}>${f.label}</option>`).join('')}
+          </select>
+        </div>`;
+      }).join('');
+      document.getElementById('ci-step-1').style.display = 'none';
+      document.getElementById('ci-step-2').style.display = '';
+    };
+    reader.readAsText(file);
+  },
+  previewChargeImport() {
+    const { headers, rows } = window._chargeImportData || {};
+    if (!rows?.length) { showToast('No data'); return; }
+    const mapping = {};
+    document.querySelectorAll('.ci-col-map').forEach(sel => { if (sel.value) mapping[sel.value] = parseInt(sel.dataset.col); });
+    if (mapping.date_of_service === undefined || mapping.cpt_code === undefined) { showToast('Date of Service and CPT Code are required'); return; }
+    const clientId = document.getElementById('ci-client')?.value || null;
+    const charges = rows.map(r => {
+      const get = (key) => { const idx = mapping[key]; return idx !== undefined ? (r[idx] || '').replace(/^"|"$/g, '').trim() : ''; };
+      const dos = get('date_of_service');
+      if (!dos) return null;
+      return { patient_name: get('patient_name'), payer_name: get('payer_name'), date_of_service: dos, cpt_code: get('cpt_code'), cpt_description: get('cpt_description'), modifiers: get('modifiers'), icd_codes: get('icd_codes'), units: parseInt(get('units')) || 1, charge_amount: parseFloat(get('charge_amount')) || 0, allowed_amount: parseFloat(get('allowed_amount')) || 0, provider_name: get('provider_name'), place_of_service: get('place_of_service'), authorization_number: get('authorization_number'), notes: get('notes'), billing_client_id: clientId };
+    }).filter(Boolean);
+    window._chargeImportParsed = charges;
+    document.getElementById('ci-count').textContent = charges.length;
+    document.getElementById('ci-preview').innerHTML = `<table style="font-size:12px;width:100%;"><thead><tr><th>DOS</th><th>Patient</th><th>CPT</th><th>ICD</th><th>Units</th><th>Amount</th><th>Payer</th></tr></thead><tbody>${charges.slice(0, 20).map(c => `<tr><td>${c.date_of_service}</td><td>${escHtml(c.patient_name)}</td><td><strong>${escHtml(c.cpt_code)}</strong></td><td>${escHtml(c.icd_codes)}</td><td>${c.units}</td><td>$${c.charge_amount.toFixed(2)}</td><td>${escHtml(c.payer_name)}</td></tr>`).join('')}${charges.length > 20 ? `<tr><td colspan="7" style="text-align:center;color:var(--gray-400);">...and ${charges.length - 20} more</td></tr>` : ''}</tbody></table>`;
+    document.getElementById('ci-step-2').style.display = 'none';
+    document.getElementById('ci-step-3').style.display = '';
+    document.getElementById('ci-submit-btn').style.display = '';
+  },
+  async executeChargeImport() {
+    const charges = window._chargeImportParsed;
+    if (!charges?.length) { showToast('No charges to import'); return; }
+    const btn = document.getElementById('ci-submit-btn');
+    btn.disabled = true; btn.textContent = 'Importing...';
+    try {
+      const result = await store.bulkImportCharges(charges);
+      showToast(`Imported ${result.imported || charges.length} charges`);
+      document.getElementById('charge-import-modal')?.remove();
+      await renderRcmPage();
+    } catch (e) { showToast('Import error: ' + e.message); }
+    btn.disabled = false; btn.textContent = 'Import Charges';
+  },
   editStatement(id) {
     showToast('Statement editing coming soon.');
   },
