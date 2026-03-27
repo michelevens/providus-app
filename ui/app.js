@@ -10494,16 +10494,11 @@ function handleNppesProxy(payload) {
   generatePayerReport(providerId) { return generatePayerReport(providerId); },
 
   // ── Revenue Cycle (unified) ──
-  async rcSwitchTab(tab) {
+  rcSwitchTab(tab) {
     window._rcTab = tab;
-    document.querySelectorAll('.rc-tab').forEach(t => t.classList.toggle('active', t.textContent.trim().toLowerCase().replace(/\//g, '').replace(/a\/r aging/i, 'ar').replace(/ /g, '') === tab || t.onclick?.toString().includes("'" + tab + "'")));
-    // Re-highlight active tab
-    document.querySelectorAll('.rc-tab').forEach(t => {
-      const match = t.getAttribute('onclick')?.match(/'(\w+)'/);
-      if (match) t.classList.toggle('active', match[1] === tab);
-    });
-    const { _renderRcTabContent } = await import('./pages/revenue-cycle.js');
-    await _renderRcTabContent(tab);
+    // CSS-only switch — instant, no re-fetching
+    document.querySelectorAll('.rc-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    document.querySelectorAll('.rc-tab-content').forEach(el => el.classList.toggle('active', el.id === 'rc-tab-' + tab));
   },
 
   // ── RCM: Claims, Denials, Payments, Charges ──
