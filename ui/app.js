@@ -10759,7 +10759,7 @@ function handleNppesProxy(payload) {
         payer_id_number: get('payer_id_number'),
         check_number: get('check_number'),
         submitted_date: get('submitted_date') || parsedDos,
-        paid_date: get('paid_date') || (status === 'paid' ? parsedDos : ''),
+        paid_date: get('paid_date') || (status === 'paid' ? parsedDos : '') || null,
         denial_reason: get('denial_reason'),
         authorization_number: get('authorization_number'),
         place_of_service: get('place_of_service'),
@@ -10818,12 +10818,26 @@ function handleNppesProxy(payload) {
     const claims = window._importClaims;
     if (!claims || !claims.length) { showToast('No claims to import'); return; }
 
+    // Clean data — empty strings to null, remove undefined
+    const cleaned = claims.map(c => {
+      const obj = {};
+      for (const [k, v] of Object.entries(c)) {
+        if (v === '' || v === undefined) obj[k] = null;
+        else obj[k] = v;
+      }
+      // Ensure date_of_service is present
+      if (!obj.date_of_service) return null;
+      return obj;
+    }).filter(Boolean);
+
+    if (!cleaned.length) { showToast('No valid claims to import'); return; }
+
     const btn = document.getElementById('import-submit-btn');
     btn.disabled = true;
-    btn.textContent = `Importing ${claims.length} claims...`;
+    btn.textContent = `Importing ${cleaned.length} claims...`;
 
     try {
-      const result = await store.bulkImportClaims(claims);
+      const result = await store.bulkImportClaims(cleaned);
       const imported = result.imported || 0;
       const errors = result.errors || [];
       document.getElementById('claim-import-modal').classList.remove('active');
@@ -10831,7 +10845,8 @@ function handleNppesProxy(payload) {
       // Refresh
       if (currentPage === 'revenue-cycle' || currentPage === 'rcm') await renderRevenueCyclePage();
     } catch (e) {
-      showToast('Import failed: ' + e.message);
+      showToast('Import failed: ' + (e.message || 'Unknown error'));
+      console.error('Import error:', e);
     } finally {
       btn.disabled = false;
       btn.textContent = 'Import Claims';
