@@ -12525,22 +12525,22 @@ async function openApplicationModal(id) {
         <label>Assigned To</label>
         <select class="form-control" id="field-assigned-to">
           <option value="">Unassigned</option>
-          <option value="${currentUser?.id || ''}" ${(existing?.assignedTo || existing?.assignedToId) == currentUser?.id ? 'selected' : ''}>Myself (${escHtml((currentUser?.firstName || currentUser?.first_name || '') + ' ' + (currentUser?.lastName || currentUser?.last_name || ''))})</option>
-          ${staffUsers.filter(u => u.id !== currentUser?.id).map(u => `<option value="${u.id}" ${String(existing?.assignedTo || existing?.assignedToId) == String(u.id) ? 'selected' : ''}>${escHtml((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''))}</option>`).join('')}
+          <option value="${currentUser?.id || ''}" ${(existing?.assignedTo || existing?.assignedToId || existing?.assigned_to || existing?.assigned_to_id) == currentUser?.id ? 'selected' : ''}>Myself (${escHtml((currentUser?.firstName || currentUser?.first_name || '') + ' ' + (currentUser?.lastName || currentUser?.last_name || ''))})</option>
+          ${staffUsers.filter(u => u.id !== currentUser?.id).map(u => `<option value="${u.id}" ${String(existing?.assignedTo || existing?.assignedToId || existing?.assigned_to || existing?.assigned_to_id) == String(u.id) ? 'selected' : ''}>${escHtml((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''))}</option>`).join('')}
         </select>
       </div>
-      <div class="form-group"><label>Submitted Date</label><input type="date" class="form-control" id="field-submitted" value="${existing?.submittedDate || ''}"></div>
-      <div class="form-group"><label>Effective Date</label><input type="date" class="form-control" id="field-effective" value="${existing?.effectiveDate || ''}"></div>
+      <div class="form-group"><label>Submitted Date</label><input type="date" class="form-control" id="field-submitted" value="${existing?.submittedDate || existing?.submitted_date || ''}"></div>
+      <div class="form-group"><label>Effective Date</label><input type="date" class="form-control" id="field-effective" value="${existing?.effectiveDate || existing?.effective_date || ''}"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Enrollment ID</label><input type="text" class="form-control" id="field-enrollment" value="${escAttr(existing?.enrollmentId || '')}" placeholder="e.g. PRV-12345678"></div>
-      <div class="form-group"><label>Est. Monthly Revenue ($)</label><input type="number" class="form-control" id="field-revenue" value="${existing?.estMonthlyRevenue || ''}"></div>
+      <div class="form-group"><label>Enrollment ID</label><input type="text" class="form-control" id="field-enrollment" value="${escAttr(existing?.enrollmentId || existing?.enrollment_id || '')}" placeholder="e.g. PRV-12345678"></div>
+      <div class="form-group"><label>Est. Monthly Revenue ($)</label><input type="number" class="form-control" id="field-revenue" value="${existing?.estMonthlyRevenue || existing?.est_monthly_revenue || ''}"></div>
     </div>
-    <div class="form-group"><label>Application Ref / Portal URL</label><input type="text" class="form-control" id="field-appref" value="${escAttr(existing?.applicationRef || '')}" placeholder="Reference number or portal URL"></div>
+    <div class="form-group"><label>Application Ref / Portal URL</label><input type="text" class="form-control" id="field-appref" value="${escAttr(existing?.applicationRef || existing?.application_ref || '')}" placeholder="Reference number or portal URL"></div>
     <div class="form-row-3">
-      <div class="form-group"><label>Payer Contact Name</label><input type="text" class="form-control" id="field-payer-contact" value="${escAttr(existing?.payerContactName || '')}" placeholder="e.g. Maria Johnson"></div>
-      <div class="form-group"><label>Payer Contact Phone</label><input type="text" class="form-control" id="field-payer-phone" value="${escAttr(existing?.payerContactPhone || '')}" placeholder="e.g. (800) 555-1234"></div>
-      <div class="form-group"><label>Payer Contact Email</label><input type="email" class="form-control" id="field-payer-email" value="${escAttr(existing?.payerContactEmail || '')}" placeholder="e.g. cred@payer.com"></div>
+      <div class="form-group"><label>Payer Contact Name</label><input type="text" class="form-control" id="field-payer-contact" value="${escAttr(existing?.payerContactName || existing?.payer_contact_name || '')}" placeholder="e.g. Maria Johnson"></div>
+      <div class="form-group"><label>Payer Contact Phone</label><input type="text" class="form-control" id="field-payer-phone" value="${escAttr(existing?.payerContactPhone || existing?.payer_contact_phone || '')}" placeholder="e.g. (800) 555-1234"></div>
+      <div class="form-group"><label>Payer Contact Email</label><input type="email" class="form-control" id="field-payer-email" value="${escAttr(existing?.payerContactEmail || existing?.payer_contact_email || '')}" placeholder="e.g. cred@payer.com"></div>
     </div>
     <div class="form-group"><label>Notes</label><textarea class="form-control" id="field-notes">${existing?.notes || ''}</textarea></div>
   `;
