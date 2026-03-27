@@ -2868,7 +2868,7 @@ async function renderAppTable(prefetchedApps = null) {
         <td>
           <div style="font-weight:600;font-size:13px;">${payerName}</div>
           <div style="margin-top:3px;"><span class="badge badge-${a.status}" style="font-size:10px;">${statusObj.label}</span> <span style="font-size:10px;color:var(--gray-400);">${typeLabel}</span>${a.type === 'location_addition' ? ' <span style="font-size:10px;" title="Location Addition">&#128205;</span>' : ''}</div>
-          ${a.facilityId ? `<div class="loc-indicator" style="font-size:10px;color:var(--gray-400);margin-top:2px;">&#128205; ${escHtml(facilityName)}</div>` : ''}
+          ${a.facilityId ? `<div class="loc-indicator" style="font-size:10px;margin-top:2px;" onclick="event.stopPropagation();window._selectedFacilityId=${a.facilityId};window.app.navigateTo('facility-detail');">&#128205; <span style="color:var(--brand-600);cursor:pointer;text-decoration:underline;">${escHtml(facilityName)}</span></div>` : ''}
         </td>
         <td class="text-sm">
           ${a.submittedDate ? `<div>Sub: ${formatDateDisplay(a.submittedDate)}</div>` : ''}
@@ -7147,7 +7147,7 @@ window.app = {
               const cred = (p.credentials || '').toLowerCase();
               const hex = (p.hexId || p.hex_id || '').toLowerCase();
               if (name.includes(q) || npi.includes(q) || cred.includes(q) || hex.includes(q)) {
-                results.push({ type: 'Provider', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>', label: `${p.firstName} ${p.lastName}`, sub: `${p.credentials || ''} ${p.npi ? '— NPI: ' + p.npi : ''}`, color: '#0891b2', action: `window.app.viewProviderApps(${p.id})` });
+                results.push({ type: 'Provider', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>', label: `${p.firstName} ${p.lastName}`, sub: `${p.credentials || ''} ${p.npi ? '— NPI: ' + p.npi : ''}`, color: '#0891b2', action: `window._selectedProviderId=${p.id};navigateTo('provider-profile')` });
               }
             });
 
@@ -7160,7 +7160,7 @@ window.app = {
               if (payer.includes(q) || state.includes(q) || status.includes(q) || hex.includes(q)) {
                 const provMatch = (providers || []).find(p => p.id == a.providerId);
                 const provName = provMatch ? `${provMatch.firstName} ${provMatch.lastName}` : '';
-                results.push({ type: 'Application', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="1" width="10" height="14" rx="1"/><path d="M6 5h4M6 8h4M6 11h2"/></svg>', label: `${a.payerName || a.payer_name || 'Unknown Payer'} — ${a.state || ''}`, sub: `${provName} — ${a.status}`, color: '#3b82f6', action: `window.app.editApp(${a.id})` });
+                results.push({ type: 'Application', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="1" width="10" height="14" rx="1"/><path d="M6 5h4M6 8h4M6 11h2"/></svg>', label: `${a.payerName || a.payer_name || 'Unknown Payer'} — ${a.state || ''}`, sub: `${provName} — ${a.status}`, color: '#3b82f6', action: `window._selectedApplicationId='${a.id}';navigateTo('application-detail')` });
               }
             });
 
@@ -7187,7 +7187,7 @@ window.app = {
               const name = (f.name || '').toLowerCase();
               const npi = (f.npi || '').toLowerCase();
               if (name.includes(q) || npi.includes(q)) {
-                results.push({ type: 'Facility', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M6 3V1M10 3V1M5 7h2M9 7h2M5 10h2M9 10h2"/></svg>', label: f.name || 'Unnamed', sub: `${f.city || ''}${f.state ? ', ' + f.state : ''} ${f.npi ? '— NPI: ' + f.npi : ''}`, color: '#8b5cf6', action: `navigateTo('facilities')` });
+                results.push({ type: 'Facility', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M6 3V1M10 3V1M5 7h2M9 7h2M5 10h2M9 10h2"/></svg>', label: f.name || 'Unnamed', sub: `${f.city || ''}${f.state ? ', ' + f.state : ''} ${f.npi ? '— NPI: ' + f.npi : ''}`, color: '#8b5cf6', action: `window._selectedFacilityId=${f.id};navigateTo('facility-detail')` });
               }
             });
 
@@ -7196,7 +7196,7 @@ window.app = {
               const name = (o.name || '').toLowerCase();
               const hex = (o.hexId || o.hex_id || '').toLowerCase();
               if (name.includes(q) || hex.includes(q)) {
-                results.push({ type: 'Organization', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="6" height="11" rx="1"/><rect x="9" y="6" width="6" height="8" rx="1"/><path d="M3 6h2M3 9h2M11 9h2"/></svg>', label: o.name, sub: hex ? `ID: ${hex.toUpperCase()}` : '', color: '#f59e0b', action: `navigateTo('organizations')` });
+                results.push({ type: 'Organization', icon: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="6" height="11" rx="1"/><rect x="9" y="6" width="6" height="8" rx="1"/><path d="M3 6h2M3 9h2M11 9h2"/></svg>', label: o.name, sub: hex ? `ID: ${hex.toUpperCase()}` : '', color: '#f59e0b', action: `window._selectedOrgId=${o.id};navigateTo('org-detail')` });
               }
             });
 
@@ -15115,7 +15115,7 @@ async function renderOrgDetailPage(orgId) {
                   const prov = providers.find(p => p.id == (a.providerId || a.provider_id));
                   const provName = prov ? `${prov.firstName || prov.first_name || ''} ${prov.lastName || prov.last_name || ''}`.trim() : '—';
                   return `
-                    <tr>
+                    <tr style="cursor:pointer;" onclick="window.app.viewApplicationDetail('${a.id}')">
                       <td class="text-sm">${escHtml(provName)}</td>
                       <td><strong>${escHtml(a.payerName || a.payer_name || '')}</strong></td>
                       <td>${a.state || '—'}</td>
@@ -15147,7 +15147,7 @@ async function renderOrgDetailPage(orgId) {
                   const addr = [f.addressStreet || f.address_street || f.street || '', f.addressCity || f.address_city || f.city || '', f.addressState || f.address_state || f.state || '', f.addressZip || f.address_zip || f.zip || ''].filter(Boolean).join(', ');
                   const fStatus = f.status || 'active';
                   return `
-                    <tr>
+                    <tr style="cursor:pointer;" onclick="window._selectedFacilityId=${f.id};window.app.navigateTo('facility-detail');">
                       <td><strong>${escHtml(f.name || f.facilityName || f.facility_name || '—')}</strong></td>
                       <td class="text-sm">${escHtml(addr || '—')}</td>
                       <td class="text-sm">${escHtml(f.phone || '—')}</td>
