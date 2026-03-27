@@ -1269,6 +1269,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderBillingClientDetail(window._selectedBillingClientId);
       break;
+    case 'rcm':
+      pageTitle.textContent = 'Revenue Cycle Management';
+      pageSubtitle.textContent = 'Claims, denials, payments, charge capture, A/R aging';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openRcmClaimModal()">+ New Claim</button> <button class="btn btn-sm btn-primary" onclick="window.app.openRcmPaymentModal()">+ Post Payment</button> <button class="btn btn-sm" onclick="window.app.openRcmDenialModal()">+ Track Denial</button>' + printBtn;
+      await renderRcmPage();
+      break;
     case 'invoice-detail':
       pageTitle.textContent = 'Invoice Detail';
       pageSubtitle.textContent = '';
@@ -6451,6 +6457,7 @@ async function renderContractsPage()         { (await _page('billing')).renderCo
 async function renderContractDetail(id)      { (await _page('billing')).renderContractDetail(id); }
 async function renderBillingServicesPage()   { (await _page('billing-services')).renderBillingServicesPage(); }
 async function renderBillingClientDetail(id) { (await _page('billing-services')).renderBillingClientDetail(id); }
+async function renderRcmPage()              { (await _page('rcm')).renderRcmPage(); }
 async function renderExclusionsPage()        { (await _page('compliance')).renderExclusionsPage(); }
 async function renderCompliancePage()        { (await _page('compliance')).renderCompliancePage(); }
 async function renderPSVPage()               { (await _page('compliance')).renderPSVPage(); }
@@ -10488,6 +10495,203 @@ function handleNppesProxy(payload) {
   generateCredentialingReport(providerId) { return generateCredentialingReport(providerId); },
   generateComplianceReportPDF() { return generateComplianceReportPDF(); },
   generatePayerReport(providerId) { return generatePayerReport(providerId); },
+
+  // ── RCM: Claims, Denials, Payments, Charges ──
+  rcmTab(btn, tabId) {
+    window._rcmTab = tabId;
+    btn.closest('.tabs').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    ['rcm-claims', 'rcm-charges', 'rcm-denials', 'rcm-payments', 'rcm-ar'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden', id !== 'rcm-' + tabId);
+    });
+  },
+  filterRcmClaims() {
+    const status = document.getElementById('rcm-claim-status')?.value || '';
+    const client = document.getElementById('rcm-claim-client')?.value || '';
+    document.querySelectorAll('.rcm-claim-row').forEach(r => {
+      r.style.display = (!status || r.dataset.status === status) && (!client || r.dataset.client === client) ? '' : 'none';
+    });
+  },
+  filterRcmDenials() {
+    const status = document.getElementById('rcm-denial-status')?.value || '';
+    const cat = document.getElementById('rcm-denial-cat')?.value || '';
+    document.querySelectorAll('.rcm-denial-row').forEach(r => {
+      r.style.display = (!status || r.dataset.status === status) && (!cat || r.dataset.category === cat) ? '' : 'none';
+    });
+  },
+  openRcmClaimModal(editData) {
+    const modal = document.getElementById('rcm-claim-modal');
+    if (!modal) { showToast('Navigate to Claims & RCM first'); return; }
+    document.getElementById('rcm-claim-modal-title').textContent = editData ? 'Edit Claim' : 'New Claim';
+    document.getElementById('rcm-claim-edit-id').value = editData?.id || '';
+    document.getElementById('rcm-claim-client').value = editData?.billingClientId || editData?.billing_client_id || '';
+    document.getElementById('rcm-claim-type').value = editData?.claimType || editData?.claim_type || '837P';
+    document.getElementById('rcm-claim-patient').value = editData?.patientName || editData?.patient_name || '';
+    document.getElementById('rcm-claim-member').value = editData?.patientMemberId || editData?.patient_member_id || '';
+    document.getElementById('rcm-claim-payer').value = editData?.payerName || editData?.payer_name || '';
+    document.getElementById('rcm-claim-provider').value = editData?.providerName || editData?.provider_name || '';
+    document.getElementById('rcm-claim-dos').value = editData?.dateOfService || editData?.date_of_service || '';
+    document.getElementById('rcm-claim-charges').value = editData?.totalCharges || editData?.total_charges || '';
+    document.getElementById('rcm-claim-status-sel').value = editData?.status || 'draft';
+    document.getElementById('rcm-claim-method').value = editData?.submissionMethod || editData?.submission_method || 'electronic';
+    document.getElementById('rcm-claim-auth').value = editData?.authorizationNumber || editData?.authorization_number || '';
+    document.getElementById('rcm-claim-submitted').value = editData?.submittedDate || editData?.submitted_date || '';
+    document.getElementById('rcm-claim-notes').value = editData?.notes || '';
+    modal.classList.add('active');
+  },
+  async editRcmClaim(id) {
+    try { const c = (window._rcmClaims || []).find(x => x.id == id) || await store.getRcmClaim(id); this.openRcmClaimModal(c); } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async saveRcmClaim() {
+    const dos = document.getElementById('rcm-claim-dos').value;
+    if (!dos) { showToast('Date of service is required'); return; }
+    const data = {
+      billing_client_id: document.getElementById('rcm-claim-client').value || null,
+      claim_type: document.getElementById('rcm-claim-type').value,
+      patient_name: document.getElementById('rcm-claim-patient').value.trim(),
+      patient_member_id: document.getElementById('rcm-claim-member').value.trim(),
+      payer_name: document.getElementById('rcm-claim-payer').value.trim(),
+      provider_name: document.getElementById('rcm-claim-provider').value.trim(),
+      date_of_service: dos,
+      total_charges: parseFloat(document.getElementById('rcm-claim-charges').value) || 0,
+      status: document.getElementById('rcm-claim-status-sel').value,
+      submission_method: document.getElementById('rcm-claim-method').value,
+      authorization_number: document.getElementById('rcm-claim-auth').value.trim(),
+      submitted_date: document.getElementById('rcm-claim-submitted').value || null,
+      notes: document.getElementById('rcm-claim-notes').value.trim(),
+    };
+    const editId = document.getElementById('rcm-claim-edit-id').value;
+    try {
+      if (editId) await store.updateRcmClaim(editId, data); else await store.createRcmClaim(data);
+      document.getElementById('rcm-claim-modal').classList.remove('active');
+      showToast(editId ? 'Claim updated' : 'Claim created');
+      await renderRcmPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async deleteRcmClaim(id) {
+    if (!await appConfirm('Delete this claim?')) return;
+    try { await store.deleteRcmClaim(id); showToast('Claim deleted'); await renderRcmPage(); } catch (e) { showToast('Error: ' + e.message); }
+  },
+  openRcmPaymentModal(editData) {
+    const modal = document.getElementById('rcm-payment-modal');
+    if (!modal) { showToast('Navigate to Claims & RCM first'); return; }
+    document.getElementById('rcm-payment-modal-title').textContent = editData ? 'Edit Payment' : 'Post Payment';
+    document.getElementById('rcm-pay-edit-id').value = editData?.id || '';
+    document.getElementById('rcm-pay-client').value = editData?.billingClientId || editData?.billing_client_id || '';
+    document.getElementById('rcm-pay-payer').value = editData?.payerName || editData?.payer_name || '';
+    document.getElementById('rcm-pay-type').value = editData?.paymentType || editData?.payment_type || 'check';
+    document.getElementById('rcm-pay-check').value = editData?.checkNumber || editData?.check_number || editData?.traceNumber || editData?.trace_number || '';
+    document.getElementById('rcm-pay-date').value = editData?.paymentDate || editData?.payment_date || new Date().toISOString().split('T')[0];
+    document.getElementById('rcm-pay-amount').value = editData?.totalAmount || editData?.total_amount || '';
+    document.getElementById('rcm-pay-notes').value = editData?.notes || '';
+    modal.classList.add('active');
+  },
+  async editRcmPayment(id) {
+    try { const p = (window._rcmPayments || []).find(x => x.id == id); this.openRcmPaymentModal(p); } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async saveRcmPayment() {
+    const amt = parseFloat(document.getElementById('rcm-pay-amount').value);
+    if (!amt || amt <= 0) { showToast('Amount is required'); return; }
+    const data = {
+      billing_client_id: document.getElementById('rcm-pay-client').value || null,
+      payer_name: document.getElementById('rcm-pay-payer').value.trim(),
+      payment_type: document.getElementById('rcm-pay-type').value,
+      check_number: document.getElementById('rcm-pay-check').value.trim(),
+      payment_date: document.getElementById('rcm-pay-date').value,
+      total_amount: amt,
+      notes: document.getElementById('rcm-pay-notes').value.trim(),
+    };
+    const editId = document.getElementById('rcm-pay-edit-id').value;
+    try {
+      if (editId) await store.updateRcmPayment(editId, data); else await store.createRcmPayment(data);
+      document.getElementById('rcm-payment-modal').classList.remove('active');
+      showToast(editId ? 'Payment updated' : 'Payment posted');
+      await renderRcmPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async deleteRcmPayment(id) {
+    if (!await appConfirm('Delete this payment?')) return;
+    try { await store.deleteRcmPayment(id); showToast('Payment deleted'); await renderRcmPage(); } catch (e) { showToast('Error: ' + e.message); }
+  },
+  openRcmDenialModal(editData) {
+    const modal = document.getElementById('rcm-denial-modal');
+    if (!modal) { showToast('Navigate to Claims & RCM first'); return; }
+    document.getElementById('rcm-denial-modal-title').textContent = editData ? 'Edit Denial' : 'Track Denial';
+    document.getElementById('rcm-denial-edit-id').value = editData?.id || '';
+    document.getElementById('rcm-denial-claim').value = editData?.claimId || editData?.claim_id || '';
+    document.getElementById('rcm-denial-category').value = editData?.denialCategory || editData?.denial_category || 'other';
+    document.getElementById('rcm-denial-priority').value = editData?.priority || 'normal';
+    document.getElementById('rcm-denial-amount').value = editData?.deniedAmount || editData?.denied_amount || '';
+    document.getElementById('rcm-denial-deadline').value = editData?.appealDeadline || editData?.appeal_deadline || '';
+    document.getElementById('rcm-denial-code').value = editData?.denialCode || editData?.denial_code || '';
+    document.getElementById('rcm-denial-status-sel').value = editData?.status || 'new';
+    document.getElementById('rcm-denial-reason').value = editData?.denialReason || editData?.denial_reason || '';
+    document.getElementById('rcm-denial-appeal-notes').value = editData?.appealNotes || editData?.appeal_notes || '';
+    modal.classList.add('active');
+  },
+  async editRcmDenial(id) {
+    try { const d = (window._rcmDenials || []).find(x => x.id == id); this.openRcmDenialModal(d); } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async saveRcmDenial() {
+    const claimId = document.getElementById('rcm-denial-claim').value;
+    const reason = document.getElementById('rcm-denial-reason').value.trim();
+    if (!claimId) { showToast('Select a claim'); return; }
+    if (!reason) { showToast('Denial reason is required'); return; }
+    const data = {
+      claim_id: claimId,
+      denial_category: document.getElementById('rcm-denial-category').value,
+      priority: document.getElementById('rcm-denial-priority').value,
+      denied_amount: parseFloat(document.getElementById('rcm-denial-amount').value) || 0,
+      appeal_deadline: document.getElementById('rcm-denial-deadline').value || null,
+      denial_code: document.getElementById('rcm-denial-code').value.trim(),
+      status: document.getElementById('rcm-denial-status-sel').value,
+      denial_reason: reason,
+      appeal_notes: document.getElementById('rcm-denial-appeal-notes').value.trim(),
+    };
+    const editId = document.getElementById('rcm-denial-edit-id').value;
+    try {
+      if (editId) await store.updateRcmDenial(editId, data); else await store.createRcmDenial(data);
+      document.getElementById('rcm-denial-modal').classList.remove('active');
+      showToast(editId ? 'Denial updated' : 'Denial tracked');
+      await renderRcmPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async deleteRcmDenial(id) {
+    if (!await appConfirm('Delete this denial record?')) return;
+    try { await store.deleteRcmDenial(id); showToast('Denial deleted'); await renderRcmPage(); } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async saveQuickCharge() {
+    const cpt = document.getElementById('rcm-qc-cpt')?.value?.trim();
+    const dos = document.getElementById('rcm-qc-dos')?.value;
+    if (!cpt) { showToast('CPT code is required'); return; }
+    if (!dos) { showToast('Date of service is required'); return; }
+    const data = {
+      billing_client_id: document.getElementById('rcm-qc-client')?.value || null,
+      patient_name: document.getElementById('rcm-qc-patient')?.value?.trim() || '',
+      payer_name: document.getElementById('rcm-qc-payer')?.value?.trim() || '',
+      cpt_code: cpt,
+      icd_codes: document.getElementById('rcm-qc-icd')?.value?.trim() || '',
+      units: parseInt(document.getElementById('rcm-qc-units')?.value) || 1,
+      charge_amount: parseFloat(document.getElementById('rcm-qc-amount')?.value) || 0,
+      date_of_service: dos,
+    };
+    try {
+      await store.createRcmCharge(data);
+      showToast('Charge entered');
+      ['rcm-qc-patient', 'rcm-qc-payer', 'rcm-qc-cpt', 'rcm-qc-icd', 'rcm-qc-amount'].forEach(f => { const e = document.getElementById(f); if (e) e.value = ''; });
+      document.getElementById('rcm-qc-units').value = '1';
+      await renderRcmPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async editRcmCharge(id) {
+    // For now, just delete and re-enter
+    showToast('Edit charge: coming soon. Delete and re-enter for now.');
+  },
+  async deleteRcmCharge(id) {
+    if (!await appConfirm('Delete this charge entry?')) return;
+    try { await store.deleteRcmCharge(id); showToast('Charge deleted'); await renderRcmPage(); } catch (e) { showToast('Error: ' + e.message); }
+  },
 
   // ── Billing Services Management ──
   bsTab(btn, tabId) {
@@ -16925,6 +17129,7 @@ if (typeof window._bsTab === 'undefined') window._bsTab = 'dashboard';
 if (typeof window._bsClients === 'undefined') window._bsClients = [];
 if (typeof window._bsTasks === 'undefined') window._bsTasks = [];
 if (typeof window._bsActivities === 'undefined') window._bsActivities = [];
+if (typeof window._rcmTab === 'undefined') window._rcmTab = 'claims';
 if (typeof window._contractLineItems === 'undefined') window._contractLineItems = [{ description: '', qty: 1, rate: 0 }];
 
 // [Lazy-loaded]  — moved to ui/pages/ module

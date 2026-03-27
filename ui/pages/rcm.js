@@ -1,0 +1,437 @@
+// ui/pages/rcm.js — Revenue Cycle Management
+// Claims, Denials, Payments, Charge Capture, AR Aging
+
+const { store, auth, CONFIG, escHtml, escAttr, formatDateDisplay, toHexId,
+        showToast, navigateTo, appConfirm, appPrompt,
+        editButton, deleteButton, helpTip } = window._credentik;
+
+if (typeof window._rcmTab === 'undefined') window._rcmTab = 'claims';
+
+function _fm(n) { return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function _fk(n) { n = Number(n || 0); return n >= 1000 ? '$' + (n / 1000).toFixed(1) + 'k' : _fm(n); }
+
+const CLAIM_STATUSES = [
+  { value: 'draft', label: 'Draft', color: '#6b7280', bg: '#f3f4f6' },
+  { value: 'submitted', label: 'Submitted', color: '#8b5cf6', bg: '#ede9fe' },
+  { value: 'acknowledged', label: 'Acknowledged', color: '#3b82f6', bg: '#dbeafe' },
+  { value: 'pending', label: 'Pending', color: '#f59e0b', bg: '#fef3c7' },
+  { value: 'paid', label: 'Paid', color: '#22c55e', bg: '#dcfce7' },
+  { value: 'partial_paid', label: 'Partial', color: '#06b6d4', bg: '#cffafe' },
+  { value: 'denied', label: 'Denied', color: '#ef4444', bg: '#fee2e2' },
+  { value: 'appealed', label: 'Appealed', color: '#f59e0b', bg: '#fef3c7' },
+  { value: 'voided', label: 'Voided', color: '#9ca3af', bg: '#f3f4f6' },
+  { value: 'written_off', label: 'Written Off', color: '#9ca3af', bg: '#f3f4f6' },
+];
+
+const DENIAL_CATEGORIES = [
+  { value: 'eligibility', label: 'Eligibility' },
+  { value: 'authorization', label: 'Authorization' },
+  { value: 'coding', label: 'Coding' },
+  { value: 'medical_necessity', label: 'Medical Necessity' },
+  { value: 'timely_filing', label: 'Timely Filing' },
+  { value: 'duplicate', label: 'Duplicate' },
+  { value: 'bundling', label: 'Bundling' },
+  { value: 'coordination_of_benefits', label: 'Coordination of Benefits' },
+  { value: 'credentialing', label: 'Credentialing' },
+  { value: 'documentation', label: 'Documentation' },
+  { value: 'other', label: 'Other' },
+];
+
+const DENIAL_STATUSES = [
+  { value: 'new', label: 'New' }, { value: 'in_review', label: 'In Review' },
+  { value: 'appeal_in_progress', label: 'Appeal In Progress' }, { value: 'pending_response', label: 'Pending Response' },
+  { value: 'resolved_won', label: 'Won' }, { value: 'resolved_lost', label: 'Lost' },
+  { value: 'resolved_partial', label: 'Partial' }, { value: 'written_off', label: 'Written Off' },
+];
+
+function _claimBadge(status) {
+  const s = CLAIM_STATUSES.find(x => x.value === status) || { label: status, color: '#6b7280', bg: '#f3f4f6' };
+  return `<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:8px;background:${s.bg};color:${s.color};">${s.label}</span>`;
+}
+
+function _denialBadge(status) {
+  const colors = { new: '#ef4444', in_review: '#f59e0b', appeal_in_progress: '#3b82f6', pending_response: '#8b5cf6', resolved_won: '#22c55e', resolved_lost: '#9ca3af', resolved_partial: '#06b6d4', written_off: '#6b7280' };
+  const s = DENIAL_STATUSES.find(x => x.value === status) || { label: status || 'New' };
+  return `<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:8px;background:${(colors[status] || '#6b7280')}20;color:${colors[status] || '#6b7280'};">${s.label}</span>`;
+}
+
+// ─── Main RCM Page ───
+async function renderRcmPage() {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  let claims = [], denials = [], payments = [], charges = [], clients = [];
+  let claimStats = {}, denialStats = {}, arData = {};
+
+  try { claimStats = await store.getRcmClaimStats(); } catch (e) {}
+  try { claims = await store.getRcmClaims(); } catch (e) {}
+  try { denialStats = await store.getRcmDenialStats(); } catch (e) {}
+  try { denials = await store.getRcmDenials(); } catch (e) {}
+  try { payments = await store.getRcmPayments(); } catch (e) {}
+  try { charges = await store.getRcmCharges(); } catch (e) {}
+  try { clients = await store.getBillingClients(); } catch (e) {}
+  try { arData = await store.getRcmArAging(); } catch (e) {}
+
+  if (!Array.isArray(claims)) claims = [];
+  if (!Array.isArray(denials)) denials = [];
+  if (!Array.isArray(payments)) payments = [];
+  if (!Array.isArray(charges)) charges = [];
+  if (!Array.isArray(clients)) clients = [];
+  window._rcmClaims = claims;
+  window._rcmDenials = denials;
+  window._rcmPayments = payments;
+  window._rcmCharges = charges;
+  window._rcmClients = clients;
+
+  const buckets = arData.buckets || {};
+  const totalAR = arData.total_ar || arData.totalAr || 0;
+
+  body.innerHTML = `
+    <style>
+      .rcm-stat{position:relative;overflow:hidden;border-radius:16px;padding:18px 22px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
+      .rcm-stat:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.1);}
+      .rcm-stat .rcm-accent{position:absolute;top:0;left:0;right:0;height:3px;}
+      .rcm-stat .rcm-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin-bottom:4px;}
+      .rcm-stat .rcm-val{font-size:24px;font-weight:800;line-height:1.1;}
+      .rcm-stat .rcm-sub{font-size:11px;color:var(--gray-500);margin-top:3px;}
+      .rcm-card{border-radius:16px;overflow:hidden;}
+      .rcm-table table tr:hover{background:var(--gray-50);}
+    </style>
+
+    <!-- KPI Stats -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px;">
+      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div><div class="rcm-label">Total Claims</div><div class="rcm-val" style="color:#2563eb;">${claimStats.total_claims || claims.length}</div></div>
+      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#22c55e,#4ade80);"></div><div class="rcm-label">Collected</div><div class="rcm-val" style="color:#16a34a;">${_fk(claimStats.total_paid)}</div><div class="rcm-sub">${claimStats.collection_rate || 0}% rate</div></div>
+      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#8b5cf6,#a78bfa);"></div><div class="rcm-label">Charged</div><div class="rcm-val" style="color:#7c3aed;">${_fk(claimStats.total_charged)}</div></div>
+      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#ef4444,#f87171);"></div><div class="rcm-label">Denials</div><div class="rcm-val" style="color:#dc2626;">${denialStats.open || 0}</div><div class="rcm-sub">${denialStats.total || 0} total</div></div>
+      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div><div class="rcm-label">Total A/R</div><div class="rcm-val" style="color:#d97706;">${_fk(totalAR)}</div><div class="rcm-sub">${arData.avg_days_in_ar || arData.avgDaysInAr || 0}d avg</div></div>
+      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#06b6d4,#22d3ee);"></div><div class="rcm-label">Clean Claim</div><div class="rcm-val" style="color:#0891b2;">${claimStats.clean_claim_rate || 0}%</div></div>
+      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#10b981,#34d399);"></div><div class="rcm-label">Appeal Rate</div><div class="rcm-val" style="color:#059669;">${denialStats.appeal_success_rate || denialStats.appealSuccessRate || 0}%</div><div class="rcm-sub">won</div></div>
+      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#6366f1,#818cf8);"></div><div class="rcm-label">Charges</div><div class="rcm-val" style="color:#4f46e5;">${charges.filter(c => c.status === 'pending').length}</div><div class="rcm-sub">pending</div></div>
+    </div>
+
+    <!-- AR Aging Bar -->
+    <div class="card rcm-card" style="margin-bottom:18px;">
+      <div class="card-body" style="padding:14px 20px;">
+        <div style="display:flex;align-items:center;gap:4px;height:28px;border-radius:6px;overflow:hidden;">
+          ${[
+            { key: '0_30', label: '0-30d', color: '#22c55e' },
+            { key: '31_60', label: '31-60d', color: '#f59e0b' },
+            { key: '61_90', label: '61-90d', color: '#f97316' },
+            { key: '91_plus', label: '90+d', color: '#ef4444' },
+          ].map(b => {
+            const t = buckets[b.key]?.total || 0;
+            const pct = totalAR > 0 ? Math.max(t / totalAR * 100, 2) : 25;
+            return `<div style="width:${pct}%;background:${b.color};height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;min-width:40px;" title="${b.label}: ${_fm(t)}">${b.label} ${_fk(t)}</div>`;
+          }).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--gray-500);">
+          <span>Current: ${_fk(buckets['0_30']?.total || 0)} (${buckets['0_30']?.count || 0})</span>
+          <span>31-60: ${_fk(buckets['31_60']?.total || 0)} (${buckets['31_60']?.count || 0})</span>
+          <span>61-90: ${_fk(buckets['61_90']?.total || 0)} (${buckets['61_90']?.count || 0})</span>
+          <span>90+: ${_fk(buckets['91_plus']?.total || 0)} (${buckets['91_plus']?.count || 0})</span>
+          <span><strong>Total: ${_fm(totalAR)}</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs" style="margin-bottom:16px;">
+      <button class="tab ${window._rcmTab === 'claims' ? 'active' : ''}" onclick="window.app.rcmTab(this,'claims')">Claims (${claims.length})</button>
+      <button class="tab ${window._rcmTab === 'charges' ? 'active' : ''}" onclick="window.app.rcmTab(this,'charges')">Charges (${charges.length})</button>
+      <button class="tab ${window._rcmTab === 'denials' ? 'active' : ''}" onclick="window.app.rcmTab(this,'denials')">Denials (${denials.length})</button>
+      <button class="tab ${window._rcmTab === 'payments' ? 'active' : ''}" onclick="window.app.rcmTab(this,'payments')">Payments (${payments.length})</button>
+      <button class="tab ${window._rcmTab === 'ar' ? 'active' : ''}" onclick="window.app.rcmTab(this,'ar')">A/R Aging</button>
+    </div>
+
+    <!-- ═══ CLAIMS TAB ═══ -->
+    <div id="rcm-claims" class="${window._rcmTab !== 'claims' ? 'hidden' : ''}">
+      <div class="card rcm-card rcm-table">
+        <div class="card-header"><h3>Claims</h3>
+          <div style="display:flex;gap:8px;">
+            <select id="rcm-claim-status" class="form-control" style="width:130px;height:34px;font-size:13px;" onchange="window.app.filterRcmClaims()"><option value="">All</option>${CLAIM_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select>
+            <select id="rcm-claim-client" class="form-control" style="width:170px;height:34px;font-size:13px;" onchange="window.app.filterRcmClaims()"><option value="">All Clients</option>${clients.map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}</select>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+          <thead><tr><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Balance</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="rcm-claims-tbody">
+            ${claims.map(c => `<tr class="rcm-claim-row" data-status="${c.status}" data-client="${c.billingClientId || c.billing_client_id || ''}">
+              <td><strong style="font-family:monospace;font-size:12px;">${escHtml(c.claimNumber || c.claim_number || '')}</strong></td>
+              <td class="text-sm">${escHtml(c.patientName || c.patient_name || '—')}</td>
+              <td class="text-sm">${escHtml(c.payerName || c.payer_name || '—')}</td>
+              <td class="text-sm">${formatDateDisplay(c.dateOfService || c.date_of_service)}</td>
+              <td style="text-align:right;">${_fm(c.totalCharges || c.total_charges)}</td>
+              <td style="text-align:right;color:var(--green);font-weight:600;">${_fm(c.totalPaid || c.total_paid)}</td>
+              <td style="text-align:right;${(c.balance || 0) > 0 ? 'color:var(--red);font-weight:600;' : ''}">${_fm(c.balance)}</td>
+              <td>${_claimBadge(c.status)}</td>
+              <td><button class="btn btn-sm" onclick="window.app.editRcmClaim(${c.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteRcmClaim(${c.id})">Del</button></td>
+            </tr>`).join('')}
+            ${claims.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No claims yet. Click "+ New Claim" to create one.</td></tr>' : ''}
+          </tbody>
+        </table></div></div>
+      </div>
+    </div>
+
+    <!-- ═══ CHARGES TAB ═══ -->
+    <div id="rcm-charges" class="${window._rcmTab !== 'charges' ? 'hidden' : ''}">
+      <!-- Quick Charge Entry -->
+      <div class="card rcm-card" style="margin-bottom:16px;">
+        <div class="card-header"><h3>Quick Charge Entry</h3></div>
+        <div class="card-body" style="padding:14px;">
+          <div style="display:grid;grid-template-columns:1fr 0.8fr 1fr 0.6fr 0.5fr 0.5fr 0.6fr 0.5fr auto;gap:8px;align-items:end;">
+            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Patient</label><input type="text" id="rcm-qc-patient" class="form-control" style="height:32px;font-size:12px;" placeholder="Patient name"></div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Payer</label><input type="text" id="rcm-qc-payer" class="form-control" style="height:32px;font-size:12px;" placeholder="Payer"></div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">CPT Code</label><input type="text" id="rcm-qc-cpt" class="form-control" style="height:32px;font-size:12px;" placeholder="99213"></div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">ICD-10</label><input type="text" id="rcm-qc-icd" class="form-control" style="height:32px;font-size:12px;" placeholder="F41.1"></div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Units</label><input type="number" id="rcm-qc-units" class="form-control" style="height:32px;font-size:12px;" value="1" min="1"></div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Amount</label><input type="number" id="rcm-qc-amount" class="form-control" style="height:32px;font-size:12px;" step="0.01" placeholder="0.00"></div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">DOS</label><input type="date" id="rcm-qc-dos" class="form-control" style="height:32px;font-size:12px;" value="${new Date().toISOString().split('T')[0]}"></div>
+            <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Client</label>
+              <select id="rcm-qc-client" class="form-control" style="height:32px;font-size:12px;">
+                <option value="">—</option>${clients.filter(c => c.status === 'active').map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}
+              </select>
+            </div>
+            <button class="btn btn-primary" style="height:32px;font-size:12px;white-space:nowrap;" onclick="window.app.saveQuickCharge()">+ Add</button>
+          </div>
+        </div>
+      </div>
+      <!-- Charges Table -->
+      <div class="card rcm-card rcm-table">
+        <div class="card-header"><h3>Charge Entries</h3></div>
+        <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+          <thead><tr><th>DOS</th><th>Patient</th><th>CPT</th><th>ICD</th><th>Payer</th><th style="text-align:center;">Units</th><th style="text-align:right;">Amount</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${charges.map(ch => `<tr>
+              <td class="text-sm">${formatDateDisplay(ch.dateOfService || ch.date_of_service)}</td>
+              <td class="text-sm">${escHtml(ch.patientName || ch.patient_name || '—')}</td>
+              <td><code style="font-size:12px;color:var(--brand-700);">${escHtml(ch.cptCode || ch.cpt_code || '')}</code> <span class="text-sm text-muted">${escHtml(ch.cptDescription || ch.cpt_description || '')}</span></td>
+              <td><code style="font-size:12px;">${escHtml(ch.icdCodes || ch.icd_codes || '')}</code></td>
+              <td class="text-sm">${escHtml(ch.payerName || ch.payer_name || '—')}</td>
+              <td style="text-align:center;">${ch.units || 1}</td>
+              <td style="text-align:right;font-weight:600;">${_fm(ch.chargeAmount || ch.charge_amount)}</td>
+              <td><span class="badge badge-${ch.status === 'submitted' || ch.status === 'billed' ? 'approved' : 'pending'}">${ch.status || 'pending'}</span></td>
+              <td><button class="btn btn-sm" onclick="window.app.editRcmCharge(${ch.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteRcmCharge(${ch.id})">Del</button></td>
+            </tr>`).join('')}
+            ${charges.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No charge entries. Use the quick entry form above.</td></tr>' : ''}
+          </tbody>
+        </table></div></div>
+      </div>
+    </div>
+
+    <!-- ═══ DENIALS TAB ═══ -->
+    <div id="rcm-denials" class="${window._rcmTab !== 'denials' ? 'hidden' : ''}">
+      <!-- Denial Stats -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
+        <div class="rcm-stat"><div class="rcm-label">Open Denials</div><div class="rcm-val" style="color:#ef4444;">${denialStats.open || 0}</div></div>
+        <div class="rcm-stat"><div class="rcm-label">Total Denied</div><div class="rcm-val" style="color:#dc2626;">${_fk(denialStats.total_denied || denialStats.totalDenied)}</div></div>
+        <div class="rcm-stat"><div class="rcm-label">Recovered</div><div class="rcm-val" style="color:#22c55e;">${_fk(denialStats.total_recovered || denialStats.totalRecovered)}</div></div>
+        <div class="rcm-stat"><div class="rcm-label">Appeal Success</div><div class="rcm-val" style="color:#3b82f6;">${denialStats.appeal_success_rate || denialStats.appealSuccessRate || 0}%</div></div>
+        <div class="rcm-stat"><div class="rcm-label">Overdue Appeals</div><div class="rcm-val" style="color:#f59e0b;">${denialStats.overdue_appeals || denialStats.overdueAppeals || 0}</div></div>
+      </div>
+      <!-- Denial by Category -->
+      ${Array.isArray(denialStats.by_category || denialStats.byCategory) && (denialStats.by_category || denialStats.byCategory).length > 0 ? `
+      <div class="card rcm-card" style="margin-bottom:16px;">
+        <div class="card-header"><h3>Denials by Category</h3></div>
+        <div class="card-body" style="padding:14px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${(denialStats.by_category || denialStats.byCategory || []).map(c => {
+              const cat = DENIAL_CATEGORIES.find(x => x.value === (c.denialCategory || c.denial_category));
+              return `<div style="padding:8px 14px;background:var(--gray-50);border-radius:10px;text-align:center;min-width:100px;">
+                <div style="font-size:18px;font-weight:800;color:var(--red);">${c.count}</div>
+                <div style="font-size:11px;color:var(--gray-500);">${escHtml(cat ? cat.label : (c.denialCategory || c.denial_category || ''))}</div>
+                <div style="font-size:11px;color:var(--gray-400);">${_fk(c.total)}</div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>` : ''}
+      <!-- Denials Table -->
+      <div class="card rcm-card rcm-table">
+        <div class="card-header"><h3>Denial Queue</h3>
+          <div style="display:flex;gap:8px;">
+            <select id="rcm-denial-status" class="form-control" style="width:140px;height:34px;font-size:13px;" onchange="window.app.filterRcmDenials()"><option value="">All</option>${DENIAL_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select>
+            <select id="rcm-denial-cat" class="form-control" style="width:160px;height:34px;font-size:13px;" onchange="window.app.filterRcmDenials()"><option value="">All Categories</option>${DENIAL_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join('')}</select>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+          <thead><tr><th>Claim</th><th>Payer</th><th>Category</th><th style="text-align:right;">Amount</th><th>Appeal Deadline</th><th>Priority</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="rcm-denials-tbody">
+            ${denials.map(d => {
+              const claim = d.claim || {};
+              const deadline = d.appealDeadline || d.appeal_deadline || '';
+              const isOverdue = deadline && new Date(deadline) < new Date() && !['resolved_won', 'resolved_lost', 'resolved_partial', 'written_off'].includes(d.status);
+              const cat = DENIAL_CATEGORIES.find(x => x.value === (d.denialCategory || d.denial_category));
+              return `<tr class="rcm-denial-row" data-status="${d.status}" data-category="${d.denialCategory || d.denial_category || ''}" style="${isOverdue ? 'background:#fef2f2;' : ''}">
+                <td><strong style="font-family:monospace;font-size:12px;">${escHtml(claim.claimNumber || claim.claim_number || '')}</strong><br><span class="text-sm text-muted">${escHtml(claim.patientName || claim.patient_name || '')}</span></td>
+                <td class="text-sm">${escHtml(claim.payerName || claim.payer_name || d.payerName || '')}</td>
+                <td><span style="font-size:11px;padding:2px 8px;background:var(--gray-100);border-radius:4px;">${escHtml(cat ? cat.label : '')}</span></td>
+                <td style="text-align:right;color:var(--red);font-weight:600;">${_fm(d.deniedAmount || d.denied_amount)}</td>
+                <td style="font-size:12px;${isOverdue ? 'color:var(--red);font-weight:700;' : ''}">${deadline ? formatDateDisplay(deadline) : '—'}${isOverdue ? ' OVERDUE' : ''}</td>
+                <td><span style="font-size:11px;font-weight:600;color:${d.priority === 'urgent' ? 'var(--red)' : d.priority === 'high' ? '#f97316' : 'var(--gray-500)'};">${d.priority || 'normal'}</span></td>
+                <td>${_denialBadge(d.status)}</td>
+                <td><button class="btn btn-sm" onclick="window.app.editRcmDenial(${d.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteRcmDenial(${d.id})">Del</button></td>
+              </tr>`;
+            }).join('')}
+            ${denials.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No denials tracked yet.</td></tr>' : ''}
+          </tbody>
+        </table></div></div>
+      </div>
+    </div>
+
+    <!-- ═══ PAYMENTS TAB ═══ -->
+    <div id="rcm-payments" class="${window._rcmTab !== 'payments' ? 'hidden' : ''}">
+      <div class="card rcm-card rcm-table">
+        <div class="card-header"><h3>Payments</h3></div>
+        <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+          <thead><tr><th>Date</th><th>Payer</th><th>Type</th><th>Check/Trace #</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Posted</th><th style="text-align:right;">Remaining</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${payments.map(p => `<tr>
+              <td class="text-sm">${formatDateDisplay(p.paymentDate || p.payment_date)}</td>
+              <td class="text-sm">${escHtml(p.payerName || p.payer_name || '—')}</td>
+              <td><span style="font-size:11px;padding:2px 8px;background:var(--gray-100);border-radius:4px;">${escHtml((p.paymentType || p.payment_type || 'check').replace(/_/g, ' '))}</span></td>
+              <td class="text-sm" style="font-family:monospace;">${escHtml(p.checkNumber || p.check_number || p.traceNumber || p.trace_number || '—')}</td>
+              <td style="text-align:right;font-weight:700;">${_fm(p.totalAmount || p.total_amount)}</td>
+              <td style="text-align:right;color:var(--green);font-weight:600;">${_fm(p.postedAmount || p.posted_amount)}</td>
+              <td style="text-align:right;${(p.remainingAmount || p.remaining_amount || 0) > 0 ? 'color:var(--gold);' : ''}">${_fm(p.remainingAmount || p.remaining_amount)}</td>
+              <td><span class="badge badge-${p.status === 'posted' || p.status === 'reconciled' ? 'approved' : 'pending'}">${p.status || 'unposted'}</span></td>
+              <td><button class="btn btn-sm" onclick="window.app.editRcmPayment(${p.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteRcmPayment(${p.id})">Del</button></td>
+            </tr>`).join('')}
+            ${payments.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No payments posted yet. Click "+ Post Payment" to record one.</td></tr>' : ''}
+          </tbody>
+        </table></div></div>
+      </div>
+    </div>
+
+    <!-- ═══ AR AGING TAB ═══ -->
+    <div id="rcm-ar" class="${window._rcmTab !== 'ar' ? 'hidden' : ''}">
+      <!-- AR Summary -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;">
+        ${[
+          { label: '0-30 Days', key: '0_30', color: '#22c55e' },
+          { label: '31-60 Days', key: '31_60', color: '#f59e0b' },
+          { label: '61-90 Days', key: '61_90', color: '#f97316' },
+          { label: '90+ Days', key: '91_plus', color: '#ef4444' },
+        ].map(b => {
+          const data = buckets[b.key] || {};
+          return `<div class="rcm-stat" style="text-align:center;">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:${b.color};letter-spacing:0.5px;">${b.label}</div>
+            <div style="font-size:28px;font-weight:800;color:${b.color};margin:6px 0;">${_fk(data.total || 0)}</div>
+            <div style="font-size:12px;color:var(--gray-500);">${data.count || 0} claims</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <!-- AR by Payer -->
+      ${Array.isArray(arData.by_payer || arData.byPayer) && (arData.by_payer || arData.byPayer).length > 0 ? `
+      <div class="card rcm-card" style="margin-bottom:16px;">
+        <div class="card-header"><h3>A/R by Payer</h3></div>
+        <div class="card-body" style="padding:0;"><table>
+          <thead><tr><th>Payer</th><th style="text-align:right;">Balance</th><th style="text-align:center;">Claims</th><th style="text-align:center;">Avg Days</th></tr></thead>
+          <tbody>
+            ${(arData.by_payer || arData.byPayer || []).sort((a, b) => b.total - a.total).map(p => `<tr>
+              <td><strong>${escHtml(p.payer)}</strong></td>
+              <td style="text-align:right;font-weight:600;color:var(--red);">${_fm(p.total)}</td>
+              <td style="text-align:center;">${p.count}</td>
+              <td style="text-align:center;font-weight:600;color:${p.avg_days > 60 ? 'var(--red)' : p.avg_days > 30 ? 'var(--gold)' : 'var(--green)'};">${p.avg_days || p.avgDays || 0}d</td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>
+      </div>` : ''}
+      <!-- Open AR Claims -->
+      <div class="card rcm-card rcm-table">
+        <div class="card-header"><h3>Open A/R Claims (${arData.claim_count || arData.claimCount || 0})</h3></div>
+        <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+          <thead><tr><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Balance</th><th>Days</th><th>Status</th></tr></thead>
+          <tbody>
+            ${(arData.claims || []).map(c => {
+              const days = Math.floor((new Date() - new Date(c.dateOfService || c.date_of_service)) / 86400000);
+              return `<tr>
+                <td><strong style="font-family:monospace;font-size:12px;">${escHtml(c.claimNumber || c.claim_number || '')}</strong></td>
+                <td class="text-sm">${escHtml(c.patientName || c.patient_name || '—')}</td>
+                <td class="text-sm">${escHtml(c.payerName || c.payer_name || '—')}</td>
+                <td class="text-sm">${formatDateDisplay(c.dateOfService || c.date_of_service)}</td>
+                <td style="text-align:right;">${_fm(c.totalCharges || c.total_charges)}</td>
+                <td style="text-align:right;color:var(--red);font-weight:600;">${_fm(c.balance)}</td>
+                <td style="font-weight:700;color:${days > 90 ? 'var(--red)' : days > 60 ? '#f97316' : days > 30 ? 'var(--gold)' : 'var(--green)'};">${days}d</td>
+                <td>${_claimBadge(c.status)}</td>
+              </tr>`;
+            }).join('')}
+            ${(arData.claims || []).length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No open A/R</td></tr>' : ''}
+          </tbody>
+        </table></div></div>
+      </div>
+    </div>
+
+    <!-- ═══ MODALS ═══ -->
+
+    <!-- Claim Modal -->
+    <div class="modal-overlay" id="rcm-claim-modal">
+      <div class="modal" style="max-width:700px;">
+        <div class="modal-header"><h3 id="rcm-claim-modal-title">New Claim</h3><button class="modal-close" onclick="document.getElementById('rcm-claim-modal').classList.remove('active')">&times;</button></div>
+        <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+          <input type="hidden" id="rcm-claim-edit-id" value="">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Client</label><select id="rcm-claim-client" class="form-control"><option value="">Select...</option>${clients.map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}</select></div>
+            <div class="auth-field" style="margin:0;"><label>Claim Type</label><select id="rcm-claim-type" class="form-control"><option value="837P">Professional (837P)</option><option value="837I">Institutional (837I)</option><option value="837D">Dental (837D)</option></select></div>
+            <div class="auth-field" style="margin:0;"><label>Patient Name *</label><input type="text" id="rcm-claim-patient" class="form-control" placeholder="Patient name"></div>
+            <div class="auth-field" style="margin:0;"><label>Member ID</label><input type="text" id="rcm-claim-member" class="form-control" placeholder="Insurance member ID"></div>
+            <div class="auth-field" style="margin:0;"><label>Payer *</label><input type="text" id="rcm-claim-payer" class="form-control" placeholder="Insurance payer"></div>
+            <div class="auth-field" style="margin:0;"><label>Provider</label><input type="text" id="rcm-claim-provider" class="form-control" placeholder="Rendering provider"></div>
+            <div class="auth-field" style="margin:0;"><label>Date of Service *</label><input type="date" id="rcm-claim-dos" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Total Charges</label><input type="number" id="rcm-claim-charges" class="form-control" step="0.01" placeholder="0.00"></div>
+            <div class="auth-field" style="margin:0;"><label>Status</label><select id="rcm-claim-status-sel" class="form-control">${CLAIM_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select></div>
+            <div class="auth-field" style="margin:0;"><label>Submission Method</label><select id="rcm-claim-method" class="form-control"><option value="electronic">Electronic</option><option value="portal">Portal</option><option value="paper">Paper</option></select></div>
+            <div class="auth-field" style="margin:0;"><label>Authorization #</label><input type="text" id="rcm-claim-auth" class="form-control" placeholder="Auth number"></div>
+            <div class="auth-field" style="margin:0;"><label>Submitted Date</label><input type="date" id="rcm-claim-submitted" class="form-control"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Notes</label><textarea id="rcm-claim-notes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);"><button class="btn" onclick="document.getElementById('rcm-claim-modal').classList.remove('active')">Cancel</button><button class="btn btn-primary" onclick="window.app.saveRcmClaim()">Save Claim</button></div>
+      </div>
+    </div>
+
+    <!-- Payment Modal -->
+    <div class="modal-overlay" id="rcm-payment-modal">
+      <div class="modal" style="max-width:560px;">
+        <div class="modal-header"><h3 id="rcm-payment-modal-title">Post Payment</h3><button class="modal-close" onclick="document.getElementById('rcm-payment-modal').classList.remove('active')">&times;</button></div>
+        <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+          <input type="hidden" id="rcm-pay-edit-id" value="">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Client</label><select id="rcm-pay-client" class="form-control"><option value="">Select...</option>${clients.map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}</select></div>
+            <div class="auth-field" style="margin:0;"><label>Payer</label><input type="text" id="rcm-pay-payer" class="form-control" placeholder="Payer name"></div>
+            <div class="auth-field" style="margin:0;"><label>Payment Type *</label><select id="rcm-pay-type" class="form-control"><option value="check">Check</option><option value="eft">EFT</option><option value="ach">ACH</option><option value="virtual_card">Virtual Card</option><option value="patient">Patient Payment</option></select></div>
+            <div class="auth-field" style="margin:0;"><label>Check/Trace #</label><input type="text" id="rcm-pay-check" class="form-control" placeholder="Check or trace number"></div>
+            <div class="auth-field" style="margin:0;"><label>Payment Date *</label><input type="date" id="rcm-pay-date" class="form-control" value="${new Date().toISOString().split('T')[0]}"></div>
+            <div class="auth-field" style="margin:0;"><label>Amount *</label><input type="number" id="rcm-pay-amount" class="form-control" step="0.01" min="0" placeholder="0.00"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Notes</label><textarea id="rcm-pay-notes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);"><button class="btn" onclick="document.getElementById('rcm-payment-modal').classList.remove('active')">Cancel</button><button class="btn btn-primary" onclick="window.app.saveRcmPayment()">Post Payment</button></div>
+      </div>
+    </div>
+
+    <!-- Denial Modal -->
+    <div class="modal-overlay" id="rcm-denial-modal">
+      <div class="modal" style="max-width:560px;">
+        <div class="modal-header"><h3 id="rcm-denial-modal-title">Track Denial</h3><button class="modal-close" onclick="document.getElementById('rcm-denial-modal').classList.remove('active')">&times;</button></div>
+        <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+          <input type="hidden" id="rcm-denial-edit-id" value="">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Claim *</label><select id="rcm-denial-claim" class="form-control"><option value="">Select claim...</option>${claims.map(c => `<option value="${c.id}">${escHtml(c.claimNumber || c.claim_number || '')} — ${escHtml(c.patientName || c.patient_name || '')} (${escHtml(c.payerName || c.payer_name || '')})</option>`).join('')}</select></div>
+            <div class="auth-field" style="margin:0;"><label>Category *</label><select id="rcm-denial-category" class="form-control">${DENIAL_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join('')}</select></div>
+            <div class="auth-field" style="margin:0;"><label>Priority</label><select id="rcm-denial-priority" class="form-control"><option value="normal">Normal</option><option value="low">Low</option><option value="high">High</option><option value="urgent">Urgent</option></select></div>
+            <div class="auth-field" style="margin:0;"><label>Denied Amount</label><input type="number" id="rcm-denial-amount" class="form-control" step="0.01" placeholder="0.00"></div>
+            <div class="auth-field" style="margin:0;"><label>Appeal Deadline</label><input type="date" id="rcm-denial-deadline" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Denial Code</label><input type="text" id="rcm-denial-code" class="form-control" placeholder="e.g. CO-45"></div>
+            <div class="auth-field" style="margin:0;"><label>Status</label><select id="rcm-denial-status-sel" class="form-control">${DENIAL_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Denial Reason *</label><textarea id="rcm-denial-reason" class="form-control" rows="2" style="resize:vertical;" placeholder="Describe why the claim was denied..."></textarea></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Appeal Notes</label><textarea id="rcm-denial-appeal-notes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);"><button class="btn" onclick="document.getElementById('rcm-denial-modal').classList.remove('active')">Cancel</button><button class="btn btn-primary" onclick="window.app.saveRcmDenial()">Save Denial</button></div>
+      </div>
+    </div>
+  `;
+}
+
+export { renderRcmPage, CLAIM_STATUSES, DENIAL_CATEGORIES, DENIAL_STATUSES };
