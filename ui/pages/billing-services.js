@@ -115,7 +115,8 @@ async function renderBillingServicesPage() {
     return (today - d) < 7 * 86400000;
   });
 
-  // Compute monthly financials for chart (last 6 months)
+  // Compute monthly data for chart — prefer live claim stats, fall back to financials
+  const claimMonthly = claimStats.monthly || [];
   const monthlyData = {};
   for (let m = 5; m >= 0; m--) {
     const d = new Date(today.getFullYear(), today.getMonth() - m, 1);
@@ -123,15 +124,28 @@ async function renderBillingServicesPage() {
     const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
     monthlyData[key] = { label, billed: 0, collected: 0, denied: 0, claims: 0 };
   }
-  financials.forEach(f => {
-    const p = f.period || '';
-    if (monthlyData[p]) {
-      monthlyData[p].billed += f.amountBilled || f.amount_billed || 0;
-      monthlyData[p].collected += f.amountCollected || f.amount_collected || 0;
-      monthlyData[p].denied += f.deniedAmount || f.denied_amount || 0;
-      monthlyData[p].claims += f.claimsSubmitted || f.claims_submitted || 0;
-    }
-  });
+  // Use live claim data if available
+  if (claimMonthly.length > 0) {
+    claimMonthly.forEach(m => {
+      const p = m.period || '';
+      if (monthlyData[p]) {
+        monthlyData[p].billed = m.amount_billed || m.amountBilled || 0;
+        monthlyData[p].collected = m.amount_collected || m.amountCollected || 0;
+        monthlyData[p].denied = m.denied_amount || m.deniedAmount || 0;
+        monthlyData[p].claims = m.claims_submitted || m.claimsSubmitted || 0;
+      }
+    });
+  } else {
+    financials.forEach(f => {
+      const p = f.period || '';
+      if (monthlyData[p]) {
+        monthlyData[p].billed += f.amountBilled || f.amount_billed || 0;
+        monthlyData[p].collected += f.amountCollected || f.amount_collected || 0;
+        monthlyData[p].denied += f.deniedAmount || f.denied_amount || 0;
+        monthlyData[p].claims += f.claimsSubmitted || f.claims_submitted || 0;
+      }
+    });
+  }
   const months = Object.values(monthlyData);
   const maxCollected = Math.max(...months.map(m => m.collected), 1);
 
