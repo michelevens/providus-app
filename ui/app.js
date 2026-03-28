@@ -11318,6 +11318,15 @@ function handleNppesProxy(payload) {
       showToast(`Exported ${data.length} denials`);
     } catch (e) { showToast('Export error: ' + e.message); }
   },
+  async syncChargeStatuses() {
+    try {
+      showToast('Reconciling charge statuses...');
+      const result = await store.syncChargeStatuses();
+      const synced = result.synced || 0;
+      showToast(synced > 0 ? `Updated ${synced} charge statuses to match claims. Refreshing...` : 'All charges already in sync.');
+      if (synced > 0) setTimeout(() => window.location.reload(), 1500);
+    } catch (e) { showToast('Reconcile error: ' + e.message); }
+  },
   exportChargesCSV() {
     const charges = window._rcmCharges || [];
     if (!charges.length) { showToast('No charges to export'); return; }

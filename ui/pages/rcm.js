@@ -435,6 +435,7 @@ async function renderRcmPage() {
               <option value="denied">Denied</option>
               <option value="pending">Pending</option>
             </select>
+            <button class="btn btn-sm btn-primary" onclick="window.app.syncChargeStatuses()" style="font-size:12px;" title="Update charge statuses to match their claim status (paid, denied, etc.)">Reconcile</button>
             <button class="btn btn-sm" onclick="window.app.openChargeImportModal()" style="font-size:12px;">Import CSV</button>
             <button class="btn btn-sm" onclick="window.app.exportChargesCSV()" style="font-size:12px;">Export CSV</button>
           </div>

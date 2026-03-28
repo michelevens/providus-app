@@ -1246,6 +1246,7 @@ class Store {
 
     // Reconciliation
     async autoReconcile() { return (await this._fetch(`${CONFIG.API_URL}/rcm/reconcile`, { method: 'POST' })).data || {}; }
+    async syncChargeStatuses() { return (await this._fetch(`${CONFIG.API_URL}/rcm/sync-charge-statuses`, { method: 'POST' })).data || {}; }
     async getReconciliationReport() { return (await this._fetch(`${CONFIG.API_URL}/rcm/reconciliation-report`)).data || {}; }
 
     // ── Billing Services Management ──
