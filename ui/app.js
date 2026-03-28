@@ -11766,10 +11766,18 @@ function handleNppesProxy(payload) {
     const s = (Array.isArray(statements) ? statements : []).find(x => x.id == id);
     if (!s) { showToast('Statement not found'); return; }
 
-    const agencyName = auth.getAgency()?.name || auth.getAgency()?.company_display_name || 'Billing Department';
-    const agencyEmail = auth.getAgency()?.email || '';
-    const agencyPhone = auth.getAgency()?.phone || '';
-    const agencyAddress = auth.getAgency()?.address_street || '';
+    const ag = auth.getAgency() || {};
+    const agencyName = ag.name || ag.companyDisplayName || ag.company_display_name || 'Billing Department';
+    const agencyEmail = ag.email || '';
+    const agencyPhone = ag.phone || '';
+    const agencyNpi = ag.npi || '';
+    const agencyTaxId = ag.taxId || ag.tax_id || '';
+    const agencyWebsite = ag.website || '';
+    const agencyAddress = [
+      ag.addressStreet || ag.address_street || '',
+      [ag.addressCity || ag.address_city || '', ag.addressState || ag.address_state || ''].filter(Boolean).join(', '),
+      ag.addressZip || ag.address_zip || ''
+    ].filter(Boolean).join(', ');
     const patientName = s.patient_name || s.patientName || '';
     const dueDate = s.due_date || s.dueDate || '';
     const statementDate = s.statement_date || s.statementDate || new Date().toISOString().split('T')[0];
@@ -11778,6 +11786,32 @@ function handleNppesProxy(payload) {
     let claims = window._rcmClaims || [];
     if (!claims.length) { try { claims = await store.getRcmClaims(); } catch (e) {} }
     const patientClaims = claims.filter(c => (c.patient_name || c.patientName || '').toLowerCase() === patientName.toLowerCase());
+
+    // Get client org info from billing client
+    const clientId = s.billing_client_id || s.billingClientId || (patientClaims[0]?.billingClientId || patientClaims[0]?.billing_client_id || null);
+    let org = {};
+    if (clientId) {
+      try {
+        const client = await store.getBillingClient(clientId);
+        const orgId = client.organizationId || client.organization_id;
+        if (orgId) {
+          const orgs = await store.getAll('organizations');
+          org = (Array.isArray(orgs) ? orgs : []).find(o => o.id == orgId) || {};
+        }
+        // Fallback: use client info directly
+        if (!org.name) org.name = client.organizationName || client.organization_name || '';
+      } catch (e) {}
+    }
+    const orgName = org.name || '';
+    const orgNpi = org.npi || '';
+    const orgPhone = org.phone || '';
+    const orgEmail = org.email || '';
+    const orgWebsite = org.website || '';
+    const orgAddress = [
+      org.addressStreet || org.address_street || '',
+      [org.addressCity || org.address_city || '', org.addressState || org.address_state || ''].filter(Boolean).join(', '),
+      org.addressZip || org.address_zip || ''
+    ].filter(Boolean).join(', ');
 
     // If statement is linked to a single claim, load its detail with service lines
     let detailClaim = null;
@@ -11918,10 +11952,12 @@ function handleNppesProxy(payload) {
         <div>
           <h1>PATIENT STATEMENT</h1>
           <div class="agency">
-            <strong>${agencyName}</strong><br>
-            ${agencyAddress ? agencyAddress + '<br>' : ''}
-            ${agencyPhone ? 'Phone: ' + agencyPhone + '<br>' : ''}
-            ${agencyEmail ? 'Email: ' + agencyEmail : ''}
+            <strong style="font-size:14px;">${orgName || agencyName}</strong><br>
+            ${orgNpi ? 'NPI: ' + orgNpi + '<br>' : (agencyNpi ? 'NPI: ' + agencyNpi + '<br>' : '')}
+            ${orgAddress || agencyAddress ? (orgAddress || agencyAddress) + '<br>' : ''}
+            ${orgPhone || agencyPhone ? 'Phone: ' + (orgPhone || agencyPhone) + '<br>' : ''}
+            ${orgEmail || agencyEmail ? 'Email: ' + (orgEmail || agencyEmail) + '<br>' : ''}
+            ${orgWebsite || agencyWebsite ? 'Web: ' + (orgWebsite || agencyWebsite) : ''}
           </div>
         </div>
         <div class="stmt-info">
