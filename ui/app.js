@@ -14876,10 +14876,11 @@ async function renderApplicationDetailPage(appId) {
   const provName = provider ? `${provider.firstName || provider.first_name || ''} ${provider.lastName || provider.last_name || ''}`.trim() : '—';
 
   let logs = [], followups = [], tasks = [], facilities = [];
-  try { logs = (await store.getAll('activity-logs')).filter(l => String(l.applicationId || l.application_id) === String(appId)).sort((a, b) => (b.date || '').localeCompare(a.date || '')); } catch {}
-  try { followups = (await store.getAll('followups')).filter(f => String(f.applicationId || f.application_id) === String(appId)).sort((a, b) => (b.dueDate || b.due_date || '').localeCompare(a.dueDate || a.due_date || '')); } catch {}
-  try { tasks = (await store.getAll('tasks')).filter(t => (t.linkedApplicationId || t.linkedAppId || t.linked_application_id) == appId); } catch {}
-  try { facilities = await store.getAll('facilities'); } catch {}
+  const [_lg, _fu, _tk, _fc] = await Promise.allSettled([store.getAll('activity-logs'), store.getAll('followups'), store.getAll('tasks'), store.getAll('facilities')]);
+  if (_lg.status === 'fulfilled') logs = (_lg.value || []).filter(l => String(l.applicationId || l.application_id) === String(appId)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  if (_fu.status === 'fulfilled') followups = (_fu.value || []).filter(f => String(f.applicationId || f.application_id) === String(appId)).sort((a, b) => (b.dueDate || b.due_date || '').localeCompare(a.dueDate || a.due_date || ''));
+  if (_tk.status === 'fulfilled') tasks = (_tk.value || []).filter(t => (t.linkedApplicationId || t.linkedAppId || t.linked_application_id) == appId);
+  if (_fc.status === 'fulfilled') facilities = _fc.value;
 
   const status = app.status || 'new';
   const statusColors = APPLICATION_STATUSES || {};
@@ -16322,10 +16323,11 @@ async function renderOrganizationsPage() {
   body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
 
   let orgs = [], providers = [], licenses = [], apps = [];
-  try { orgs = await store.getAll('organizations'); } catch {}
-  try { providers = await store.getAll('providers'); } catch {}
-  try { licenses = await store.getAll('licenses'); } catch {}
-  try { apps = await store.getAll('applications'); } catch {}
+  const [_orgs, _provs, _lics, _apps] = await Promise.allSettled([store.getAll('organizations'), store.getAll('providers'), store.getAll('licenses'), store.getAll('applications')]);
+  if (_orgs.status === 'fulfilled') orgs = _orgs.value;
+  if (_provs.status === 'fulfilled') providers = _provs.value;
+  if (_lics.status === 'fulfilled') licenses = _lics.value;
+  if (_apps.status === 'fulfilled') apps = _apps.value;
 
   body.innerHTML = `
     <style>
@@ -16411,22 +16413,27 @@ async function renderOrgDetailPage(orgId) {
   body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div><div style="margin-top:12px;color:var(--gray-500);font-size:13px;">Loading organization...</div></div>';
 
   let o = {}, providers = [], licenses = [], apps = [], facilities = [];
-  try { o = await store.getOne('organizations', orgId); } catch {}
-  try { providers = (await store.getAll('providers')).filter(p => (p.organizationId || p.orgId) == orgId); } catch {}
-  try { licenses = await store.getAll('licenses'); } catch {}
-  try { apps = await store.getAll('applications'); } catch {}
-  try { facilities = await store.getAll('facilities'); } catch {}
+  const [_o, _p, _l, _a, _f, _bc] = await Promise.allSettled([
+    store.getOne('organizations', orgId), store.getAll('providers'), store.getAll('licenses'),
+    store.getAll('applications'), store.getAll('facilities'), store.getBillingClients(),
+  ]);
+  if (_o.status === 'fulfilled') o = _o.value;
+  if (_p.status === 'fulfilled') providers = (_p.value || []).filter(p => (p.organizationId || p.orgId) == orgId);
+  if (_l.status === 'fulfilled') licenses = _l.value;
+  if (_a.status === 'fulfilled') apps = _a.value;
+  if (_f.status === 'fulfilled') facilities = _f.value;
 
-  // Load billing data for this org
   let billingActivities = [], billingClient = null, billingFinancials = [];
-  try {
-    const allClients = await store.getBillingClients();
-    billingClient = (Array.isArray(allClients) ? allClients : []).find(c => (c.organizationId || c.organization_id) == orgId || (c.organizationName || c.organization_name || '') === (o.name || ''));
-    if (billingClient) {
-      try { billingActivities = await store.getBillingActivities({ billing_client_id: billingClient.id, limit: 20 }); } catch {}
-      try { billingFinancials = await store.getBillingFinancials({ billing_client_id: billingClient.id }); } catch {}
-    }
-  } catch {}
+  const allClients = _bc.status === 'fulfilled' ? (_bc.value || []) : [];
+  billingClient = allClients.find(c => (c.organizationId || c.organization_id) == orgId || (c.organizationName || c.organization_name || '') === (o.name || ''));
+  if (billingClient) {
+    const [_ba, _bf] = await Promise.allSettled([
+      store.getBillingActivities({ billing_client_id: billingClient.id, limit: 20 }),
+      store.getBillingFinancials({ billing_client_id: billingClient.id }),
+    ]);
+    if (_ba.status === 'fulfilled') billingActivities = _ba.value;
+    if (_bf.status === 'fulfilled') billingFinancials = _bf.value;
+  }
   if (!Array.isArray(billingActivities)) billingActivities = [];
   if (!Array.isArray(billingFinancials)) billingFinancials = [];
 
@@ -16792,13 +16799,11 @@ async function renderUsersStub() {
     body.innerHTML = '<div class="alert alert-danger">You do not have permission to manage users.</div>';
     return;
   }
-  let users = [];
-  try { users = await store.getAgencyUsers(); } catch {}
-
-  // Pre-load orgs and providers for dropdowns
-  let orgs = [], providers = [];
-  try { orgs = await store.getAll('organizations'); } catch {}
-  try { providers = await store.getAll('providers'); } catch {}
+  let users = [], orgs = [], providers = [];
+  const [_u, _o, _p] = await Promise.allSettled([store.getAgencyUsers(), store.getAll('organizations'), store.getAll('providers')]);
+  if (_u.status === 'fulfilled') users = _u.value;
+  if (_o.status === 'fulfilled') orgs = _o.value;
+  if (_p.status === 'fulfilled') providers = _p.value;
 
   const roleBadge = (role) => {
     const map = {
@@ -17305,8 +17310,9 @@ async function renderCommunicationsPage() {
   const body = document.getElementById('page-body');
   let logs = [];
   let providers = [];
-  try { logs = await store.getCommunicationLogs(); } catch (e) { console.error('Comm logs error:', e); }
-  try { providers = await store.getAll('providers'); } catch (e) {}
+  const [_logs, _provs] = await Promise.allSettled([store.getCommunicationLogs(), store.getAll('providers')]);
+  if (_logs.status === 'fulfilled') logs = _logs.value;
+  if (_provs.status === 'fulfilled') providers = _provs.value;
   if (!Array.isArray(logs)) logs = [];
 
   const channelFilter = document.getElementById('comm-filter-channel')?.value || '';
