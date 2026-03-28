@@ -11931,6 +11931,13 @@ function handleNppesProxy(payload) {
       showToast(`${payerName}: ${stats.total_claims} claims, ${stats.denial_rate}% denial rate, ${stats.collection_rate}% collected`);
     } catch (e) { showToast('Error: ' + e.message); }
   },
+  async runReconciliation() {
+    try {
+      const r = await store.autoReconcile();
+      showToast(r.matched > 0 ? `Matched ${r.matched} charge(s) to claims. ${r.unlinked_remaining} still unmatched.` : 'No new matches found.');
+      window.app.rcSwitchTab('dashboard');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
   async runDuplicateDetection() {
     try {
       const r = await store.detectDuplicates();

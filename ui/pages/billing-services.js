@@ -81,9 +81,9 @@ async function renderBillingServicesPage() {
   let clients = [], tasks = [], activities = [], financials = [], orgs = [];
   let stats = { total_clients: 0, active_clients: 0, total_tasks: 0, pending_tasks: 0, completed_tasks: 0, total_claims: 0, total_collected: 0, total_denied: 0 };
 
-  let claimStats = {}, workQueues = {}, denialRisk = {};
+  let claimStats = {}, workQueues = {}, denialRisk = {}, reconciliation = {};
   // Fire all API calls in parallel for speed
-  const [r0, r1, r2, r3, r4, r5, r6, r7, r8] = await Promise.allSettled([
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9] = await Promise.allSettled([
     store.getBillingClientStats(),
     store.getBillingClients(),
     store.getBillingTasks(),
@@ -93,6 +93,7 @@ async function renderBillingServicesPage() {
     store.getWorkQueues(),
     store.getDenialRiskAnalysis(),
     store.getAll('organizations'),
+    store.getReconciliationReport(),
   ]);
   if (r0.status === 'fulfilled') stats = r0.value;
   if (r1.status === 'fulfilled') clients = r1.value;
@@ -103,6 +104,7 @@ async function renderBillingServicesPage() {
   if (r6.status === 'fulfilled') workQueues = r6.value;
   if (r7.status === 'fulfilled') denialRisk = r7.value;
   if (r8.status === 'fulfilled') orgs = r8.value;
+  if (r9.status === 'fulfilled') reconciliation = r9.value;
 
   if (!Array.isArray(clients)) clients = [];
   if (!Array.isArray(tasks)) tasks = [];
@@ -425,6 +427,32 @@ async function renderBillingServicesPage() {
             <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-500);margin-bottom:6px;">Recommendations</div>
             ${(denialRisk.recommendations || []).map(r => `<div style="font-size:13px;padding:4px 0;color:var(--gray-600);">&#8226; ${escHtml(r)}</div>`).join('')}
           </div>
+        </div>
+      </div>` : ''}
+
+      <!-- Revenue Pipeline -->
+      ${reconciliation.pipeline ? `
+      <div class="card bs-card" style="margin-top:16px;">
+        <div class="card-header"><h3>Revenue Pipeline</h3>
+          <button class="btn btn-sm" onclick="window.app.runReconciliation()" style="font-size:11px;">Auto-Match Charges</button>
+        </div>
+        <div class="card-body" style="padding:14px;">
+          <div style="display:flex;gap:4px;align-items:center;margin-bottom:12px;">
+            ${[
+              { label: 'Charges', val: reconciliation.pipeline.charges_entered, color: '#8b5cf6' },
+              { label: 'Submitted', val: reconciliation.pipeline.claims_submitted, color: '#3b82f6' },
+              { label: 'Paid', val: reconciliation.pipeline.claims_paid, color: '#22c55e' },
+              { label: 'Denied', val: reconciliation.pipeline.claims_denied, color: '#ef4444' },
+              { label: 'Pending', val: reconciliation.pipeline.claims_pending, color: '#f59e0b' },
+            ].map(s => `<div style="flex:1;text-align:center;padding:10px 6px;background:${s.color}10;border-radius:8px;border-left:3px solid ${s.color};">
+              <div style="font-size:18px;font-weight:800;color:${s.color};">${s.val?.count || 0}</div>
+              <div style="font-size:10px;color:var(--gray-500);font-weight:600;">${s.label}</div>
+              <div style="font-size:10px;color:var(--gray-400);">${_fmtK(s.val?.amount || 0)}</div>
+            </div>`).join('<div style="color:var(--gray-300);font-size:16px;">→</div>')}
+          </div>
+          <div style="font-size:12px;color:var(--gray-500);">Collection Rate: <strong style="color:${(reconciliation.pipeline.collection_rate || 0) > 90 ? 'var(--green)' : '#f59e0b'};">${reconciliation.pipeline.collection_rate || 0}%</strong></div>
+          ${(reconciliation.unbilled_charges || []).length > 0 ? `<div style="margin-top:8px;padding:8px 12px;background:#fef2f2;border-radius:6px;font-size:12px;color:var(--red);font-weight:600;">${reconciliation.unbilled_charges.length} unbilled charge(s) — ${_fmtK((reconciliation.unbilled_charges || []).reduce((s,c) => s + Number(c.charge_amount || 0), 0))} in charges with no matching claim</div>` : ''}
+          ${(reconciliation.unpaid_claims || []).length > 0 ? `<div style="margin-top:4px;padding:8px 12px;background:#fffbeb;border-radius:6px;font-size:12px;color:#f59e0b;font-weight:600;">${reconciliation.unpaid_claims.length} claim(s) pending 30+ days with no payment</div>` : ''}
         </div>
       </div>` : ''}
     </div>
