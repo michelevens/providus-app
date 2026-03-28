@@ -1241,6 +1241,10 @@ class Store {
     // Real-time Eligibility
     async realTimeEligibility(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/eligibility/realtime`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
 
+    // Reconciliation
+    async autoReconcile() { return (await this._fetch(`${CONFIG.API_URL}/rcm/reconcile`, { method: 'POST' })).data || {}; }
+    async getReconciliationReport() { return (await this._fetch(`${CONFIG.API_URL}/rcm/reconciliation-report`)).data || {}; }
+
     // ── Billing Services Management ──
     // Client billing assignments (agency manages billing for org/provider)
     async getBillingClients(params = {}) {
