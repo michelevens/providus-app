@@ -7259,6 +7259,23 @@ window.app = {
     if (panel.classList.contains('active')) {
       setTimeout(() => document.addEventListener('click', close), 0);
     }
+    // Close RCM tools if open
+    document.getElementById('rcm-tools-panel')?.classList.remove('active');
+  },
+  toggleRcmToolsMenu() {
+    const panel = document.getElementById('rcm-tools-panel');
+    if (panel) panel.classList.toggle('active');
+    const close = (e) => {
+      if (!e.target.closest('#rcm-tools-dropdown')) {
+        panel.classList.remove('active');
+        document.removeEventListener('click', close);
+      }
+    };
+    if (panel.classList.contains('active')) {
+      setTimeout(() => document.addEventListener('click', close), 0);
+    }
+    // Close credentialing tools if open
+    document.getElementById('tools-panel')?.classList.remove('active');
   },
 
   // Notifications
