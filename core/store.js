@@ -1140,7 +1140,7 @@ class Store {
     async createRcmClaim(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
     async updateRcmClaim(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
     async deleteRcmClaim(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`, { method: 'DELETE' }); this.clearCache(); return r; }
-    async bulkImportClaims(claims) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims/bulk-import`, { method: 'POST', body: JSON.stringify({ claims }) })); this.clearCache(); return r.data || r; }
+    async bulkImportClaims(claims) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims/bulk-import`, { method: 'POST', body: JSON.stringify({ claims }) })); return r.data || r; }
 
     async getRcmDenialStats() { return (await this._fetch(`${CONFIG.API_URL}/rcm/denials/stats`)).data || {}; }
     async getRcmDenials(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/denials${q ? '?' + q : ''}`)).data || []; }
@@ -1216,7 +1216,7 @@ class Store {
     // ERA/EOB Parsing
     async parseEra(eraData) { return (await this._fetch(`${CONFIG.API_URL}/rcm/era/parse`, { method: 'POST', body: JSON.stringify({ era_data: eraData }) })).data || {}; }
     async parse837(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/837/parse`, { method: 'POST', body: JSON.stringify({ data }) })).data || {}; }
-    async import837(claims, clientId) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/837/import`, { method: 'POST', body: JSON.stringify({ claims, billing_client_id: clientId }) }); this.clearCache(); return r.data || r; }
+    async import837(claims, clientId) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/837/import`, { method: 'POST', body: JSON.stringify({ claims, billing_client_id: clientId }) }); return r.data || r; }
 
     // AI Denial Prevention
     async getDenialRiskAnalysis() { return (await this._fetch(`${CONFIG.API_URL}/rcm/denial-risk`)).data || {}; }

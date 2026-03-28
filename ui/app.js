@@ -10889,6 +10889,7 @@ function handleNppesProxy(payload) {
 
     try {
       const result = await store.bulkImportClaims(cleaned);
+      store.clearCache();
       const imported = result.imported || 0;
       const errors = result.errors || [];
       document.getElementById('claim-import-modal').classList.remove('active');
@@ -12059,6 +12060,7 @@ function handleNppesProxy(payload) {
         totalCharges += (result.chargesCreated || result.charges_created || 0);
         if (result.errors?.length) console.warn(`Batch ${Math.floor(i/batchSize)+1} errors:`, result.errors);
       }
+      store.clearCache();
       showToast(`Imported ${totalImported} claims + ${totalCharges} charges`);
       document.getElementById('import-837-modal')?.remove();
       try { await store.autoReconcile(); } catch (e) {}
