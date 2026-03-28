@@ -352,18 +352,24 @@ async function renderRcmPage() {
     <div id="rcm-claims" class="${window._rcmTab !== 'claims' ? 'hidden' : ''}">
       <div class="card rcm-card rcm-table">
         <div class="card-header" style="flex-wrap:wrap;gap:8px;"><h3>Claims</h3>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-            <input type="text" id="rcm-claim-search" placeholder="Search patient, payer, claim #..." class="form-control" style="width:200px;height:34px;font-size:12px;" oninput="window.app.filterRcmClaims()">
-            <select id="rcm-claim-status" class="form-control" style="width:120px;height:34px;font-size:12px;" onchange="window.app.filterRcmClaims()"><option value="">All Status</option>${CLAIM_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select>
-            <select id="rcm-claim-client" class="form-control" style="width:150px;height:34px;font-size:12px;" onchange="window.app.filterRcmClaims()"><option value="">All Clients</option>${clients.map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}</select>
-            <button class="btn btn-sm" onclick="window.app.openClaimImportModal()" style="font-size:12px;">Import CSV</button>
-            <button class="btn btn-sm" onclick="window.app.exportClaimsCSV()" style="font-size:12px;">Export CSV</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+            <input type="text" id="rcm-claim-search" placeholder="Search patient, claim #..." class="form-control" style="width:170px;height:32px;font-size:12px;" oninput="window.app.filterRcmClaims()">
+            <select id="rcm-claim-payer" class="form-control" style="width:140px;height:32px;font-size:12px;" onchange="window.app.filterRcmClaims()">
+              <option value="">All Payers</option>
+              ${[...new Set(claims.map(c => c.payerName || c.payer_name || '').filter(Boolean))].sort().map(p => `<option value="${escAttr(p)}">${escHtml(p.length > 25 ? p.slice(0,25) + '...' : p)}</option>`).join('')}
+            </select>
+            <select id="rcm-claim-status" class="form-control" style="width:110px;height:32px;font-size:12px;" onchange="window.app.filterRcmClaims()"><option value="">All Status</option>${CLAIM_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select>
+            <select id="rcm-claim-client" class="form-control" style="width:130px;height:32px;font-size:12px;" onchange="window.app.filterRcmClaims()"><option value="">All Clients</option>${clients.map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}</select>
+            <input type="date" id="rcm-claim-dos-from" class="form-control" style="width:125px;height:32px;font-size:11px;" onchange="window.app.filterRcmClaims()" title="DOS From">
+            <input type="date" id="rcm-claim-dos-to" class="form-control" style="width:125px;height:32px;font-size:11px;" onchange="window.app.filterRcmClaims()" title="DOS To">
+            <button class="btn btn-sm" onclick="window.app.openClaimImportModal()" style="font-size:11px;">Import</button>
+            <button class="btn btn-sm" onclick="window.app.exportClaimsCSV()" style="font-size:11px;">Export</button>
           </div>
         </div>
         <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
           <thead><tr><th title="Unique claim identifier from 837 or payer">Claim #</th><th>Patient</th><th title="Insurance company or plan">Payer</th><th title="Date of Service">DOS</th><th style="text-align:right;" title="Amount billed to insurance">Charges</th><th style="text-align:right;" title="Amount paid by insurance — money received">Paid</th><th style="text-align:right;" title="Copay, deductible, or coinsurance owed by patient">Pt Resp</th><th style="text-align:right;" title="Remaining amount owed (Charges - Paid - Pt Resp)">Balance</th><th title="Check or EFT number from payer — click to see all claims on this payment">Check #</th><th title="Current claim status">Status</th><th>Actions</th></tr></thead>
           <tbody id="rcm-claims-tbody">
-            ${claims.map(c => `<tr class="rcm-claim-row" data-status="${c.status}" data-client="${c.billingClientId || c.billing_client_id || ''}" style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
+            ${claims.map(c => `<tr class="rcm-claim-row" data-status="${c.status}" data-client="${c.billingClientId || c.billing_client_id || ''}" data-payer="${escAttr(c.payerName || c.payer_name || '')}" data-dos="${(c.dateOfService || c.date_of_service || '').toString().slice(0,10)}" style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
               <td><strong style="font-family:monospace;font-size:12px;color:var(--brand-600);">${escHtml(c.claimNumber || c.claim_number || '')}</strong></td>
               <td class="text-sm">${escHtml(c.patientName || c.patient_name || '—')}</td>
               <td class="text-sm">${escHtml(c.payerName || c.payer_name || '—')}</td>

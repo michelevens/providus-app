@@ -10936,12 +10936,20 @@ function handleNppesProxy(payload) {
   filterRcmClaims() {
     const status = document.getElementById('rcm-claim-status')?.value || '';
     const client = document.getElementById('rcm-claim-client')?.value || '';
+    const payer = document.getElementById('rcm-claim-payer')?.value || '';
     const search = (document.getElementById('rcm-claim-search')?.value || '').toLowerCase();
+    const dosFrom = document.getElementById('rcm-claim-dos-from')?.value || '';
+    const dosTo = document.getElementById('rcm-claim-dos-to')?.value || '';
     document.querySelectorAll('.rcm-claim-row').forEach(r => {
-      const matchStatus = !status || r.dataset.status === status;
-      const matchClient = !client || r.dataset.client === client;
-      const matchSearch = !search || r.textContent.toLowerCase().includes(search);
-      r.style.display = matchStatus && matchClient && matchSearch ? '' : 'none';
+      const dos = r.dataset.dos || '';
+      r.style.display =
+        (!status || r.dataset.status === status) &&
+        (!client || r.dataset.client === client) &&
+        (!payer || r.dataset.payer === payer) &&
+        (!search || r.textContent.toLowerCase().includes(search)) &&
+        (!dosFrom || dos >= dosFrom) &&
+        (!dosTo || dos <= dosTo)
+        ? '' : 'none';
     });
   },
   viewCheckDetail(checkNum) {
