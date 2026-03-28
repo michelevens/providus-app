@@ -10936,9 +10936,59 @@ function handleNppesProxy(payload) {
   filterRcmClaims() {
     const status = document.getElementById('rcm-claim-status')?.value || '';
     const client = document.getElementById('rcm-claim-client')?.value || '';
+    const search = (document.getElementById('rcm-claim-search')?.value || '').toLowerCase();
     document.querySelectorAll('.rcm-claim-row').forEach(r => {
-      r.style.display = (!status || r.dataset.status === status) && (!client || r.dataset.client === client) ? '' : 'none';
+      const matchStatus = !status || r.dataset.status === status;
+      const matchClient = !client || r.dataset.client === client;
+      const matchSearch = !search || r.textContent.toLowerCase().includes(search);
+      r.style.display = matchStatus && matchClient && matchSearch ? '' : 'none';
     });
+  },
+  viewCheckDetail(checkNum) {
+    if (!checkNum) return;
+    const claims = (window._rcmClaims || []).filter(c => (c.checkNumber || c.check_number) === checkNum);
+    const totalPaid = claims.reduce((s, c) => s + (parseFloat(c.totalPaid || c.total_paid) || 0), 0);
+    const totalCharges = claims.reduce((s, c) => s + (parseFloat(c.totalCharges || c.total_charges) || 0), 0);
+    const html = `<div class="modal-overlay active" id="check-detail-modal">
+      <div class="modal" style="max-width:900px;">
+        <div class="modal-header"><h3>Check / EFT # ${escHtml(checkNum)}</h3><button class="modal-close" onclick="document.getElementById('check-detail-modal').remove()">&times;</button></div>
+        <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
+          <div style="display:flex;gap:16px;margin-bottom:16px;">
+            <div style="padding:12px 20px;background:#dcfce7;border-radius:10px;text-align:center;">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#166534;">Total Paid</div>
+              <div style="font-size:22px;font-weight:800;color:#16a34a;">$${totalPaid.toFixed(2)}</div>
+            </div>
+            <div style="padding:12px 20px;background:#ede9fe;border-radius:10px;text-align:center;">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#5b21b6;">Total Charged</div>
+              <div style="font-size:22px;font-weight:800;color:#7c3aed;">$${totalCharges.toFixed(2)}</div>
+            </div>
+            <div style="padding:12px 20px;background:#dbeafe;border-radius:10px;text-align:center;">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#1e40af;">Claims</div>
+              <div style="font-size:22px;font-weight:800;color:#2563eb;">${claims.length}</div>
+            </div>
+          </div>
+          <table style="width:100%;font-size:12px;border-collapse:collapse;">
+            <thead><tr style="background:var(--gray-100);"><th style="padding:6px 8px;">Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Pt Resp</th><th style="text-align:right;">Balance</th><th>Status</th></tr></thead>
+            <tbody>${claims.map(c => `<tr style="border-bottom:1px solid var(--gray-200);cursor:pointer;" onclick="document.getElementById('check-detail-modal').remove();window.app.viewClaimDetail(${c.id})">
+              <td style="padding:5px 8px;font-family:monospace;color:var(--brand-600);">${escHtml(c.claimNumber || c.claim_number || '')}</td>
+              <td>${escHtml(c.patientName || c.patient_name || '—')}</td>
+              <td>${escHtml(c.payerName || c.payer_name || '—')}</td>
+              <td>${formatDateDisplay(c.dateOfService || c.date_of_service)}</td>
+              <td style="text-align:right;">$${(parseFloat(c.totalCharges || c.total_charges) || 0).toFixed(2)}</td>
+              <td style="text-align:right;color:#16a34a;font-weight:600;">$${(parseFloat(c.totalPaid || c.total_paid) || 0).toFixed(2)}</td>
+              <td style="text-align:right;color:#7c3aed;">$${(parseFloat(c.patientResponsibility || c.patient_responsibility) || 0).toFixed(2)}</td>
+              <td style="text-align:right;${parseFloat(c.balance || 0) > 0 ? 'color:#dc2626;font-weight:600;' : ''}">$${(parseFloat(c.balance) || 0).toFixed(2)}</td>
+              <td>${c.status || ''}</td>
+            </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div class="modal-footer" style="padding:12px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('check-detail-modal').remove()">Close</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
   },
   filterRcmDenials() {
     const status = document.getElementById('rcm-denial-status')?.value || '';

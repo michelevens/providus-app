@@ -187,6 +187,18 @@ async function renderRcmPage() {
   const buckets = arData.buckets || {};
   const totalAR = arData.total_ar || arData.totalAr || 0;
 
+  // Revenue Gap Analysis
+  const _cv = (c, ...keys) => { for (const k of keys) { if (c[k] !== undefined && c[k] !== null) return parseFloat(c[k]) || 0; } return 0; };
+  const gapPending = claims.filter(c => c.status === 'submitted' || c.status === 'pending');
+  const gapDenied = claims.filter(c => c.status === 'denied');
+  const gapPartial = claims.filter(c => c.status === 'partial_paid');
+  const gapPendingAmt = gapPending.reduce((s, c) => s + _cv(c, 'totalCharges', 'total_charges'), 0);
+  const gapDeniedAmt = gapDenied.reduce((s, c) => s + _cv(c, 'totalCharges', 'total_charges') - _cv(c, 'totalPaid', 'total_paid'), 0);
+  const gapPartialBal = gapPartial.reduce((s, c) => s + _cv(c, 'balance'), 0);
+  const gapPtResp = claims.reduce((s, c) => s + _cv(c, 'patientResponsibility', 'patient_responsibility'), 0);
+  const totalCharged = _cv(claimStats, 'totalCharged', 'total_charged');
+  const totalCollected = _cv(claimStats, 'totalPaid', 'total_paid');
+
   body.innerHTML = `
     <style>
       .rcm-stat{position:relative;overflow:hidden;border-radius:16px;padding:18px 22px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
@@ -236,6 +248,35 @@ async function renderRcmPage() {
       </div>
     </div>
 
+    <!-- Revenue Gap Analysis -->
+    <div class="card rcm-card" style="margin-bottom:18px;">
+      <div class="card-header"><h3>Revenue Gap Analysis</h3><span style="font-size:12px;color:var(--gray-500);">Billed ${_fk(totalCharged)} — Collected ${_fk(totalCollected)} — Gap ${_fk(totalCharged - totalCollected)}</span></div>
+      <div class="card-body" style="padding:14px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+          <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px;cursor:pointer;" onclick="window._rcmTab='claims';window.app.rcmTab(document.querySelector('.tab'),'claims');setTimeout(()=>{document.getElementById('rcm-claim-status').value='submitted';window.app.filterRcmClaims();},100);">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#9a3412;letter-spacing:0.5px;">Pending (No Payment)</div>
+            <div style="font-size:22px;font-weight:800;color:#ea580c;">${_fk(gapPendingAmt)}</div>
+            <div style="font-size:11px;color:#c2410c;">${gapPending.length} claims — click to view</div>
+          </div>
+          <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px;cursor:pointer;" onclick="window._rcmTab='claims';window.app.rcmTab(document.querySelector('.tab'),'claims');setTimeout(()=>{document.getElementById('rcm-claim-status').value='denied';window.app.filterRcmClaims();},100);">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#991b1b;letter-spacing:0.5px;">Denied</div>
+            <div style="font-size:22px;font-weight:800;color:#dc2626;">${_fk(gapDeniedAmt)}</div>
+            <div style="font-size:11px;color:#b91c1c;">${gapDenied.length} claims — click to view</div>
+          </div>
+          <div style="background:#ecfeff;border:1px solid #a5f3fc;border-radius:12px;padding:14px;cursor:pointer;" onclick="window._rcmTab='claims';window.app.rcmTab(document.querySelector('.tab'),'claims');setTimeout(()=>{document.getElementById('rcm-claim-status').value='partial_paid';window.app.filterRcmClaims();},100);">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#155e75;letter-spacing:0.5px;">Partial Pay (Balance Due)</div>
+            <div style="font-size:22px;font-weight:800;color:#0891b2;">${_fk(gapPartialBal)}</div>
+            <div style="font-size:11px;color:#0e7490;">${gapPartial.length} claims — click to view</div>
+          </div>
+          <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:14px;">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#5b21b6;letter-spacing:0.5px;">Patient Responsibility</div>
+            <div style="font-size:22px;font-weight:800;color:#7c3aed;">${_fk(gapPtResp)}</div>
+            <div style="font-size:11px;color:#6d28d9;">Copays / deductibles</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Tabs -->
     <div class="tabs" style="margin-bottom:16px;">
       <button class="tab ${window._rcmTab === 'claims' ? 'active' : ''}" onclick="window.app.rcmTab(this,'claims')">Claims (${claims.length})</button>
@@ -248,18 +289,17 @@ async function renderRcmPage() {
     <!-- ═══ CLAIMS TAB ═══ -->
     <div id="rcm-claims" class="${window._rcmTab !== 'claims' ? 'hidden' : ''}">
       <div class="card rcm-card rcm-table">
-        <div class="card-header"><h3>Claims</h3>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-sm" onclick="window.app.openClaimImportModal()" style="font-size:12px;">
-              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M7 10V2M3.5 5.5L7 2l3.5 3.5"/><path d="M1.5 10v2a1 1 0 001 1h9a1 1 0 001-1v-2"/></svg>Import CSV
-            </button>
+        <div class="card-header" style="flex-wrap:wrap;gap:8px;"><h3>Claims</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <input type="text" id="rcm-claim-search" placeholder="Search patient, payer, claim #..." class="form-control" style="width:200px;height:34px;font-size:12px;" oninput="window.app.filterRcmClaims()">
+            <select id="rcm-claim-status" class="form-control" style="width:120px;height:34px;font-size:12px;" onchange="window.app.filterRcmClaims()"><option value="">All Status</option>${CLAIM_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select>
+            <select id="rcm-claim-client" class="form-control" style="width:150px;height:34px;font-size:12px;" onchange="window.app.filterRcmClaims()"><option value="">All Clients</option>${clients.map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}</select>
+            <button class="btn btn-sm" onclick="window.app.openClaimImportModal()" style="font-size:12px;">Import CSV</button>
             <button class="btn btn-sm" onclick="window.app.exportClaimsCSV()" style="font-size:12px;">Export CSV</button>
-            <select id="rcm-claim-status" class="form-control" style="width:130px;height:34px;font-size:13px;" onchange="window.app.filterRcmClaims()"><option value="">All</option>${CLAIM_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select>
-            <select id="rcm-claim-client" class="form-control" style="width:170px;height:34px;font-size:13px;" onchange="window.app.filterRcmClaims()"><option value="">All Clients</option>${clients.map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}</select>
           </div>
         </div>
         <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
-          <thead><tr><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Pt Resp</th><th style="text-align:right;">Balance</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Pt Resp</th><th style="text-align:right;">Balance</th><th>Check #</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="rcm-claims-tbody">
             ${claims.map(c => `<tr class="rcm-claim-row" data-status="${c.status}" data-client="${c.billingClientId || c.billing_client_id || ''}" style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
               <td><strong style="font-family:monospace;font-size:12px;color:var(--brand-600);">${escHtml(c.claimNumber || c.claim_number || '')}</strong></td>
@@ -270,10 +310,11 @@ async function renderRcmPage() {
               <td style="text-align:right;color:var(--green);font-weight:600;">${_fm(c.totalPaid || c.total_paid)}</td>
               <td style="text-align:right;color:#7c3aed;">${_fm(c.patientResponsibility || c.patient_responsibility)}</td>
               <td style="text-align:right;${(c.balance || 0) > 0 ? 'color:var(--red);font-weight:600;' : ''}">${_fm(c.balance)}</td>
+              <td class="text-sm">${c.checkNumber || c.check_number ? `<a href="#" onclick="event.stopPropagation();window.app.viewCheckDetail('${escHtml(c.checkNumber || c.check_number)}')" style="font-family:monospace;font-size:11px;color:var(--brand-600);text-decoration:underline;">${escHtml(c.checkNumber || c.check_number)}</a>` : '<span style="color:var(--gray-300);">—</span>'}</td>
               <td>${_claimBadge(c.status)}</td>
               <td><button class="btn btn-sm" onclick="event.stopPropagation();window.app.editRcmClaim(${c.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="event.stopPropagation();window.app.deleteRcmClaim(${c.id})">Del</button></td>
             </tr>`).join('')}
-            ${claims.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--gray-500);">No claims yet. Click "+ New Claim" to create one.</td></tr>' : ''}
+            ${claims.length === 0 ? '<tr><td colspan="11" style="text-align:center;padding:2rem;color:var(--gray-500);">No claims yet. Click "+ New Claim" to create one.</td></tr>' : ''}
           </tbody>
         </table></div></div>
       </div>
