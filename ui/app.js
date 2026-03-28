@@ -742,11 +742,17 @@ export async function initApp() {
       <div class="skeleton" style="height:160px;border-radius:12px;"></div>
     </div>`;
 
-  // Load reference data from API
-  try { PAYER_CATALOG = await store.getReference('payers') || []; } catch (e) { console.error('Failed to load payers:', e); }
-  try { STATES = await store.getReference('states') || []; } catch (e) { console.error('Failed to load states:', e); }
-  try { TELEHEALTH_POLICIES = await store.getReference('telehealth_policies') || []; } catch (e) { console.error('Failed to load telehealth policies:', e); }
-  try { DEFAULT_STRATEGIES = await store.getAll('strategies') || []; } catch (e) { console.error('Failed to load strategies:', e); }
+  // Load reference data from API — all in parallel
+  const [refPayers, refStates, refTele, refStrat] = await Promise.allSettled([
+    store.getReference('payers'),
+    store.getReference('states'),
+    store.getReference('telehealth_policies'),
+    store.getAll('strategies'),
+  ]);
+  if (refPayers.status === 'fulfilled') PAYER_CATALOG = refPayers.value || [];
+  if (refStates.status === 'fulfilled') STATES = refStates.value || [];
+  if (refTele.status === 'fulfilled') TELEHEALTH_POLICIES = refTele.value || [];
+  if (refStrat.status === 'fulfilled') DEFAULT_STRATEGIES = refStrat.value || [];
   US_TOTAL_POP = STATES.reduce((sum, s) => sum + (s.population || 0), 0);
 
   // Enrich existing payers with strategic tags (lazy-load supplemental payers in background)

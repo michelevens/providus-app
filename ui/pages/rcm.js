@@ -146,15 +146,27 @@ async function renderRcmPage() {
   let claims = [], denials = [], payments = [], charges = [], clients = [], providers = [], payers = [];
   let claimStats = {}, denialStats = {}, arData = {};
 
-  try { claimStats = await store.getRcmClaimStats(); } catch (e) {}
-  try { claims = await store.getRcmClaims(); } catch (e) {}
-  try { denialStats = await store.getRcmDenialStats(); } catch (e) {}
-  try { denials = await store.getRcmDenials(); } catch (e) {}
-  try { payments = await store.getRcmPayments(); } catch (e) {}
-  try { charges = await store.getRcmCharges(); } catch (e) {}
-  try { clients = await store.getBillingClients(); } catch (e) {}
-  try { arData = await store.getRcmArAging(); } catch (e) {}
-  try { providers = await store.getAll('providers'); } catch (e) {}
+  // Fire all API calls in parallel for speed
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8] = await Promise.allSettled([
+    store.getRcmClaimStats(),
+    store.getRcmClaims(),
+    store.getRcmDenialStats(),
+    store.getRcmDenials(),
+    store.getRcmPayments(),
+    store.getRcmCharges(),
+    store.getBillingClients(),
+    store.getRcmArAging(),
+    store.getAll('providers'),
+  ]);
+  if (r0.status === 'fulfilled') claimStats = r0.value;
+  if (r1.status === 'fulfilled') claims = r1.value;
+  if (r2.status === 'fulfilled') denialStats = r2.value;
+  if (r3.status === 'fulfilled') denials = r3.value;
+  if (r4.status === 'fulfilled') payments = r4.value;
+  if (r5.status === 'fulfilled') charges = r5.value;
+  if (r6.status === 'fulfilled') clients = r6.value;
+  if (r7.status === 'fulfilled') arData = r7.value;
+  if (r8.status === 'fulfilled') providers = r8.value;
   try { payers = window.PAYER_CATALOG || []; } catch (e) {}
 
   if (!Array.isArray(claims)) claims = [];

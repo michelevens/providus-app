@@ -81,16 +81,28 @@ async function renderBillingServicesPage() {
   let clients = [], tasks = [], activities = [], financials = [], orgs = [];
   let stats = { total_clients: 0, active_clients: 0, total_tasks: 0, pending_tasks: 0, completed_tasks: 0, total_claims: 0, total_collected: 0, total_denied: 0 };
 
-  try { stats = await store.getBillingClientStats(); } catch (e) {}
-  try { clients = await store.getBillingClients(); } catch (e) {}
-  try { tasks = await store.getBillingTasks(); } catch (e) {}
-  try { activities = await store.getBillingActivities({ limit: 100 }); } catch (e) {}
-  try { financials = await store.getBillingFinancials({}); } catch (e) {}
   let claimStats = {}, workQueues = {}, denialRisk = {};
-  try { claimStats = await store.getRcmClaimStats(); } catch (e) {}
-  try { workQueues = await store.getWorkQueues(); } catch (e) {}
-  try { denialRisk = await store.getDenialRiskAnalysis(); } catch (e) {}
-  try { orgs = await store.getAll('organizations'); } catch (e) {}
+  // Fire all API calls in parallel for speed
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8] = await Promise.allSettled([
+    store.getBillingClientStats(),
+    store.getBillingClients(),
+    store.getBillingTasks(),
+    store.getBillingActivities({ limit: 100 }),
+    store.getBillingFinancials({}),
+    store.getRcmClaimStats(),
+    store.getWorkQueues(),
+    store.getDenialRiskAnalysis(),
+    store.getAll('organizations'),
+  ]);
+  if (r0.status === 'fulfilled') stats = r0.value;
+  if (r1.status === 'fulfilled') clients = r1.value;
+  if (r2.status === 'fulfilled') tasks = r2.value;
+  if (r3.status === 'fulfilled') activities = r3.value;
+  if (r4.status === 'fulfilled') financials = r4.value;
+  if (r5.status === 'fulfilled') claimStats = r5.value;
+  if (r6.status === 'fulfilled') workQueues = r6.value;
+  if (r7.status === 'fulfilled') denialRisk = r7.value;
+  if (r8.status === 'fulfilled') orgs = r8.value;
 
   if (!Array.isArray(clients)) clients = [];
   if (!Array.isArray(tasks)) tasks = [];
