@@ -320,13 +320,26 @@ async function renderRcmPage() {
       <!-- Charges Table -->
       <div class="card rcm-card rcm-table">
         <div class="card-header"><h3>Charge Entries</h3>
-          <button class="btn btn-sm" onclick="window.app.openChargeImportModal()" style="font-size:12px;">
-            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M7 10V2M3.5 5.5L7 2l3.5 3.5"/><path d="M1.5 10v2a1 1 0 001 1h9a1 1 0 001-1v-2"/></svg>Import CSV
-          </button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="rcm-charge-patient" placeholder="Patient" class="form-control" style="width:140px;height:32px;font-size:12px;" oninput="window.app.filterRcmCharges()">
+            <input type="text" id="rcm-charge-cpt" placeholder="CPT" class="form-control" style="width:80px;height:32px;font-size:12px;" oninput="window.app.filterRcmCharges()">
+            <input type="text" id="rcm-charge-payer" placeholder="Payer" class="form-control" style="width:140px;height:32px;font-size:12px;" oninput="window.app.filterRcmCharges()">
+            <select id="rcm-charge-status" class="form-control" style="width:110px;height:32px;font-size:12px;" onchange="window.app.filterRcmCharges()">
+              <option value="">All Status</option>
+              <option value="submitted">Submitted</option>
+              <option value="billed">Billed</option>
+              <option value="paid">Paid</option>
+              <option value="denied">Denied</option>
+              <option value="pending">Pending</option>
+            </select>
+            <button class="btn btn-sm" onclick="window.app.openChargeImportModal()" style="font-size:12px;">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M7 10V2M3.5 5.5L7 2l3.5 3.5"/><path d="M1.5 10v2a1 1 0 001 1h9a1 1 0 001-1v-2"/></svg>Import CSV
+            </button>
+          </div>
         </div>
         <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
           <thead><tr><th>DOS</th><th>Patient</th><th>CPT</th><th>ICD</th><th>Payer</th><th style="text-align:center;">Units</th><th style="text-align:right;">Amount</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>
+          <tbody id="rcm-charges-tbody">
             ${charges.map(ch => `<tr>
               <td class="text-sm">${formatDateDisplay(ch.dateOfService || ch.date_of_service)}</td>
               <td class="text-sm">${escHtml(ch.patientName || ch.patient_name || '—')}</td>

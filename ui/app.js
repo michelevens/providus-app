@@ -10947,6 +10947,27 @@ function handleNppesProxy(payload) {
       r.style.display = (!status || r.dataset.status === status) && (!cat || r.dataset.category === cat) ? '' : 'none';
     });
   },
+  filterRcmCharges() {
+    const patient = (document.getElementById('rcm-charge-patient')?.value || '').toLowerCase();
+    const cpt = (document.getElementById('rcm-charge-cpt')?.value || '').toLowerCase();
+    const payer = (document.getElementById('rcm-charge-payer')?.value || '').toLowerCase();
+    const status = document.getElementById('rcm-charge-status')?.value || '';
+    const tbody = document.getElementById('rcm-charges-tbody');
+    if (!tbody) return;
+    tbody.querySelectorAll('tr').forEach(r => {
+      const cells = r.querySelectorAll('td');
+      if (cells.length < 8) return;
+      const rPatient = (cells[1]?.textContent || '').toLowerCase();
+      const rCpt = (cells[2]?.textContent || '').toLowerCase();
+      const rPayer = (cells[4]?.textContent || '').toLowerCase();
+      const rStatus = (cells[7]?.textContent || '').trim().toLowerCase();
+      const show = (!patient || rPatient.includes(patient))
+        && (!cpt || rCpt.includes(cpt))
+        && (!payer || rPayer.includes(payer))
+        && (!status || rStatus === status);
+      r.style.display = show ? '' : 'none';
+    });
+  },
   openRcmClaimModal(editData) {
     const modal = document.getElementById('rcm-claim-modal');
     if (!modal) { showToast('Navigate to Claims & RCM first'); return; }
