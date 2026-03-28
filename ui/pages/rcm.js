@@ -213,14 +213,14 @@ async function renderRcmPage() {
 
     <!-- KPI Stats -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px;">
-      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div><div class="rcm-label">Total Claims</div><div class="rcm-val" style="color:#2563eb;">${claimStats.totalClaims || claimStats.total_claims || claims.length}</div></div>
-      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#22c55e,#4ade80);"></div><div class="rcm-label">Collected</div><div class="rcm-val" style="color:#16a34a;">${_fk(claimStats.totalPaid || claimStats.total_paid)}</div><div class="rcm-sub">${claimStats.collectionRate || claimStats.collection_rate || 0}% rate</div></div>
-      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#8b5cf6,#a78bfa);"></div><div class="rcm-label">Charged</div><div class="rcm-val" style="color:#7c3aed;">${_fk(claimStats.totalCharged || claimStats.total_charged)}</div></div>
-      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#ef4444,#f87171);"></div><div class="rcm-label">Denials</div><div class="rcm-val" style="color:#dc2626;">${denialStats.open || 0}</div><div class="rcm-sub">${denialStats.total || 0} total</div></div>
-      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div><div class="rcm-label">Total A/R</div><div class="rcm-val" style="color:#d97706;">${_fk(totalAR)}</div><div class="rcm-sub">${arData.avg_days_in_ar || arData.avgDaysInAr || 0}d avg</div></div>
-      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#06b6d4,#22d3ee);"></div><div class="rcm-label">Clean Claim</div><div class="rcm-val" style="color:#0891b2;">${claimStats.cleanClaimRate || claimStats.clean_claim_rate || 0}%</div></div>
-      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#10b981,#34d399);"></div><div class="rcm-label">Appeal Rate</div><div class="rcm-val" style="color:#059669;">${denialStats.appeal_success_rate || denialStats.appealSuccessRate || 0}%</div><div class="rcm-sub">won</div></div>
-      <div class="rcm-stat"><div class="rcm-accent" style="background:linear-gradient(90deg,#6366f1,#818cf8);"></div><div class="rcm-label">Charges</div><div class="rcm-val" style="color:#4f46e5;">${charges.filter(c => c.status === 'pending').length}</div><div class="rcm-sub">pending</div></div>
+      <div class="rcm-stat" title="Total number of claims submitted to payers across all dates"><div class="rcm-accent" style="background:linear-gradient(90deg,#3b82f6,#60a5fa);"></div><div class="rcm-label">Total Claims</div><div class="rcm-val" style="color:#2563eb;">${claimStats.totalClaims || claimStats.total_claims || claims.length}</div></div>
+      <div class="rcm-stat" title="Total payments received from insurance — money in the bank"><div class="rcm-accent" style="background:linear-gradient(90deg,#22c55e,#4ade80);"></div><div class="rcm-label">Collected</div><div class="rcm-val" style="color:#16a34a;">${_fk(claimStats.totalPaid || claimStats.total_paid)}</div><div class="rcm-sub">${claimStats.collectionRate || claimStats.collection_rate || 0}% rate</div></div>
+      <div class="rcm-stat" title="Total amount billed to insurance for all claims"><div class="rcm-accent" style="background:linear-gradient(90deg,#8b5cf6,#a78bfa);"></div><div class="rcm-label">Charged</div><div class="rcm-val" style="color:#7c3aed;">${_fk(claimStats.totalCharged || claimStats.total_charged)}</div></div>
+      <div class="rcm-stat" title="Claims rejected by insurance — review and appeal to recover"><div class="rcm-accent" style="background:linear-gradient(90deg,#ef4444,#f87171);"></div><div class="rcm-label">Denials</div><div class="rcm-val" style="color:#dc2626;">${denialStats.open || 0}</div><div class="rcm-sub">${denialStats.total || 0} total</div></div>
+      <div class="rcm-stat" title="Accounts Receivable — total balance owed by payers and patients"><div class="rcm-accent" style="background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div><div class="rcm-label">Total A/R</div><div class="rcm-val" style="color:#d97706;">${_fk(totalAR)}</div><div class="rcm-sub">${arData.avg_days_in_ar || arData.avgDaysInAr || 0}d avg</div></div>
+      <div class="rcm-stat" title="Percentage of claims accepted without rejections or edits"><div class="rcm-accent" style="background:linear-gradient(90deg,#06b6d4,#22d3ee);"></div><div class="rcm-label">Clean Claim</div><div class="rcm-val" style="color:#0891b2;">${claimStats.cleanClaimRate || claimStats.clean_claim_rate || 0}%</div></div>
+      <div class="rcm-stat" title="Percentage of denied claims won on appeal"><div class="rcm-accent" style="background:linear-gradient(90deg,#10b981,#34d399);"></div><div class="rcm-label">Appeal Rate</div><div class="rcm-val" style="color:#059669;">${denialStats.appeal_success_rate || denialStats.appealSuccessRate || 0}%</div><div class="rcm-sub">won</div></div>
+      <div class="rcm-stat" title="Charge entries awaiting claim submission"><div class="rcm-accent" style="background:linear-gradient(90deg,#6366f1,#818cf8);"></div><div class="rcm-label">Charges</div><div class="rcm-val" style="color:#4f46e5;">${charges.filter(c => c.status === 'pending').length}</div><div class="rcm-sub">pending</div></div>
     </div>
 
     <!-- AR Aging Bar -->
@@ -279,22 +279,22 @@ async function renderRcmPage() {
       <div class="card-body" style="padding:14px;">
         <!-- Summary cards -->
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:16px;">
-          <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px;cursor:pointer;" onclick="window._rcmTab='claims';window.app.rcmTab(document.querySelector('.tab'),'claims');setTimeout(()=>{document.getElementById('rcm-claim-status').value='submitted';window.app.filterRcmClaims();},100);">
+          <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px;cursor:pointer;" title="Claims submitted but no payment received yet — may need payer follow-up or payment CSV import" onclick="window._rcmTab='claims';window.app.rcmTab(document.querySelector('.tab'),'claims');setTimeout(()=>{document.getElementById('rcm-claim-status').value='submitted';window.app.filterRcmClaims();},100);">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#9a3412;letter-spacing:0.5px;">Pending (No Payment)</div>
             <div style="font-size:22px;font-weight:800;color:#ea580c;">${_fk(gapPendingAmt)}</div>
             <div style="font-size:11px;color:#c2410c;">${gapPending.length} claims — click to view</div>
           </div>
-          <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px;cursor:pointer;" onclick="window._rcmTab='claims';window.app.rcmTab(document.querySelector('.tab'),'claims');setTimeout(()=>{document.getElementById('rcm-claim-status').value='denied';window.app.filterRcmClaims();},100);">
+          <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px;cursor:pointer;" title="Claims rejected by insurance — review denial reason and appeal if appropriate" onclick="window._rcmTab='claims';window.app.rcmTab(document.querySelector('.tab'),'claims');setTimeout(()=>{document.getElementById('rcm-claim-status').value='denied';window.app.filterRcmClaims();},100);">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#991b1b;letter-spacing:0.5px;">Denied</div>
             <div style="font-size:22px;font-weight:800;color:#dc2626;">${_fk(gapDeniedAmt)}</div>
             <div style="font-size:11px;color:#b91c1c;">${gapDenied.length} claims — click to view</div>
           </div>
-          <div style="background:#ecfeff;border:1px solid #a5f3fc;border-radius:12px;padding:14px;cursor:pointer;" onclick="window._rcmTab='claims';window.app.rcmTab(document.querySelector('.tab'),'claims');setTimeout(()=>{document.getElementById('rcm-claim-status').value='partial_paid';window.app.filterRcmClaims();},100);">
+          <div style="background:#ecfeff;border:1px solid #a5f3fc;border-radius:12px;padding:14px;cursor:pointer;" title="Insurance paid part of the claim — remaining balance still owed" onclick="window._rcmTab='claims';window.app.rcmTab(document.querySelector('.tab'),'claims');setTimeout(()=>{document.getElementById('rcm-claim-status').value='partial_paid';window.app.filterRcmClaims();},100);">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#155e75;letter-spacing:0.5px;">Partial Pay (Balance Due)</div>
             <div style="font-size:22px;font-weight:800;color:#0891b2;">${_fk(gapPartialBal)}</div>
             <div style="font-size:11px;color:#0e7490;">${gapPartial.length} claims — click to view</div>
           </div>
-          <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:14px;">
+          <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:14px;" title="Copays, deductibles, and coinsurance owed by patients">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#5b21b6;letter-spacing:0.5px;">Patient Responsibility</div>
             <div style="font-size:22px;font-weight:800;color:#7c3aed;">${_fk(gapPtResp)}</div>
             <div style="font-size:11px;color:#6d28d9;">Copays / deductibles</div>
@@ -361,7 +361,7 @@ async function renderRcmPage() {
           </div>
         </div>
         <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
-          <thead><tr><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Pt Resp</th><th style="text-align:right;">Balance</th><th>Check #</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th title="Unique claim identifier from 837 or payer">Claim #</th><th>Patient</th><th title="Insurance company or plan">Payer</th><th title="Date of Service">DOS</th><th style="text-align:right;" title="Amount billed to insurance">Charges</th><th style="text-align:right;" title="Amount paid by insurance — money received">Paid</th><th style="text-align:right;" title="Copay, deductible, or coinsurance owed by patient">Pt Resp</th><th style="text-align:right;" title="Remaining amount owed (Charges - Paid - Pt Resp)">Balance</th><th title="Check or EFT number from payer — click to see all claims on this payment">Check #</th><th title="Current claim status">Status</th><th>Actions</th></tr></thead>
           <tbody id="rcm-claims-tbody">
             ${claims.map(c => `<tr class="rcm-claim-row" data-status="${c.status}" data-client="${c.billingClientId || c.billing_client_id || ''}" style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
               <td><strong style="font-family:monospace;font-size:12px;color:var(--brand-600);">${escHtml(c.claimNumber || c.claim_number || '')}</strong></td>
