@@ -11820,19 +11820,23 @@ function handleNppesProxy(payload) {
         }
 
         if (svcLines.length > 0) {
-          // Show each service line with CPT
+          // Show each service line with CPT — split claim payment proportionally by line charges
+          const totalLineCharges = svcLines.reduce((s, sl) => s + Number(sl.charges || sl.chargeAmount || sl.charge_amount || 0), 0);
           svcLines.forEach(sl => {
             const slCharges = Number(sl.charges || sl.chargeAmount || sl.charge_amount || 0);
             const slPaid = Number(sl.paidAmount || sl.paid_amount || 0);
+            // If line has its own paid amount use it, otherwise split claim payment by charge proportion
+            const linePaid = slPaid > 0 ? slPaid : (totalLineCharges > 0 ? paid * (slCharges / totalLineCharges) : 0);
+            const lineYouOwe = slCharges - linePaid;
             lineItems.push({
               dos: c.date_of_service || c.dateOfService || '',
               cpt: sl.cptCode || sl.cpt_code || '',
               description: sl.cptDescription || sl.cpt_description || '',
               units: sl.units || 1,
-              charges: slCharges || charges,
-              paid: slPaid || paid,
+              charges: slCharges,
+              paid: Math.round(linePaid * 100) / 100,
               payer: c.payer_name || c.payerName || '',
-              ptResp: slCharges > 0 ? (slCharges - (slPaid || 0)) * (youOwe / charges) : youOwe,
+              ptResp: Math.round(Math.max(lineYouOwe, 0) * 100) / 100,
             });
           });
         } else {
