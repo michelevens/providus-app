@@ -10539,10 +10539,14 @@ function handleNppesProxy(payload) {
     modal.id = 'claim-import-modal';
     modal.innerHTML = `
       <div class="modal" style="max-width:900px;">
-        <div class="modal-header"><h3>Import Claims from CSV</h3><button class="modal-close" onclick="document.getElementById('claim-import-modal').classList.remove('active')">&times;</button></div>
+        <div class="modal-header"><h3>Import from CSV</h3><button class="modal-close" onclick="document.getElementById('claim-import-modal').classList.remove('active')">&times;</button></div>
         <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
           <div id="import-step-1">
-            <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px;">Upload a CSV file exported from your billing platform (Office Ally, Availity, Kareo, etc.). We'll help you map the columns. <a href="samples/claims-import-sample.csv" download style="color:var(--brand-600);font-weight:600;">Download sample CSV</a></p>
+            <div style="display:flex;gap:8px;margin-bottom:14px;">
+              <button class="btn btn-sm ${!window._importType || window._importType === 'claims' ? 'btn-primary' : ''}" onclick="window._importType='claims';document.getElementById('import-type-desc').textContent='Creates new claims from CSV data';this.classList.add('btn-primary');this.nextElementSibling.classList.remove('btn-primary');">New Claims</button>
+              <button class="btn btn-sm ${window._importType === 'payments' ? 'btn-primary' : ''}" onclick="window._importType='payments';document.getElementById('import-type-desc').textContent='Matches payments to existing claims by Claim # or Patient+DOS';this.classList.add('btn-primary');this.previousElementSibling.classList.remove('btn-primary');">Payments / Remittance</button>
+            </div>
+            <p id="import-type-desc" style="font-size:13px;color:var(--gray-600);margin-bottom:12px;">${window._importType === 'payments' ? 'Matches payments to existing claims by Claim # or Patient+DOS' : 'Creates new claims from CSV data'}</p>
             <div style="display:flex;gap:12px;margin-bottom:16px;">
               <select id="import-platform" class="form-control" style="width:200px;height:38px;" onchange="window.app.loadImportMapping()">
                 <option value="">Select platform...</option>
@@ -10586,7 +10590,7 @@ function handleNppesProxy(payload) {
         </div>
         <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
           <button class="btn" onclick="document.getElementById('claim-import-modal').classList.remove('active')">Cancel</button>
-          <button class="btn btn-primary" id="import-submit-btn" style="display:none;" onclick="window.app.executeImport()">Import Claims</button>
+          <button class="btn btn-primary" id="import-submit-btn" style="display:none;" onclick="window.app.executeImport()">${window._importType === 'payments' ? 'Match Payments' : 'Import Claims'}</button>
         </div>
       </div>
     `;
@@ -10657,7 +10661,8 @@ function handleNppesProxy(payload) {
       { key: 'patient_member_id', label: 'Member ID' },
       { key: 'patient_dob', label: 'Patient DOB' },
       { key: 'status', label: 'Claim Status' },
-      { key: 'payer_id_number', label: 'Claim Number (Payer)' },
+      { key: 'claim_number', label: 'Claim Number' },
+      { key: 'payer_id_number', label: 'Payer Claim / ICN' },
       { key: 'check_number', label: 'Check/EFT Number' },
       { key: 'submitted_date', label: 'Submitted Date' },
       { key: 'paid_date', label: 'Paid Date' },
@@ -10687,7 +10692,7 @@ function handleNppesProxy(payload) {
         'memberid': 'patient_member_id', 'subscriberid': 'patient_member_id', 'insuranceid': 'patient_member_id',
         'dob': 'patient_dob', 'dateofbirth': 'patient_dob', 'birthdate': 'patient_dob', 'patientbirthdate': 'patient_dob',
         'status': 'status', 'claimstatus': 'status',
-        'claimnumber': 'payer_id_number',
+        'claimnumber': 'claim_number',
         'submitteddate': 'submitted_date', 'submitdate': 'submitted_date',
         'paiddate': 'paid_date', 'paymentdate': 'paid_date',
         'denialreason': 'denial_reason', 'denial': 'denial_reason', 'remark': 'denial_reason',
@@ -10797,6 +10802,7 @@ function handleNppesProxy(payload) {
         patient_member_id: get('patient_member_id'),
         patient_dob: get('patient_dob'),
         status,
+        claim_number: get('claim_number'),
         payer_id_number: get('payer_id_number'),
         check_number: get('check_number'),
         submitted_date: get('submitted_date') || parsedDos,
@@ -10888,19 +10894,32 @@ function handleNppesProxy(payload) {
     btn.textContent = `Importing ${cleaned.length} claims...`;
 
     try {
-      const result = await store.bulkImportClaims(cleaned);
-      store.clearCache();
-      const imported = result.imported || 0;
-      const errors = result.errors || [];
-      document.getElementById('claim-import-modal').classList.remove('active');
-      showToast(`${imported} claims imported successfully${errors.length ? ` (${errors.length} errors)` : ''}. Refresh to see updated data.`);
-      // Don't re-render — it causes page crash. User clicks tab or refreshes.
+      if (window._importType === 'payments') {
+        btn.textContent = `Matching ${cleaned.length} payments...`;
+        const result = await store.bulkMatchPayments(cleaned);
+        store.clearCache();
+        const matched = result.matched || 0;
+        const created = result.created || 0;
+        const errors = result.errors || [];
+        document.getElementById('claim-import-modal').classList.remove('active');
+        showToast(`${matched} payments matched to existing claims${created > 0 ? `, ${created} new claims created` : ''}${errors.length ? ` (${errors.length} errors)` : ''}. Refreshing...`);
+        if (errors.length) console.warn('Payment match errors:', errors);
+        setTimeout(() => { window.location.reload(); }, 1500);
+      } else {
+        const result = await store.bulkImportClaims(cleaned);
+        store.clearCache();
+        const imported = result.imported || 0;
+        const errors = result.errors || [];
+        document.getElementById('claim-import-modal').classList.remove('active');
+        showToast(`${imported} claims imported successfully${errors.length ? ` (${errors.length} errors)` : ''}. Refreshing...`);
+        setTimeout(() => { window.location.reload(); }, 1500);
+      }
     } catch (e) {
       showToast('Import failed: ' + (e.message || 'Unknown error'));
       console.error('Import error:', e);
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Import Claims';
+      btn.textContent = window._importType === 'payments' ? 'Match Payments' : 'Import Claims';
     }
   },
 
