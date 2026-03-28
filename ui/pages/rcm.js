@@ -249,10 +249,36 @@ async function renderRcmPage() {
     </div>
 
     <!-- Revenue Gap Analysis -->
+    ${(() => {
+      // Pending by payer
+      const pendingByPayer = {};
+      gapPending.forEach(c => {
+        const p = (c.payerName || c.payer_name || 'Unknown').replace(/BLUE CROSS BLUE SHIELD OF /g, 'BCBS ');
+        if (!pendingByPayer[p]) pendingByPayer[p] = { count: 0, amount: 0 };
+        pendingByPayer[p].count++;
+        pendingByPayer[p].amount += _cv(c, 'totalCharges', 'total_charges');
+      });
+      const payerList = Object.entries(pendingByPayer).sort((a,b) => b[1].amount - a[1].amount);
+
+      // Pending aging
+      const now = new Date();
+      const pendingAging = { current: { count: 0, amt: 0 }, aging30: { count: 0, amt: 0 }, aging60: { count: 0, amt: 0 }, aging90: { count: 0, amt: 0 } };
+      gapPending.forEach(c => {
+        const dos = new Date(c.dateOfService || c.date_of_service);
+        const days = Math.floor((now - dos) / 86400000);
+        const charges = _cv(c, 'totalCharges', 'total_charges');
+        if (days <= 30) { pendingAging.current.count++; pendingAging.current.amt += charges; }
+        else if (days <= 60) { pendingAging.aging30.count++; pendingAging.aging30.amt += charges; }
+        else if (days <= 90) { pendingAging.aging60.count++; pendingAging.aging60.amt += charges; }
+        else { pendingAging.aging90.count++; pendingAging.aging90.amt += charges; }
+      });
+
+      return `
     <div class="card rcm-card" style="margin-bottom:18px;">
       <div class="card-header"><h3>Revenue Gap Analysis</h3><span style="font-size:12px;color:var(--gray-500);">Billed ${_fk(totalCharged)} — Collected ${_fk(totalCollected)} — Gap ${_fk(totalCharged - totalCollected)}</span></div>
       <div class="card-body" style="padding:14px;">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+        <!-- Summary cards -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:16px;">
           <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px;cursor:pointer;" onclick="window._rcmTab='claims';window.app.rcmTab(document.querySelector('.tab'),'claims');setTimeout(()=>{document.getElementById('rcm-claim-status').value='submitted';window.app.filterRcmClaims();},100);">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#9a3412;letter-spacing:0.5px;">Pending (No Payment)</div>
             <div style="font-size:22px;font-weight:800;color:#ea580c;">${_fk(gapPendingAmt)}</div>
@@ -274,8 +300,44 @@ async function renderRcmPage() {
             <div style="font-size:11px;color:#6d28d9;">Copays / deductibles</div>
           </div>
         </div>
+
+        <!-- Pending detail: by payer + aging -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+          <!-- By Payer -->
+          <div style="background:var(--gray-50);border-radius:10px;padding:14px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-500);margin-bottom:8px;">Pending by Payer</div>
+            ${payerList.map(([payer, d]) => {
+              const pct = gapPendingAmt > 0 ? (d.amount / gapPendingAmt * 100) : 0;
+              return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;" onclick="document.getElementById(\'rcm-claim-search\').value=\'' + escHtml(payer.replace('BCBS ', '')) + '\';window._rcmTab=\'claims\';window.app.rcmTab(document.querySelector(\'.tab\'),\'claims\');setTimeout(()=>{document.getElementById(\'rcm-claim-status\').value=\'submitted\';window.app.filterRcmClaims();},100);">' +
+                '<div style="flex:1;font-size:12px;font-weight:600;color:var(--gray-700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(payer) + '">' + escHtml(payer) + '</div>' +
+                '<div style="font-size:11px;color:var(--gray-500);">' + d.count + '</div>' +
+                '<div style="width:60px;height:6px;background:var(--gray-200);border-radius:3px;overflow:hidden;"><div style="height:100%;background:#ea580c;width:' + pct + '%;border-radius:3px;"></div></div>' +
+                '<div style="font-size:12px;font-weight:700;color:#ea580c;min-width:55px;text-align:right;">' + _fk(d.amount) + '</div>' +
+              '</div>';
+            }).join('')}
+          </div>
+          <!-- Aging -->
+          <div style="background:var(--gray-50);border-radius:10px;padding:14px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-500);margin-bottom:8px;">Pending Aging</div>
+            ${[
+              { label: '0-30 days (Current)', ...pendingAging.current, color: '#22c55e' },
+              { label: '31-60 days', ...pendingAging.aging30, color: '#f59e0b' },
+              { label: '61-90 days', ...pendingAging.aging60, color: '#f97316' },
+              { label: '90+ days (Action Needed)', ...pendingAging.aging90, color: '#ef4444' },
+            ].map(b => {
+              const pct = gapPendingAmt > 0 ? (b.amt / gapPendingAmt * 100) : 0;
+              return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
+                '<div style="flex:1;font-size:12px;color:var(--gray-700);">' + b.label + ' <span style="color:var(--gray-400);">(' + b.count + ')</span></div>' +
+                '<div style="width:80px;height:6px;background:var(--gray-200);border-radius:3px;overflow:hidden;"><div style="height:100%;background:' + b.color + ';width:' + pct + '%;border-radius:3px;"></div></div>' +
+                '<div style="font-size:12px;font-weight:700;color:' + b.color + ';min-width:55px;text-align:right;">' + _fk(b.amt) + '</div>' +
+              '</div>';
+            }).join('')}
+            ${pendingAging.aging90.count > 0 ? '<div style="margin-top:8px;padding:8px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:11px;color:#991b1b;"><strong>' + pendingAging.aging90.count + ' claims over 90 days</strong> — follow up with payers or check if payment CSV is missing</div>' : ''}
+          </div>
+        </div>
       </div>
-    </div>
+    </div>`;
+    })()}
 
     <!-- Tabs -->
     <div class="tabs" style="margin-bottom:16px;">
