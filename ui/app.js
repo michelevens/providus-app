@@ -11796,26 +11796,52 @@ function handleNppesProxy(payload) {
         grandPaid += paid;
       });
     } else if (patientClaims.length > 0) {
-      // Multiple claims — show each claim as a line item
-      patientClaims.forEach(c => {
+      // Multiple claims — try to load service lines for CPT codes
+      for (const c of patientClaims) {
         const charges = Number(c.total_charges || c.totalCharges || 0);
         const paid = Number(c.total_paid || c.totalPaid || 0);
         const adj = Number(c.adjustments || 0);
         const ptResp = Number(c.patient_responsibility || c.patientResponsibility || 0);
-        lineItems.push({
-          dos: c.date_of_service || c.dateOfService || '',
-          cpt: '',
-          description: `Claim ${c.claim_number || c.claimNumber || ''}`,
-          units: 1,
-          charges, paid,
-          payer: c.payer_name || c.payerName || '',
-          adjustment: adj,
-          ptResp: ptResp || (charges - paid - adj),
-        });
+        const youOwe = charges - paid - adj;
+
+        // Try to get service lines for CPT codes
+        let svcLines = c.serviceLines || c.service_lines || [];
+        if (!svcLines.length) {
+          try { const detail = await store.getRcmClaim(c.id); svcLines = detail.serviceLines || detail.service_lines || []; } catch (e) {}
+        }
+
+        if (svcLines.length > 0) {
+          // Show each service line with CPT
+          svcLines.forEach(sl => {
+            const slCharges = Number(sl.charges || sl.chargeAmount || sl.charge_amount || 0);
+            const slPaid = Number(sl.paidAmount || sl.paid_amount || 0);
+            lineItems.push({
+              dos: c.date_of_service || c.dateOfService || '',
+              cpt: sl.cptCode || sl.cpt_code || '',
+              description: sl.cptDescription || sl.cpt_description || '',
+              units: sl.units || 1,
+              charges: slCharges || charges,
+              paid: slPaid || paid,
+              payer: c.payer_name || c.payerName || '',
+              ptResp: slCharges > 0 ? (slCharges - (slPaid || 0)) * (youOwe / charges) : youOwe,
+            });
+          });
+        } else {
+          lineItems.push({
+            dos: c.date_of_service || c.dateOfService || '',
+            cpt: c.cptCode || c.cpt_code || '',
+            description: `Claim ${c.claim_number || c.claimNumber || ''}`,
+            units: 1,
+            charges, paid,
+            payer: c.payer_name || c.payerName || '',
+            adjustment: adj,
+            ptResp: youOwe,
+          });
+        }
         grandCharges += charges;
         grandPaid += paid;
         grandAdj += adj;
-      });
+      }
     } else {
       // Fallback — single summary line from statement data
       grandCharges = Number(s.total_charges || s.totalCharges || 0);
@@ -11825,7 +11851,9 @@ function handleNppesProxy(payload) {
     }
 
     const amountPaid = Number(s.amount_paid || s.amountPaid || 0);
-    const patientBalance = Number(s.patient_balance || s.patientBalance || 0);
+    // Calculate "You Owe" total from line items (not statement record, which may be stale)
+    const grandYouOwe = lineItems.reduce((sum, li) => sum + (li.ptResp != null ? li.ptResp : (li.charges - li.paid - (li.adjustment || 0))), 0);
+    const patientBalance = grandYouOwe > 0 ? grandYouOwe : Number(s.patient_balance || s.patientBalance || 0);
 
     // Build line items HTML
     const _fmtDate = (d) => { if (!d) return ''; try { return new Date(d).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}); } catch { return d; } };
