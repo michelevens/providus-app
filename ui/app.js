@@ -12060,11 +12060,10 @@ function handleNppesProxy(payload) {
         totalCharges += (result.chargesCreated || result.charges_created || 0);
         if (result.errors?.length) console.warn(`Batch ${Math.floor(i/batchSize)+1} errors:`, result.errors);
       }
-      store.clearCache();
-      showToast(`Imported ${totalImported} claims + ${totalCharges} charges`);
+      showToast(`Imported ${totalImported} claims + ${totalCharges} charges. Refreshing...`);
       document.getElementById('import-837-modal')?.remove();
-      try { await store.autoReconcile(); } catch (e) {}
-      await renderRcmPage();
+      // Delay cache clear and page refresh to avoid 401 race condition
+      setTimeout(() => { store.clearCache(); window.location.reload(); }, 1500);
     } catch (e) { showToast(`Imported ${totalImported} so far. Error: ${e.message}`); }
     btn.disabled = false; btn.textContent = 'Import Claims';
   },
