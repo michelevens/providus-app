@@ -11715,8 +11715,9 @@ function handleNppesProxy(payload) {
     const patientBalance = Number(s.patient_balance || s.patientBalance || 0);
 
     // Build line items HTML
+    const _fmtDate = (d) => { if (!d) return ''; try { return new Date(d).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}); } catch { return d; } };
     const lineItemsHtml = lineItems.map(li => `<tr>
-      <td style="font-size:12px;">${li.dos}</td>
+      <td style="font-size:12px;">${_fmtDate(li.dos)}</td>
       <td style="font-size:12px;font-family:monospace;">${li.cpt}</td>
       <td style="font-size:12px;">${li.description}</td>
       <td style="font-size:12px;">${li.payer}</td>
@@ -11770,9 +11771,9 @@ function handleNppesProxy(payload) {
           </div>
         </div>
         <div class="stmt-info">
-          <strong>Statement Date:</strong> ${statementDate}<br>
+          <strong>Statement Date:</strong> ${new Date(statementDate).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'})}<br>
           <strong>Statement #:</strong> STMT-${String(id).padStart(6, '0')}<br>
-          ${dueDate ? '<strong>Due Date:</strong> ' + dueDate + '<br>' : ''}
+          ${dueDate ? '<strong>Due Date:</strong> ' + new Date(dueDate).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) + '<br>' : ''}
           <strong>Account Status:</strong> ${(s.status || 'draft').toUpperCase()}<br>
           ${s.times_sent || s.timesSent ? '<strong>Times Sent:</strong> ' + (s.times_sent || s.timesSent) : ''}
         </div>
@@ -11825,7 +11826,7 @@ function handleNppesProxy(payload) {
       <div class="balance-box">
         <div class="label">Amount Due</div>
         <div class="amount">$${patientBalance.toFixed(2)}</div>
-        ${dueDate ? '<div class="due">Please pay by ' + dueDate + '</div>' : ''}
+        ${dueDate ? '<div class="due">Please pay by ' + _fmtDate(dueDate) + '</div>' : ''}
       </div>
 
       <div class="pay-info">
