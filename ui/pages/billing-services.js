@@ -147,10 +147,10 @@ async function renderBillingServicesPage() {
     claimMonthly.forEach(m => {
       const p = m.period || '';
       if (monthlyData[p]) {
-        monthlyData[p].billed = m.amount_billed || m.amountBilled || 0;
-        monthlyData[p].collected = m.amount_collected || m.amountCollected || 0;
-        monthlyData[p].denied = m.denied_amount || m.deniedAmount || 0;
-        monthlyData[p].claims = m.claims_submitted || m.claimsSubmitted || 0;
+        monthlyData[p].billed = m.amountBilled || m.amount_billed || 0;
+        monthlyData[p].collected = m.amountCollected || m.amount_collected || 0;
+        monthlyData[p].denied = m.deniedAmount || m.denied_amount || 0;
+        monthlyData[p].claims = m.claimsSubmitted || m.claims_submitted || 0;
       }
     });
   } else {
@@ -245,12 +245,11 @@ async function renderBillingServicesPage() {
           <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
             <h3>Collections Trend</h3>
             <div style="display:flex;gap:4px;align-items:center;">
-              ${[3,6,12].map(n => `<button class="btn btn-sm${chartRange === n ? ' btn-primary' : ''}" style="font-size:11px;padding:3px 10px;min-width:0;" onclick="window._bsChartRange=${n};window._bsRefreshDashboard();">${n}mo</button>`).join('')}
-              <input type="number" id="bs-chart-custom" min="1" max="24" placeholder="Custom" value="${![3,6,12].includes(chartRange) ? chartRange : ''}" style="width:60px;height:26px;font-size:11px;padding:2px 6px;border:1px solid var(--gray-300);border-radius:6px;" onchange="const v=parseInt(this.value);if(v>=1&&v<=24){window._bsChartRange=v;window._bsRefreshDashboard();}">
+              ${[3,6,12,24].map(n => `<button class="btn btn-sm${chartRange === n ? ' btn-primary' : ''}" style="font-size:11px;padding:3px 10px;min-width:0;" onclick="window._bsChartRange=${n};window._bsRefreshDashboard();">${n}mo</button>`).join('')}
             </div>
           </div>
           <div class="card-body" style="padding:16px;">
-            <div style="display:flex;align-items:flex-end;gap:6px;height:160px;">
+            <div style="display:flex;align-items:flex-end;gap:${chartRange > 12 ? 3 : 6}px;height:${chartRange > 12 ? 200 : 160}px;">
               ${months.map(m => `
                 <div style="flex:1;text-align:center;display:flex;flex-direction:column;justify-content:flex-end;height:100%;">
                   <div style="display:flex;flex-direction:column;gap:2px;align-items:center;">
