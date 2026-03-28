@@ -11311,6 +11311,25 @@ function handleNppesProxy(payload) {
       showToast(`Exported ${data.length} denials`);
     } catch (e) { showToast('Export error: ' + e.message); }
   },
+  exportChargesCSV() {
+    const charges = window._rcmCharges || [];
+    if (!charges.length) { showToast('No charges to export'); return; }
+    const headers = ['DOS', 'Patient', 'CPT', 'ICD', 'Payer', 'Units', 'Amount', 'Status'];
+    const rows = charges.map(ch => [
+      (ch.dateOfService || ch.date_of_service || '').toString().slice(0, 10),
+      ch.patientName || ch.patient_name || '',
+      ch.cptCode || ch.cpt_code || '',
+      ch.icdCodes || ch.icd_codes || '',
+      ch.payerName || ch.payer_name || '',
+      ch.units || 1,
+      ch.chargeAmount || ch.charge_amount || 0,
+      ch.status || '',
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `charges_export_${new Date().toISOString().split('T')[0]}.csv`; a.click();
+    showToast(`Exported ${charges.length} charges`);
+  },
   async escalateDenials() {
     try {
       const r = await store.escalateDenials();

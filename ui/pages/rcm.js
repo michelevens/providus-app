@@ -435,9 +435,8 @@ async function renderRcmPage() {
               <option value="denied">Denied</option>
               <option value="pending">Pending</option>
             </select>
-            <button class="btn btn-sm" onclick="window.app.openChargeImportModal()" style="font-size:12px;">
-              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M7 10V2M3.5 5.5L7 2l3.5 3.5"/><path d="M1.5 10v2a1 1 0 001 1h9a1 1 0 001-1v-2"/></svg>Import CSV
-            </button>
+            <button class="btn btn-sm" onclick="window.app.openChargeImportModal()" style="font-size:12px;">Import CSV</button>
+            <button class="btn btn-sm" onclick="window.app.exportChargesCSV()" style="font-size:12px;">Export CSV</button>
           </div>
         </div>
         <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
