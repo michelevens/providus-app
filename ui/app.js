@@ -10559,12 +10559,12 @@ function handleNppesProxy(payload) {
                 ${(window._rcmClients || window._bsClients || []).map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}
               </select>
             </div>
-            <div style="border:2px dashed var(--gray-300);border-radius:12px;padding:32px;text-align:center;cursor:pointer;transition:border-color 0.2s;" id="import-dropzone" onclick="document.getElementById('import-file').click()" ondragover="event.preventDefault();this.style.borderColor='var(--brand-600)'" ondragleave="this.style.borderColor='var(--gray-300)'" ondrop="event.preventDefault();this.style.borderColor='var(--gray-300)';window.app.handleImportFile(event.dataTransfer.files[0])">
+            <div style="border:2px dashed var(--gray-300);border-radius:12px;padding:32px;text-align:center;cursor:pointer;transition:border-color 0.2s;" id="import-dropzone" onclick="document.getElementById('import-file').click()" ondragover="event.preventDefault();this.style.borderColor='var(--brand-600)'" ondragleave="this.style.borderColor='var(--gray-300)'" ondrop="event.preventDefault();this.style.borderColor='var(--gray-300)';window.app.handleImportFiles(event.dataTransfer.files)">
               <svg width="40" height="40" fill="none" stroke="var(--gray-400)" stroke-width="1.5" style="margin-bottom:8px;"><path d="M20 28V12M12 18l8-8 8 8"/><path d="M6 28v4a2 2 0 002 2h24a2 2 0 002-2v-4"/></svg>
-              <div style="font-size:14px;font-weight:600;color:var(--gray-600);">Drop CSV file here or click to browse</div>
-              <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">Supports .csv and .tsv files up to 10MB</div>
+              <div style="font-size:14px;font-weight:600;color:var(--gray-600);">Drop CSV files here or click to browse</div>
+              <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">Supports .csv and .tsv files up to 10MB — select multiple</div>
             </div>
-            <input type="file" id="import-file" accept=".csv,.tsv,.txt" style="display:none;" onchange="window.app.handleImportFile(this.files[0])">
+            <input type="file" id="import-file" accept=".csv,.tsv,.txt" multiple style="display:none;" onchange="window.app.handleImportFiles(this.files)">
           </div>
           <div id="import-step-2" style="display:none;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -10594,18 +10594,26 @@ function handleNppesProxy(payload) {
     modal.classList.add('active');
   },
 
-  handleImportFile(file) {
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { showToast('File too large (max 10MB)'); return; }
+  async handleImportFiles(fileList) {
+    if (!fileList || !fileList.length) return;
+    const files = Array.from(fileList);
+    for (const f of files) {
+      if (f.size > 10 * 1024 * 1024) { showToast(`${f.name} too large (max 10MB)`); return; }
+    }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
+    let allHeaders = null;
+    let allRows = [];
+    const fileNames = [];
+
+    for (const file of files) {
+      const text = await new Promise((res, rej) => { const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsText(file); });
       const delimiter = text.includes('\t') ? '\t' : ',';
       const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) { showToast('File is empty or has no data rows'); return; }
+      if (lines.length < 2) { showToast(`${file.name} is empty or has no data rows`); continue; }
 
       const headers = lines[0].split(delimiter).map(h => h.replace(/^"|"$/g, '').trim());
+      if (!allHeaders) { allHeaders = headers; }
+
       const rows = lines.slice(1).map(l => {
         const vals = [];
         let inQuote = false, current = '';
@@ -10618,13 +10626,17 @@ function handleNppesProxy(payload) {
         return vals;
       }).filter(r => r.some(v => v));
 
-      window._importData = { headers, rows, file: file.name };
-      document.getElementById('import-file-info').textContent = `${file.name} — ${headers.length} columns, ${rows.length} rows`;
-      window.app.renderColumnMapping(headers);
-      document.getElementById('import-step-1').style.display = 'none';
-      document.getElementById('import-step-2').style.display = '';
-    };
-    reader.readAsText(file);
+      allRows = allRows.concat(rows);
+      fileNames.push(file.name);
+    }
+
+    if (!allHeaders || !allRows.length) { showToast('No valid data found in files'); return; }
+
+    window._importData = { headers: allHeaders, rows: allRows, file: fileNames.join(', ') };
+    document.getElementById('import-file-info').textContent = `${fileNames.length} file(s): ${fileNames.join(', ')} — ${allHeaders.length} columns, ${allRows.length} rows`;
+    window.app.renderColumnMapping(allHeaders);
+    document.getElementById('import-step-1').style.display = 'none';
+    document.getElementById('import-step-2').style.display = '';
   },
 
   renderColumnMapping(headers) {
@@ -10797,8 +10809,18 @@ function handleNppesProxy(payload) {
       });
     });
 
-    window._importClaims = claims;
-    document.getElementById('import-count').textContent = claims.length;
+    // Deduplicate: remove claims with same patient_name + date_of_service + cpt_code + total_charges
+    const seenKeys = new Set();
+    let dupeCount = 0;
+    const dedupedClaims = [];
+    claims.forEach(c => {
+      const key = `${(c.patient_name || '').trim().toLowerCase()}|${c.date_of_service}|${(c.cpt_code || '').trim()}|${c.total_charges || 0}`;
+      if (seenKeys.has(key)) { dupeCount++; return; }
+      seenKeys.add(key);
+      dedupedClaims.push(c);
+    });
+    window._importClaims = dedupedClaims;
+    document.getElementById('import-count').textContent = dedupedClaims.length + (dupeCount > 0 ? ` (${dupeCount} duplicates removed)` : '');
 
     // Render preview table
     const preview = document.getElementById('import-preview');
@@ -11936,9 +11958,9 @@ function handleNppesProxy(payload) {
     const clients = window._rcmClients || window._bsClients || [];
     const html = `<div class="modal-overlay active" id="import-837-modal">
       <div class="modal" style="max-width:850px;">
-        <div class="modal-header"><h3>Import 837 Claim File</h3><button class="modal-close" onclick="document.getElementById('import-837-modal').remove()">&times;</button></div>
+        <div class="modal-header"><h3>Import 837 Claim Files</h3><button class="modal-close" onclick="document.getElementById('import-837-modal').remove()">&times;</button></div>
         <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
-          <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px;">Upload an 837P file exported from Tebra, AdvancedMD, or any EHR. This creates claims AND charges with full CPT/ICD detail.</p>
+          <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px;">Upload one or more 837P files exported from Tebra, AdvancedMD, or any EHR. This creates claims AND charges with full CPT/ICD detail.</p>
           <div style="display:flex;gap:12px;margin-bottom:12px;">
             <select id="import-837-client" class="form-control" style="width:200px;height:38px;">
               <option value="">Assign to client (optional)</option>
@@ -11946,10 +11968,10 @@ function handleNppesProxy(payload) {
             </select>
           </div>
           <div style="border:2px dashed var(--gray-300);border-radius:12px;padding:32px;text-align:center;cursor:pointer;" onclick="document.getElementById('import-837-file').click()">
-            <div style="font-size:14px;font-weight:600;color:var(--gray-600);">Drop 837 file here or click to browse</div>
-            <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">Accepts .txt, .837, .edi files</div>
+            <div style="font-size:14px;font-weight:600;color:var(--gray-600);">Drop 837 files here or click to browse</div>
+            <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">Accepts .txt, .837, .edi files — select multiple</div>
           </div>
-          <input type="file" id="import-837-file" accept=".txt,.837,.edi,.x12" style="display:none;" onchange="window.app.handle837File(this.files[0])">
+          <input type="file" id="import-837-file" accept=".txt,.837,.edi,.x12" multiple style="display:none;" onchange="window.app.handle837Files(this.files)">
           <div id="import-837-preview" style="margin-top:12px;"></div>
         </div>
         <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
@@ -11960,41 +11982,62 @@ function handleNppesProxy(payload) {
     </div>`;
     document.body.insertAdjacentHTML('beforeend', html);
   },
-  handle837File(file) {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const text = e.target.result;
+  async handle837Files(fileList) {
+    if (!fileList || !fileList.length) return;
+    const files = Array.from(fileList);
+    window._parsed837 = { claims: [], claimCount: 0, serviceLineCount: 0, totalCharges: 0, billingProvider: '', billingNpi: '' };
+    const prev = document.getElementById('import-837-preview');
+    const seenKeys = new Set();
+    let dupeCount = 0;
+
+    for (const file of files) {
       try {
+        const text = await new Promise((res, rej) => { const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsText(file); });
         const result = await store.parse837(text);
-        window._parsed837 = result;
-        const prev = document.getElementById('import-837-preview');
-        if (prev) {
-          prev.innerHTML = `<div style="background:var(--gray-50);padding:14px;border-radius:8px;font-size:13px;">
-            <strong>Billing Provider:</strong> ${result.billingProvider || result.billing_provider || '—'} (NPI: ${result.billingNpi || result.billing_npi || '—'})<br>
-            <strong>Claims:</strong> ${result.claimCount || result.claim_count || 0} | <strong>Service Lines:</strong> ${result.serviceLineCount || result.service_line_count || 0} | <strong>Total Charges:</strong> $${(result.totalCharges || result.total_charges || 0).toFixed(2)}
-            <div style="max-height:300px;overflow:auto;margin-top:8px;">
-              <table style="width:100%;font-size:11px;border-collapse:collapse;">
-                <thead><tr style="background:var(--gray-100);"><th style="padding:4px 6px;">Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th>CPTs</th><th style="text-align:right;">Charges</th></tr></thead>
-                <tbody>${(result.claims || []).slice(0, 30).map(c => `<tr style="border-bottom:1px solid var(--gray-200);">
-                  <td style="padding:3px 6px;font-family:monospace;">${c.claimNumber || c.claim_number || ''}</td>
-                  <td>${c.patientName || c.patient_name || ''}</td>
-                  <td>${c.payerName || c.payer_name || ''}</td>
-                  <td>${c.dateOfService || c.date_of_service || '—'}</td>
-                  <td>${(c.serviceLines || c.service_lines || []).map(sl => sl.cptCode || sl.cpt_code || '').join(', ')}</td>
-                  <td style="text-align:right;font-weight:600;">$${(c.totalCharges || c.total_charges || 0).toFixed(2)}</td>
-                </tr>`).join('')}
-                ${result.claim_count > 30 ? `<tr><td colspan="6" style="text-align:center;padding:8px;color:var(--gray-400);">...and ${result.claim_count - 30} more claims</td></tr>` : ''}
-                </tbody>
-              </table>
-            </div>
-          </div>`;
+        const claims = result.claims || [];
+        // Deduplicate: skip claims with same claim_number + date_of_service + total_charges
+        claims.forEach(c => {
+          const key = `${(c.claimNumber || c.claim_number || '').trim()}|${(c.dateOfService || c.date_of_service || '').trim()}|${(c.totalCharges || c.total_charges || 0)}`;
+          if (seenKeys.has(key)) { dupeCount++; return; }
+          seenKeys.add(key);
+          window._parsed837.claims.push(c);
+        });
+        window._parsed837.claimCount = window._parsed837.claims.length;
+        window._parsed837.serviceLineCount += (result.serviceLineCount || result.service_line_count || 0);
+        window._parsed837.totalCharges += (result.totalCharges || result.total_charges || 0);
+        if (!window._parsed837.billingProvider) {
+          window._parsed837.billingProvider = result.billingProvider || result.billing_provider || '';
+          window._parsed837.billingNpi = result.billingNpi || result.billing_npi || '';
         }
-        document.getElementById('import-837-btn').style.display = '';
-        showToast(`Parsed ${result.claimCount || result.claim_count || 0} claims with ${result.serviceLineCount || result.service_line_count || 0} service lines`);
-      } catch (e) { showToast('Parse error: ' + e.message); }
-    };
-    reader.readAsText(file);
+      } catch (e) { showToast(`Error parsing ${file.name}: ${e.message}`); }
+    }
+
+    const merged = window._parsed837;
+    if (prev) {
+      prev.innerHTML = `<div style="background:var(--gray-50);padding:14px;border-radius:8px;font-size:13px;">
+        <strong>Files:</strong> ${files.map(f => f.name).join(', ')}<br>
+        <strong>Billing Provider:</strong> ${merged.billingProvider || '—'} (NPI: ${merged.billingNpi || '—'})<br>
+        <strong>Claims:</strong> ${merged.claimCount} | <strong>Service Lines:</strong> ${merged.serviceLineCount} | <strong>Total Charges:</strong> $${(merged.totalCharges || 0).toFixed(2)}
+        ${dupeCount > 0 ? `<br><span style="color:#d97706;font-weight:600;">${dupeCount} duplicate claim(s) removed</span>` : ''}
+        <div style="max-height:300px;overflow:auto;margin-top:8px;">
+          <table style="width:100%;font-size:11px;border-collapse:collapse;">
+            <thead><tr style="background:var(--gray-100);"><th style="padding:4px 6px;">Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th>CPTs</th><th style="text-align:right;">Charges</th></tr></thead>
+            <tbody>${merged.claims.slice(0, 30).map(c => `<tr style="border-bottom:1px solid var(--gray-200);">
+              <td style="padding:3px 6px;font-family:monospace;">${c.claimNumber || c.claim_number || ''}</td>
+              <td>${c.patientName || c.patient_name || ''}</td>
+              <td>${c.payerName || c.payer_name || ''}</td>
+              <td>${c.dateOfService || c.date_of_service || '—'}</td>
+              <td>${(c.serviceLines || c.service_lines || []).map(sl => sl.cptCode || sl.cpt_code || '').join(', ')}</td>
+              <td style="text-align:right;font-weight:600;">$${(c.totalCharges || c.total_charges || 0).toFixed(2)}</td>
+            </tr>`).join('')}
+            ${merged.claimCount > 30 ? `<tr><td colspan="6" style="text-align:center;padding:8px;color:var(--gray-400);">...and ${merged.claimCount - 30} more claims</td></tr>` : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    }
+    document.getElementById('import-837-btn').style.display = '';
+    showToast(`Parsed ${merged.claimCount} claims from ${files.length} file(s)${dupeCount > 0 ? ` (${dupeCount} duplicates removed)` : ''}`);
   },
   async execute837Import() {
     const parsed = window._parsed837;

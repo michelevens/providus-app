@@ -82,6 +82,7 @@ async function renderBillingServicesPage() {
   let stats = { total_clients: 0, active_clients: 0, total_tasks: 0, pending_tasks: 0, completed_tasks: 0, total_claims: 0, total_collected: 0, total_denied: 0 };
 
   let claimStats = {}, workQueues = {}, denialRisk = {}, reconciliation = {};
+  const chartRange = window._bsChartRange || 6;
   // Fire all API calls in parallel for speed
   const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9] = await Promise.allSettled([
     store.getBillingClientStats(),
@@ -89,7 +90,7 @@ async function renderBillingServicesPage() {
     store.getBillingTasks(),
     store.getBillingActivities({ limit: 100 }),
     store.getBillingFinancials({}),
-    store.getRcmClaimStats(),
+    store.getRcmClaimStats({ months: chartRange }),
     store.getWorkQueues(),
     store.getDenialRiskAnalysis(),
     store.getAll('organizations'),
@@ -134,7 +135,7 @@ async function renderBillingServicesPage() {
   // Compute monthly data for chart — prefer live claim stats, fall back to financials
   const claimMonthly = claimStats.monthly || [];
   const monthlyData = {};
-  for (let m = 5; m >= 0; m--) {
+  for (let m = chartRange - 1; m >= 0; m--) {
     const d = new Date(today.getFullYear(), today.getMonth() - m, 1);
     const key = d.toISOString().slice(0, 7);
     const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
@@ -246,7 +247,13 @@ async function renderBillingServicesPage() {
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px;">
         <!-- Collections Chart -->
         <div class="card bs-card">
-          <div class="card-header"><h3>Collections Trend (6 Months)</h3></div>
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+            <h3>Collections Trend</h3>
+            <div style="display:flex;gap:4px;align-items:center;">
+              ${[3,6,12].map(n => `<button class="btn btn-sm${chartRange === n ? ' btn-primary' : ''}" style="font-size:11px;padding:3px 10px;min-width:0;" onclick="window._bsChartRange=${n};renderBillingServicesPage();">${n}mo</button>`).join('')}
+              <input type="number" id="bs-chart-custom" min="1" max="24" placeholder="Custom" value="${![3,6,12].includes(chartRange) ? chartRange : ''}" style="width:60px;height:26px;font-size:11px;padding:2px 6px;border:1px solid var(--gray-300);border-radius:6px;" onchange="const v=parseInt(this.value);if(v>=1&&v<=24){window._bsChartRange=v;renderBillingServicesPage();}">
+            </div>
+          </div>
           <div class="card-body" style="padding:16px;">
             <div style="display:flex;align-items:flex-end;gap:6px;height:160px;">
               ${months.map(m => `

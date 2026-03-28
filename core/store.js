@@ -1134,7 +1134,7 @@ class Store {
     }
 
     // ── RCM: Claims, Denials, Payments, Charges, AR ──
-    async getRcmClaimStats() { return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/stats`)).data || {}; }
+    async getRcmClaimStats(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/stats${q ? '?' + q : ''}`)).data || {}; }
     async getRcmClaims(params = {}) { const q = new URLSearchParams(params).toString(); const r = await this._fetch(`${CONFIG.API_URL}/rcm/claims${q ? '?' + q : ''}`); return r.data?.data || r.data || []; }
     async getRcmClaim(id) { return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`)).data || {}; }
     async createRcmClaim(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
