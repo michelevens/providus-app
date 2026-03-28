@@ -1215,6 +1215,8 @@ class Store {
 
     // ERA/EOB Parsing
     async parseEra(eraData) { return (await this._fetch(`${CONFIG.API_URL}/rcm/era/parse`, { method: 'POST', body: JSON.stringify({ era_data: eraData }) })).data || {}; }
+    async parse837(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/837/parse`, { method: 'POST', body: JSON.stringify({ data }) })).data || {}; }
+    async import837(claims, clientId) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/837/import`, { method: 'POST', body: JSON.stringify({ claims, billing_client_id: clientId }) }); this.clearCache(); return r.data || r; }
 
     // AI Denial Prevention
     async getDenialRiskAnalysis() { return (await this._fetch(`${CONFIG.API_URL}/rcm/denial-risk`)).data || {}; }

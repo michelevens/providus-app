@@ -11931,6 +11931,87 @@ function handleNppesProxy(payload) {
       showToast(`${payerName}: ${stats.total_claims} claims, ${stats.denial_rate}% denial rate, ${stats.collection_rate}% collected`);
     } catch (e) { showToast('Error: ' + e.message); }
   },
+  // 837 Claim File Import
+  open837ImportModal() {
+    const clients = window._rcmClients || window._bsClients || [];
+    const html = `<div class="modal-overlay active" id="import-837-modal">
+      <div class="modal" style="max-width:850px;">
+        <div class="modal-header"><h3>Import 837 Claim File</h3><button class="modal-close" onclick="document.getElementById('import-837-modal').remove()">&times;</button></div>
+        <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
+          <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px;">Upload an 837P file exported from Tebra, AdvancedMD, or any EHR. This creates claims AND charges with full CPT/ICD detail.</p>
+          <div style="display:flex;gap:12px;margin-bottom:12px;">
+            <select id="import-837-client" class="form-control" style="width:200px;height:38px;">
+              <option value="">Assign to client (optional)</option>
+              ${clients.map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}
+            </select>
+          </div>
+          <div style="border:2px dashed var(--gray-300);border-radius:12px;padding:32px;text-align:center;cursor:pointer;" onclick="document.getElementById('import-837-file').click()">
+            <div style="font-size:14px;font-weight:600;color:var(--gray-600);">Drop 837 file here or click to browse</div>
+            <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">Accepts .txt, .837, .edi files</div>
+          </div>
+          <input type="file" id="import-837-file" accept=".txt,.837,.edi,.x12" style="display:none;" onchange="window.app.handle837File(this.files[0])">
+          <div id="import-837-preview" style="margin-top:12px;"></div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('import-837-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" id="import-837-btn" style="display:none;" onclick="window.app.execute837Import()">Import Claims</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  handle837File(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const text = e.target.result;
+      try {
+        const result = await store.parse837(text);
+        window._parsed837 = result;
+        const prev = document.getElementById('import-837-preview');
+        if (prev) {
+          prev.innerHTML = `<div style="background:var(--gray-50);padding:14px;border-radius:8px;font-size:13px;">
+            <strong>Billing Provider:</strong> ${result.billing_provider || '—'} (NPI: ${result.billing_npi || '—'})<br>
+            <strong>Claims:</strong> ${result.claim_count} | <strong>Service Lines:</strong> ${result.service_line_count} | <strong>Total Charges:</strong> $${(result.total_charges || 0).toFixed(2)}
+            <div style="max-height:300px;overflow:auto;margin-top:8px;">
+              <table style="width:100%;font-size:11px;border-collapse:collapse;">
+                <thead><tr style="background:var(--gray-100);"><th style="padding:4px 6px;">Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th>CPTs</th><th style="text-align:right;">Charges</th></tr></thead>
+                <tbody>${(result.claims || []).slice(0, 30).map(c => `<tr style="border-bottom:1px solid var(--gray-200);">
+                  <td style="padding:3px 6px;font-family:monospace;">${c.claim_number}</td>
+                  <td>${c.patient_name}</td>
+                  <td>${c.payer_name}</td>
+                  <td>${c.date_of_service || '—'}</td>
+                  <td>${(c.service_lines || []).map(sl => sl.cpt_code).join(', ')}</td>
+                  <td style="text-align:right;font-weight:600;">$${c.total_charges.toFixed(2)}</td>
+                </tr>`).join('')}
+                ${result.claim_count > 30 ? `<tr><td colspan="6" style="text-align:center;padding:8px;color:var(--gray-400);">...and ${result.claim_count - 30} more claims</td></tr>` : ''}
+                </tbody>
+              </table>
+            </div>
+          </div>`;
+        }
+        document.getElementById('import-837-btn').style.display = '';
+        showToast(`Parsed ${result.claim_count} claims with ${result.service_line_count} service lines`);
+      } catch (e) { showToast('Parse error: ' + e.message); }
+    };
+    reader.readAsText(file);
+  },
+  async execute837Import() {
+    const parsed = window._parsed837;
+    if (!parsed?.claims?.length) { showToast('No claims to import'); return; }
+    const clientId = document.getElementById('import-837-client')?.value || null;
+    const btn = document.getElementById('import-837-btn');
+    btn.disabled = true; btn.textContent = 'Importing...';
+    try {
+      const result = await store.import837(parsed.claims, clientId);
+      showToast(`Imported ${result.imported_claims} claims + ${result.charges_created} charges`);
+      document.getElementById('import-837-modal')?.remove();
+      // Auto-reconcile after import
+      try { await store.autoReconcile(); } catch (e) {}
+      await renderRcmPage();
+    } catch (e) { showToast('Import error: ' + e.message); }
+    btn.disabled = false; btn.textContent = 'Import Claims';
+  },
   async runReconciliation() {
     try {
       const r = await store.autoReconcile();
