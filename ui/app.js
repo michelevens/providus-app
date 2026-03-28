@@ -11502,6 +11502,111 @@ function handleNppesProxy(payload) {
   editStatement(id) {
     showToast('Statement editing coming soon.');
   },
+  async printStatement(id) {
+    // Find statement from cached data
+    let statements = [];
+    try { statements = await store.getPatientStatements(); } catch (e) {}
+    const s = (Array.isArray(statements) ? statements : []).find(x => x.id == id);
+    if (!s) { showToast('Statement not found'); return; }
+
+    const agencyName = auth.getAgency()?.name || auth.getAgency()?.company_display_name || 'Billing Department';
+    const agencyEmail = auth.getAgency()?.email || '';
+    const agencyPhone = auth.getAgency()?.phone || '';
+    const agencyAddress = auth.getAgency()?.address_street || '';
+
+    const patientBalance = Number(s.patient_balance || s.patientBalance || 0);
+    const totalCharges = Number(s.total_charges || s.totalCharges || 0);
+    const insurancePaid = Number(s.insurance_paid || s.insurancePaid || 0);
+    const adjustments = Number(s.adjustments || 0);
+    const amountPaid = Number(s.amount_paid || s.amountPaid || 0);
+    const dueDate = s.due_date || s.dueDate || '';
+    const statementDate = s.statement_date || s.statementDate || new Date().toISOString().split('T')[0];
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Patient Statement - ${s.patient_name || s.patientName}</title>
+      <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #1a1a1a; max-width: 800px; margin: 0 auto; }
+        .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:30px; padding-bottom:20px; border-bottom:3px solid #2C4A5A; }
+        .header h1 { font-size:22px; color:#2C4A5A; margin-bottom:4px; }
+        .header .agency { font-size:12px; color:#666; line-height:1.6; }
+        .header .stmt-info { text-align:right; font-size:12px; color:#666; line-height:1.6; }
+        .header .stmt-info strong { color:#1a1a1a; }
+        .patient-box { background:#f7f9fb; padding:16px 20px; border-radius:8px; margin-bottom:24px; }
+        .patient-box h3 { font-size:14px; color:#2C4A5A; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px; }
+        .patient-box .name { font-size:18px; font-weight:700; }
+        .summary-table { width:100%; border-collapse:collapse; margin-bottom:24px; }
+        .summary-table th { text-align:left; padding:10px 14px; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:#666; background:#f0f0f0; border-bottom:2px solid #ddd; }
+        .summary-table td { padding:12px 14px; border-bottom:1px solid #eee; font-size:14px; }
+        .summary-table .label { color:#666; }
+        .summary-table .amount { text-align:right; font-weight:600; font-family:monospace; font-size:15px; }
+        .balance-box { background:#fef2f2; border:2px solid #ef4444; border-radius:8px; padding:20px; text-align:center; margin-bottom:24px; }
+        .balance-box .label { font-size:12px; text-transform:uppercase; letter-spacing:1px; color:#666; margin-bottom:4px; }
+        .balance-box .amount { font-size:32px; font-weight:800; color:#ef4444; }
+        .balance-box .due { font-size:13px; color:#666; margin-top:6px; }
+        .footer { margin-top:40px; padding-top:20px; border-top:1px solid #ddd; font-size:11px; color:#999; text-align:center; line-height:1.8; }
+        .pay-info { background:#f0fdf4; border:1px solid #22c55e; border-radius:8px; padding:16px; margin-bottom:24px; font-size:13px; }
+        .pay-info strong { color:#16a34a; }
+        @media print { body { padding:20px; } .no-print { display:none; } }
+      </style>
+    </head><body>
+      <div class="no-print" style="text-align:right;margin-bottom:16px;">
+        <button onclick="window.print()" style="padding:8px 24px;background:#2C4A5A;color:white;border:none;border-radius:6px;font-size:14px;cursor:pointer;">Print / Save PDF</button>
+      </div>
+
+      <div class="header">
+        <div>
+          <h1>PATIENT STATEMENT</h1>
+          <div class="agency">
+            <strong>${agencyName}</strong><br>
+            ${agencyAddress ? agencyAddress + '<br>' : ''}
+            ${agencyPhone ? 'Phone: ' + agencyPhone + '<br>' : ''}
+            ${agencyEmail ? 'Email: ' + agencyEmail : ''}
+          </div>
+        </div>
+        <div class="stmt-info">
+          <strong>Statement Date:</strong> ${statementDate}<br>
+          <strong>Statement #:</strong> STMT-${String(id).padStart(6, '0')}<br>
+          ${dueDate ? '<strong>Due Date:</strong> ' + dueDate + '<br>' : ''}
+          <strong>Account Status:</strong> ${(s.status || 'draft').toUpperCase()}
+        </div>
+      </div>
+
+      <div class="patient-box">
+        <h3>Patient Information</h3>
+        <div class="name">${s.patient_name || s.patientName || ''}</div>
+        ${s.patient_email || s.patientEmail ? '<div style="font-size:13px;color:#666;margin-top:4px;">' + (s.patient_email || s.patientEmail) + '</div>' : ''}
+        ${s.patient_phone || s.patientPhone ? '<div style="font-size:13px;color:#666;">' + (s.patient_phone || s.patientPhone) + '</div>' : ''}
+      </div>
+
+      <table class="summary-table">
+        <thead><tr><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
+        <tbody>
+          <tr><td class="label">Total Charges</td><td class="amount">$${totalCharges.toFixed(2)}</td></tr>
+          <tr><td class="label">Insurance Payment</td><td class="amount" style="color:#16a34a;">-$${insurancePaid.toFixed(2)}</td></tr>
+          ${adjustments > 0 ? '<tr><td class="label">Adjustments</td><td class="amount">-$' + adjustments.toFixed(2) + '</td></tr>' : ''}
+          ${amountPaid > 0 ? '<tr><td class="label">Previous Patient Payment</td><td class="amount" style="color:#16a34a;">-$' + amountPaid.toFixed(2) + '</td></tr>' : ''}
+        </tbody>
+      </table>
+
+      <div class="balance-box">
+        <div class="label">Amount Due</div>
+        <div class="amount">$${patientBalance.toFixed(2)}</div>
+        ${dueDate ? '<div class="due">Please pay by ' + dueDate + '</div>' : ''}
+      </div>
+
+      <div class="pay-info">
+        <strong>Payment Options:</strong> Please contact our billing department to arrange payment by phone, mail, or online portal. We accept credit cards, checks, and payment plans for balances over $100.
+      </div>
+
+      <div class="footer">
+        This is a statement of your account. Insurance has been billed and the above amount represents your responsibility.<br>
+        If you have questions about this statement, please contact our billing department.<br>
+        <strong>${agencyName}</strong> ${agencyPhone ? '| ' + agencyPhone : ''} ${agencyEmail ? '| ' + agencyEmail : ''}
+      </div>
+    </body></html>`);
+    printWindow.document.close();
+  },
   async markStatementSent(id) {
     try {
       await store.updatePatientStatement(id, { status: 'sent', last_sent_date: new Date().toISOString().split('T')[0] });

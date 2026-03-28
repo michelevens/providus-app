@@ -136,6 +136,7 @@ async function renderStatementsTab(body) {
               <td class="text-sm" style="${isOverdue ? 'color:var(--red);font-weight:700;' : ''}">${dueDate ? formatDateDisplay(dueDate) : '—'}${isOverdue ? ' !' : ''}</td>
               <td class="text-sm">${s.times_sent || s.timesSent || 0}x</td>
               <td style="white-space:nowrap;">
+                <button class="btn btn-sm" onclick="window.app.printStatement(${s.id})" style="font-size:11px;">Print</button>
                 ${s.status === 'draft' ? `<button class="btn btn-sm" onclick="window.app.markStatementSent(${s.id})" style="font-size:11px;">Send</button>` : ''}
                 ${['sent','partial_paid'].includes(s.status) ? `<button class="btn btn-sm" onclick="window.app.markStatementPaid(${s.id})" style="font-size:11px;color:var(--green);">Paid</button>` : ''}
                 <button class="btn btn-sm" onclick="window.app.editStatement(${s.id})" style="font-size:11px;">Edit</button>
