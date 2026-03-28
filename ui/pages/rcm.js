@@ -248,8 +248,8 @@ async function renderRcmPage() {
       </div>
     </div>
 
-    <!-- Revenue Gap Analysis -->
-    ${(() => {
+    <!-- Revenue Gap Analysis (only on Claims tab) -->
+    ${window._rcmTab !== 'claims' ? '' : (() => {
       // Pending by payer
       const pendingByPayer = {};
       gapPending.forEach(c => {
