@@ -83,6 +83,7 @@ async function renderBillingServicesPage() {
 
   let claimStats = {}, workQueues = {}, denialRisk = {}, reconciliation = {};
   const chartRange = window._bsChartRange || 6;
+  window._bsRefreshDashboard = () => renderBillingServicesPage();
   // Fire all API calls in parallel for speed
   const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9] = await Promise.allSettled([
     store.getBillingClientStats(),
@@ -175,16 +176,10 @@ async function renderBillingServicesPage() {
     return (today - d) > 7 * 86400000;
   });
 
-  // Total revenue numbers — prefer claim stats (real data), fall back to financials
-  const claimBilled = claimStats.total_charged || claimStats.totalCharged || 0;
-  const claimCollected = claimStats.total_paid || claimStats.totalPaid || 0;
-  const claimDenied = claimStats.total_denied_amount || claimStats.totalDeniedAmount || 0;
-  const finBilled = financials.reduce((s, f) => s + (f.amountBilled || f.amount_billed || 0), 0);
-  const finCollected = financials.reduce((s, f) => s + (f.amountCollected || f.amount_collected || 0), 0);
-  const finDenied = financials.reduce((s, f) => s + (f.deniedAmount || f.denied_amount || 0), 0);
-  const totalBilled = claimBilled || finBilled;
-  const totalCollected = claimCollected || finCollected;
-  const totalDenied = claimDenied || finDenied;
+  // Total revenue numbers — sum from chart months so totals match the visible range
+  const totalBilled = months.reduce((s, m) => s + m.billed, 0);
+  const totalCollected = months.reduce((s, m) => s + m.collected, 0);
+  const totalDenied = months.reduce((s, m) => s + m.denied, 0);
   const collectionRate = totalBilled > 0 ? ((totalCollected / totalBilled) * 100).toFixed(1) : '0.0';
   const denialRate = totalBilled > 0 ? ((totalDenied / totalBilled) * 100).toFixed(1) : '0.0';
 
@@ -250,8 +245,8 @@ async function renderBillingServicesPage() {
           <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
             <h3>Collections Trend</h3>
             <div style="display:flex;gap:4px;align-items:center;">
-              ${[3,6,12].map(n => `<button class="btn btn-sm${chartRange === n ? ' btn-primary' : ''}" style="font-size:11px;padding:3px 10px;min-width:0;" onclick="window._bsChartRange=${n};renderBillingServicesPage();">${n}mo</button>`).join('')}
-              <input type="number" id="bs-chart-custom" min="1" max="24" placeholder="Custom" value="${![3,6,12].includes(chartRange) ? chartRange : ''}" style="width:60px;height:26px;font-size:11px;padding:2px 6px;border:1px solid var(--gray-300);border-radius:6px;" onchange="const v=parseInt(this.value);if(v>=1&&v<=24){window._bsChartRange=v;renderBillingServicesPage();}">
+              ${[3,6,12].map(n => `<button class="btn btn-sm${chartRange === n ? ' btn-primary' : ''}" style="font-size:11px;padding:3px 10px;min-width:0;" onclick="window._bsChartRange=${n};window._bsRefreshDashboard();">${n}mo</button>`).join('')}
+              <input type="number" id="bs-chart-custom" min="1" max="24" placeholder="Custom" value="${![3,6,12].includes(chartRange) ? chartRange : ''}" style="width:60px;height:26px;font-size:11px;padding:2px 6px;border:1px solid var(--gray-300);border-radius:6px;" onchange="const v=parseInt(this.value);if(v>=1&&v<=24){window._bsChartRange=v;window._bsRefreshDashboard();}">
             </div>
           </div>
           <div class="card-body" style="padding:16px;">
