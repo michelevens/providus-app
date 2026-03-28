@@ -11261,17 +11261,47 @@ function handleNppesProxy(payload) {
     try { const r = await store.detectUnderpayments(); showToast(r.flagged > 0 ? `${r.flagged} underpayment(s) flagged!` : 'No underpayments detected'); } catch (e) { showToast('Error: ' + e.message); }
   },
   // Eligibility modal
-  openEligibilityModal() {
+  async openEligibilityModal() {
+    // Get payers from catalog + claims
+    const payers = [];
+    if (window.PAYER_CATALOG && Array.isArray(window.PAYER_CATALOG)) {
+      window.PAYER_CATALOG.forEach(p => { if (p.name && !payers.includes(p.name)) payers.push(p.name); });
+    }
+    if (window._rcmClaims && Array.isArray(window._rcmClaims)) {
+      window._rcmClaims.forEach(c => { const n = c.payerName || c.payer_name; if (n && !payers.includes(n)) payers.push(n); });
+    }
+    payers.sort();
+
+    // Get providers with NPI
+    let providers = [];
+    try { providers = await store.getAll('providers'); } catch (e) {}
+    if (!Array.isArray(providers)) providers = [];
+    const agencyNpi = auth.getAgency()?.npi || '';
+
     const html = `<div class="modal-overlay active" id="elig-modal">
-      <div class="modal" style="max-width:500px;">
+      <div class="modal" style="max-width:560px;">
         <div class="modal-header"><h3>Check Eligibility</h3><button class="modal-close" onclick="document.getElementById('elig-modal').remove()">&times;</button></div>
         <div class="modal-body">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div class="auth-field" style="margin:0;"><label>Patient Name *</label><input type="text" id="elig-patient" class="form-control" placeholder="Patient name"></div>
             <div class="auth-field" style="margin:0;"><label>Date of Birth</label><input type="date" id="elig-dob" class="form-control"></div>
-            <div class="auth-field" style="margin:0;"><label>Payer *</label><input type="text" id="elig-payer" class="form-control" placeholder="Insurance company"></div>
+            <div class="auth-field" style="margin:0;"><label>Payer *</label>
+              <select id="elig-payer" class="form-control">
+                <option value="">Select payer...</option>
+                ${payers.map(p => `<option value="${escAttr(p)}">${escHtml(p)}</option>`).join('')}
+              </select>
+            </div>
             <div class="auth-field" style="margin:0;"><label>Member ID</label><input type="text" id="elig-member" class="form-control" placeholder="Insurance member ID"></div>
-            <div class="auth-field" style="margin:0;"><label>Provider NPI</label><input type="text" id="elig-npi" class="form-control" placeholder="10-digit NPI"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Provider NPI</label>
+              <select id="elig-npi" class="form-control">
+                <option value="">Select provider...</option>
+                ${agencyNpi ? `<option value="${agencyNpi}">Clinic NPI: ${agencyNpi} (${auth.getAgency()?.name || 'Agency'})</option>` : ''}
+                ${providers.filter(p => p.npi).map(p => `<option value="${p.npi}">${escHtml((p.firstName || p.first_name || '') + ' ' + (p.lastName || p.last_name || ''))} — NPI: ${p.npi}${p.credentials ? ' (' + p.credentials + ')' : ''}</option>`).join('')}
+                <option value="__manual__">Enter NPI manually</option>
+              </select>
+              <input type="text" id="elig-npi-manual" class="form-control" style="display:none;margin-top:4px;" placeholder="10-digit NPI">
+              <script>document.getElementById('elig-npi').onchange=function(){document.getElementById('elig-npi-manual').style.display=this.value==='__manual__'?'block':'none';}</script>
+            </div>
           </div>
         </div>
         <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
@@ -11284,10 +11314,12 @@ function handleNppesProxy(payload) {
   },
   async saveEligibilityCheck() {
     const patient = document.getElementById('elig-patient').value.trim();
-    const payer = document.getElementById('elig-payer').value.trim();
+    const payer = document.getElementById('elig-payer').value;
     if (!patient || !payer) { showToast('Patient and payer are required'); return; }
+    const npiSel = document.getElementById('elig-npi');
+    const npi = npiSel?.value === '__manual__' ? (document.getElementById('elig-npi-manual')?.value?.trim() || '') : (npiSel?.value || '');
     try {
-      await store.checkEligibility({ patient_name: patient, payer_name: payer, patient_dob: document.getElementById('elig-dob').value || null, member_id: document.getElementById('elig-member').value.trim() || null, provider_npi: document.getElementById('elig-npi').value.trim() || null });
+      await store.checkEligibility({ patient_name: patient, payer_name: payer, patient_dob: document.getElementById('elig-dob').value || null, member_id: document.getElementById('elig-member').value.trim() || null, provider_npi: npi || null });
       document.getElementById('elig-modal')?.remove();
       showToast('Eligibility check submitted');
       window.app.rcSwitchTab('eligibility');
