@@ -1220,6 +1220,26 @@ class Store {
     async getDenialRiskAnalysis() { return (await this._fetch(`${CONFIG.API_URL}/rcm/denial-risk`)).data || {}; }
     async preSubmissionCheck(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/pre-submission-check`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
 
+    // Payer Intelligence Hub
+    async getPayerRules() { return (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules`)).data || []; }
+    async getPayerRule(payerName) { return (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/${encodeURIComponent(payerName)}`)).data || {}; }
+    async createPayerRule(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async updatePayerRule(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async deletePayerRule(id) { await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/${id}`, { method: 'DELETE' }); this.clearCache(); }
+    async checkPayerRules(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/check`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
+
+    // Duplicate Detection
+    async detectDuplicates() { return (await this._fetch(`${CONFIG.API_URL}/rcm/duplicates`)).data || {}; }
+
+    // Provider Feedback
+    async getProviderFeedback(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/provider-feedback${q ? '?' + q : ''}`)).data || []; }
+    async createProviderFeedback(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/provider-feedback`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async updateProviderFeedback(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/provider-feedback/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async autoGenerateProviderFeedback() { return (await this._fetch(`${CONFIG.API_URL}/rcm/provider-feedback/auto-generate`, { method: 'POST' })).data || {}; }
+
+    // Real-time Eligibility
+    async realTimeEligibility(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/eligibility/realtime`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
+
     // ── Billing Services Management ──
     // Client billing assignments (agency manages billing for org/provider)
     async getBillingClients(params = {}) {
