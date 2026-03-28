@@ -12057,6 +12057,7 @@ function handleNppesProxy(payload) {
         const result = await store.import837(batch, clientId);
         totalImported += (result.importedClaims || result.imported_claims || 0);
         totalCharges += (result.chargesCreated || result.charges_created || 0);
+        if (result.errors?.length) console.warn(`Batch ${Math.floor(i/batchSize)+1} errors:`, result.errors);
       }
       showToast(`Imported ${totalImported} claims + ${totalCharges} charges`);
       document.getElementById('import-837-modal')?.remove();
