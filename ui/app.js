@@ -12002,14 +12002,24 @@ function handleNppesProxy(payload) {
     const clientId = document.getElementById('import-837-client')?.value || null;
     const btn = document.getElementById('import-837-btn');
     btn.disabled = true; btn.textContent = 'Importing...';
+
+    // Import in batches of 50 to avoid timeout
+    const batchSize = 50;
+    const allClaims = parsed.claims;
+    let totalImported = 0, totalCharges = 0;
     try {
-      const result = await store.import837(parsed.claims, clientId);
-      showToast(`Imported ${result.imported_claims} claims + ${result.charges_created} charges`);
+      for (let i = 0; i < allClaims.length; i += batchSize) {
+        const batch = allClaims.slice(i, i + batchSize);
+        btn.textContent = `Importing ${i + 1}-${Math.min(i + batchSize, allClaims.length)} of ${allClaims.length}...`;
+        const result = await store.import837(batch, clientId);
+        totalImported += (result.importedClaims || result.imported_claims || 0);
+        totalCharges += (result.chargesCreated || result.charges_created || 0);
+      }
+      showToast(`Imported ${totalImported} claims + ${totalCharges} charges`);
       document.getElementById('import-837-modal')?.remove();
-      // Auto-reconcile after import
       try { await store.autoReconcile(); } catch (e) {}
       await renderRcmPage();
-    } catch (e) { showToast('Import error: ' + e.message); }
+    } catch (e) { showToast(`Imported ${totalImported} so far. Error: ${e.message}`); }
     btn.disabled = false; btn.textContent = 'Import Claims';
   },
   async runReconciliation() {
