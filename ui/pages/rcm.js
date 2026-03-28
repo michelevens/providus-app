@@ -554,14 +554,18 @@ async function renderRcmPage() {
         <div class="card-header" style="flex-wrap:wrap;gap:8px;">
           <h3>Payments by Check / EFT</h3>
           <div style="display:flex;gap:8px;align-items:center;">
-            <input type="text" id="rcm-payment-search" placeholder="Search check #, payer..." class="form-control" style="width:200px;height:34px;font-size:12px;" oninput="window.app.filterPaymentGroups()">
+            <input type="text" id="rcm-payment-search" placeholder="Search check #, payer..." class="form-control" style="width:180px;height:34px;font-size:12px;" oninput="window.app.filterPaymentGroups()">
+            <label style="font-size:11px;color:var(--gray-500);margin:0;">DOS From</label>
+            <input type="date" id="rcm-payment-dos-from" class="form-control" style="width:130px;height:34px;font-size:12px;" onchange="window.app.filterPaymentGroups()">
+            <label style="font-size:11px;color:var(--gray-500);margin:0;">To</label>
+            <input type="date" id="rcm-payment-dos-to" class="form-control" style="width:130px;height:34px;font-size:12px;" onchange="window.app.filterPaymentGroups()">
             <button class="btn btn-sm" onclick="window.app.openEraImportModal()" style="font-size:12px;">Import ERA/835</button>
           </div>
         </div>
         <div class="card-body" style="padding:0;">
           ${checkList.length === 0 ? '<div style="text-align:center;padding:2rem;color:var(--gray-500);">No payments posted yet.</div>' : ''}
           ${checkList.map(([checkNum, group]) => `
-          <div class="payment-group" data-check="${escAttr(checkNum)}" data-payer="${escAttr(group.payer.toLowerCase())}">
+          <div class="payment-group" data-check="${escAttr(checkNum)}" data-payer="${escAttr(group.payer.toLowerCase())}" data-dos-min="${group.claims.reduce((m, c) => { const d = (c.dateOfService || c.date_of_service || '').toString().slice(0,10); return d && d < m ? d : m; }, '9999-99-99')}" data-dos-max="${group.claims.reduce((m, c) => { const d = (c.dateOfService || c.date_of_service || '').toString().slice(0,10); return d && d > m ? d : m; }, '0000-00-00')}">
             <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--gray-200);cursor:pointer;gap:12px;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none';this.querySelector('.chevron').style.transform=this.nextElementSibling.style.display==='none'?'':'rotate(90deg)'">
               <svg class="chevron" width="14" height="14" fill="none" stroke="var(--gray-400)" stroke-width="2.5" style="flex-shrink:0;transition:transform 0.15s;"><path d="M5 2l5 5-5 5"/></svg>
               <div style="flex:1;">

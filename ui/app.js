@@ -10992,11 +10992,18 @@ function handleNppesProxy(payload) {
   },
   filterPaymentGroups() {
     const search = (document.getElementById('rcm-payment-search')?.value || '').toLowerCase();
+    const dosFrom = document.getElementById('rcm-payment-dos-from')?.value || '';
+    const dosTo = document.getElementById('rcm-payment-dos-to')?.value || '';
     document.querySelectorAll('.payment-group').forEach(g => {
       const check = (g.dataset.check || '').toLowerCase();
       const payer = (g.dataset.payer || '').toLowerCase();
       const text = g.textContent.toLowerCase();
-      g.style.display = !search || check.includes(search) || payer.includes(search) || text.includes(search) ? '' : 'none';
+      const dosMin = g.dataset.dosMin || '';
+      const dosMax = g.dataset.dosMax || '';
+      const matchSearch = !search || check.includes(search) || payer.includes(search) || text.includes(search);
+      const matchFrom = !dosFrom || dosMax >= dosFrom;
+      const matchTo = !dosTo || dosMin <= dosTo;
+      g.style.display = matchSearch && matchFrom && matchTo ? '' : 'none';
     });
   },
   filterRcmDenials() {
