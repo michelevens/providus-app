@@ -135,7 +135,12 @@ async function renderStatementsTab(body) {
               <td><span style="font-size:11px;font-weight:600;color:${statusColors[s.status] || 'var(--gray-500)'};">${(s.status || 'draft').replace('_', ' ').toUpperCase()}</span></td>
               <td class="text-sm" style="${isOverdue ? 'color:var(--red);font-weight:700;' : ''}">${dueDate ? formatDateDisplay(dueDate) : '—'}${isOverdue ? ' !' : ''}</td>
               <td class="text-sm">${s.times_sent || s.timesSent || 0}x</td>
-              <td><button class="btn btn-sm" onclick="window.app.editStatement(${s.id})">Edit</button></td>
+              <td style="white-space:nowrap;">
+                ${s.status === 'draft' ? `<button class="btn btn-sm" onclick="window.app.markStatementSent(${s.id})" style="font-size:11px;">Send</button>` : ''}
+                ${['sent','partial_paid'].includes(s.status) ? `<button class="btn btn-sm" onclick="window.app.markStatementPaid(${s.id})" style="font-size:11px;color:var(--green);">Paid</button>` : ''}
+                <button class="btn btn-sm" onclick="window.app.editStatement(${s.id})" style="font-size:11px;">Edit</button>
+                <button class="btn btn-sm" onclick="window.app.deleteStatement(${s.id})" style="font-size:11px;color:var(--red);">Del</button>
+              </td>
             </tr>`;
           }).join('')}
           ${statements.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--gray-500);">No patient statements. Click "Auto-Generate" to create statements from claims with patient responsibility.</td></tr>' : ''}
@@ -195,6 +200,7 @@ async function renderPayerIntelligenceTab(body) {
   body.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:16px;justify-content:flex-end;">
       <button class="btn btn-sm btn-primary" onclick="window.app.openPayerRuleModal()">+ Add Payer</button>
+      <button class="btn btn-sm" onclick="window.app.openPolicyExtractModal()" style="color:#8b5cf6;">AI Extract Policy</button>
       <button class="btn btn-sm" onclick="window.app.runDuplicateDetection()">Check Duplicates</button>
       <button class="btn btn-sm" onclick="window.app.runProviderFeedback()">Generate Provider Feedback</button>
     </div>

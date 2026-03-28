@@ -1227,6 +1227,7 @@ class Store {
     async updatePayerRule(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
     async deletePayerRule(id) { await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/${id}`, { method: 'DELETE' }); this.clearCache(); }
     async checkPayerRules(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/check`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
+    async extractPayerPolicy(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/extract-policy`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
 
     // Duplicate Detection
     async detectDuplicates() { return (await this._fetch(`${CONFIG.API_URL}/rcm/duplicates`)).data || {}; }

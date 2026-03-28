@@ -11485,6 +11485,24 @@ function handleNppesProxy(payload) {
   editStatement(id) {
     showToast('Statement editing coming soon.');
   },
+  async markStatementSent(id) {
+    try {
+      await store.updatePatientStatement(id, { status: 'sent', last_sent_date: new Date().toISOString().split('T')[0] });
+      showToast('Statement marked as sent');
+      window.app.rcSwitchTab('statements');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async markStatementPaid(id) {
+    try {
+      await store.updatePatientStatement(id, { status: 'paid' });
+      showToast('Statement marked as paid');
+      window.app.rcSwitchTab('statements');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async deleteStatement(id) {
+    if (!await appConfirm('Delete this statement?')) return;
+    showToast('Statement deletion coming soon.');
+  },
   // Payer Intelligence
   openPayerRuleModal(editData) {
     const html = `<div class="modal-overlay active" id="payer-rule-modal">
@@ -11579,6 +11597,53 @@ function handleNppesProxy(payload) {
   },
   openProviderFeedbackModal() {
     showToast('Use "Auto-Generate from Denials" to create feedback from coding/documentation denials.');
+  },
+  openPolicyExtractModal() {
+    const html = `<div class="modal-overlay active" id="policy-extract-modal">
+      <div class="modal" style="max-width:600px;">
+        <div class="modal-header"><h3>AI Policy Extraction</h3><button class="modal-close" onclick="document.getElementById('policy-extract-modal').remove()">&times;</button></div>
+        <div class="modal-body">
+          <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px;">Paste a payer policy PDF URL or the policy text. Claude AI will extract timely filing limits, auth requirements, denial rules, and more.</p>
+          <div class="auth-field" style="margin:0;margin-bottom:12px;"><label>PDF URL</label><input type="url" id="pe-url" class="form-control" placeholder="https://payer.com/provider-manual.pdf"></div>
+          <div class="auth-field" style="margin:0;"><label>Or paste policy text</label><textarea id="pe-text" class="form-control" rows="6" style="resize:vertical;font-size:12px;" placeholder="Paste reimbursement policy text here..."></textarea></div>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13px;"><input type="checkbox" id="pe-autosave" checked> Auto-save extracted rules as payer rule</label>
+          <div id="pe-result" style="margin-top:12px;"></div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('policy-extract-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" id="pe-btn" onclick="window.app.runPolicyExtract()">Extract with AI</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  async runPolicyExtract() {
+    const url = document.getElementById('pe-url')?.value?.trim();
+    const text = document.getElementById('pe-text')?.value?.trim();
+    const autoSave = document.getElementById('pe-autosave')?.checked;
+    if (!url && !text) { showToast('Provide a PDF URL or paste policy text'); return; }
+    const btn = document.getElementById('pe-btn');
+    btn.disabled = true; btn.textContent = 'Extracting...';
+    try {
+      const data = url ? { pdf_url: url, auto_save: autoSave } : { policy_text: text, auto_save: autoSave };
+      const result = await store.extractPayerPolicy(data);
+      const res = document.getElementById('pe-result');
+      if (res) {
+        res.innerHTML = `<div style="background:var(--gray-50);padding:12px;border-radius:8px;font-size:12px;max-height:300px;overflow:auto;">
+          <strong>${result.payer_name || 'Unknown Payer'}</strong><br>
+          ${result.timely_filing_days ? `<div>Timely Filing: <strong>${result.timely_filing_days} days</strong></div>` : ''}
+          ${result.appeal_filing_days ? `<div>Appeal Filing: <strong>${result.appeal_filing_days} days</strong></div>` : ''}
+          ${result.provider_phone ? `<div>Phone: ${result.provider_phone}</div>` : ''}
+          ${result.portal_url ? `<div>Portal: <a href="${result.portal_url}" target="_blank">${result.portal_url}</a></div>` : ''}
+          ${(result.auth_required_cpts || []).length ? `<div>Auth Required CPTs: ${result.auth_required_cpts.join(', ')}</div>` : ''}
+          ${result.billing_tips ? `<div style="margin-top:8px;"><strong>Billing Tips:</strong> ${result.billing_tips}</div>` : ''}
+          ${(result.key_policies || []).length ? `<div style="margin-top:8px;"><strong>Key Policies:</strong>${result.key_policies.map(p => `<div style="margin-left:8px;">- ${p.topic}: ${p.summary}</div>`).join('')}</div>` : ''}
+          ${autoSave ? '<div style="margin-top:8px;color:var(--green);font-weight:600;">Saved as payer rule</div>' : ''}
+        </div>`;
+      }
+      showToast(`Extracted rules for ${result.payer_name || 'payer'}`);
+    } catch (e) { showToast('Error: ' + e.message); }
+    btn.disabled = false; btn.textContent = 'Extract with AI';
   },
 
   // ── Billing Services Management ──
