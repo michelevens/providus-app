@@ -521,25 +521,48 @@ async function renderRcmPage() {
 
     <!-- Payment Modal -->
     <div class="modal-overlay" id="rcm-payment-modal">
-      <div class="modal" style="max-width:560px;">
+      <div class="modal" style="max-width:700px;">
         <div class="modal-header"><h3 id="rcm-payment-modal-title">Post Payment</h3><button class="modal-close" onclick="document.getElementById('rcm-payment-modal').classList.remove('active')">&times;</button></div>
         <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
           <input type="hidden" id="rcm-pay-edit-id" value="">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div class="auth-field" style="margin:0;"><label>Client</label><select id="rcm-pay-client" class="form-control"><option value="">Select...</option>${clients.map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}</select></div>
-            <div class="auth-field" style="margin:0;"><label>Payer</label><input type="text" id="rcm-pay-payer" class="form-control" placeholder="Payer name"></div>
+            <div class="auth-field" style="margin:0;"><label>Payer</label>
+              <select id="rcm-pay-payer" class="form-control">
+                <option value="">Select payer...</option>
+                ${[...new Set(claims.map(c => c.payerName || c.payer_name).filter(Boolean))].sort().map(p => `<option value="${escAttr(p)}">${escHtml(p)}</option>`).join('')}
+                ${(window.PAYER_CATALOG || []).filter(p => p.name).slice(0, 50).map(p => `<option value="${escAttr(p.name)}">${escHtml(p.name)}</option>`).join('')}
+              </select>
+            </div>
             <div class="auth-field" style="margin:0;"><label>Payment Type *</label><select id="rcm-pay-type" class="form-control"><option value="check">Check</option><option value="eft">EFT</option><option value="ach">ACH</option><option value="virtual_card">Virtual Card</option><option value="patient">Patient Payment</option></select></div>
             <div class="auth-field" style="margin:0;"><label>Check/Trace #</label><input type="text" id="rcm-pay-check" class="form-control" placeholder="Check or trace number"></div>
             <div class="auth-field" style="margin:0;"><label>Payment Date *</label><input type="date" id="rcm-pay-date" class="form-control" value="${new Date().toISOString().split('T')[0]}"></div>
-            <div class="auth-field" style="margin:0;"><label>Amount *</label><input type="number" id="rcm-pay-amount" class="form-control" step="0.01" min="0" placeholder="0.00"></div>
-            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Allocate to Claim (optional)</label>
-              <select id="rcm-pay-claim" class="form-control">
-                <option value="">No allocation — unposted payment</option>
-                ${claims.filter(c => c.status !== 'paid' && c.status !== 'voided').map(c => `<option value="${c.id}" data-balance="${c.balance || 0}">${escHtml(c.claimNumber || c.claim_number || '')} — ${escHtml(c.patientName || c.patient_name || '')} (${escHtml(c.payerName || c.payer_name || '')}) Balance: ${_fm(c.balance)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Notes</label><textarea id="rcm-pay-notes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
+            <div class="auth-field" style="margin:0;"><label>Deposit Date</label><input type="date" id="rcm-pay-deposit" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Total Amount *</label><input type="number" id="rcm-pay-amount" class="form-control" step="0.01" min="0" placeholder="0.00"></div>
           </div>
+          <!-- Claim Allocations -->
+          <div style="margin-top:16px;border-top:1px solid var(--gray-200);padding-top:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <label style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);">Claim Allocations</label>
+              <button class="btn btn-sm" onclick="window.app.addPaymentAllocation()" style="font-size:11px;">+ Add Claim</button>
+            </div>
+            <div id="rcm-pay-allocations">
+              <div class="pay-alloc-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;">
+                <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Claim</label>
+                  <select class="form-control pay-alloc-claim" style="height:32px;font-size:12px;" onchange="window.app.onPayAllocClaimChange(this)">
+                    <option value="">Select claim...</option>
+                    ${claims.filter(c => c.status !== 'paid' && c.status !== 'voided').map(c => `<option value="${c.id}" data-balance="${c.balance || 0}" data-payer="${escAttr(c.payerName || c.payer_name || '')}" data-charges="${c.totalCharges || c.total_charges || 0}">${escHtml(c.claimNumber || c.claim_number || '')} — ${escHtml(c.patientName || c.patient_name || '')} (${_fm(c.balance)})</option>`).join('')}
+                  </select>
+                </div>
+                <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Allowed</label><input type="number" class="form-control pay-alloc-allowed" style="height:32px;font-size:12px;" step="0.01" placeholder="0.00"></div>
+                <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Paid</label><input type="number" class="form-control pay-alloc-paid" style="height:32px;font-size:12px;" step="0.01" placeholder="0.00"></div>
+                <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Adjustment</label><input type="number" class="form-control pay-alloc-adj" style="height:32px;font-size:12px;" step="0.01" placeholder="0.00"></div>
+                <div class="auth-field" style="margin:0;"><label style="font-size:10px;">Pt Resp</label><input type="number" class="form-control pay-alloc-ptresp" style="height:32px;font-size:12px;" step="0.01" placeholder="0.00"></div>
+                <button class="btn btn-sm" onclick="this.closest('.pay-alloc-row').remove()" style="height:32px;color:var(--red);font-size:11px;">X</button>
+              </div>
+            </div>
+          </div>
+          <div class="auth-field" style="margin:12px 0 0;"><label>Notes</label><textarea id="rcm-pay-notes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
         </div>
         <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);"><button class="btn" onclick="document.getElementById('rcm-payment-modal').classList.remove('active')">Cancel</button><button class="btn btn-primary" onclick="window.app.saveRcmPayment()">Post Payment</button></div>
       </div>

@@ -10982,32 +10982,92 @@ function handleNppesProxy(payload) {
     document.getElementById('rcm-payment-modal-title').textContent = editData ? 'Edit Payment' : 'Post Payment';
     document.getElementById('rcm-pay-edit-id').value = editData?.id || '';
     document.getElementById('rcm-pay-client').value = editData?.billingClientId || editData?.billing_client_id || '';
-    document.getElementById('rcm-pay-payer').value = editData?.payerName || editData?.payer_name || '';
+    const payerSel = document.getElementById('rcm-pay-payer');
+    if (payerSel) payerSel.value = editData?.payerName || editData?.payer_name || '';
     document.getElementById('rcm-pay-type').value = editData?.paymentType || editData?.payment_type || 'check';
     document.getElementById('rcm-pay-check').value = editData?.checkNumber || editData?.check_number || editData?.traceNumber || editData?.trace_number || '';
     document.getElementById('rcm-pay-date').value = editData?.paymentDate || editData?.payment_date || new Date().toISOString().split('T')[0];
+    const depositEl = document.getElementById('rcm-pay-deposit');
+    if (depositEl) depositEl.value = editData?.depositDate || editData?.deposit_date || '';
     document.getElementById('rcm-pay-amount').value = editData?.totalAmount || editData?.total_amount || '';
     document.getElementById('rcm-pay-notes').value = editData?.notes || '';
+    // Pre-select claim if passed from claim detail page
+    if (editData?.claimId) {
+      const firstClaim = document.querySelector('.pay-alloc-claim');
+      if (firstClaim) firstClaim.value = editData.claimId;
+    }
     modal.classList.add('active');
   },
   async editRcmPayment(id) {
     try { const p = (window._rcmPayments || []).find(x => x.id == id); this.openRcmPaymentModal(p); } catch (e) { showToast('Error: ' + e.message); }
   },
+  addPaymentAllocation() {
+    const claims = window._rcmClaims || [];
+    const row = document.createElement('div');
+    row.className = 'pay-alloc-row';
+    row.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;';
+    row.innerHTML = `
+      <div class="auth-field" style="margin:0;"><select class="form-control pay-alloc-claim" style="height:32px;font-size:12px;" onchange="window.app.onPayAllocClaimChange(this)">
+        <option value="">Select claim...</option>
+        ${claims.filter(c => c.status !== 'paid' && c.status !== 'voided').map(c => `<option value="${c.id}" data-balance="${c.balance || 0}" data-payer="${escAttr(c.payerName || c.payer_name || '')}" data-charges="${c.totalCharges || c.total_charges || 0}">${escHtml(c.claimNumber || c.claim_number || '')} — ${escHtml(c.patientName || c.patient_name || '')} ($${Number(c.balance || 0).toFixed(2)})</option>`).join('')}
+      </select></div>
+      <div class="auth-field" style="margin:0;"><input type="number" class="form-control pay-alloc-allowed" style="height:32px;font-size:12px;" step="0.01" placeholder="0.00"></div>
+      <div class="auth-field" style="margin:0;"><input type="number" class="form-control pay-alloc-paid" style="height:32px;font-size:12px;" step="0.01" placeholder="0.00"></div>
+      <div class="auth-field" style="margin:0;"><input type="number" class="form-control pay-alloc-adj" style="height:32px;font-size:12px;" step="0.01" placeholder="0.00"></div>
+      <div class="auth-field" style="margin:0;"><input type="number" class="form-control pay-alloc-ptresp" style="height:32px;font-size:12px;" step="0.01" placeholder="0.00"></div>
+      <button class="btn btn-sm" onclick="this.closest('.pay-alloc-row').remove()" style="height:32px;color:var(--red);font-size:11px;">X</button>`;
+    document.getElementById('rcm-pay-allocations')?.appendChild(row);
+  },
+  onPayAllocClaimChange(sel) {
+    const opt = sel.selectedOptions[0];
+    if (!opt) return;
+    const payer = opt.dataset.payer || '';
+    const payerSel = document.getElementById('rcm-pay-payer');
+    if (payerSel && payer && !payerSel.value) {
+      // Auto-select payer if not already set
+      const found = [...payerSel.options].find(o => o.value === payer);
+      if (found) payerSel.value = payer;
+    }
+    // Auto-fill balance as paid amount
+    const row = sel.closest('.pay-alloc-row');
+    const paidInput = row?.querySelector('.pay-alloc-paid');
+    const charges = opt.dataset.charges || 0;
+    const allowedInput = row?.querySelector('.pay-alloc-allowed');
+    if (allowedInput && !allowedInput.value) allowedInput.value = charges;
+  },
   async saveRcmPayment() {
     const amt = parseFloat(document.getElementById('rcm-pay-amount').value);
     if (!amt || amt <= 0) { showToast('Amount is required'); return; }
-    const claimId = document.getElementById('rcm-pay-claim')?.value || null;
+
+    // Collect allocations from all rows
+    const allocations = [];
+    document.querySelectorAll('.pay-alloc-row').forEach(row => {
+      const claimId = row.querySelector('.pay-alloc-claim')?.value;
+      const paid = parseFloat(row.querySelector('.pay-alloc-paid')?.value) || 0;
+      if (claimId && paid > 0) {
+        allocations.push({
+          claim_id: claimId,
+          charged_amount: parseFloat(row.querySelector('.pay-alloc-allowed')?.value) || 0,
+          allowed_amount: parseFloat(row.querySelector('.pay-alloc-allowed')?.value) || 0,
+          paid_amount: paid,
+          adjustment_amount: parseFloat(row.querySelector('.pay-alloc-adj')?.value) || 0,
+          patient_responsibility: parseFloat(row.querySelector('.pay-alloc-ptresp')?.value) || 0,
+        });
+      }
+    });
+
     const data = {
       billing_client_id: document.getElementById('rcm-pay-client').value || null,
-      payer_name: document.getElementById('rcm-pay-payer').value.trim(),
+      payer_name: document.getElementById('rcm-pay-payer').value,
       payment_type: document.getElementById('rcm-pay-type').value,
       check_number: document.getElementById('rcm-pay-check').value.trim(),
       payment_date: document.getElementById('rcm-pay-date').value,
+      deposit_date: document.getElementById('rcm-pay-deposit')?.value || null,
       total_amount: amt,
       notes: document.getElementById('rcm-pay-notes').value.trim(),
     };
-    if (claimId) {
-      data.allocations = [{ claim_id: claimId, paid_amount: amt }];
+    if (allocations.length > 0) {
+      data.allocations = allocations;
     }
     const editId = document.getElementById('rcm-pay-edit-id').value;
     try {
