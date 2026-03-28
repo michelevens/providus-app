@@ -10811,7 +10811,7 @@ function handleNppesProxy(payload) {
           <td>${escHtml(c.payer_name || '—')}</td>
           <td>${c.date_of_service}</td>
           <td><code>${escHtml(c.cpt_code || '')}</code></td>
-          <td>$${c.total_charges.toFixed(2)}</td>
+          <td>$${(c.total_charges || 0).toFixed(2)}</td>
           <td>$${c.total_paid.toFixed(2)}</td>
           <td>${escHtml(c.status)}</td>
         </tr>`).join('')}
@@ -11982,7 +11982,7 @@ function handleNppesProxy(payload) {
                   <td>${c.payer_name}</td>
                   <td>${c.date_of_service || '—'}</td>
                   <td>${(c.service_lines || []).map(sl => sl.cpt_code).join(', ')}</td>
-                  <td style="text-align:right;font-weight:600;">$${c.total_charges.toFixed(2)}</td>
+                  <td style="text-align:right;font-weight:600;">$${(c.total_charges || 0).toFixed(2)}</td>
                 </tr>`).join('')}
                 ${result.claim_count > 30 ? `<tr><td colspan="6" style="text-align:center;padding:8px;color:var(--gray-400);">...and ${result.claim_count - 30} more claims</td></tr>` : ''}
                 </tbody>
