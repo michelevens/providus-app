@@ -11971,18 +11971,18 @@ function handleNppesProxy(payload) {
         const prev = document.getElementById('import-837-preview');
         if (prev) {
           prev.innerHTML = `<div style="background:var(--gray-50);padding:14px;border-radius:8px;font-size:13px;">
-            <strong>Billing Provider:</strong> ${result.billing_provider || '—'} (NPI: ${result.billing_npi || '—'})<br>
-            <strong>Claims:</strong> ${result.claim_count} | <strong>Service Lines:</strong> ${result.service_line_count} | <strong>Total Charges:</strong> $${(result.total_charges || 0).toFixed(2)}
+            <strong>Billing Provider:</strong> ${result.billingProvider || result.billing_provider || '—'} (NPI: ${result.billingNpi || result.billing_npi || '—'})<br>
+            <strong>Claims:</strong> ${result.claimCount || result.claim_count || 0} | <strong>Service Lines:</strong> ${result.serviceLineCount || result.service_line_count || 0} | <strong>Total Charges:</strong> $${(result.totalCharges || result.total_charges || 0).toFixed(2)}
             <div style="max-height:300px;overflow:auto;margin-top:8px;">
               <table style="width:100%;font-size:11px;border-collapse:collapse;">
                 <thead><tr style="background:var(--gray-100);"><th style="padding:4px 6px;">Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th>CPTs</th><th style="text-align:right;">Charges</th></tr></thead>
                 <tbody>${(result.claims || []).slice(0, 30).map(c => `<tr style="border-bottom:1px solid var(--gray-200);">
-                  <td style="padding:3px 6px;font-family:monospace;">${c.claim_number}</td>
-                  <td>${c.patient_name}</td>
-                  <td>${c.payer_name}</td>
-                  <td>${c.date_of_service || '—'}</td>
-                  <td>${(c.service_lines || []).map(sl => sl.cpt_code).join(', ')}</td>
-                  <td style="text-align:right;font-weight:600;">$${(c.total_charges || 0).toFixed(2)}</td>
+                  <td style="padding:3px 6px;font-family:monospace;">${c.claimNumber || c.claim_number || ''}</td>
+                  <td>${c.patientName || c.patient_name || ''}</td>
+                  <td>${c.payerName || c.payer_name || ''}</td>
+                  <td>${c.dateOfService || c.date_of_service || '—'}</td>
+                  <td>${(c.serviceLines || c.service_lines || []).map(sl => sl.cptCode || sl.cpt_code || '').join(', ')}</td>
+                  <td style="text-align:right;font-weight:600;">$${(c.totalCharges || c.total_charges || 0).toFixed(2)}</td>
                 </tr>`).join('')}
                 ${result.claim_count > 30 ? `<tr><td colspan="6" style="text-align:center;padding:8px;color:var(--gray-400);">...and ${result.claim_count - 30} more claims</td></tr>` : ''}
                 </tbody>
@@ -11991,7 +11991,7 @@ function handleNppesProxy(payload) {
           </div>`;
         }
         document.getElementById('import-837-btn').style.display = '';
-        showToast(`Parsed ${result.claim_count} claims with ${result.service_line_count} service lines`);
+        showToast(`Parsed ${result.claimCount || result.claim_count || 0} claims with ${result.serviceLineCount || result.service_line_count || 0} service lines`);
       } catch (e) { showToast('Parse error: ' + e.message); }
     };
     reader.readAsText(file);
