@@ -10990,6 +10990,15 @@ function handleNppesProxy(payload) {
     </div>`;
     document.body.insertAdjacentHTML('beforeend', html);
   },
+  filterPaymentGroups() {
+    const search = (document.getElementById('rcm-payment-search')?.value || '').toLowerCase();
+    document.querySelectorAll('.payment-group').forEach(g => {
+      const check = (g.dataset.check || '').toLowerCase();
+      const payer = (g.dataset.payer || '').toLowerCase();
+      const text = g.textContent.toLowerCase();
+      g.style.display = !search || check.includes(search) || payer.includes(search) || text.includes(search) ? '' : 'none';
+    });
+  },
   filterRcmDenials() {
     const status = document.getElementById('rcm-denial-status')?.value || '';
     const cat = document.getElementById('rcm-denial-cat')?.value || '';

@@ -524,28 +524,76 @@ async function renderRcmPage() {
 
     <!-- ═══ PAYMENTS TAB ═══ -->
     <div id="rcm-payments" class="${window._rcmTab !== 'payments' ? 'hidden' : ''}">
-      <div class="card rcm-card rcm-table">
-        <div class="card-header"><h3>Payments</h3>
-          <button class="btn btn-sm" onclick="window.app.openEraImportModal()" style="font-size:12px;">Import ERA/835</button>
-        </div>
-        <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
-          <thead><tr><th>Date</th><th>Payer</th><th>Type</th><th>Check/Trace #</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Posted</th><th style="text-align:right;">Remaining</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>
-            ${payments.map(p => `<tr>
-              <td class="text-sm">${formatDateDisplay(p.paymentDate || p.payment_date)}</td>
-              <td class="text-sm">${escHtml(p.payerName || p.payer_name || '—')}</td>
-              <td><span style="font-size:11px;padding:2px 8px;background:var(--gray-100);border-radius:4px;">${escHtml((p.paymentType || p.payment_type || 'check').replace(/_/g, ' '))}</span></td>
-              <td class="text-sm" style="font-family:monospace;">${escHtml(p.checkNumber || p.check_number || p.traceNumber || p.trace_number || '—')}</td>
-              <td style="text-align:right;font-weight:700;">${_fm(p.totalAmount || p.total_amount)}</td>
-              <td style="text-align:right;color:var(--green);font-weight:600;">${_fm(p.postedAmount || p.posted_amount)}</td>
-              <td style="text-align:right;${(p.remainingAmount || p.remaining_amount || 0) > 0 ? 'color:var(--gold);' : ''}">${_fm(p.remainingAmount || p.remaining_amount)}</td>
-              <td><span class="badge badge-${p.status === 'posted' || p.status === 'reconciled' ? 'approved' : 'pending'}">${p.status || 'unposted'}</span></td>
-              <td><button class="btn btn-sm" onclick="window.app.editRcmPayment(${p.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteRcmPayment(${p.id})">Del</button></td>
-            </tr>`).join('')}
-            ${payments.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No payments posted yet. Click "+ Post Payment" to record one.</td></tr>' : ''}
-          </tbody>
-        </table></div></div>
+      ${(() => {
+        // Group claims by check number for EOB view
+        const checkGroups = {};
+        claims.forEach(c => {
+          const ck = c.checkNumber || c.check_number;
+          if (!ck) return;
+          if (!checkGroups[ck]) checkGroups[ck] = { claims: [], totalPaid: 0, totalCharges: 0, payer: '', date: '' };
+          checkGroups[ck].claims.push(c);
+          checkGroups[ck].totalPaid += Number(c.totalPaid || c.total_paid || 0);
+          checkGroups[ck].totalCharges += Number(c.totalCharges || c.total_charges || 0);
+          checkGroups[ck].payer = c.payerName || c.payer_name || checkGroups[ck].payer;
+          checkGroups[ck].date = c.paidDate || c.paid_date || checkGroups[ck].date;
+        });
+        const checkList = Object.entries(checkGroups).sort((a,b) => (b[1].date || '').localeCompare(a[1].date || ''));
+        const totalPayments = checkList.reduce((s, [,g]) => s + g.totalPaid, 0);
+        const unlinkedClaims = claims.filter(c => (Number(c.totalPaid || c.total_paid || 0) > 0) && !(c.checkNumber || c.check_number));
+
+        return `
+      <!-- Payment Stats -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
+        <div class="rcm-stat"><div class="rcm-label">Check/EFTs</div><div class="rcm-val" style="color:#3b82f6;">${checkList.length}</div></div>
+        <div class="rcm-stat"><div class="rcm-label">Total Posted</div><div class="rcm-val" style="color:#16a34a;">${_fk(totalPayments)}</div></div>
+        <div class="rcm-stat"><div class="rcm-label">Claims w/ Payment</div><div class="rcm-val" style="color:#7c3aed;">${claims.filter(c => Number(c.totalPaid || c.total_paid || 0) > 0).length}</div></div>
+        <div class="rcm-stat"><div class="rcm-label">Unlinked Payments</div><div class="rcm-val" style="color:#f59e0b;">${unlinkedClaims.length}</div><div class="rcm-sub">No check # assigned</div></div>
       </div>
+
+      <!-- EOB / Check Detail -->
+      <div class="card rcm-card">
+        <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+          <h3>Payments by Check / EFT</h3>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="rcm-payment-search" placeholder="Search check #, payer..." class="form-control" style="width:200px;height:34px;font-size:12px;" oninput="window.app.filterPaymentGroups()">
+            <button class="btn btn-sm" onclick="window.app.openEraImportModal()" style="font-size:12px;">Import ERA/835</button>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${checkList.length === 0 ? '<div style="text-align:center;padding:2rem;color:var(--gray-500);">No payments posted yet.</div>' : ''}
+          ${checkList.map(([checkNum, group]) => `
+          <div class="payment-group" data-check="${escAttr(checkNum)}" data-payer="${escAttr(group.payer.toLowerCase())}">
+            <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--gray-200);cursor:pointer;gap:12px;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none';this.querySelector('.chevron').style.transform=this.nextElementSibling.style.display==='none'?'':'rotate(90deg)'">
+              <svg class="chevron" width="14" height="14" fill="none" stroke="var(--gray-400)" stroke-width="2.5" style="flex-shrink:0;transition:transform 0.15s;"><path d="M5 2l5 5-5 5"/></svg>
+              <div style="flex:1;">
+                <div style="font-family:monospace;font-size:14px;font-weight:700;color:var(--brand-600);">${escHtml(checkNum)}</div>
+                <div style="font-size:11px;color:var(--gray-500);">${escHtml(group.payer)} — ${group.claims.length} claim${group.claims.length > 1 ? 's' : ''} — ${group.date ? formatDateDisplay(group.date) : ''}</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:16px;font-weight:800;color:#16a34a;">${_fm(group.totalPaid)}</div>
+                <div style="font-size:11px;color:var(--gray-400);">of ${_fm(group.totalCharges)} billed</div>
+              </div>
+            </div>
+            <div style="display:none;background:var(--gray-50);border-bottom:1px solid var(--gray-200);">
+              <table style="width:100%;font-size:12px;border-collapse:collapse;">
+                <thead><tr style="background:var(--gray-100);"><th style="padding:6px 12px;">Claim #</th><th>Patient</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Pt Resp</th><th style="text-align:right;">Balance</th><th>Status</th></tr></thead>
+                <tbody>${group.claims.map(c => `<tr style="border-bottom:1px solid var(--gray-200);cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
+                  <td style="padding:5px 12px;font-family:monospace;color:var(--brand-600);">${escHtml(c.claimNumber || c.claim_number || '')}</td>
+                  <td>${escHtml(c.patientName || c.patient_name || '')}</td>
+                  <td>${formatDateDisplay(c.dateOfService || c.date_of_service)}</td>
+                  <td style="text-align:right;">${_fm(c.totalCharges || c.total_charges)}</td>
+                  <td style="text-align:right;color:#16a34a;font-weight:600;">${_fm(c.totalPaid || c.total_paid)}</td>
+                  <td style="text-align:right;color:#7c3aed;">${_fm(c.patientResponsibility || c.patient_responsibility)}</td>
+                  <td style="text-align:right;${Number(c.balance || 0) > 0 ? 'color:var(--red);font-weight:600;' : ''}">${_fm(c.balance)}</td>
+                  <td>${_claimBadge(c.status)}</td>
+                </tr>`).join('')}</tbody>
+              </table>
+            </div>
+          </div>
+          `).join('')}
+        </div>
+      </div>`;
+      })()}
     </div>
 
     <!-- ═══ AR AGING TAB ═══ -->
