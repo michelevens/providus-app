@@ -176,10 +176,10 @@ async function renderBillingServicesPage() {
     return (today - d) > 7 * 86400000;
   });
 
-  // Total revenue numbers — sum from chart months so totals match the visible range
-  const totalBilled = months.reduce((s, m) => s + m.billed, 0);
-  const totalCollected = months.reduce((s, m) => s + m.collected, 0);
-  const totalDenied = months.reduce((s, m) => s + m.denied, 0);
+  // Total revenue numbers — use API all-time totals for stat cards (not scoped to chart range)
+  const totalBilled = claimStats.totalCharged || claimStats.total_charged || 0;
+  const totalCollected = claimStats.totalPaid || claimStats.total_paid || 0;
+  const totalDenied = claimStats.totalDeniedAmount || claimStats.total_denied_amount || 0;
   const collectionRate = totalBilled > 0 ? ((totalCollected / totalBilled) * 100).toFixed(1) : '0.0';
   const denialRate = totalBilled > 0 ? ((totalDenied / totalBilled) * 100).toFixed(1) : '0.0';
 
