@@ -83,7 +83,11 @@ async function renderBillingServicesPage() {
 
   let claimStats = {}, workQueues = {}, denialRisk = {}, reconciliation = {};
   const chartRange = window._bsChartRange || 6;
-  window._bsRefreshDashboard = () => renderBillingServicesPage();
+  // Use the parent revenue-cycle renderer if available so the unified tab bar is preserved
+  window._bsRefreshDashboard = () => {
+    if (window.app?.rcSwitchTab) window.app.rcSwitchTab('dashboard');
+    else renderBillingServicesPage();
+  };
   // Fire all API calls in parallel for speed
   const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9] = await Promise.allSettled([
     store.getBillingClientStats(),
