@@ -11181,14 +11181,42 @@ function handleNppesProxy(payload) {
     } catch (e) { showToast('Error: ' + e.message); }
   },
   // Fee Schedule modal
-  openFeeScheduleModal(editData) {
+  async openFeeScheduleModal(editData) {
+    // Get payers from credentialed/approved applications + payer catalog
+    let payers = [];
+    try {
+      const apps = await store.getAll('applications');
+      if (Array.isArray(apps)) {
+        const approved = apps.filter(a => ['approved','active','completed'].includes(a.status));
+        approved.forEach(a => { const name = a.payerName || a.payer_name || a.payer?.name; if (name && !payers.includes(name)) payers.push(name); });
+      }
+    } catch (e) {}
+    // Also add from payer catalog
+    if (window.PAYER_CATALOG && Array.isArray(window.PAYER_CATALOG)) {
+      window.PAYER_CATALOG.forEach(p => { if (p.name && !payers.includes(p.name)) payers.push(p.name); });
+    }
+    // Also add from existing claims
+    if (window._rcmClaims && Array.isArray(window._rcmClaims)) {
+      window._rcmClaims.forEach(c => { const name = c.payerName || c.payer_name; if (name && !payers.includes(name)) payers.push(name); });
+    }
+    payers.sort();
+    const payerOptions = payers.map(p => `<option value="${escAttr(p)}" ${(editData?.payer_name || '') === p ? 'selected' : ''}>${escHtml(p)}</option>`).join('');
+
     const html = `<div class="modal-overlay active" id="fee-schedule-modal">
       <div class="modal" style="max-width:560px;">
         <div class="modal-header"><h3>${editData ? 'Edit' : 'Add'} Fee Schedule</h3><button class="modal-close" onclick="document.getElementById('fee-schedule-modal').remove()">&times;</button></div>
         <div class="modal-body">
           <input type="hidden" id="fs-edit-id" value="${editData?.id || ''}">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div class="auth-field" style="margin:0;"><label>Payer Name *</label><input type="text" id="fs-payer" class="form-control" value="${editData?.payer_name || ''}" placeholder="e.g. Florida Blue"></div>
+            <div class="auth-field" style="margin:0;"><label>Payer *</label>
+              <select id="fs-payer" class="form-control">
+                <option value="">Select payer...</option>
+                ${payerOptions}
+                <option value="__other__">Other (type manually)</option>
+              </select>
+              <input type="text" id="fs-payer-other" class="form-control" style="display:none;margin-top:4px;" placeholder="Enter payer name" value="${editData?.payer_name && !payers.includes(editData.payer_name) ? editData.payer_name : ''}">
+              <script>document.getElementById('fs-payer').onchange=function(){document.getElementById('fs-payer-other').style.display=this.value==='__other__'?'block':'none';}</script>
+            </div>
             <div class="auth-field" style="margin:0;"><label>CPT Code *</label><input type="text" id="fs-cpt" class="form-control" value="${editData?.cpt_code || ''}" placeholder="e.g. 90837"></div>
             <div class="auth-field" style="margin:0;"><label>Description</label><input type="text" id="fs-desc" class="form-control" value="${editData?.cpt_description || ''}" placeholder="Psychotherapy 60 min"></div>
             <div class="auth-field" style="margin:0;"><label>Modifier</label><input type="text" id="fs-mod" class="form-control" value="${editData?.modifier || ''}" placeholder="e.g. 25"></div>
@@ -11211,7 +11239,8 @@ function handleNppesProxy(payload) {
     if (s) this.openFeeScheduleModal(s);
   },
   async saveFeeSchedule() {
-    const payer = document.getElementById('fs-payer').value.trim();
+    const payerSel = document.getElementById('fs-payer');
+    const payer = payerSel?.value === '__other__' ? (document.getElementById('fs-payer-other')?.value?.trim() || '') : (payerSel?.value || '');
     const cpt = document.getElementById('fs-cpt').value.trim();
     const rate = parseFloat(document.getElementById('fs-rate').value);
     if (!payer || !cpt || !rate) { showToast('Payer, CPT, and rate are required'); return; }
