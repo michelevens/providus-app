@@ -182,4 +182,112 @@ async function renderClientReportsSection() {
   `;
 }
 
-export { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection };
+// ═══════════════════════════════════════════════════
+// PAYER INTELLIGENCE TAB
+// ═══════════════════════════════════════════════════
+async function renderPayerIntelligenceTab(body) {
+  let rules = [], denialRisk = {};
+  try { rules = await store.getPayerRules(); } catch (e) {}
+  try { denialRisk = await store.getDenialRiskAnalysis(); } catch (e) {}
+  if (!Array.isArray(rules)) rules = [];
+  const payerRates = denialRisk.payer_denial_rates || denialRisk.payerDenialRates || [];
+
+  body.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:16px;justify-content:flex-end;">
+      <button class="btn btn-sm btn-primary" onclick="window.app.openPayerRuleModal()">+ Add Payer</button>
+      <button class="btn btn-sm" onclick="window.app.runDuplicateDetection()">Check Duplicates</button>
+      <button class="btn btn-sm" onclick="window.app.runProviderFeedback()">Generate Provider Feedback</button>
+    </div>
+
+    <!-- Payer Performance Overview -->
+    ${payerRates.length > 0 ? `
+    <div class="card rcm-card" style="margin-bottom:16px;">
+      <div class="card-header"><h3>Payer Performance</h3></div>
+      <div class="card-body" style="padding:14px;">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          ${payerRates.map(p => `
+            <div style="padding:12px 16px;background:${p.denial_rate > 20 ? '#fef2f2' : p.denial_rate > 10 ? '#fffbeb' : '#f0fdf4'};border-radius:12px;min-width:140px;cursor:pointer;" onclick="window.app.viewPayerDetail('${escAttr(p.payer || '')}')">
+              <div style="font-size:11px;color:var(--gray-500);font-weight:600;">${escHtml(p.payer || '')}</div>
+              <div style="font-size:22px;font-weight:800;color:${p.denial_rate > 20 ? 'var(--red)' : p.denial_rate > 10 ? '#f59e0b' : 'var(--green)'};">${p.denial_rate || 0}%</div>
+              <div style="font-size:10px;color:var(--gray-400);">${p.denied || 0}/${p.total_claims || 0} denied | ${_fk(p.avg_denied_amount || 0)} avg</div>
+              ${p.top_denial_category ? `<div style="font-size:10px;margin-top:2px;color:var(--gray-500);">Top: ${p.top_denial_category}</div>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>` : ''}
+
+    <!-- Payer Rules -->
+    <div class="card rcm-card rcm-table">
+      <div class="card-header"><h3>Payer Rules & Intelligence (${rules.length})</h3></div>
+      <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+        <thead><tr><th>Payer</th><th>Timely Filing</th><th>Appeal Limit</th><th>Portal</th><th>Phone</th><th>Auth Required CPTs</th><th>Policy Docs</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${rules.map(r => `<tr>
+            <td style="font-weight:700;">${escHtml(r.payer_name || r.payerName || '')}</td>
+            <td style="font-weight:600;color:${r.timely_filing_days ? (r.timely_filing_days <= 90 ? '#f59e0b' : 'var(--green)') : 'var(--gray-400)'};">${r.timely_filing_days || r.timelyFilingDays ? (r.timely_filing_days || r.timelyFilingDays) + ' days' : '—'}</td>
+            <td>${r.appeal_filing_days || r.appealFilingDays ? (r.appeal_filing_days || r.appealFilingDays) + ' days' : '—'}</td>
+            <td>${r.portal_url || r.portalUrl ? `<a href="${escAttr(r.portal_url || r.portalUrl)}" target="_blank" style="color:var(--brand-600);font-size:12px;">Portal</a>` : '—'}</td>
+            <td class="text-sm">${escHtml(r.provider_phone || r.providerPhone || '—')}</td>
+            <td class="text-sm">${(r.auth_required_cpts || r.authRequiredCpts || []).join(', ') || '—'}</td>
+            <td>${(r.policy_documents || r.policyDocuments || []).length > 0 ? `<span style="color:var(--brand-600);font-size:12px;">${(r.policy_documents || r.policyDocuments).length} docs</span>` : '—'}</td>
+            <td>
+              <button class="btn btn-sm" onclick="window.app.editPayerRule(${r.id})">Edit</button>
+              <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deletePayerRule(${r.id})">Del</button>
+            </td>
+          </tr>`).join('')}
+          ${rules.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No payer rules configured. Add payer-specific rules like timely filing limits, auth requirements, and portal URLs.</td></tr>' : ''}
+        </tbody>
+      </table></div></div>
+    </div>
+
+    <!-- Recommendations -->
+    ${(denialRisk.recommendations || []).length > 0 ? `
+    <div class="card rcm-card" style="margin-top:16px;">
+      <div class="card-header"><h3>AI Recommendations</h3></div>
+      <div class="card-body" style="padding:14px;">
+        ${(denialRisk.recommendations || []).map(r => `<div style="padding:6px 0;font-size:13px;color:var(--gray-600);border-bottom:1px solid var(--gray-100);">&#8226; ${escHtml(r)}</div>`).join('')}
+      </div>
+    </div>` : ''}
+  `;
+}
+
+// ═══════════════════════════════════════════════════
+// PROVIDER FEEDBACK TAB
+// ═══════════════════════════════════════════════════
+async function renderProviderFeedbackTab(body) {
+  let feedback = [];
+  try { feedback = await store.getProviderFeedback(); } catch (e) {}
+  if (!Array.isArray(feedback)) feedback = [];
+
+  const typeLabels = { coding_error: 'Coding', documentation: 'Documentation', authorization: 'Authorization', modifier: 'Modifier', medical_necessity: 'Medical Necessity' };
+  const statusColors = { pending: '#f59e0b', sent: '#3b82f6', acknowledged: 'var(--green)', resolved: 'var(--gray-400)' };
+
+  body.innerHTML = `
+    <div class="card rcm-card rcm-table">
+      <div class="card-header"><h3>Provider Feedback (${feedback.length})</h3>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm btn-primary" onclick="window.app.runProviderFeedback()">Auto-Generate from Denials</button>
+          <button class="btn btn-sm" onclick="window.app.openProviderFeedbackModal()">+ Manual Feedback</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+        <thead><tr><th>Provider</th><th>Type</th><th>Payer</th><th>Issue</th><th>Recommendation</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${feedback.map(f => `<tr>
+            <td style="font-weight:600;">${escHtml(f.provider_name || f.providerName || '')}</td>
+            <td><span style="font-size:11px;padding:2px 8px;background:var(--gray-100);border-radius:4px;">${typeLabels[f.feedback_type || f.feedbackType] || f.feedback_type || ''}</span></td>
+            <td class="text-sm">${escHtml(f.payer_name || f.payerName || '—')}</td>
+            <td class="text-sm" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">${escHtml(f.issue || '')}</td>
+            <td class="text-sm" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">${escHtml(f.recommendation || '')}</td>
+            <td><span style="font-size:11px;font-weight:600;color:${statusColors[f.status] || 'var(--gray-500)'};">${(f.status || 'pending').toUpperCase()}</span></td>
+            <td><button class="btn btn-sm" onclick="window.app.markFeedbackSent(${f.id})">Mark Sent</button></td>
+          </tr>`).join('')}
+          ${feedback.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-500);">No provider feedback yet. Click "Auto-Generate" to create feedback from coding/documentation denials.</td></tr>' : ''}
+        </tbody>
+      </table></div></div>
+    </div>
+  `;
+}
+
+export { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection, renderPayerIntelligenceTab, renderProviderFeedbackTab };

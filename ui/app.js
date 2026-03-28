@@ -11485,6 +11485,101 @@ function handleNppesProxy(payload) {
   editStatement(id) {
     showToast('Statement editing coming soon.');
   },
+  // Payer Intelligence
+  openPayerRuleModal(editData) {
+    const html = `<div class="modal-overlay active" id="payer-rule-modal">
+      <div class="modal" style="max-width:700px;">
+        <div class="modal-header"><h3>${editData ? 'Edit' : 'Add'} Payer Rules</h3><button class="modal-close" onclick="document.getElementById('payer-rule-modal').remove()">&times;</button></div>
+        <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+          <input type="hidden" id="pr-edit-id" value="${editData?.id || ''}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Payer Name *</label><input type="text" id="pr-payer" class="form-control" value="${editData?.payer_name || ''}" placeholder="e.g. Florida Blue"></div>
+            <div class="auth-field" style="margin:0;"><label>Timely Filing (days)</label><input type="number" id="pr-timely" class="form-control" value="${editData?.timely_filing_days || ''}" placeholder="e.g. 365"></div>
+            <div class="auth-field" style="margin:0;"><label>Appeal Filing (days)</label><input type="number" id="pr-appeal" class="form-control" value="${editData?.appeal_filing_days || ''}" placeholder="e.g. 60"></div>
+            <div class="auth-field" style="margin:0;"><label>Portal URL</label><input type="url" id="pr-portal" class="form-control" value="${editData?.portal_url || ''}" placeholder="https://..."></div>
+            <div class="auth-field" style="margin:0;"><label>Provider Phone</label><input type="text" id="pr-phone" class="form-control" value="${editData?.provider_phone || ''}" placeholder="(800) ..."></div>
+            <div class="auth-field" style="margin:0;"><label>Electronic Payer ID</label><input type="text" id="pr-epid" class="form-control" value="${editData?.electronic_payer_id || ''}" placeholder="e.g. 00590"></div>
+            <div class="auth-field" style="margin:0;"><label>Appeals Fax</label><input type="text" id="pr-fax" class="form-control" value="${editData?.appeals_fax || ''}" placeholder="Fax number"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Auth Required CPTs (comma-separated)</label><input type="text" id="pr-auth-cpts" class="form-control" value="${(editData?.auth_required_cpts || []).join(', ')}" placeholder="e.g. 90837, 90847, 90791"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Billing Tips / Reimbursement Notes</label><textarea id="pr-tips" class="form-control" rows="3" style="resize:vertical;" placeholder="Agency-specific billing tips for this payer...">${editData?.billing_tips || ''}</textarea></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Policy Document URLs (one per line)</label><textarea id="pr-docs" class="form-control" rows="2" style="resize:vertical;" placeholder="https://payer.com/provider-manual.pdf&#10;https://payer.com/fee-schedule.pdf">${(editData?.policy_documents || []).map(d => d.url || d).join('\n')}</textarea></div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('payer-rule-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.savePayerRule()">Save</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  async editPayerRule(id) {
+    try {
+      const rules = await store.getPayerRules();
+      const r = (Array.isArray(rules) ? rules : []).find(x => x.id == id);
+      if (r) this.openPayerRuleModal(r);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async savePayerRule() {
+    const payer = document.getElementById('pr-payer').value.trim();
+    if (!payer) { showToast('Payer name is required'); return; }
+    const authCpts = document.getElementById('pr-auth-cpts').value.split(',').map(s => s.trim()).filter(Boolean);
+    const docUrls = document.getElementById('pr-docs').value.split('\n').map(s => s.trim()).filter(Boolean).map(url => ({ url, title: url.split('/').pop() }));
+    const data = {
+      payer_name: payer,
+      timely_filing_days: parseInt(document.getElementById('pr-timely').value) || null,
+      appeal_filing_days: parseInt(document.getElementById('pr-appeal').value) || null,
+      portal_url: document.getElementById('pr-portal').value.trim() || null,
+      provider_phone: document.getElementById('pr-phone').value.trim() || null,
+      electronic_payer_id: document.getElementById('pr-epid').value.trim() || null,
+      appeals_fax: document.getElementById('pr-fax').value.trim() || null,
+      auth_required_cpts: authCpts.length > 0 ? authCpts : null,
+      billing_tips: document.getElementById('pr-tips').value.trim() || null,
+      policy_documents: docUrls.length > 0 ? docUrls : null,
+    };
+    const editId = document.getElementById('pr-edit-id').value;
+    try {
+      if (editId) await store.updatePayerRule(editId, data); else await store.createPayerRule(data);
+      document.getElementById('payer-rule-modal')?.remove();
+      showToast(editId ? 'Payer rule updated' : 'Payer rule added');
+      window.app.rcSwitchTab('payer-intel');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async deletePayerRule(id) {
+    if (!await appConfirm('Delete this payer rule?')) return;
+    try { await store.deletePayerRule(id); showToast('Deleted'); window.app.rcSwitchTab('payer-intel'); } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async viewPayerDetail(payerName) {
+    try {
+      const data = await store.getPayerRule(payerName);
+      const rule = data.rule || {};
+      const stats = data.stats || {};
+      showToast(`${payerName}: ${stats.total_claims} claims, ${stats.denial_rate}% denial rate, ${stats.collection_rate}% collected`);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async runDuplicateDetection() {
+    try {
+      const r = await store.detectDuplicates();
+      showToast(r.total_duplicates > 0 ? `Found ${r.total_duplicates} potential duplicate(s) across ${r.duplicate_groups?.length || 0} group(s)` : `No duplicates found in ${r.total_claims_checked} claims`);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async runProviderFeedback() {
+    try {
+      const r = await store.autoGenerateProviderFeedback();
+      showToast(r.generated > 0 ? `${r.generated} feedback item(s) generated from denials` : 'No new feedback to generate');
+      window.app.rcSwitchTab('provider-feedback');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async markFeedbackSent(id) {
+    try {
+      await store.updateProviderFeedback(id, { status: 'sent', sent_date: new Date().toISOString().split('T')[0] });
+      showToast('Marked as sent');
+      window.app.rcSwitchTab('provider-feedback');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  openProviderFeedbackModal() {
+    showToast('Use "Auto-Generate from Denials" to create feedback from coding/documentation denials.');
+  },
 
   // ── Billing Services Management ──
   bsTab(btn, tabId) {
