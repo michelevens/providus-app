@@ -11560,6 +11560,15 @@ function handleNppesProxy(payload) {
     } catch (e) { showToast('Import error: ' + e.message); }
     btn.disabled = false; btn.textContent = 'Import Charges';
   },
+  filterStatements() {
+    const name = (document.getElementById('stmt-filter-name')?.value || '').toLowerCase();
+    const status = document.getElementById('stmt-filter-status')?.value || '';
+    document.querySelectorAll('.stmt-row').forEach(r => {
+      const matchName = !name || (r.dataset.patient || '').includes(name);
+      const matchStatus = !status || r.dataset.status === status;
+      r.style.display = matchName && matchStatus ? '' : 'none';
+    });
+  },
   editStatement(id) {
     showToast('Statement editing coming soon.');
   },

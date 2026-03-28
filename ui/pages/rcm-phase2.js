@@ -114,6 +114,16 @@ async function renderStatementsTab(body) {
     <div class="card rcm-card rcm-table">
       <div class="card-header"><h3>Patient Statements</h3>
         <div style="display:flex;gap:8px;">
+          <input type="text" id="stmt-filter-name" class="form-control" style="width:180px;height:34px;font-size:13px;" placeholder="Filter by patient..." oninput="window.app.filterStatements()">
+          <select id="stmt-filter-status" class="form-control" style="width:130px;height:34px;font-size:13px;" onchange="window.app.filterStatements()">
+            <option value="">All Status</option>
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="partial_paid">Partial</option>
+            <option value="paid">Paid</option>
+            <option value="collections">Collections</option>
+            <option value="written_off">Written Off</option>
+          </select>
           <button class="btn btn-sm btn-primary" onclick="window.app.autoGenerateStatements()">Auto-Generate</button>
           <button class="btn btn-sm" onclick="window.app.openStatementModal()">+ Manual Statement</button>
         </div>
@@ -125,7 +135,7 @@ async function renderStatementsTab(body) {
             const statusColors = { draft: 'var(--gray-500)', sent: '#f59e0b', partial_paid: '#3b82f6', paid: 'var(--green)', collections: 'var(--red)', written_off: 'var(--gray-400)' };
             const dueDate = s.due_date || s.dueDate || '';
             const isOverdue = dueDate && new Date(dueDate) < new Date() && !['paid', 'written_off'].includes(s.status);
-            return `<tr style="${isOverdue ? 'background:#fef2f2;' : ''}">
+            return `<tr class="stmt-row" data-patient="${escAttr((s.patient_name || s.patientName || '').toLowerCase())}" data-status="${s.status || 'draft'}" style="${isOverdue ? 'background:#fef2f2;' : ''}">
               <td style="font-weight:600;">${escHtml(s.patient_name || s.patientName || '')}</td>
               <td style="text-align:right;">${_fm(s.total_charges || s.totalCharges)}</td>
               <td style="text-align:right;color:var(--green);">${_fm(s.insurance_paid || s.insurancePaid)}</td>
