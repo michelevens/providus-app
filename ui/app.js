@@ -11639,7 +11639,6 @@ function handleNppesProxy(payload) {
     showToast('Statement editing coming soon.');
   },
   async printStatement(id) {
-    // Find statement from cached data
     let statements = [];
     try { statements = await store.getPatientStatements(); } catch (e) {}
     const s = (Array.isArray(statements) ? statements : []).find(x => x.id == id);
@@ -11649,44 +11648,114 @@ function handleNppesProxy(payload) {
     const agencyEmail = auth.getAgency()?.email || '';
     const agencyPhone = auth.getAgency()?.phone || '';
     const agencyAddress = auth.getAgency()?.address_street || '';
-
-    const patientBalance = Number(s.patient_balance || s.patientBalance || 0);
-    const totalCharges = Number(s.total_charges || s.totalCharges || 0);
-    const insurancePaid = Number(s.insurance_paid || s.insurancePaid || 0);
-    const adjustments = Number(s.adjustments || 0);
-    const amountPaid = Number(s.amount_paid || s.amountPaid || 0);
+    const patientName = s.patient_name || s.patientName || '';
     const dueDate = s.due_date || s.dueDate || '';
     const statementDate = s.statement_date || s.statementDate || new Date().toISOString().split('T')[0];
 
+    // Find all claims for this patient to build line items
+    let claims = window._rcmClaims || [];
+    if (!claims.length) { try { claims = await store.getRcmClaims(); } catch (e) {} }
+    const patientClaims = claims.filter(c => (c.patient_name || c.patientName || '').toLowerCase() === patientName.toLowerCase());
+
+    // If statement is linked to a single claim, load its detail with service lines
+    let detailClaim = null;
+    const claimId = s.claim_id || s.claimId;
+    if (claimId) { try { detailClaim = await store.getRcmClaim(claimId); } catch (e) {} }
+
+    // Build line items from service lines or claims
+    let lineItems = [];
+    let grandCharges = 0, grandPaid = 0, grandAdj = 0, grandPtResp = 0;
+
+    if (detailClaim && (detailClaim.serviceLines || detailClaim.service_lines || []).length > 0) {
+      // Single claim with service lines — show each line
+      (detailClaim.serviceLines || detailClaim.service_lines || []).forEach(sl => {
+        const charges = Number(sl.charges || 0);
+        const paid = Number(sl.paidAmount || sl.paid_amount || 0);
+        lineItems.push({
+          dos: detailClaim.date_of_service || detailClaim.dateOfService || '',
+          cpt: sl.cptCode || sl.cpt_code || '',
+          description: sl.cptDescription || sl.cpt_description || '',
+          units: sl.units || 1,
+          charges, paid,
+          payer: detailClaim.payer_name || detailClaim.payerName || '',
+        });
+        grandCharges += charges;
+        grandPaid += paid;
+      });
+    } else if (patientClaims.length > 0) {
+      // Multiple claims — show each claim as a line item
+      patientClaims.forEach(c => {
+        const charges = Number(c.total_charges || c.totalCharges || 0);
+        const paid = Number(c.total_paid || c.totalPaid || 0);
+        const adj = Number(c.adjustments || 0);
+        const ptResp = Number(c.patient_responsibility || c.patientResponsibility || 0);
+        lineItems.push({
+          dos: c.date_of_service || c.dateOfService || '',
+          cpt: '',
+          description: `Claim ${c.claim_number || c.claimNumber || ''}`,
+          units: 1,
+          charges, paid,
+          payer: c.payer_name || c.payerName || '',
+          adjustment: adj,
+          ptResp: ptResp || (charges - paid - adj),
+        });
+        grandCharges += charges;
+        grandPaid += paid;
+        grandAdj += adj;
+      });
+    } else {
+      // Fallback — single summary line from statement data
+      grandCharges = Number(s.total_charges || s.totalCharges || 0);
+      grandPaid = Number(s.insurance_paid || s.insurancePaid || 0);
+      grandAdj = Number(s.adjustments || 0);
+      lineItems.push({ dos: '', cpt: '', description: 'Medical Services', units: 1, charges: grandCharges, paid: grandPaid, payer: '' });
+    }
+
+    const amountPaid = Number(s.amount_paid || s.amountPaid || 0);
+    const patientBalance = Number(s.patient_balance || s.patientBalance || 0);
+
+    // Build line items HTML
+    const lineItemsHtml = lineItems.map(li => `<tr>
+      <td style="font-size:12px;">${li.dos}</td>
+      <td style="font-size:12px;font-family:monospace;">${li.cpt}</td>
+      <td style="font-size:12px;">${li.description}</td>
+      <td style="font-size:12px;">${li.payer}</td>
+      <td style="text-align:center;font-size:12px;">${li.units}</td>
+      <td style="text-align:right;font-size:13px;font-family:monospace;">$${li.charges.toFixed(2)}</td>
+      <td style="text-align:right;font-size:13px;font-family:monospace;color:#16a34a;">$${li.paid.toFixed(2)}</td>
+      <td style="text-align:right;font-size:13px;font-family:monospace;color:#ef4444;font-weight:600;">$${(li.ptResp != null ? li.ptResp : (li.charges - li.paid - (li.adjustment || 0))).toFixed(2)}</td>
+    </tr>`).join('');
+
     const printWindow = window.open('', '_blank');
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Patient Statement - ${s.patient_name || s.patientName}</title>
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Patient Statement - ${patientName}</title>
       <style>
         * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #1a1a1a; max-width: 800px; margin: 0 auto; }
-        .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:30px; padding-bottom:20px; border-bottom:3px solid #2C4A5A; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #1a1a1a; max-width: 850px; margin: 0 auto; }
+        .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; padding-bottom:16px; border-bottom:3px solid #2C4A5A; }
         .header h1 { font-size:22px; color:#2C4A5A; margin-bottom:4px; }
         .header .agency { font-size:12px; color:#666; line-height:1.6; }
         .header .stmt-info { text-align:right; font-size:12px; color:#666; line-height:1.6; }
         .header .stmt-info strong { color:#1a1a1a; }
-        .patient-box { background:#f7f9fb; padding:16px 20px; border-radius:8px; margin-bottom:24px; }
-        .patient-box h3 { font-size:14px; color:#2C4A5A; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px; }
-        .patient-box .name { font-size:18px; font-weight:700; }
-        .summary-table { width:100%; border-collapse:collapse; margin-bottom:24px; }
-        .summary-table th { text-align:left; padding:10px 14px; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:#666; background:#f0f0f0; border-bottom:2px solid #ddd; }
-        .summary-table td { padding:12px 14px; border-bottom:1px solid #eee; font-size:14px; }
-        .summary-table .label { color:#666; }
-        .summary-table .amount { text-align:right; font-weight:600; font-family:monospace; font-size:15px; }
-        .balance-box { background:#fef2f2; border:2px solid #ef4444; border-radius:8px; padding:20px; text-align:center; margin-bottom:24px; }
-        .balance-box .label { font-size:12px; text-transform:uppercase; letter-spacing:1px; color:#666; margin-bottom:4px; }
+        .patient-box { background:#f7f9fb; padding:14px 18px; border-radius:8px; margin-bottom:20px; display:flex; justify-content:space-between; }
+        .patient-box h3 { font-size:11px; color:#2C4A5A; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px; }
+        .patient-box .name { font-size:16px; font-weight:700; }
+        table.lines { width:100%; border-collapse:collapse; margin-bottom:16px; }
+        table.lines th { text-align:left; padding:8px 10px; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:#666; background:#f0f0f0; border-bottom:2px solid #ddd; }
+        table.lines td { padding:7px 10px; border-bottom:1px solid #eee; }
+        table.lines tfoot td { padding:10px; border-top:2px solid #333; font-weight:700; font-size:13px; }
+        .summary { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+        .summary-card { padding:14px; border-radius:8px; }
+        .balance-box { background:#fef2f2; border:2px solid #ef4444; border-radius:8px; padding:20px; text-align:center; margin-bottom:20px; }
+        .balance-box .label { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#666; margin-bottom:4px; }
         .balance-box .amount { font-size:32px; font-weight:800; color:#ef4444; }
-        .balance-box .due { font-size:13px; color:#666; margin-top:6px; }
-        .footer { margin-top:40px; padding-top:20px; border-top:1px solid #ddd; font-size:11px; color:#999; text-align:center; line-height:1.8; }
-        .pay-info { background:#f0fdf4; border:1px solid #22c55e; border-radius:8px; padding:16px; margin-bottom:24px; font-size:13px; }
+        .balance-box .due { font-size:13px; color:#666; margin-top:4px; }
+        .pay-info { background:#f0fdf4; border:1px solid #22c55e; border-radius:8px; padding:14px; margin-bottom:20px; font-size:12px; }
         .pay-info strong { color:#16a34a; }
+        .footer { margin-top:30px; padding-top:16px; border-top:1px solid #ddd; font-size:10px; color:#999; text-align:center; line-height:1.8; }
         @media print { body { padding:20px; } .no-print { display:none; } }
       </style>
     </head><body>
-      <div class="no-print" style="text-align:right;margin-bottom:16px;">
+      <div class="no-print" style="text-align:right;margin-bottom:12px;">
         <button onclick="window.print()" style="padding:8px 24px;background:#2C4A5A;color:white;border:none;border-radius:6px;font-size:14px;cursor:pointer;">Print / Save PDF</button>
       </div>
 
@@ -11704,26 +11773,54 @@ function handleNppesProxy(payload) {
           <strong>Statement Date:</strong> ${statementDate}<br>
           <strong>Statement #:</strong> STMT-${String(id).padStart(6, '0')}<br>
           ${dueDate ? '<strong>Due Date:</strong> ' + dueDate + '<br>' : ''}
-          <strong>Account Status:</strong> ${(s.status || 'draft').toUpperCase()}
+          <strong>Account Status:</strong> ${(s.status || 'draft').toUpperCase()}<br>
+          ${s.times_sent || s.timesSent ? '<strong>Times Sent:</strong> ' + (s.times_sent || s.timesSent) : ''}
         </div>
       </div>
 
       <div class="patient-box">
-        <h3>Patient Information</h3>
-        <div class="name">${s.patient_name || s.patientName || ''}</div>
-        ${s.patient_email || s.patientEmail ? '<div style="font-size:13px;color:#666;margin-top:4px;">' + (s.patient_email || s.patientEmail) + '</div>' : ''}
-        ${s.patient_phone || s.patientPhone ? '<div style="font-size:13px;color:#666;">' + (s.patient_phone || s.patientPhone) + '</div>' : ''}
+        <div>
+          <h3>Patient</h3>
+          <div class="name">${patientName}</div>
+          ${s.patient_email || s.patientEmail ? '<div style="font-size:12px;color:#666;margin-top:2px;">' + (s.patient_email || s.patientEmail) + '</div>' : ''}
+          ${s.patient_phone || s.patientPhone ? '<div style="font-size:12px;color:#666;">' + (s.patient_phone || s.patientPhone) + '</div>' : ''}
+          ${s.patient_address || s.patientAddress ? '<div style="font-size:12px;color:#666;">' + (s.patient_address || s.patientAddress) + '</div>' : ''}
+        </div>
+        <div style="text-align:right;">
+          <h3>Account Summary</h3>
+          <div style="font-size:12px;color:#666;">Total Claims: ${lineItems.length}</div>
+          <div style="font-size:12px;color:#666;">Total Charges: $${grandCharges.toFixed(2)}</div>
+          <div style="font-size:12px;color:#16a34a;">Insurance Paid: $${grandPaid.toFixed(2)}</div>
+        </div>
       </div>
 
-      <table class="summary-table">
-        <thead><tr><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
+      <table class="lines">
+        <thead>
+          <tr>
+            <th>Date of Service</th>
+            <th>CPT</th>
+            <th>Description</th>
+            <th>Payer</th>
+            <th style="text-align:center;">Units</th>
+            <th style="text-align:right;">Charges</th>
+            <th style="text-align:right;">Ins Paid</th>
+            <th style="text-align:right;">You Owe</th>
+          </tr>
+        </thead>
         <tbody>
-          <tr><td class="label">Total Charges</td><td class="amount">$${totalCharges.toFixed(2)}</td></tr>
-          <tr><td class="label">Insurance Payment</td><td class="amount" style="color:#16a34a;">-$${insurancePaid.toFixed(2)}</td></tr>
-          ${adjustments > 0 ? '<tr><td class="label">Adjustments</td><td class="amount">-$' + adjustments.toFixed(2) + '</td></tr>' : ''}
-          ${amountPaid > 0 ? '<tr><td class="label">Previous Patient Payment</td><td class="amount" style="color:#16a34a;">-$' + amountPaid.toFixed(2) + '</td></tr>' : ''}
+          ${lineItemsHtml}
         </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="5" style="text-align:right;">TOTALS</td>
+            <td style="text-align:right;font-family:monospace;">$${grandCharges.toFixed(2)}</td>
+            <td style="text-align:right;font-family:monospace;color:#16a34a;">$${grandPaid.toFixed(2)}</td>
+            <td style="text-align:right;font-family:monospace;color:#ef4444;">$${patientBalance.toFixed(2)}</td>
+          </tr>
+        </tfoot>
       </table>
+
+      ${amountPaid > 0 ? '<div style="font-size:13px;margin-bottom:16px;padding:10px;background:#f7f9fb;border-radius:6px;"><strong>Previous Patient Payments:</strong> $' + amountPaid.toFixed(2) + '</div>' : ''}
 
       <div class="balance-box">
         <div class="label">Amount Due</div>
