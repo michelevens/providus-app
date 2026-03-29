@@ -89,7 +89,8 @@ async function renderBillingServicesPage() {
     else renderBillingServicesPage();
   };
   // Fire all API calls in parallel for speed
-  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9] = await Promise.allSettled([
+  let allClaims = [];
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, rClaims] = await Promise.allSettled([
     store.getBillingClientStats(),
     store.getBillingClients(),
     store.getBillingTasks(),
@@ -100,6 +101,7 @@ async function renderBillingServicesPage() {
     store.getDenialRiskAnalysis(),
     store.getAll('organizations'),
     store.getReconciliationReport(),
+    store.getRcmClaims(),
   ]);
   if (r0.status === 'fulfilled') stats = r0.value;
   if (r1.status === 'fulfilled') clients = r1.value;
@@ -111,6 +113,7 @@ async function renderBillingServicesPage() {
   if (r7.status === 'fulfilled') denialRisk = r7.value;
   if (r8.status === 'fulfilled') orgs = r8.value;
   if (r9.status === 'fulfilled') reconciliation = r9.value;
+  if (rClaims.status === 'fulfilled') allClaims = Array.isArray(rClaims.value) ? rClaims.value : [];
 
   if (!Array.isArray(clients)) clients = [];
   if (!Array.isArray(tasks)) tasks = [];
@@ -137,8 +140,7 @@ async function renderBillingServicesPage() {
     return (today - d) < 7 * 86400000;
   });
 
-  // Compute monthly data for chart — prefer live claim stats, fall back to financials
-  const claimMonthly = claimStats.monthly || [];
+  // Compute monthly data for chart — aggregate from raw claims (most reliable)
   const monthlyData = {};
   for (let m = chartRange - 1; m >= 0; m--) {
     const d = new Date(today.getFullYear(), today.getMonth() - m, 1);
@@ -146,27 +148,43 @@ async function renderBillingServicesPage() {
     const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
     monthlyData[key] = { label, billed: 0, collected: 0, denied: 0, claims: 0 };
   }
-  // Use live claim data if available
-  if (claimMonthly.length > 0) {
-    claimMonthly.forEach(m => {
-      const p = m.period || '';
+  // Aggregate from raw claims by date_of_service (most accurate)
+  if (allClaims.length > 0) {
+    allClaims.forEach(c => {
+      const dos = c.dateOfService || c.date_of_service || c.submittedDate || c.submitted_date || c.createdAt || c.created_at || '';
+      const p = dos ? dos.slice(0, 7) : '';
       if (monthlyData[p]) {
-        monthlyData[p].billed = m.amountBilled || m.amount_billed || 0;
-        monthlyData[p].collected = m.amountCollected || m.amount_collected || 0;
-        monthlyData[p].denied = m.deniedAmount || m.denied_amount || 0;
-        monthlyData[p].claims = m.claimsSubmitted || m.claims_submitted || 0;
+        monthlyData[p].billed += Number(c.totalCharges || c.total_charges || c.chargedAmount || c.charged_amount || 0);
+        monthlyData[p].collected += Number(c.totalPaid || c.total_paid || c.paidAmount || c.paid_amount || 0);
+        const isDenied = c.status === 'denied' || c.status === 'partial_denial';
+        if (isDenied) monthlyData[p].denied += Number(c.totalCharges || c.total_charges || c.chargedAmount || c.charged_amount || 0) - Number(c.totalPaid || c.total_paid || c.paidAmount || c.paid_amount || 0);
+        monthlyData[p].claims++;
       }
     });
   } else {
-    financials.forEach(f => {
-      const p = f.period || '';
-      if (monthlyData[p]) {
-        monthlyData[p].billed += f.amountBilled || f.amount_billed || 0;
-        monthlyData[p].collected += f.amountCollected || f.amount_collected || 0;
-        monthlyData[p].denied += f.deniedAmount || f.denied_amount || 0;
-        monthlyData[p].claims += f.claimsSubmitted || f.claims_submitted || 0;
-      }
-    });
+    // Fall back to API claim stats or financials
+    const claimMonthly = claimStats.monthly || [];
+    if (claimMonthly.length > 0) {
+      claimMonthly.forEach(m => {
+        const p = m.period || '';
+        if (monthlyData[p]) {
+          monthlyData[p].billed = m.amountBilled || m.amount_billed || 0;
+          monthlyData[p].collected = m.amountCollected || m.amount_collected || 0;
+          monthlyData[p].denied = m.deniedAmount || m.denied_amount || 0;
+          monthlyData[p].claims = m.claimsSubmitted || m.claims_submitted || 0;
+        }
+      });
+    } else {
+      financials.forEach(f => {
+        const p = f.period || '';
+        if (monthlyData[p]) {
+          monthlyData[p].billed += f.amountBilled || f.amount_billed || 0;
+          monthlyData[p].collected += f.amountCollected || f.amount_collected || 0;
+          monthlyData[p].denied += f.deniedAmount || f.denied_amount || 0;
+          monthlyData[p].claims += f.claimsSubmitted || f.claims_submitted || 0;
+        }
+      });
+    }
   }
   const months = Object.values(monthlyData);
   const maxCollected = Math.max(...months.map(m => m.collected), 1);

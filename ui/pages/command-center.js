@@ -41,12 +41,7 @@ export async function renderCommandCenterPage() {
 }
 
 function _injectTabBar(body, tab) {
-  const existingContent = body.innerHTML;
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = existingContent;
-  const subTabs = tempDiv.querySelector('.tabs');
-  if (subTabs) subTabs.remove();
-
+  // Prepend hub tab bar, preserving sub-page internal tabs
   const tabBar = `
     <style>
       .cc-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--gray-200);overflow-x:auto;}
@@ -58,7 +53,7 @@ function _injectTabBar(body, tab) {
       ${CC_TABS.map(t => `<button class="cc-tab ${tab === t.key ? 'active' : ''}" onclick="window.app.ccSwitchTab('${t.key}')">${t.label}</button>`).join('')}
     </div>
   `;
-  body.innerHTML = tabBar + tempDiv.innerHTML;
+  body.innerHTML = tabBar + body.innerHTML;
 }
 
 async function _renderOverview(body) {

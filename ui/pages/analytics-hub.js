@@ -31,13 +31,7 @@ export async function renderAnalyticsHubPage() {
     default:                 await R.renderBottleneckAnalysis(); break;
   }
 
-  // Inject unified tab bar
-  const existingContent = body.innerHTML;
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = existingContent;
-  const subTabs = tempDiv.querySelector('.tabs');
-  if (subTabs) subTabs.remove();
-
+  // Inject unified tab bar (preserve sub-page internal tabs)
   const tabBar = `
     <style>
       .ana-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--gray-200);overflow-x:auto;}
@@ -50,5 +44,5 @@ export async function renderAnalyticsHubPage() {
     </div>
   `;
 
-  body.innerHTML = tabBar + tempDiv.innerHTML;
+  body.innerHTML = tabBar + body.innerHTML;
 }

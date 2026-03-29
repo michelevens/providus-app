@@ -30,15 +30,7 @@ export async function renderCredentialingPage() {
     default:             await R.renderDashboard(); break;
   }
 
-  // Inject unified tab bar at top
-  const existingContent = body.innerHTML;
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = existingContent;
-
-  // Remove any sub-module tab bar
-  const subTabs = tempDiv.querySelector('.tabs');
-  if (subTabs) subTabs.remove();
-
+  // Inject unified tab bar at top (preserve sub-page internal tabs)
   const tabBar = `
     <style>
       .cred-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--gray-200);overflow-x:auto;}
@@ -51,5 +43,5 @@ export async function renderCredentialingPage() {
     </div>
   `;
 
-  body.innerHTML = tabBar + tempDiv.innerHTML;
+  body.innerHTML = tabBar + body.innerHTML;
 }
