@@ -1268,7 +1268,7 @@ async function navigateTo(page) {
     case 'revenue-cycle':
       pageTitle.textContent = 'Revenue Cycle';
       pageSubtitle.textContent = 'Clients, claims, denials, payments, charges, A/R';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openBsClientModal()">+ Add Client</button> <button class="btn btn-sm btn-primary" onclick="window.app.openRcmClaimModal()">+ New Claim</button> <button class="btn btn-sm" onclick="window.app.openRcmPaymentModal()">+ Post Payment</button>' + printBtn;
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openBsClientModal()">+ Add Client</button> <button class="btn btn-sm btn-primary" onclick="window.app.openRcmClaimModal()">+ New Claim</button> <button class="btn btn-sm" onclick="window.app.openRcmPaymentModal()">+ Post Payment</button> <button class="btn btn-sm" style="color:#7c3aed;" onclick="window.app.openPatientPaymentModal()">+ Patient Payment</button>' + printBtn;
       await renderRevenueCyclePage();
       break;
     case 'billing-client-detail':
@@ -11014,6 +11014,141 @@ function handleNppesProxy(payload) {
       </div>
     </div>`;
     document.body.insertAdjacentHTML('beforeend', html);
+  },
+  openPatientPaymentModal() {
+    const claims = (window._rcmClaims || []).filter(c => {
+      const bal = Number(c.balance || 0);
+      const ptResp = Number(c.patientResponsibility || c.patient_responsibility || 0);
+      return (bal > 0 || ptResp > 0) && c.status !== 'voided';
+    });
+    // Group by patient
+    const patients = {};
+    claims.forEach(c => {
+      const name = c.patientName || c.patient_name || 'Unknown';
+      if (!patients[name]) patients[name] = [];
+      patients[name].push(c);
+    });
+    const patientList = Object.entries(patients).sort((a, b) => a[0].localeCompare(b[0]));
+
+    const html = `<div class="modal-overlay active" id="pt-pay-modal">
+      <div class="modal" style="max-width:650px;">
+        <div class="modal-header"><h3>Record Patient Payment</h3><button class="modal-close" onclick="document.getElementById('pt-pay-modal').remove()">&times;</button></div>
+        <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+            <div class="auth-field" style="margin:0;">
+              <label>Patient</label>
+              <select id="pt-pay-patient" class="form-control" onchange="window.app.onPtPayPatientChange()">
+                <option value="">Select patient...</option>
+                ${patientList.map(([name, cls]) => {
+                  const totalOwed = cls.reduce((s, c) => s + Number(c.balance || 0), 0);
+                  return `<option value="${escAttr(name)}">${escHtml(name)} — $${totalOwed.toFixed(2)} owed (${cls.length} claims)</option>`;
+                }).join('')}
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;">
+              <label>Payment Method</label>
+              <select id="pt-pay-method" class="form-control">
+                <option value="cash">Cash</option>
+                <option value="check">Check</option>
+                <option value="credit_card">Credit Card</option>
+                <option value="debit_card">Debit Card</option>
+                <option value="zelle">Zelle</option>
+                <option value="venmo">Venmo</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+            <div class="auth-field" style="margin:0;"><label>Amount</label><input type="number" id="pt-pay-amount" class="form-control" step="0.01" min="0" placeholder="0.00"></div>
+            <div class="auth-field" style="margin:0;"><label>Date</label><input type="date" id="pt-pay-date" class="form-control" value="${new Date().toISOString().split('T')[0]}"></div>
+            <div class="auth-field" style="margin:0;"><label>Reference #</label><input type="text" id="pt-pay-ref" class="form-control" placeholder="Check #, receipt #"></div>
+          </div>
+          <div id="pt-pay-claims" style="margin-bottom:12px;"></div>
+          <div class="auth-field" style="margin:0;"><label>Notes</label><input type="text" id="pt-pay-notes" class="form-control" placeholder="e.g. Copay for Jan visit"></div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:12px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('pt-pay-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.savePatientPayment()">Record Payment</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  onPtPayPatientChange() {
+    const name = document.getElementById('pt-pay-patient')?.value;
+    const container = document.getElementById('pt-pay-claims');
+    if (!name || !container) return;
+    const claims = (window._rcmClaims || []).filter(c =>
+      (c.patientName || c.patient_name || '') === name && Number(c.balance || 0) > 0
+    );
+    container.innerHTML = claims.length === 0 ? '<div style="color:var(--gray-400);font-size:12px;">No open claims for this patient.</div>' : `
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-500);margin-bottom:6px;">Apply to Claims</div>
+      <div style="max-height:200px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:8px;">
+        <table style="width:100%;font-size:12px;border-collapse:collapse;">
+          <thead><tr style="background:var(--gray-50);"><th style="padding:6px 10px;"><input type="checkbox" checked onchange="document.querySelectorAll('.pt-pay-claim-cb').forEach(cb=>cb.checked=this.checked)"></th><th>DOS</th><th>Payer</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Balance</th></tr></thead>
+          <tbody>${claims.map(c => `<tr style="border-bottom:1px solid var(--gray-100);">
+            <td style="padding:4px 10px;"><input type="checkbox" class="pt-pay-claim-cb" value="${c.id}" checked data-balance="${Number(c.balance || 0).toFixed(2)}"></td>
+            <td>${formatDateDisplay(c.dateOfService || c.date_of_service)}</td>
+            <td style="font-size:11px;">${escHtml(c.payerName || c.payer_name || '')}</td>
+            <td style="text-align:right;">${_fm(c.totalCharges || c.total_charges)}</td>
+            <td style="text-align:right;color:#16a34a;">${_fm(c.totalPaid || c.total_paid)}</td>
+            <td style="text-align:right;color:var(--red);font-weight:600;">${_fm(c.balance)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <div style="font-size:11px;color:var(--gray-500);margin-top:4px;">Total owed: <strong style="color:var(--red);">$${claims.reduce((s, c) => s + Number(c.balance || 0), 0).toFixed(2)}</strong></div>`;
+    // Auto-fill amount with total owed
+    const totalOwed = claims.reduce((s, c) => s + Number(c.balance || 0), 0);
+    const amtEl = document.getElementById('pt-pay-amount');
+    if (amtEl && !amtEl.value) amtEl.value = totalOwed.toFixed(2);
+  },
+  async savePatientPayment() {
+    const patient = document.getElementById('pt-pay-patient')?.value;
+    const amount = parseFloat(document.getElementById('pt-pay-amount')?.value) || 0;
+    const date = document.getElementById('pt-pay-date')?.value;
+    const method = document.getElementById('pt-pay-method')?.value || 'cash';
+    const ref = document.getElementById('pt-pay-ref')?.value?.trim() || null;
+    const notes = document.getElementById('pt-pay-notes')?.value?.trim() || null;
+
+    if (!patient) { showToast('Select a patient'); return; }
+    if (!amount || amount <= 0) { showToast('Enter a payment amount'); return; }
+
+    // Get selected claims
+    const selectedClaims = [];
+    document.querySelectorAll('.pt-pay-claim-cb:checked').forEach(cb => {
+      selectedClaims.push({ claim_id: cb.value, balance: parseFloat(cb.dataset.balance) || 0 });
+    });
+
+    // Allocate payment across selected claims (oldest first by balance)
+    const allocations = [];
+    let remaining = amount;
+    for (const sc of selectedClaims) {
+      if (remaining <= 0) break;
+      const alloc = Math.min(remaining, sc.balance);
+      allocations.push({
+        claim_id: sc.claim_id,
+        paid_amount: alloc,
+        charged_amount: sc.balance,
+        patient_responsibility: alloc,
+      });
+      remaining -= alloc;
+    }
+
+    try {
+      await store.createRcmPayment({
+        payer_name: 'Patient: ' + patient,
+        payment_type: method,
+        check_number: ref || `PT-${date}-${patient.split(' ')[1] || patient}`.substring(0, 30),
+        payment_date: date,
+        total_amount: amount,
+        notes: notes || `Patient payment — ${method}`,
+        allocations: allocations.length > 0 ? allocations : undefined,
+      });
+      try { await store.syncChargeStatuses(); } catch (e) {}
+      document.getElementById('pt-pay-modal').remove();
+      showToast(`$${amount.toFixed(2)} patient payment recorded for ${patient}`);
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e) { showToast('Error: ' + e.message); }
   },
   async saveDeposit(paymentId) {
     try {
