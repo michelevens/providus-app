@@ -17229,19 +17229,42 @@ async function renderOrgDetailPage(orgId) {
   if (_a.status === 'fulfilled') apps = _a.value;
   if (_f.status === 'fulfilled') facilities = _f.value;
 
-  let billingActivities = [], billingClient = null, billingFinancials = [];
+  let billingActivities = [], billingClient = null, billingFinancials = [], rcmClaims = [], rcmDenials = [], rcmTasks = [];
   const allClients = _bc.status === 'fulfilled' ? (_bc.value || []) : [];
   billingClient = allClients.find(c => (c.organizationId || c.organization_id) == orgId || (c.organizationName || c.organization_name || '') === (o.name || ''));
   if (billingClient) {
-    const [_ba, _bf] = await Promise.allSettled([
-      store.getBillingActivities({ billing_client_id: billingClient.id, limit: 20 }),
+    const [_ba, _bf, _rc, _rd, _rt] = await Promise.allSettled([
+      store.getBillingActivities({ billing_client_id: billingClient.id, limit: 50 }),
       store.getBillingFinancials({ billing_client_id: billingClient.id }),
+      store.getRcmClaims({ billing_client_id: billingClient.id }),
+      store.getRcmDenials({ billing_client_id: billingClient.id }),
+      store.getBillingTasks({ billing_client_id: billingClient.id }),
     ]);
     if (_ba.status === 'fulfilled') billingActivities = _ba.value;
     if (_bf.status === 'fulfilled') billingFinancials = _bf.value;
+    if (_rc.status === 'fulfilled') rcmClaims = _rc.value;
+    if (_rd.status === 'fulfilled') rcmDenials = _rd.value;
+    if (_rt.status === 'fulfilled') rcmTasks = _rt.value;
   }
   if (!Array.isArray(billingActivities)) billingActivities = [];
   if (!Array.isArray(billingFinancials)) billingFinancials = [];
+  if (!Array.isArray(rcmClaims)) rcmClaims = [];
+  if (!Array.isArray(rcmDenials)) rcmDenials = [];
+  if (!Array.isArray(rcmTasks)) rcmTasks = [];
+
+  // Compute billing totals from claims
+  const billingTotals = { claims: 0, billed: 0, collected: 0, denied: 0, balance: 0 };
+  if (rcmClaims.length > 0) {
+    billingTotals.claims = rcmClaims.length;
+    rcmClaims.forEach(c => {
+      billingTotals.billed += Number(c.totalCharges || c.total_charges || 0);
+      billingTotals.collected += Number(c.totalPaid || c.total_paid || 0);
+      billingTotals.balance += Number(c.balance || 0);
+      if (c.status === 'denied') billingTotals.denied += Number(c.totalCharges || c.total_charges || 0);
+    });
+  }
+  const bCollectionRate = billingTotals.billed > 0 ? ((billingTotals.collected / billingTotals.billed) * 100).toFixed(1) : '0.0';
+  const openBTasks = rcmTasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled');
 
   if (!o || !o.id) { body.innerHTML = '<div class="empty-state"><h3>Organization not found</h3></div>'; return; }
 
@@ -17300,22 +17323,28 @@ async function renderOrgDetailPage(orgId) {
       </div>
     </div>
 
-    <!-- Stats -->
-    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:20px;">
+    <!-- Stats — Credentialing + Billing combined -->
+    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin-bottom:16px;">
       <div class="stat-card odv2-stat"><div class="label">Providers</div><div class="value">${providers.length}</div></div>
       <div class="stat-card odv2-stat"><div class="label">Licenses</div><div class="value" style="color:var(--brand-600);">${orgLicenses.length}</div></div>
-      <div class="stat-card odv2-stat"><div class="label">Licensed States</div><div class="value">${licensedStates.length}</div></div>
       <div class="stat-card odv2-stat"><div class="label">Applications</div><div class="value">${orgApps.length}</div></div>
-      <div class="stat-card odv2-stat"><div class="label">Locations</div><div class="value">${facilities.length}</div></div>
-      <div class="stat-card odv2-stat"><div class="label">Est. Monthly Rev</div><div class="value" style="color:var(--green);">$${estRevenue.toLocaleString()}</div></div>
+      <div class="stat-card odv2-stat"><div class="label">Claims</div><div class="value" style="color:#3b82f6;">${billingTotals.claims}</div></div>
+      <div class="stat-card odv2-stat"><div class="label">Collected</div><div class="value" style="color:#16a34a;">$${Math.round(billingTotals.collected).toLocaleString()}</div><div style="font-size:10px;color:var(--gray-400);">${bCollectionRate}%</div></div>
+      <div class="stat-card odv2-stat"><div class="label">Balance</div><div class="value" style="color:#ea580c;">$${Math.round(billingTotals.balance).toLocaleString()}</div></div>
+      <div class="stat-card odv2-stat"><div class="label">Tasks</div><div class="value" style="color:#d97706;">${openBTasks.length}</div></div>
+      <div class="stat-card odv2-stat"><div class="label">Denials</div><div class="value" style="color:#ef4444;">${rcmDenials.length}</div></div>
     </div>
 
-    <!-- Tabs -->
+    <!-- Tabs — unified credentialing + billing -->
     <div class="tabs" style="margin-bottom:16px;">
       <button class="tab active" onclick="window.app.orgDetailTab(this, 'od-providers')">Providers (${providers.length})</button>
       <button class="tab" onclick="window.app.orgDetailTab(this, 'od-applications')">Applications (${orgApps.length})</button>
       <button class="tab" onclick="window.app.orgDetailTab(this, 'od-locations')">Locations (${facilities.length})</button>
-      <button class="tab" onclick="window.app.orgDetailTab(this, 'od-billing')">Billing${billingClient ? ' (' + billingActivities.length + ')' : ''}</button>
+      <button class="tab" onclick="window.app.orgDetailTab(this, 'od-claims')">Claims (${billingTotals.claims})</button>
+      <button class="tab" onclick="window.app.orgDetailTab(this, 'od-denials')">Denials (${rcmDenials.length})</button>
+      <button class="tab" onclick="window.app.orgDetailTab(this, 'od-tasks')">Tasks (${openBTasks.length})</button>
+      <button class="tab" onclick="window.app.orgDetailTab(this, 'od-billing')">Financial${billingClient ? '' : ''}</button>
+      <button class="tab" onclick="window.app.orgDetailTab(this, 'od-activity')">Activity</button>
       <button class="tab" onclick="window.app.orgDetailTab(this, 'od-contacts')">Contacts (${orgContacts.length})</button>
     </div>
 
@@ -17407,59 +17436,136 @@ async function renderOrgDetailPage(orgId) {
       </div>
     </div>
 
-    <!-- Billing Tab (Client Portal View) -->
+    <!-- Claims Tab -->
+    <div id="od-claims" class="hidden">
+      <div class="card odv2-card">
+        <div class="card-header"><h3>Claims (${rcmClaims.length})</h3></div>
+        <div class="card-body" style="padding:0;"><div style="max-height:500px;overflow-y:auto;"><table style="font-size:12px;">
+          <thead><tr><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Balance</th><th>Check #</th><th>Status</th></tr></thead>
+          <tbody>
+            ${rcmClaims.map(c => `<tr style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
+              <td style="font-family:monospace;color:var(--brand-600);">${escHtml(c.claimNumber || c.claim_number || '')}</td>
+              <td>${escHtml(c.patientName || c.patient_name || '')}</td>
+              <td style="font-size:11px;">${escHtml(c.payerName || c.payer_name || '')}</td>
+              <td>${formatDateDisplay(c.dateOfService || c.date_of_service)}</td>
+              <td style="text-align:right;">$${Number(c.totalCharges || c.total_charges || 0).toFixed(2)}</td>
+              <td style="text-align:right;color:#16a34a;font-weight:600;">$${Number(c.totalPaid || c.total_paid || 0).toFixed(2)}</td>
+              <td style="text-align:right;${Number(c.balance || 0) > 0 ? 'color:#ef4444;font-weight:600;' : ''}">$${Number(c.balance || 0).toFixed(2)}</td>
+              <td style="font-family:monospace;font-size:10px;">${escHtml(c.checkNumber || c.check_number || '—')}</td>
+              <td><span class="badge badge-${c.status === 'paid' ? 'approved' : c.status === 'denied' ? 'denied' : 'pending'}">${c.status || ''}</span></td>
+            </tr>`).join('')}
+            ${rcmClaims.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No claims</td></tr>' : ''}
+          </tbody>
+        </table></div></div>
+      </div>
+    </div>
+
+    <!-- Denials Tab -->
+    <div id="od-denials" class="hidden">
+      <div class="card odv2-card">
+        <div class="card-header"><h3>Denials (${rcmDenials.length})</h3></div>
+        <div class="card-body" style="padding:0;"><table style="font-size:12px;">
+          <thead><tr><th>Claim</th><th>Patient</th><th>Payer</th><th>Code</th><th>Reason</th><th style="text-align:right;">Amount</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${rcmDenials.map(d => {
+              const cl = d.claim || {};
+              return `<tr>
+                <td style="font-family:monospace;color:var(--brand-600);">${escHtml(cl.claimNumber || cl.claim_number || '')}</td>
+                <td>${escHtml(cl.patientName || cl.patient_name || '')}</td>
+                <td style="font-size:11px;">${escHtml(cl.payerName || cl.payer_name || '')}</td>
+                <td style="font-family:monospace;font-size:11px;color:#7c3aed;">${escHtml(d.denialCode || d.denial_code || '—')}</td>
+                <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escAttr(d.denialReason || d.denial_reason || '')}">${escHtml(d.denialReason || d.denial_reason || '—')}</td>
+                <td style="text-align:right;color:#ef4444;font-weight:600;">$${Number(d.deniedAmount || d.denied_amount || 0).toFixed(2)}</td>
+                <td><span class="badge badge-${d.status === 'resolved_won' ? 'approved' : d.status === 'resolved_lost' ? 'denied' : 'pending'}">${(d.status || 'new').replace('_',' ')}</span></td>
+                <td><button class="btn btn-sm" onclick="window.app.editRcmDenial(${d.id})" style="font-size:10px;">Edit</button></td>
+              </tr>`;
+            }).join('')}
+            ${rcmDenials.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No denials</td></tr>' : ''}
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- Tasks Tab -->
+    <div id="od-tasks" class="hidden">
+      <div class="card odv2-card">
+        <div class="card-header"><h3>Tasks (${openBTasks.length} open)</h3></div>
+        <div class="card-body" style="padding:0;"><table style="font-size:12px;">
+          <thead><tr><th>Task</th><th>Category</th><th>Priority</th><th>Due</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${rcmTasks.map(t => {
+              const dueDate = t.dueDate || t.due_date || '';
+              const isOverdue = dueDate && new Date(dueDate) < new Date() && t.status !== 'completed' && t.status !== 'cancelled';
+              const isSystem = (t.source || '') === 'system';
+              const catLabels = { charge_entry: 'Charge Entry', claim_submission: 'Submission', claim_followup: 'Follow-up', denial_management: 'Denial', payment_posting: 'Payment', patient_billing: 'Patient Billing', other: 'Other' };
+              return `<tr style="${isOverdue ? 'background:#fef2f2;' : t.status === 'completed' ? 'opacity:0.5;' : ''}">
+                <td><strong>${escHtml(t.title || '—')}</strong>${isSystem ? ' <span style="font-size:9px;padding:1px 5px;border-radius:4px;background:#dbeafe;color:#1e40af;font-weight:600;">AUTO</span>' : ''}${t.description ? '<div style="font-size:11px;color:var(--gray-500);max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(t.description) + '</div>' : ''}</td>
+                <td style="font-size:11px;">${catLabels[t.category || t.taskCategory || t.task_category] || ''}</td>
+                <td style="font-size:11px;font-weight:600;color:${t.priority === 'urgent' ? '#ef4444' : t.priority === 'high' ? '#f97316' : '#3b82f6'};">${t.priority || 'normal'}</td>
+                <td style="font-size:11px;${isOverdue ? 'color:#ef4444;font-weight:600;' : ''}">${dueDate ? formatDateDisplay(dueDate) : '—'}${isOverdue ? ' !' : ''}</td>
+                <td><span class="badge badge-${t.status === 'completed' ? 'approved' : 'pending'}">${(t.status || 'pending').replace('_',' ')}</span></td>
+                <td style="white-space:nowrap;">${t.status !== 'completed' ? '<button class="btn btn-sm btn-primary" onclick="window.app.completeBsTask(' + t.id + ')" style="font-size:10px;padding:2px 6px;">Done</button>' : ''} <button class="btn btn-sm" onclick="window.app.editBsTask(' + t.id + ')" style="font-size:10px;">Edit</button></td>
+              </tr>`;
+            }).join('')}
+            ${rcmTasks.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--gray-500);">No tasks</td></tr>' : ''}
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- Financial Tab -->
     <div id="od-billing" class="hidden">
       ${billingClient ? `
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:16px;">
-          ${(() => {
-            const totals = { billed: 0, collected: 0, denied: 0, claims: 0 };
-            billingFinancials.forEach(f => {
-              totals.billed += f.amountBilled || f.amount_billed || 0;
-              totals.collected += f.amountCollected || f.amount_collected || 0;
-              totals.denied += f.deniedAmount || f.denied_amount || 0;
-              totals.claims += f.claimsSubmitted || f.claims_submitted || 0;
-            });
-            const rate = totals.billed > 0 ? ((totals.collected / totals.billed) * 100).toFixed(1) : '0.0';
-            return `
-              <div class="stat-card odv2-stat"><div class="label">Claims</div><div class="value">${totals.claims}</div></div>
-              <div class="stat-card odv2-stat"><div class="label">Billed</div><div class="value">$${totals.billed.toLocaleString()}</div></div>
-              <div class="stat-card odv2-stat"><div class="label">Collected</div><div class="value" style="color:var(--green);">$${totals.collected.toLocaleString()}</div></div>
-              <div class="stat-card odv2-stat"><div class="label">Denied</div><div class="value" style="color:var(--red);">$${totals.denied.toLocaleString()}</div></div>
-              <div class="stat-card odv2-stat"><div class="label">Collection Rate</div><div class="value" style="color:var(--brand-600);">${rate}%</div></div>
-            `;
-          })()}
-        </div>
-        <div class="card" style="border-radius:16px;margin-bottom:16px;">
-          <div class="card-header"><h3>Billing Activity</h3></div>
-          <div class="card-body" style="padding:12px 16px;">
-            ${billingActivities.length > 0 ? billingActivities.map(a => {
-              const type = a.activityType || a.activity_type || a.type || 'note';
-              const typeLabels = { claim_submitted: 'Claims Submitted', claim_followup: 'Claim Follow-up', denial_worked: 'Denial Worked', payment_posted: 'Payment Posted', eligibility_check: 'Eligibility Check', report_generated: 'Report Generated', note: 'Note' };
-              const amount = a.amount || 0;
-              return `<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--gray-100);font-size:13px;">
-                <div style="flex:1;">
-                  <strong>${escHtml(typeLabels[type] || type)}</strong>
-                  ${amount ? ` — <span style="color:var(--green);font-weight:600;">$${Number(amount).toLocaleString('en-US', {minimumFractionDigits:2})}</span>` : ''}
-                  <div style="font-size:12px;color:var(--gray-600);">${escHtml(a.notes || a.description || '')}</div>
-                </div>
-                <span style="font-size:11px;color:var(--gray-400);flex-shrink:0;">${formatDateDisplay(a.activityDate || a.activity_date || a.createdAt || a.created_at)}</span>
-              </div>`;
-            }).join('') : '<div style="text-align:center;padding:1rem;color:var(--gray-400);">No billing activity recorded</div>'}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+          <div class="card odv2-card">
+            <div class="card-header"><h3>Collections Summary</h3>${billingClient ? `<button class="btn btn-sm" onclick="window.app.viewClientLedger(${billingClient.id})" style="font-size:11px;">Full Ledger</button>` : ''}</div>
+            <div class="card-body" style="padding:14px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div style="background:#dcfce7;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:10px;font-weight:700;color:#166534;">COLLECTED</div><div style="font-size:20px;font-weight:800;color:#16a34a;">$${Math.round(billingTotals.collected).toLocaleString()}</div></div>
+                <div style="background:#fff7ed;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:10px;font-weight:700;color:#9a3412;">OUTSTANDING</div><div style="font-size:20px;font-weight:800;color:#ea580c;">$${Math.round(billingTotals.balance).toLocaleString()}</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="card odv2-card">
+            <div class="card-header"><h3>Monthly Trend</h3></div>
+            <div class="card-body" style="padding:0;max-height:250px;overflow-y:auto;"><table style="font-size:12px;">
+              <thead><tr style="background:var(--gray-50);"><th style="padding:6px 8px;">Month</th><th style="text-align:right;">Billed</th><th style="text-align:right;">Collected</th><th style="text-align:right;">Rate</th></tr></thead>
+              <tbody>${(() => {
+                const mt = {};
+                rcmClaims.forEach(c => {
+                  const m = (c.dateOfService || c.date_of_service || '').toString().slice(0, 7);
+                  if (!m) return;
+                  if (!mt[m]) mt[m] = { b: 0, c: 0 };
+                  mt[m].b += Number(c.totalCharges || c.total_charges || 0);
+                  mt[m].c += Number(c.totalPaid || c.total_paid || 0);
+                });
+                return Object.entries(mt).sort((a,b) => b[0].localeCompare(a[0])).map(([m, d]) => {
+                  const r = d.b > 0 ? ((d.c / d.b) * 100).toFixed(0) : '—';
+                  return '<tr style="border-bottom:1px solid var(--gray-100);"><td style="padding:4px 8px;font-weight:600;">' + m + '</td><td style="text-align:right;">$' + d.b.toFixed(2) + '</td><td style="text-align:right;color:#16a34a;">$' + d.c.toFixed(2) + '</td><td style="text-align:right;font-weight:600;">' + r + '%</td></tr>';
+                }).join('');
+              })()}</tbody>
+            </table></div>
           </div>
         </div>
-        ${billingFinancials.length > 0 ? `<div class="card" style="border-radius:16px;">
-          <div class="card-header"><h3>Monthly Financial Summary</h3></div>
-          <div class="card-body" style="padding:0;"><table>
-            <thead><tr><th>Period</th><th style="text-align:right;">Claims</th><th style="text-align:right;">Billed</th><th style="text-align:right;">Collected</th><th style="text-align:right;">Denied</th><th style="text-align:right;">Rate</th></tr></thead>
-            <tbody>${billingFinancials.map(f => {
-              const b = f.amountBilled || f.amount_billed || 0;
-              const c = f.amountCollected || f.amount_collected || 0;
-              const r = b > 0 ? ((c / b) * 100).toFixed(1) : '—';
-              return `<tr><td><strong>${escHtml(f.period || '—')}</strong></td><td style="text-align:right;">${f.claimsSubmitted || f.claims_submitted || 0}</td><td style="text-align:right;">$${b.toLocaleString()}</td><td style="text-align:right;color:var(--green);font-weight:600;">$${c.toLocaleString()}</td><td style="text-align:right;color:var(--red);">$${(f.deniedAmount || f.denied_amount || 0).toLocaleString()}</td><td style="text-align:right;font-weight:600;">${r}%</td></tr>`;
-            }).join('')}</tbody>
-          </table></div>
-        </div>` : ''}
-      ` : `<div class="empty-state" style="padding:30px;"><p>No billing services configured for this organization.</p><p style="margin-top:8px;"><button class="btn btn-primary btn-sm" onclick="window.app.navigateTo('revenue-cycle')">Set Up Billing Services</button></p></div>`}
+      ` : '<div class="empty-state" style="padding:30px;"><p>No billing services configured.</p><button class="btn btn-primary btn-sm" onclick="window.app.navigateTo(\'revenue-cycle\')">Set Up Billing</button></div>'}
+    </div>
+
+    <!-- Activity Tab -->
+    <div id="od-activity" class="hidden">
+      <div class="card odv2-card">
+        <div class="card-header"><h3>Activity Log</h3>${billingClient ? `<button class="btn btn-sm btn-gold" onclick="window.app.openBsActivityModal(${billingClient.id})">+ Log Activity</button>` : ''}</div>
+        <div class="card-body" style="padding:12px 16px;max-height:500px;overflow-y:auto;">
+          ${billingActivities.length > 0 ? billingActivities.map(a => {
+            const type = a.activityType || a.activity_type || a.type || 'note';
+            const typeLabels = { claim_submitted: 'Claims Submitted', claim_followup: 'Claim Follow-up', denial_worked: 'Denial Worked', payment_posted: 'Payment Posted', eligibility_check: 'Eligibility Check', report_generated: 'Report Generated', note: 'Note' };
+            const amount = a.amount || 0;
+            return `<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--gray-100);font-size:12px;">
+              <div style="flex:1;"><strong>${escHtml(typeLabels[type] || type)}</strong>${amount ? ' — <span style="color:var(--green);font-weight:600;">$' + Number(amount).toFixed(2) + '</span>' : ''}<div style="font-size:11px;color:var(--gray-600);">${escHtml(a.notes || a.description || '')}</div></div>
+              <div style="font-size:10px;color:var(--gray-400);white-space:nowrap;">${formatDateDisplay(a.activityDate || a.activity_date || a.createdAt || a.created_at)}</div>
+            </div>`;
+          }).join('') : '<div style="text-align:center;padding:2rem;color:var(--gray-500);">No activity logged</div>'}
+        </div>
+      </div>
     </div>
 
     <!-- Contacts Tab -->
