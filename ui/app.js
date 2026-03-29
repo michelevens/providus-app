@@ -11395,6 +11395,31 @@ function handleNppesProxy(payload) {
     if (!await appConfirm('Delete this payment?')) return;
     try { await store.deleteRcmPayment(id); showToast('Payment deleted'); await renderRcmPage(); } catch (e) { showToast('Error: ' + e.message); }
   },
+  onDenialCodeChange(code) {
+    const infoBox = document.getElementById('rcm-denial-code-info');
+    if (!infoBox || !code) { if (infoBox) infoBox.style.display = 'none'; return; }
+    // Look up from DENIAL_CODES (available on window from rcm.js module)
+    const codes = window.DENIAL_CODES || [];
+    const match = codes.find(c => c.code.toLowerCase() === code.trim().toLowerCase());
+    if (match) {
+      infoBox.style.display = '';
+      document.getElementById('rcm-denial-code-desc').textContent = match.code + ' — ' + match.desc;
+      document.getElementById('rcm-denial-code-action').textContent = 'Suggested: ' + match.action;
+      const recoveryColors = { high: '#16a34a', medium: '#f59e0b', low: '#ef4444' };
+      document.getElementById('rcm-denial-code-recovery').innerHTML = 'Recovery likelihood: <strong style="color:' + (recoveryColors[match.recovery] || '#666') + ';">' + (match.recovery || '').toUpperCase() + '</strong>';
+      // Auto-fill category if not already set
+      const catSel = document.getElementById('rcm-denial-category');
+      if (catSel && (!catSel.value || catSel.value === 'other')) catSel.value = match.category || 'other';
+      // Auto-fill reason if empty
+      const reasonEl = document.getElementById('rcm-denial-reason');
+      if (reasonEl && !reasonEl.value) reasonEl.value = match.desc;
+      // Auto-fill appeal notes if empty
+      const appealEl = document.getElementById('rcm-denial-appeal-notes');
+      if (appealEl && !appealEl.value) appealEl.value = match.action;
+    } else {
+      infoBox.style.display = 'none';
+    }
+  },
   openRcmDenialModal(editData) {
     const modal = document.getElementById('rcm-denial-modal');
     if (!modal) { showToast('Navigate to Claims & RCM first'); return; }
@@ -11409,6 +11434,10 @@ function handleNppesProxy(payload) {
     document.getElementById('rcm-denial-status-sel').value = editData?.status || 'new';
     document.getElementById('rcm-denial-reason').value = editData?.denialReason || editData?.denial_reason || '';
     document.getElementById('rcm-denial-appeal-notes').value = editData?.appealNotes || editData?.appeal_notes || '';
+    // Trigger code lookup if code is set
+    const codeVal = editData?.denialCode || editData?.denial_code || '';
+    if (codeVal) this.onDenialCodeChange(codeVal);
+    else { const info = document.getElementById('rcm-denial-code-info'); if (info) info.style.display = 'none'; }
     modal.classList.add('active');
   },
   async editRcmDenial(id) {

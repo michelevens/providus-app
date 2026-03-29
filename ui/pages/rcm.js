@@ -127,6 +127,50 @@ const DENIAL_STATUSES = [
   { value: 'resolved_partial', label: 'Partial' }, { value: 'written_off', label: 'Written Off' },
 ];
 
+// CARC (Claim Adjustment Reason Codes) + RARC (Remittance Advice Remark Codes) Library
+const DENIAL_CODES = [
+  // CARC — Contractual Obligation (CO)
+  { code: 'CO-4', desc: 'Procedure code inconsistent with modifier or missing modifier', category: 'coding', action: 'Add correct modifier and resubmit', recovery: 'high' },
+  { code: 'CO-11', desc: 'Diagnosis inconsistent with procedure', category: 'coding', action: 'Verify ICD-10 matches CPT and resubmit', recovery: 'high' },
+  { code: 'CO-15', desc: 'Authorization/pre-certification required but not obtained', category: 'authorization', action: 'Obtain retro-auth if possible, or appeal with clinical justification', recovery: 'medium' },
+  { code: 'CO-16', desc: 'Claim/service lacks information or has submission errors', category: 'coding', action: 'Review claim for missing fields, correct and resubmit', recovery: 'high' },
+  { code: 'CO-18', desc: 'Duplicate claim/service', category: 'duplicate', action: 'Verify if duplicate — if not, appeal with documentation', recovery: 'medium' },
+  { code: 'CO-22', desc: 'Coordination of benefits — payment adjusted for other insurance', category: 'coordination_of_benefits', action: 'Bill secondary payer or verify COB order', recovery: 'medium' },
+  { code: 'CO-27', desc: 'Expenses incurred after coverage terminated', category: 'eligibility', action: 'Verify eligibility dates, bill patient or correct payer', recovery: 'low' },
+  { code: 'CO-29', desc: 'Time limit for filing has expired', category: 'timely_filing', action: 'Appeal with proof of timely submission if applicable', recovery: 'low' },
+  { code: 'CO-45', desc: 'Charges exceed fee schedule/maximum allowable', category: 'coding', action: 'Accept contractual adjustment — typically not appealable', recovery: 'low' },
+  { code: 'CO-50', desc: 'Non-covered service — not deemed medically necessary', category: 'medical_necessity', action: 'Appeal with clinical documentation and medical records', recovery: 'medium' },
+  { code: 'CO-97', desc: 'Payment adjusted — already adjudicated for this DOS', category: 'duplicate', action: 'Verify previous payment, may be duplicate submission', recovery: 'low' },
+  { code: 'CO-109', desc: 'Claim not covered by this payer — forward to correct payer', category: 'eligibility', action: 'Verify payer and resubmit to correct insurance', recovery: 'high' },
+  { code: 'CO-167', desc: 'Diagnosis not covered by this payer', category: 'medical_necessity', action: 'Appeal with supporting documentation or use alternate diagnosis', recovery: 'medium' },
+  { code: 'CO-197', desc: 'Precertification/authorization/notification absent', category: 'authorization', action: 'Obtain retro-authorization or appeal', recovery: 'medium' },
+  { code: 'CO-204', desc: 'Service/equipment not covered under patient benefit plan', category: 'eligibility', action: 'Verify benefits, bill patient, or appeal', recovery: 'low' },
+  { code: 'CO-222', desc: 'Exceeds number of sessions/visits allowed', category: 'authorization', action: 'Request additional sessions authorization or appeal', recovery: 'medium' },
+  { code: 'CO-236', desc: 'Not payable — bundled with another service', category: 'bundling', action: 'Add modifier 59/XE/XP/XS/XU to unbundle or accept', recovery: 'medium' },
+  { code: 'CO-252', desc: 'Service not on payer fee schedule', category: 'coding', action: 'Verify CPT is covered, use alternate code, or appeal', recovery: 'medium' },
+  // CARC — Patient Responsibility (PR)
+  { code: 'PR-1', desc: 'Deductible amount', category: 'other', action: 'Bill patient for deductible', recovery: 'high' },
+  { code: 'PR-2', desc: 'Coinsurance amount', category: 'other', action: 'Bill patient for coinsurance', recovery: 'high' },
+  { code: 'PR-3', desc: 'Copay amount', category: 'other', action: 'Collect copay from patient', recovery: 'high' },
+  { code: 'PR-96', desc: 'Non-covered charge(s)', category: 'eligibility', action: 'Bill patient or appeal medical necessity', recovery: 'low' },
+  // CARC — Other Adjustment (OA)
+  { code: 'OA-23', desc: 'Payment adjusted — impact of prior payer adjudication', category: 'coordination_of_benefits', action: 'Review primary EOB and bill secondary', recovery: 'medium' },
+  // RARC (Remark Codes)
+  { code: 'N30', desc: 'Missing or incomplete prior authorization number', category: 'authorization', action: 'Submit with valid auth number', recovery: 'high' },
+  { code: 'N56', desc: 'Procedure code billed is not correct', category: 'coding', action: 'Verify CPT and resubmit with correct code', recovery: 'high' },
+  { code: 'N386', desc: 'Non-network provider — out of network', category: 'credentialing', action: 'Verify network status or bill patient difference', recovery: 'low' },
+  { code: 'N479', desc: 'Missing UB revenue code', category: 'coding', action: 'Add revenue code and resubmit', recovery: 'high' },
+  { code: 'H36', desc: 'Procedure code inconsistent with modifier used or required modifier missing', category: 'coding', action: 'Add required modifier (e.g. 95 for telehealth, HE for behavioral health) and resubmit', recovery: 'high' },
+  { code: 'M76', desc: 'Missing/incomplete/invalid diagnosis or condition', category: 'coding', action: 'Add required diagnosis code and resubmit', recovery: 'high' },
+  { code: 'M79', desc: 'Service not covered — missing/invalid procedure code', category: 'coding', action: 'Verify CPT code and resubmit', recovery: 'high' },
+  { code: 'MA130', desc: 'Claim submitted to wrong payer/contractor', category: 'eligibility', action: 'Resubmit to correct payer', recovery: 'high' },
+  // Status codes
+  { code: 'Status-70', desc: 'Claim denied', category: 'other', action: 'Review denial codes and determine next action', recovery: 'medium' },
+  { code: 'Status-3', desc: 'Claim adjudicated — payment made', category: 'other', action: 'No action needed — payment processed', recovery: 'high' },
+  { code: 'Status-19', desc: 'Claim returned — invalid information', category: 'coding', action: 'Correct claim data and resubmit', recovery: 'high' },
+];
+window.DENIAL_CODES = DENIAL_CODES;
+
 function _claimBadge(status) {
   const s = CLAIM_STATUSES.find(x => x.value === status) || { label: status, color: '#6b7280', bg: '#f3f4f6' };
   return `<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:8px;background:${s.bg};color:${s.color};">${s.label}</span>`;
@@ -778,10 +822,18 @@ async function renderRcmPage() {
             <div class="auth-field" style="margin:0;"><label>Priority</label><select id="rcm-denial-priority" class="form-control"><option value="normal">Normal</option><option value="low">Low</option><option value="high">High</option><option value="urgent">Urgent</option></select></div>
             <div class="auth-field" style="margin:0;"><label>Denied Amount</label><input type="number" id="rcm-denial-amount" class="form-control" step="0.01" placeholder="0.00"></div>
             <div class="auth-field" style="margin:0;"><label>Appeal Deadline</label><input type="date" id="rcm-denial-deadline" class="form-control"></div>
-            <div class="auth-field" style="margin:0;"><label>Denial Code</label><input type="text" id="rcm-denial-code" class="form-control" placeholder="e.g. CO-45"></div>
+            <div class="auth-field" style="margin:0;"><label>Denial Code</label>
+              <input type="text" id="rcm-denial-code" class="form-control" placeholder="Type code (CO-45, H36...)" list="denial-code-list" oninput="window.app.onDenialCodeChange(this.value)" autocomplete="off">
+              <datalist id="denial-code-list">${DENIAL_CODES.map(c => `<option value="${c.code}">${c.code} — ${c.desc.slice(0, 60)}</option>`).join('')}</datalist>
+            </div>
             <div class="auth-field" style="margin:0;"><label>Status</label><select id="rcm-denial-status-sel" class="form-control">${DENIAL_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select></div>
+            <div id="rcm-denial-code-info" style="grid-column:1/-1;display:none;padding:10px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;margin-bottom:4px;">
+              <div style="font-size:12px;font-weight:700;color:#1e40af;" id="rcm-denial-code-desc"></div>
+              <div style="font-size:11px;color:#3b82f6;margin-top:4px;" id="rcm-denial-code-action"></div>
+              <div style="font-size:11px;margin-top:2px;"><span id="rcm-denial-code-recovery"></span></div>
+            </div>
             <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Denial Reason *</label><textarea id="rcm-denial-reason" class="form-control" rows="2" style="resize:vertical;" placeholder="Describe why the claim was denied..."></textarea></div>
-            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Appeal Notes</label><textarea id="rcm-denial-appeal-notes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Appeal Notes / Suggested Action</label><textarea id="rcm-denial-appeal-notes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
           </div>
         </div>
         <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);"><button class="btn" onclick="document.getElementById('rcm-denial-modal').classList.remove('active')">Cancel</button><button class="btn btn-primary" onclick="window.app.saveRcmDenial()">Save Denial</button></div>
