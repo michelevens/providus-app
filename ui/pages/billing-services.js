@@ -205,6 +205,104 @@ async function renderBillingServicesPage() {
   const collectionRate = totalBilled > 0 ? ((totalCollected / totalBilled) * 100).toFixed(1) : '0.0';
   const denialRate = totalBilled > 0 ? ((totalDenied / totalBilled) * 100).toFixed(1) : '0.0';
 
+  // ── Pre-compute analytics HTML for dashboard sections ──
+
+  // Payer Performance Summary
+  let _payerPerfHtml = '';
+  if (allClaims.length > 0) {
+    const payerMap = {};
+    allClaims.forEach(c => {
+      const payer = c.payer_name || c.payerName || 'Unknown';
+      if (!payerMap[payer]) payerMap[payer] = { claims: 0, charged: 0, paid: 0, denied: 0, deniedAmt: 0, daysToPay: [], name: payer };
+      const p = payerMap[payer];
+      p.claims++;
+      const charged = Number(c.totalCharges || c.total_charges || c.chargedAmount || c.charged_amount || 0);
+      const paid = Number(c.totalPaid || c.total_paid || c.paidAmount || c.paid_amount || 0);
+      p.charged += charged;
+      p.paid += paid;
+      const isDenied = c.status === 'denied' || c.status === 'partial_denial';
+      if (isDenied) { p.denied++; p.deniedAmt += charged - paid; }
+      const dos = c.dateOfService || c.date_of_service || c.submittedDate || c.submitted_date || '';
+      const paidDate = c.paidDate || c.paid_date || c.paymentDate || c.payment_date || '';
+      if (dos && paidDate && paid > 0) {
+        const diff = Math.floor((new Date(paidDate) - new Date(dos)) / 86400000);
+        if (diff > 0 && diff < 365) p.daysToPay.push(diff);
+      }
+    });
+    const payers = Object.values(payerMap).sort((a, b) => b.charged - a.charged).slice(0, 10);
+    const payerRows = payers.map(p => {
+      const colRate = p.charged > 0 ? (p.paid / p.charged * 100) : 0;
+      const denRate = p.claims > 0 ? (p.denied / p.claims * 100) : 0;
+      const avgDays = p.daysToPay.length > 0 ? Math.round(p.daysToPay.reduce((s, v) => s + v, 0) / p.daysToPay.length) : null;
+      const colColor = colRate >= 90 ? '#16a34a' : colRate >= 70 ? '#f59e0b' : '#ef4444';
+      return '<tr>'
+        + '<td style="font-weight:600;">' + escHtml(p.name) + '</td>'
+        + '<td style="text-align:right;">' + p.claims + '</td>'
+        + '<td style="text-align:right;">' + _fmtMoney(p.charged) + '</td>'
+        + '<td style="text-align:right;">' + _fmtMoney(p.paid) + '</td>'
+        + '<td style="text-align:right;font-weight:700;color:' + colColor + ';">' + colRate.toFixed(1) + '%</td>'
+        + '<td style="text-align:right;' + (p.denied > 0 ? 'color:var(--red);font-weight:600;' : '') + '">' + p.denied + '</td>'
+        + '<td style="text-align:right;">' + denRate.toFixed(1) + '%</td>'
+        + '<td style="text-align:right;">' + (avgDays !== null ? avgDays + 'd' : '—') + '</td>'
+        + '</tr>';
+    }).join('');
+    _payerPerfHtml = '<div class="card bs-card" style="margin-top:16px;">'
+      + '<div class="card-header"><h3>Payer Performance Summary</h3><span style="font-size:11px;color:var(--gray-400);">' + payers.length + ' payer' + (payers.length !== 1 ? 's' : '') + ' from ' + allClaims.length + ' claims</span></div>'
+      + '<div class="card-body" style="padding:0;overflow-x:auto;"><table style="font-size:13px;width:100%;">'
+      + '<thead><tr><th>Payer</th><th style="text-align:right;">Claims</th><th style="text-align:right;">Charged</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Collection %</th><th style="text-align:right;">Denials</th><th style="text-align:right;">Denial %</th><th style="text-align:right;">Avg Days to Pay</th></tr></thead>'
+      + '<tbody>' + payerRows + '</tbody>'
+      + '</table></div></div>';
+  }
+
+  // Monthly Collection Detail
+  const _monthDetailRows = months.map(m => {
+    const colPct = m.billed > 0 ? (m.collected / m.billed * 100) : 0;
+    const denPct = m.billed > 0 ? (m.denied / m.billed * 100) : 0;
+    const colColor = colPct >= 90 ? '#16a34a' : colPct >= 70 ? '#f59e0b' : m.billed > 0 ? '#ef4444' : 'var(--gray-400)';
+    return '<tr>'
+      + '<td style="font-weight:600;">' + m.label + '</td>'
+      + '<td style="text-align:right;">' + m.claims + '</td>'
+      + '<td style="text-align:right;">' + _fmtMoney(m.billed) + '</td>'
+      + '<td style="text-align:right;">' + _fmtMoney(m.collected) + '</td>'
+      + '<td style="text-align:right;font-weight:700;color:' + colColor + ';">' + colPct.toFixed(1) + '%</td>'
+      + '<td style="text-align:right;' + (m.denied > 0 ? 'color:var(--red);font-weight:600;' : '') + '">' + _fmtMoney(m.denied) + '</td>'
+      + '<td style="text-align:right;">' + denPct.toFixed(1) + '%</td>'
+      + '</tr>';
+  }).join('');
+
+  // Top Denial Reasons
+  let _denialReasonsHtml = '';
+  if (allClaims.length > 0) {
+    const reasonMap = {};
+    allClaims.forEach(c => {
+      const isDenied = c.status === 'denied' || c.status === 'partial_denial';
+      if (!isDenied) return;
+      const reason = c.denial_reason || c.denialReason || c.denial_codes || c.denialCodes || 'Unspecified';
+      const reasons = typeof reason === 'string' ? reason.split(/[,;|]/).map(r => r.trim()).filter(Boolean) : [String(reason)];
+      const amt = Number(c.totalCharges || c.total_charges || c.chargedAmount || c.charged_amount || 0) - Number(c.totalPaid || c.total_paid || c.paidAmount || c.paid_amount || 0);
+      reasons.forEach(r => {
+        const key = r || 'Unspecified';
+        if (!reasonMap[key]) reasonMap[key] = { reason: key, count: 0, amount: 0 };
+        reasonMap[key].count++;
+        reasonMap[key].amount += amt;
+      });
+    });
+    const topReasons = Object.values(reasonMap).sort((a, b) => b.count - a.count).slice(0, 5);
+    if (topReasons.length > 0) {
+      const reasonRows = topReasons.map((r, i) => {
+        return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;' + (i < topReasons.length - 1 ? 'border-bottom:1px solid var(--gray-100);' : '') + '">'
+          + '<span style="width:22px;height:22px;border-radius:50%;background:#fef2f2;color:var(--red);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">' + (i + 1) + '</span>'
+          + '<span style="flex:1;font-size:13px;font-weight:500;">' + escHtml(r.reason) + '</span>'
+          + '<span style="font-size:12px;color:var(--gray-500);">' + r.count + ' claim' + (r.count !== 1 ? 's' : '') + '</span>'
+          + '<span style="font-size:13px;font-weight:700;color:var(--red);">' + _fmtMoney(r.amount) + '</span>'
+          + '</div>';
+      }).join('');
+      _denialReasonsHtml = '<div class="card bs-card" style="margin-top:16px;">'
+        + '<div class="card-header"><h3 style="color:#ef4444;">Top Denial Reasons</h3></div>'
+        + '<div class="card-body" style="padding:12px;">' + reasonRows + '</div></div>';
+    }
+  }
+
   body.innerHTML = `
     <style>
       .bs-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
@@ -478,6 +576,20 @@ async function renderBillingServicesPage() {
           ${(reconciliation.unpaid_claims || []).length > 0 ? `<div style="margin-top:4px;padding:8px 12px;background:#fffbeb;border-radius:6px;font-size:12px;color:#f59e0b;font-weight:600;">${reconciliation.unpaid_claims.length} claim(s) pending 30+ days with no payment</div>` : ''}
         </div>
       </div>` : ''}
+
+      <!-- Payer Performance Summary -->
+      ${_payerPerfHtml}
+
+      <!-- Monthly Collection Detail -->
+      <div class="card bs-card" style="margin-top:16px;">
+        <div class="card-header"><h3>Monthly Collection Detail</h3></div>
+        <div class="card-body" style="padding:0;overflow-x:auto;">
+          ${months.length > 0 ? '<table style="font-size:13px;width:100%;"><thead><tr><th>Month</th><th style="text-align:right;">Claims</th><th style="text-align:right;">Billed</th><th style="text-align:right;">Collected</th><th style="text-align:right;">Collection %</th><th style="text-align:right;">Denied</th><th style="text-align:right;">Denial %</th></tr></thead><tbody>' + _monthDetailRows + '</tbody></table>' : '<div style="padding:2rem;text-align:center;color:var(--gray-400);">No monthly data available</div>'}
+        </div>
+      </div>
+
+      <!-- Top Denial Reasons -->
+      ${_denialReasonsHtml}
     </div>
 
     <!-- ═══ CLIENTS TAB ═══ -->
