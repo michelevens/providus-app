@@ -2177,9 +2177,18 @@
     });
 
     // ── Bottom Nav Active State ──
+    // Map hub pages and old sub-page names to their bottom-nav equivalent
     window._updateBottomNav = function(page) {
+      const map = {
+        'credentialing': 'credentialing', 'dashboard': 'credentialing',
+        'applications': 'credentialing', 'followups': 'credentialing',
+        'licenses': 'credentialing', 'providers': 'providers',
+        'workspace': 'tasks', 'tasks': 'tasks', 'kanban': 'tasks',
+        'calendar': 'tasks', 'messages': 'tasks', 'communications': 'tasks',
+      };
+      const mapped = map[page] || page;
       document.querySelectorAll('.bottom-nav-item').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.page === page);
+        btn.classList.toggle('active', btn.dataset.page === mapped);
       });
     };
   </script>
