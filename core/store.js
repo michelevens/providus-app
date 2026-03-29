@@ -1291,6 +1291,8 @@ class Store {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-tasks${query ? '?' + query : ''}`);
         return result.data || result;
     }
+    async generateTasks() { return (await this._fetch(`${CONFIG.API_URL}/billing-tasks/generate`, { method: 'POST' })).data || {}; }
+    async dismissTask(id) { return (await this._fetch(`${CONFIG.API_URL}/billing-tasks/${id}/dismiss`, { method: 'POST' })).data || {}; }
     async createBillingTask(data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-tasks`, { method: 'POST', body: JSON.stringify(data) });
         this.clearCache();

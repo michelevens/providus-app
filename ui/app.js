@@ -12799,6 +12799,23 @@ function handleNppesProxy(payload) {
       else if (currentPage === 'billing-client-detail') await renderBillingClientDetail(window._selectedBillingClientId);
     } catch (e) { showToast('Error: ' + e.message); }
   },
+  async autoGenerateTasks() {
+    try {
+      showToast('Scanning claims data...');
+      const result = await store.generateTasks();
+      const created = result.created || 0;
+      showToast(created > 0 ? `${created} new tasks generated! Refreshing...` : 'No new tasks needed — everything is up to date.');
+      if (created > 0) setTimeout(() => window.location.reload(), 1500);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async dismissBsTask(id) {
+    try {
+      await store.dismissTask(id);
+      showToast('Task dismissed — it won\'t be regenerated');
+      const row = document.querySelector(`.bs-task-row button[onclick*="dismissBsTask(${id})"]`)?.closest('tr');
+      if (row) row.remove();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
   async completeBsTask(id) {
     try {
       await store.updateBillingTask(id, { status: 'completed' });
@@ -12820,11 +12837,13 @@ function handleNppesProxy(payload) {
     const clientFilter = document.getElementById('bs-task-client-filter')?.value || '';
     const statusFilter = document.getElementById('bs-task-status-filter')?.value || '';
     const catFilter = document.getElementById('bs-task-cat-filter')?.value || '';
+    const sourceFilter = document.getElementById('bs-task-source-filter')?.value || '';
     document.querySelectorAll('.bs-task-row').forEach(row => {
       const matchClient = !clientFilter || row.dataset.client === clientFilter;
       const matchStatus = !statusFilter || row.dataset.status === statusFilter;
       const matchCat = !catFilter || row.dataset.category === catFilter;
-      row.style.display = matchClient && matchStatus && matchCat ? '' : 'none';
+      const matchSource = !sourceFilter || row.dataset.source === sourceFilter;
+      row.style.display = matchClient && matchStatus && matchCat && matchSource ? '' : 'none';
     });
   },
 

@@ -503,10 +503,14 @@ async function renderBillingServicesPage() {
     <!-- ═══ TASKS TAB ═══ -->
     <div id="bs-tasks" class="${window._bsTab !== 'tasks' ? 'hidden' : ''}">
       <div class="card bs-card bs-table">
-        <div class="card-header">
+        <div class="card-header" style="flex-wrap:wrap;gap:8px;">
           <h3>Billing Tasks</h3>
-          <div style="display:flex;gap:8px;">
-            <select id="bs-task-client-filter" class="form-control" style="width:180px;height:34px;font-size:13px;" onchange="window.app.filterBsTasks()">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-sm btn-primary" onclick="window.app.autoGenerateTasks()" style="font-size:12px;" title="Scan claims data and generate follow-up, denial, and collection tasks">Generate Tasks</button>
+            <select id="bs-task-source-filter" class="form-control" style="width:110px;height:34px;font-size:12px;" onchange="window.app.filterBsTasks()">
+              <option value="">All Sources</option><option value="manual">Manual</option><option value="system">System</option>
+            </select>
+            <select id="bs-task-client-filter" class="form-control" style="width:160px;height:34px;font-size:12px;" onchange="window.app.filterBsTasks()">
               <option value="">All Clients</option>
               ${clients.map(c => `<option value="${c.id}">${escHtml(_clientName(c))}</option>`).join('')}
             </select>
@@ -528,15 +532,16 @@ async function renderBillingServicesPage() {
                 const dueDate = t.dueDate || t.due_date || '';
                 const isOverdue = dueDate && new Date(dueDate) < today && t.status !== 'completed' && t.status !== 'cancelled';
                 const cat = TASK_CATEGORIES.find(c => c.value === (t.category || t.taskCategory || t.task_category));
-                return `<tr class="bs-task-row" data-client="${t.billingClientId || t.billing_client_id || ''}" data-status="${t.status || 'pending'}" data-category="${t.category || t.taskCategory || t.task_category || ''}" style="${isOverdue ? 'background:#fef2f2;' : ''}">
-                  <td><strong>${escHtml(t.title || '—')}</strong></td>
+                const isSystem = (t.source || '') === 'system';
+                return `<tr class="bs-task-row" data-client="${t.billingClientId || t.billing_client_id || ''}" data-status="${t.status || 'pending'}" data-category="${t.category || t.taskCategory || t.task_category || ''}" data-source="${t.source || 'manual'}" style="${isOverdue ? 'background:#fef2f2;' : ''}">
+                  <td><strong>${escHtml(t.title || '—')}</strong>${isSystem ? ' <span style="font-size:9px;padding:1px 5px;border-radius:4px;background:#dbeafe;color:#1e40af;font-weight:600;vertical-align:middle;">AUTO</span>' : ''}</td>
                   <td class="text-sm">${escHtml(client ? _clientName(client) : '—')}</td>
                   <td class="text-sm">${escHtml(t.providerName || t.provider_name || '—')}</td>
                   <td><span style="font-size:12px;padding:2px 8px;background:var(--gray-100);border-radius:4px;">${escHtml(cat ? cat.label : '')}</span></td>
                   <td>${_taskPriorityBadge(t.priority)}</td>
                   <td style="${isOverdue ? 'color:var(--red);font-weight:600;' : ''}">${dueDate ? formatDateDisplay(dueDate) : '—'}${isOverdue ? ' <span style="font-size:10px;">OVERDUE</span>' : ''}</td>
                   <td>${_taskStatusBadge(t.status)}</td>
-                  <td>${t.status !== 'completed' ? `<button class="btn btn-sm btn-primary" onclick="window.app.completeBsTask(${t.id})" title="Complete">&#10003;</button>` : ''} <button class="btn btn-sm" onclick="window.app.editBsTask(${t.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteBsTask(${t.id})">Del</button></td>
+                  <td style="white-space:nowrap;">${t.status !== 'completed' ? `<button class="btn btn-sm btn-primary" onclick="window.app.completeBsTask(${t.id})" title="Complete">&#10003;</button>` : ''} <button class="btn btn-sm" onclick="window.app.editBsTask(${t.id})">Edit</button>${isSystem ? ` <button class="btn btn-sm" style="color:var(--gray-400);font-size:10px;" onclick="window.app.dismissBsTask(${t.id})" title="Dismiss — won't be regenerated">Dismiss</button>` : ` <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteBsTask(${t.id})">Del</button>`}</td>
                 </tr>`;
               }).join('')}
               ${tasks.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No billing tasks yet.</td></tr>' : ''}
