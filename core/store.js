@@ -1009,7 +1009,7 @@ class Store {
         const response = await fetch(`${CONFIG.API_URL}/providers/${providerId}/documents/upload`, {
             method: 'POST', headers, body: formData,
         });
-        if (response.status === 401) { auth._clearSession(); window.location.reload(); throw new Error('Session expired'); }
+        if (response.status === 401) { auth._clearSession(); document.getElementById('app-sidebar')?.classList.add('hidden'); document.getElementById('login-screen')?.classList.remove('hidden'); throw new Error('Session expired'); }
         if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.message || err.error || `HTTP ${response.status}`); }
         const json = await response.json();
         return this._snakeToCamel(json);
@@ -1036,7 +1036,7 @@ class Store {
         if (this.activeAgencyId) headers['X-Agency-Id'] = String(this.activeAgencyId);
 
         const response = await fetch(`${CONFIG.API_URL}/reports/provider/${providerId}/pdf`, { headers });
-        if (response.status === 401) { auth._clearSession(); window.location.reload(); throw new Error('Session expired'); }
+        if (response.status === 401) { auth._clearSession(); document.getElementById('app-sidebar')?.classList.add('hidden'); document.getElementById('login-screen')?.classList.remove('hidden'); throw new Error('Session expired'); }
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);

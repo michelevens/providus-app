@@ -730,7 +730,12 @@ async function applyOrgBranding() {
 
 // ─── Init ───
 
+let _initRunning = false;
 export async function initApp() {
+  // Prevent multiple concurrent inits (can happen on hard refresh)
+  if (_initRunning) return;
+  _initRunning = true;
+
   // Show loading state with skeleton
   const body = document.getElementById('page-body');
   if (body) body.innerHTML = `
