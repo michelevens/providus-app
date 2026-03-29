@@ -631,7 +631,7 @@ function deleteButton(label, onclick) {
   return `<button class="btn btn-sm btn-danger" onclick="${onclick}">${label}</button>`;
 }
 
-let currentPage = 'dashboard';
+let currentPage = 'credentialing';
 let currentSort = { field: '', dir: 'asc' };
 let filters = { state: '', payer: '', status: '', wave: '', search: '' };
 
@@ -829,18 +829,18 @@ export async function initApp() {
 
   // Listen for data changes
   store.on('created', async () => {
-    if (currentPage === 'dashboard') await renderDashboard();
-    if (currentPage === 'tasks') await renderTasksPage();
+    if (currentPage === 'credentialing' || currentPage === 'dashboard') await renderCredentialingPage();
+    if (currentPage === 'workspace' || currentPage === 'tasks') await renderWorkspaceHubPage();
     await updateNotificationBell();
   });
   store.on('updated', async () => {
-    if (currentPage === 'dashboard') await renderDashboard();
-    if (currentPage === 'tasks') await renderTasksPage();
+    if (currentPage === 'credentialing' || currentPage === 'dashboard') await renderCredentialingPage();
+    if (currentPage === 'workspace' || currentPage === 'tasks') await renderWorkspaceHubPage();
     await updateNotificationBell();
   });
   store.on('deleted', async () => {
-    if (currentPage === 'dashboard') await renderDashboard();
-    if (currentPage === 'tasks') await renderTasksPage();
+    if (currentPage === 'credentialing' || currentPage === 'dashboard') await renderCredentialingPage();
+    if (currentPage === 'workspace' || currentPage === 'tasks') await renderWorkspaceHubPage();
     await updateNotificationBell();
   });
 
@@ -1023,17 +1023,24 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderMyAccount();
       break;
+    // ─── Healthcare Credentialing (unified) ───
+    case 'credentialing':
     case 'dashboard':
-      pageTitle.textContent = 'Dashboard';
-      pageSubtitle.textContent = 'Licensing & credentialing overview';
-      pageActions.innerHTML = printBtn;
-      await renderDashboard();
-      break;
     case 'applications':
-      pageTitle.textContent = 'Applications';
-      pageSubtitle.textContent = 'All credentialing applications';
-      pageActions.innerHTML = printBtn;
-      await renderApplications();
+    case 'followups':
+    case 'licenses':
+      // Map old page names to credentialing tabs
+      if (page === 'dashboard') window._credTab = 'dashboard';
+      else if (page === 'applications') window._credTab = 'applications';
+      else if (page === 'followups') window._credTab = 'followups';
+      else if (page === 'licenses') window._credTab = 'licenses';
+      else if (!window._credTab) window._credTab = 'dashboard';
+      pageTitle.textContent = 'Healthcare Credentialing';
+      pageSubtitle.textContent = 'Dashboard, providers, applications, follow-ups, licenses, locations';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openProviderModal()">+ Provider</button> <button class="btn" onclick="window.app.openLicenseModal()">+ License</button>' + printBtn;
+      // Highlight the credentialing nav item for all sub-tabs
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'credentialing'));
+      await renderCredentialingPage();
       break;
     case 'application-detail':
       pageTitle.textContent = 'Application Detail';
@@ -1041,17 +1048,24 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderApplicationDetailPage(window._selectedApplicationId);
       break;
-    case 'followups':
-      pageTitle.textContent = 'Follow-ups';
-      pageSubtitle.textContent = 'Pending and overdue follow-up tasks';
-      pageActions.innerHTML = printBtn;
-      await renderFollowups();
-      break;
+    // ─── Workspace (unified) ───
+    case 'workspace':
     case 'tasks':
-      pageTitle.textContent = 'Tasks';
-      pageSubtitle.textContent = 'Track all credentialing & licensing tasks';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.showAddTaskForm()">+ Add Task</button> <button class="btn" onclick="window.app.showWorkflowTemplates()">Workflow Templates</button>' + printBtn;
-      await renderTasksPage();
+    case 'kanban':
+    case 'calendar':
+    case 'messages':
+    case 'communications':
+      if (page === 'tasks') window._wsTab = 'tasks';
+      else if (page === 'kanban') window._wsTab = 'kanban';
+      else if (page === 'calendar') window._wsTab = 'calendar';
+      else if (page === 'messages') window._wsTab = 'messages';
+      else if (page === 'communications') window._wsTab = 'communications';
+      else if (!window._wsTab) window._wsTab = 'tasks';
+      pageTitle.textContent = 'Workspace';
+      pageSubtitle.textContent = 'Tasks, kanban, calendar, messages & communications';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.showAddTaskForm()">+ Add Task</button> <button class="btn" onclick="window.app.openNewMessage()">+ Message</button> <button class="btn" onclick="window.app.openCommLogModal()">+ Log Call</button>' + printBtn;
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'workspace'));
+      await renderWorkspaceHubPage();
       break;
     case 'providers':
       pageTitle.textContent = 'Providers';
@@ -1059,35 +1073,34 @@ async function navigateTo(page) {
       pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openProviderModal()">+ Add Provider</button> <button class="btn" onclick="window.app.navigateTo(\'provider-onboard\')">Guided Setup</button>' + printBtn;
       await renderProviders();
       break;
-    case 'licenses':
-      pageTitle.textContent = 'License Monitoring';
-      pageSubtitle.textContent = 'Licenses, verification, and DEA tracking';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openLicenseModal()">+ Add License</button> <button class="btn" onclick="window.app.openDeaModal()">+ Add DEA</button>' + printBtn;
-      await renderLicenses();
-      break;
     case 'payers':
       pageTitle.textContent = 'Payers';
       pageSubtitle.textContent = 'Insurance payer catalog';
       pageActions.innerHTML = printBtn;
       await renderPayers();
       break;
-    case 'policies':
-      pageTitle.textContent = 'State Policies';
-      pageSubtitle.textContent = 'Telehealth regulations by state';
-      pageActions.innerHTML = printBtn;
-      await renderStatePolicies();
-      break;
-    case 'coverage':
-      pageTitle.textContent = 'Coverage Matrix';
-      pageSubtitle.textContent = 'Payer-state credentialing coverage';
-      pageActions.innerHTML = printBtn;
-      await renderCoverageMatrix();
-      break;
+    // ─── Analytics & Strategy (unified) ───
+    case 'analytics':
+    case 'bottleneck':
     case 'forecast':
-      pageTitle.textContent = 'Revenue Forecast';
-      pageSubtitle.textContent = 'Pipeline revenue projections & analytics';
+    case 'coverage':
+    case 'reimbursement':
+    case 'policies':
+    case 'renewal-calendar':
+    case 'service-lines':
+      if (page === 'bottleneck') window._analyticsTab = 'bottleneck';
+      else if (page === 'forecast') window._analyticsTab = 'forecast';
+      else if (page === 'coverage') window._analyticsTab = 'coverage';
+      else if (page === 'reimbursement') window._analyticsTab = 'reimbursement';
+      else if (page === 'policies') window._analyticsTab = 'policies';
+      else if (page === 'renewal-calendar') window._analyticsTab = 'renewal-calendar';
+      else if (page === 'service-lines') window._analyticsTab = 'service-lines';
+      else if (!window._analyticsTab) window._analyticsTab = 'bottleneck';
+      pageTitle.textContent = 'Analytics & Strategy';
+      pageSubtitle.textContent = 'Pipeline analytics, forecasting, coverage & strategy tools';
       pageActions.innerHTML = printBtn;
-      await renderRevenueForecast();
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'analytics'));
+      await renderAnalyticsHubPage();
       break;
     case 'batch':
       pageTitle.textContent = 'Batch Generator';
@@ -1101,30 +1114,14 @@ async function navigateTo(page) {
       pageActions.innerHTML = '';
       await renderEmailGenerator();
       break;
-    case 'reimbursement':
-      pageTitle.textContent = 'Reimbursement Comparison';
-      pageSubtitle.textContent = 'Compare payer rates across states';
-      pageActions.innerHTML = printBtn;
-      await renderReimbursement();
-      break;
-    case 'renewal-calendar':
-      pageTitle.textContent = 'Renewal Calendar';
-      pageSubtitle.textContent = 'License expirations and renewal timeline';
-      pageActions.innerHTML = printBtn;
-      await renderRenewalCalendar();
-      break;
+    // reimbursement and renewal-calendar now handled by analytics hub above
     case 'documents':
       pageTitle.textContent = 'Document Tracker';
       pageSubtitle.textContent = 'Cross-application document completion status';
       pageActions.innerHTML = printBtn;
       await renderDocumentTracker();
       break;
-    case 'service-lines':
-      pageTitle.textContent = 'Service Lines';
-      pageSubtitle.textContent = 'Expansion opportunities beyond psychiatric telehealth';
-      pageActions.innerHTML = printBtn;
-      await renderServiceLines();
-      break;
+    // service-lines now handled by analytics hub above
     case 'settings':
       pageTitle.textContent = 'Settings & Data';
       pageSubtitle.textContent = 'Organization, providers, import/export';
@@ -1222,12 +1219,11 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderOnboardingStub();
       break;
+    // exclusions → compliance hub
     case 'exclusions':
-      pageTitle.textContent = 'Exclusion Screening';
-      pageSubtitle.textContent = 'OIG/SAM exclusion checks for all providers';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.screenAllProviders()">Screen All Providers</button>' + printBtn;
-      await renderExclusionsPage();
-      break;
+      window._compTab = 'exclusions';
+      window.app.navigateTo('compliance-hub');
+      return;
     case 'facilities':
       pageTitle.textContent = 'Practice Locations';
       pageSubtitle.textContent = 'Office sites and service delivery locations';
@@ -1289,23 +1285,20 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderImportPage();
       break;
+    // ─── Compliance (unified) ───
+    case 'compliance-hub':
     case 'compliance':
-      pageTitle.textContent = 'Compliance Center';
-      pageSubtitle.textContent = 'Compliance scoring, risk matrix, and audit exports';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.exportAuditPacket()">Audit Packet</button> <button class="btn" onclick="window.app.generateComplianceReportPDF()">Export PDF</button> <button class="btn" onclick="window.app.generateComplianceReport()">Refresh</button> <button class="btn" onclick="window.app.exportComplianceData()">Export</button>' + printBtn;
-      await renderCompliancePage();
-      break;
     case 'psv':
-      pageTitle.textContent = 'Primary Source Verification';
-      pageSubtitle.textContent = 'Verify provider credentials against authoritative sources';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.runFullPSV()">Verify All Providers</button> <button class="btn" onclick="window.app.exportPSVReport()">Export Report</button>' + printBtn;
-      await renderPSVPage();
-      break;
     case 'monitoring':
-      pageTitle.textContent = 'Continuous Monitoring';
-      pageSubtitle.textContent = 'Real-time credential status and automated alerts';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.runMonitoringScan()">Run Scan Now</button> <button class="btn" onclick="window.app.exportMonitoringReport()">Export</button>' + printBtn;
-      await renderMonitoringPage();
+      if (page === 'compliance') window._compTab = 'compliance';
+      else if (page === 'psv') window._compTab = 'psv';
+      else if (page === 'monitoring') window._compTab = 'monitoring';
+      else if (!window._compTab) window._compTab = 'compliance';
+      pageTitle.textContent = 'Compliance';
+      pageSubtitle.textContent = 'Compliance center, exclusions, PSV & continuous monitoring';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.exportAuditPacket()">Audit Packet</button> <button class="btn" onclick="window.app.screenAllProviders()">Screen All</button> <button class="btn" onclick="window.app.runFullPSV()">Verify All</button>' + printBtn;
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'compliance-hub'));
+      await renderComplianceHubPage();
       break;
     case 'provider-profile-share':
       pageTitle.textContent = 'Provider Credential Profile';
@@ -1331,36 +1324,7 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderProviderPrintout(window._selectedProviderId);
       break;
-    case 'communications':
-      pageTitle.textContent = 'Communications';
-      pageSubtitle.textContent = 'Track all calls, emails, and correspondence';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openCommLogModal()">+ Log Communication</button>' + printBtn;
-      await renderCommunicationsPage();
-      break;
-    case 'messages':
-      pageTitle.textContent = 'Messages';
-      pageSubtitle.textContent = 'Internal messaging between staff and providers';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openNewMessage()">+ New Message</button>' + printBtn;
-      await renderMessagesPage();
-      break;
-    case 'kanban':
-      pageTitle.textContent = 'Kanban Board';
-      pageSubtitle.textContent = 'Drag-and-drop application workflow';
-      pageActions.innerHTML = printBtn;
-      await renderKanbanBoard();
-      break;
-    case 'calendar':
-      pageTitle.textContent = 'Calendar';
-      pageSubtitle.textContent = 'All deadlines, expirations, and events';
-      pageActions.innerHTML = printBtn;
-      await renderCalendarPage();
-      break;
-    case 'bottleneck':
-      pageTitle.textContent = 'Pipeline Analytics';
-      pageSubtitle.textContent = 'Identify bottlenecks and optimize credentialing speed';
-      pageActions.innerHTML = printBtn;
-      await renderBottleneckAnalysis();
-      break;
+    // communications, messages, kanban, calendar, bottleneck now handled by their unified hubs above
     case 'admin':
       pageTitle.textContent = 'Super Admin';
       pageSubtitle.textContent = 'Manage all agencies and system settings';
@@ -6452,6 +6416,22 @@ async function _page(name) {
   return _pageModules[name];
 }
 
+// Expose render functions so unified hub pages (ES modules) can call back into app.js
+window._appRender = {
+  renderDashboard, renderApplications, renderFollowups, renderLicenses,
+  renderProviders, renderFacilitiesPage,
+  renderExclusionsPage, renderCompliancePage, renderPSVPage, renderMonitoringPage,
+  renderTasksPage, renderKanbanBoard, renderCalendarPage, renderMessagesPage, renderCommunicationsPage,
+  renderBottleneckAnalysis, renderRevenueForecast, renderCoverageMatrix, renderReimbursement,
+  renderStatePolicies, renderRenewalCalendar, renderServiceLines,
+};
+
+// Unified hub page stubs
+async function renderCredentialingPage()     { (await _page('healthcare-credentialing')).renderCredentialingPage(); }
+async function renderComplianceHubPage()     { (await _page('compliance-hub')).renderComplianceHubPage(); }
+async function renderWorkspaceHubPage()      { (await _page('workspace-hub')).renderWorkspaceHubPage(); }
+async function renderAnalyticsHubPage()      { (await _page('analytics-hub')).renderAnalyticsHubPage(); }
+
 // Convenience stubs — these look like the original functions but lazy-load from modules.
 async function renderBillingPage()           { (await _page('billing')).renderBillingPage(); }
 async function renderInvoiceDetail(id)       { (await _page('billing')).renderInvoiceDetail(id); }
@@ -10517,6 +10497,26 @@ function handleNppesProxy(payload) {
   generateComplianceReportPDF() { return generateComplianceReportPDF(); },
   generatePayerReport(providerId) { return generatePayerReport(providerId); },
 
+  // ── Credentialing (unified) ──
+  async credSwitchTab(tab) {
+    window._credTab = tab;
+    await renderCredentialingPage();
+  },
+  // ── Compliance (unified) ──
+  async compSwitchTab(tab) {
+    window._compTab = tab;
+    await renderComplianceHubPage();
+  },
+  // ── Workspace (unified) ──
+  async wsSwitchTab(tab) {
+    window._wsTab = tab;
+    await renderWorkspaceHubPage();
+  },
+  // ── Analytics (unified) ──
+  async analyticsSwitchTab(tab) {
+    window._analyticsTab = tab;
+    await renderAnalyticsHubPage();
+  },
   // ── Revenue Cycle (unified) ──
   async rcSwitchTab(tab) {
     window._rcTab = tab;
