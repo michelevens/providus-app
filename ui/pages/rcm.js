@@ -882,16 +882,19 @@ async function renderClaimDetail(claimId) {
   const payments = (claim.paymentAllocations || claim.payment_allocations || []);
   const serviceLines = claim.serviceLines || claim.service_lines || [];
 
-  // If service lines have $0 paid but claim has payments, pro-rate payment to lines
+  // If service lines have $0 paid but claim has payments, pro-rate to lines
   const claimTotalPaid = Number(claim.totalPaid || claim.total_paid || claim.paidAmount || claim.paid_amount || 0);
+  const claimAdjustments = Number(claim.adjustments || 0);
+  const claimPtResp = Number(claim.patientResponsibility || claim.patient_responsibility || 0);
   const slTotalPaid = serviceLines.reduce((s, sl) => s + Number(sl.paidAmount || sl.paid_amount || 0), 0);
   const slTotalCharges = serviceLines.reduce((s, sl) => s + Number(sl.charges || 0), 0);
   if (claimTotalPaid > 0 && slTotalPaid === 0 && serviceLines.length > 0) {
-    // Pro-rate claim payment to service lines by charge proportion
     serviceLines.forEach(sl => {
       const charges = Number(sl.charges || 0);
       const ratio = slTotalCharges > 0 ? charges / slTotalCharges : 1 / serviceLines.length;
       sl._computedPaid = Math.round(claimTotalPaid * ratio * 100) / 100;
+      sl._computedAdjustment = Math.round(claimAdjustments * ratio * 100) / 100;
+      sl._computedPtResp = Math.round(claimPtResp * ratio * 100) / 100;
       sl._computedStatus = claim.status || 'pending';
     });
   }
@@ -989,9 +992,13 @@ async function renderClaimDetail(claimId) {
     <div class="cd-section">
       <div class="cd-sh"><h4>Service Lines (${serviceLines.length})</h4></div>
       <table>
-        <thead><tr><th>#</th><th>CPT</th><th>Description</th><th>Modifiers</th><th>ICD</th><th>Units</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th>Status</th></tr></thead>
+        <thead><tr><th>#</th><th>CPT</th><th>Description</th><th>Modifiers</th><th>ICD</th><th>Units</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Adjust</th><th style="text-align:right;">Pt Resp</th><th>Status</th></tr></thead>
         <tbody>
-          ${serviceLines.map(sl => `<tr>
+          ${serviceLines.map(sl => {
+            const paid = sl._computedPaid != null ? sl._computedPaid : Number(sl.paidAmount || sl.paid_amount || 0);
+            const adj = sl._computedAdjustment != null ? sl._computedAdjustment : Number(sl.adjustment || sl.adjustments || 0);
+            const ptResp = sl._computedPtResp != null ? sl._computedPtResp : Number(sl.patientResp || sl.patient_resp || sl.patientResponsibility || sl.patient_responsibility || 0);
+            return `<tr>
             <td>${sl.lineNumber || sl.line_number || ''}</td>
             <td><strong style="font-family:monospace;">${escHtml(sl.cptCode || sl.cpt_code || '')}</strong></td>
             <td class="text-sm">${escHtml(sl.cptDescription || sl.cpt_description || '')}</td>
@@ -999,9 +1006,11 @@ async function renderClaimDetail(claimId) {
             <td class="text-sm">${escHtml(sl.icdCodes || sl.icd_codes || '')}</td>
             <td>${sl.units || 1}</td>
             <td style="text-align:right;">${_fm(sl.charges)}</td>
-            <td style="text-align:right;color:var(--green);">${_fm(sl._computedPaid != null ? sl._computedPaid : (sl.paidAmount || sl.paid_amount))}</td>
+            <td style="text-align:right;color:var(--green);">${_fm(paid)}</td>
+            <td style="text-align:right;color:var(--gray-500);">${_fm(adj)}</td>
+            <td style="text-align:right;${ptResp > 0 ? 'color:var(--orange,#f97316);font-weight:600;' : ''}">${_fm(ptResp)}</td>
             <td>${_claimBadge(sl._computedStatus || sl.status || 'pending')}</td>
-          </tr>`).join('')}
+          </tr>`;}).join('')}
         </tbody>
       </table>
     </div>` : ''}
