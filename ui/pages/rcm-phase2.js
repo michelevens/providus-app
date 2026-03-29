@@ -16,38 +16,73 @@ async function renderFeeSchedulesTab(body) {
   if (!Array.isArray(schedules)) schedules = [];
   window._feeSchedules = schedules;
 
+  // Get field values (handle both snake_case and camelCase)
+  const _payer = s => s.payer_name || s.payerName || '';
+  const _cpt = s => s.cpt_code || s.cptCode || '';
+  const _desc = s => s.cpt_description || s.cptDescription || '';
+  const _planType = s => s.plan_type || s.planType || '';
+
+  // Build filter options
+  const payers = [...new Set(schedules.map(_payer).filter(Boolean))].sort();
+  const planTypes = [...new Set(schedules.map(_planType).filter(Boolean))].sort();
+
+  // Apply current filters
+  const fPayer = window._fsFilterPayer || '';
+  const fPlan = window._fsFilterPlan || '';
+  const fSearch = (window._fsFilterSearch || '').toLowerCase();
+  const filtered = schedules.filter(s => {
+    if (fPayer && _payer(s) !== fPayer) return false;
+    if (fPlan && _planType(s) !== fPlan) return false;
+    if (fSearch && !_cpt(s).toLowerCase().includes(fSearch) && !_desc(s).toLowerCase().includes(fSearch) && !_payer(s).toLowerCase().includes(fSearch)) return false;
+    return true;
+  });
+
   const byPayer = {};
-  schedules.forEach(s => { byPayer[s.payer_name] = (byPayer[s.payer_name] || 0) + 1; });
+  filtered.forEach(s => { const p = _payer(s) || 'Unknown'; byPayer[p] = (byPayer[p] || 0) + 1; });
 
   body.innerHTML = `
     <div class="card rcm-card rcm-table">
-      <div class="card-header"><h3>Fee Schedules (${schedules.length})</h3>
+      <div class="card-header"><h3>Fee Schedules (${filtered.length}${filtered.length !== schedules.length ? ' of ' + schedules.length : ''})</h3>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-sm btn-primary" onclick="window.app.openFeeScheduleModal()">+ Add Rate</button>
           <button class="btn btn-sm" onclick="window.app.importFeeScheduleCSV()">Import CSV</button>
         </div>
       </div>
-      ${Object.keys(byPayer).length > 0 ? `<div style="padding:12px 18px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--gray-100);">
-        ${Object.entries(byPayer).map(([p, c]) => `<span style="padding:4px 10px;background:var(--gray-100);border-radius:6px;font-size:12px;font-weight:500;">${escHtml(p)} <strong>(${c})</strong></span>`).join('')}
+      <!-- Filters -->
+      <div style="padding:12px 18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--gray-100);">
+        <select class="form-control" style="height:32px;font-size:12px;width:200px;" onchange="window._fsFilterPayer=this.value;window.app.rcSwitchTab('fee-schedules');">
+          <option value="">All Payers</option>
+          ${payers.map(p => `<option value="${escAttr(p)}" ${fPayer === p ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
+        </select>
+        <select class="form-control" style="height:32px;font-size:12px;width:140px;" onchange="window._fsFilterPlan=this.value;window.app.rcSwitchTab('fee-schedules');">
+          <option value="">All Plan Types</option>
+          ${planTypes.map(p => `<option value="${escAttr(p)}" ${fPlan === p ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
+        </select>
+        <input type="text" class="form-control" placeholder="Search CPT or description..." value="${escAttr(fSearch)}" style="height:32px;font-size:12px;width:220px;" onkeyup="window._fsFilterSearch=this.value;clearTimeout(window._fsSearchTimer);window._fsSearchTimer=setTimeout(()=>window.app.rcSwitchTab('fee-schedules'),300);">
+        ${fPayer || fPlan || fSearch ? '<button class="btn btn-sm" onclick="window._fsFilterPayer=\\'\\';window._fsFilterPlan=\\'\\';window._fsFilterSearch=\\'\\';window.app.rcSwitchTab(\\'fee-schedules\\');" style="font-size:11px;color:var(--red);">Clear Filters</button>' : ''}
+      </div>
+      <!-- Payer badges -->
+      ${Object.keys(byPayer).length > 0 ? `<div style="padding:10px 18px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--gray-100);">
+        ${Object.entries(byPayer).sort((a,b) => b[1] - a[1]).map(([p, c]) => `<span style="padding:3px 8px;background:${fPayer === p ? 'var(--brand-600)' : 'var(--gray-100)'};color:${fPayer === p ? 'white' : 'inherit'};border-radius:6px;font-size:11px;font-weight:500;cursor:pointer;" onclick="window._fsFilterPayer=window._fsFilterPayer==='${escAttr(p)}'?'':'${escAttr(p)}';window.app.rcSwitchTab('fee-schedules');">${escHtml(p)} <strong>(${c})</strong></span>`).join('')}
       </div>` : ''}
       <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
         <thead><tr><th>Payer</th><th>CPT</th><th>Description</th><th>Modifier</th><th style="text-align:right;">Contracted Rate</th><th style="text-align:right;">Expected Allowed</th><th>Plan Type</th><th>Effective</th><th>Actions</th></tr></thead>
         <tbody>
-          ${schedules.map(s => `<tr>
-            <td class="text-sm" style="font-weight:600;">${escHtml(s.payer_name || s.payerName || '')}</td>
-            <td style="font-family:monospace;font-weight:600;">${escHtml(s.cpt_code || s.cptCode || '')}</td>
-            <td class="text-sm">${escHtml(s.cpt_description || s.cptDescription || '')}</td>
+          ${filtered.map(s => `<tr>
+            <td class="text-sm" style="font-weight:600;">${escHtml(_payer(s))}</td>
+            <td style="font-family:monospace;font-weight:600;">${escHtml(_cpt(s))}</td>
+            <td class="text-sm">${escHtml(_desc(s))}</td>
             <td class="text-sm">${escHtml(s.modifier || '—')}</td>
             <td style="text-align:right;font-weight:700;color:var(--green);">${_fm(s.contracted_rate || s.contractedRate)}</td>
             <td style="text-align:right;">${_fm(s.expected_allowed || s.expectedAllowed)}</td>
-            <td><span style="font-size:11px;padding:2px 6px;background:var(--gray-100);border-radius:4px;">${escHtml(s.plan_type || s.planType || '—')}</span></td>
+            <td><span style="font-size:11px;padding:2px 6px;background:var(--gray-100);border-radius:4px;">${escHtml(_planType(s) || '—')}</span></td>
             <td class="text-sm">${formatDateDisplay(s.effective_date || s.effectiveDate) || '—'}</td>
             <td>
               <button class="btn btn-sm" onclick="window.app.editFeeSchedule(${s.id})">Edit</button>
               <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteFeeSchedule(${s.id})">Del</button>
             </td>
           </tr>`).join('')}
-          ${schedules.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No fee schedules yet. Add contracted rates to enable underpayment detection.</td></tr>' : ''}
+          ${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No fee schedules match the current filters.</td></tr>' : ''}
         </tbody>
       </table></div></div>
     </div>
