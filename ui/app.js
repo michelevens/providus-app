@@ -1017,6 +1017,17 @@ async function navigateTo(page) {
   const printBtn = '<button class="btn btn-sm no-print" onclick="window.app.printPage()" title="Print this page"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11H2.5A1 1 0 011.5 10V6.5A1 1 0 012.5 5.5h11a1 1 0 011 1V10a1 1 0 01-1 1H12"/><path d="M4 5.5V1.5h8v4"/><rect x="4" y="9" width="8" height="5.5" rx="0.5"/></svg> Print</button>';
 
   switch (page) {
+    // ─── Command Center ───
+    case 'command-center':
+    case 'audit-trail':
+      if (page === 'audit-trail') window._ccTab = 'audit';
+      else if (!window._ccTab) window._ccTab = 'overview';
+      pageTitle.textContent = 'Command Center';
+      pageSubtitle.textContent = 'Agency-wide overview, activity & reports';
+      pageActions.innerHTML = printBtn;
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'command-center'));
+      await renderCommandCenterPage();
+      break;
     case 'my-account':
       pageTitle.textContent = 'My Account';
       pageSubtitle.textContent = 'Profile, security & preferences';
@@ -1073,12 +1084,9 @@ async function navigateTo(page) {
       pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openProviderModal()">+ Add Provider</button> <button class="btn" onclick="window.app.navigateTo(\'provider-onboard\')">Guided Setup</button>' + printBtn;
       await renderProviders();
       break;
+    // payers → admin hub
     case 'payers':
-      pageTitle.textContent = 'Payers';
-      pageSubtitle.textContent = 'Insurance payer catalog';
-      pageActions.innerHTML = printBtn;
-      await renderPayers();
-      break;
+      window._adminTab = 'payers'; window.app.navigateTo('admin-hub'); return;
     // ─── Analytics & Strategy (unified) ───
     case 'analytics':
     case 'bottleneck':
@@ -1122,12 +1130,9 @@ async function navigateTo(page) {
       await renderDocumentTracker();
       break;
     // service-lines now handled by analytics hub above
+    // settings → admin hub
     case 'settings':
-      pageTitle.textContent = 'Settings & Data';
-      pageSubtitle.textContent = 'Organization, providers, import/export';
-      pageActions.innerHTML = '';
-      await renderSettings();
-      break;
+      window._adminTab = 'settings'; window.app.navigateTo('admin-hub'); return;
     // ─── New Tools ───
     case 'doc-checklist':
       pageTitle.textContent = 'Document Checklist Generator';
@@ -1201,24 +1206,11 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderOrgDetailPage(window._selectedOrgId);
       break;
+    // users, onboarding → admin hub (audit-trail → command center, handled above)
     case 'users':
-      pageTitle.textContent = 'User Management';
-      pageSubtitle.textContent = 'Manage team members and permissions';
-      pageActions.innerHTML = printBtn;
-      await renderUsersStub();
-      break;
-    case 'audit-trail':
-      pageTitle.textContent = 'Audit Trail';
-      pageSubtitle.textContent = 'Track who changed what and when';
-      pageActions.innerHTML = printBtn;
-      await renderAuditTrail();
-      break;
+      window._adminTab = 'users'; window.app.navigateTo('admin-hub'); return;
     case 'onboarding':
-      pageTitle.textContent = 'Provider Onboarding';
-      pageSubtitle.textContent = 'Onboarding tokens and self-service registration';
-      pageActions.innerHTML = printBtn;
-      await renderOnboardingStub();
-      break;
+      window._adminTab = 'onboarding'; window.app.navigateTo('admin-hub'); return;
     // exclusions → compliance hub
     case 'exclusions':
       window._compTab = 'exclusions';
@@ -1236,23 +1228,16 @@ async function navigateTo(page) {
       pageActions.innerHTML = '<button class="btn" onclick="window.app.navigateTo(\'facilities\')">← All Locations</button>' + printBtn;
       await renderFacilityDetailPage(window._selectedFacilityId);
       break;
+    // billing, contracts → admin hub
     case 'billing':
-      pageTitle.textContent = 'Billing & Invoicing';
-      pageSubtitle.textContent = 'Manage invoices, services, and payments';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openInvoiceModal()">+ Create Invoice</button> <button class="btn btn-sm" onclick="window.app.openEstimateModal()">+ Estimate</button>' + printBtn;
       // Check for Stripe checkout return params
       { const hp = new URLSearchParams(window.location.hash.split('?')[1] || '');
         if (hp.get('session_id')) { window._billingTab = 'subscription'; showToast('Subscription activated! Welcome aboard.'); window.location.hash = '#billing'; }
         if (hp.get('canceled')) { window._billingTab = 'subscription'; showToast('Checkout canceled'); window.location.hash = '#billing'; }
       }
-      await renderBillingPage();
-      break;
+      window._adminTab = 'billing'; window.app.navigateTo('admin-hub'); return;
     case 'contracts':
-      pageTitle.textContent = 'Contracts & Agreements';
-      pageSubtitle.textContent = 'Create and manage service agreements with organizations';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openContractModal()">+ New Contract</button>' + printBtn;
-      await renderContractsPage();
-      break;
+      window._adminTab = 'contracts'; window.app.navigateTo('admin-hub'); return;
     case 'contract-detail':
       pageTitle.textContent = 'Contract Detail';
       pageSubtitle.textContent = '';
@@ -1279,12 +1264,9 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderInvoiceDetail(window._selectedInvoiceId);
       break;
+    // import → admin hub
     case 'import':
-      pageTitle.textContent = 'Bulk Import';
-      pageSubtitle.textContent = 'Import providers, organizations, licenses, and facilities from CSV';
-      pageActions.innerHTML = printBtn;
-      await renderImportPage();
-      break;
+      window._adminTab = 'import'; window.app.navigateTo('admin-hub'); return;
     // ─── Compliance (unified) ───
     case 'compliance-hub':
     case 'compliance':
@@ -1306,12 +1288,9 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderProviderPortableProfile(window._selectedProviderId);
       break;
+    // faq → admin hub
     case 'faq':
-      pageTitle.textContent = 'Knowledge Base';
-      pageSubtitle.textContent = 'FAQs and help articles';
-      pageActions.innerHTML = '<button class="btn btn-sm" onclick="window.app.startGuidedTour()" style="border-radius:10px;margin-right:8px;">Start Tour</button>' + editButton('+ Add FAQ', 'window.app.openFaqModal()') + printBtn;
-      await renderFaqPage();
-      break;
+      window._adminTab = 'faq'; window.app.navigateTo('admin-hub'); return;
     case 'provider-profile':
       pageTitle.textContent = 'Provider Profile';
       pageSubtitle.textContent = 'Comprehensive provider credentialing profile';
@@ -1325,6 +1304,15 @@ async function navigateTo(page) {
       await renderProviderPrintout(window._selectedProviderId);
       break;
     // communications, messages, kanban, calendar, bottleneck now handled by their unified hubs above
+    // ─── Admin (unified) ───
+    case 'admin-hub':
+      if (!window._adminTab) window._adminTab = 'settings';
+      pageTitle.textContent = 'Admin';
+      pageSubtitle.textContent = 'Settings, billing, contracts, payers, users & tools';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openInvoiceModal()">+ Invoice</button> <button class="btn" onclick="window.app.openContractModal()">+ Contract</button>' + printBtn;
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'admin-hub'));
+      await renderAdminHubPage();
+      break;
     case 'admin':
       pageTitle.textContent = 'Super Admin';
       pageSubtitle.textContent = 'Manage all agencies and system settings';
@@ -1386,18 +1374,11 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderProviderOnboardingWizard();
       break;
+    // automations, api-docs → admin hub
     case 'automations':
-      pageTitle.textContent = 'Workflow Automations';
-      pageSubtitle.textContent = 'Rule-based automation for credentialing workflows';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openAutomationRuleModal()">+ Create Rule</button>' + printBtn;
-      await renderAutomationsPage();
-      break;
+      window._adminTab = 'automations'; window.app.navigateTo('admin-hub'); return;
     case 'api-docs':
-      pageTitle.textContent = 'API Documentation';
-      pageSubtitle.textContent = 'Interactive API reference for all Credentik endpoints';
-      pageActions.innerHTML = printBtn;
-      await renderApiDocsPage();
-      break;
+      window._adminTab = 'api-docs'; window.app.navigateTo('admin-hub'); return;
     case 'notifications':
       pageTitle.textContent = 'Email Notifications';
       pageSubtitle.textContent = 'Manage notification preferences and view sent emails';
@@ -6424,6 +6405,9 @@ window._appRender = {
   renderTasksPage, renderKanbanBoard, renderCalendarPage, renderMessagesPage, renderCommunicationsPage,
   renderBottleneckAnalysis, renderRevenueForecast, renderCoverageMatrix, renderReimbursement,
   renderStatePolicies, renderRenewalCalendar, renderServiceLines,
+  renderSettings, renderBillingPage, renderContractsPage, renderPayers,
+  renderUsersStub, renderOnboardingStub, renderImportPage, renderAutomationsPage,
+  renderFaqPage, renderApiDocsPage, renderAuditTrail,
 };
 
 // Unified hub page stubs
@@ -6431,6 +6415,8 @@ async function renderCredentialingPage()     { (await _page('healthcare-credenti
 async function renderComplianceHubPage()     { (await _page('compliance-hub')).renderComplianceHubPage(); }
 async function renderWorkspaceHubPage()      { (await _page('workspace-hub')).renderWorkspaceHubPage(); }
 async function renderAnalyticsHubPage()      { (await _page('analytics-hub')).renderAnalyticsHubPage(); }
+async function renderCommandCenterPage()     { (await _page('command-center')).renderCommandCenterPage(); }
+async function renderAdminHubPage()          { (await _page('admin-hub')).renderAdminHubPage(); }
 
 // Convenience stubs — these look like the original functions but lazy-load from modules.
 async function renderBillingPage()           { (await _page('billing')).renderBillingPage(); }
@@ -10497,6 +10483,16 @@ function handleNppesProxy(payload) {
   generateComplianceReportPDF() { return generateComplianceReportPDF(); },
   generatePayerReport(providerId) { return generatePayerReport(providerId); },
 
+  // ── Command Center ──
+  async ccSwitchTab(tab) {
+    window._ccTab = tab;
+    await renderCommandCenterPage();
+  },
+  // ── Admin (unified) ──
+  async adminSwitchTab(tab) {
+    window._adminTab = tab;
+    await renderAdminHubPage();
+  },
   // ── Credentialing (unified) ──
   async credSwitchTab(tab) {
     window._credTab = tab;
