@@ -881,6 +881,21 @@ async function renderClaimDetail(claimId) {
   const denials = claim.denials || [];
   const payments = (claim.paymentAllocations || claim.payment_allocations || []);
   const serviceLines = claim.serviceLines || claim.service_lines || [];
+
+  // If service lines have $0 paid but claim has payments, pro-rate payment to lines
+  const claimTotalPaid = Number(claim.totalPaid || claim.total_paid || claim.paidAmount || claim.paid_amount || 0);
+  const slTotalPaid = serviceLines.reduce((s, sl) => s + Number(sl.paidAmount || sl.paid_amount || 0), 0);
+  const slTotalCharges = serviceLines.reduce((s, sl) => s + Number(sl.charges || 0), 0);
+  if (claimTotalPaid > 0 && slTotalPaid === 0 && serviceLines.length > 0) {
+    // Pro-rate claim payment to service lines by charge proportion
+    serviceLines.forEach(sl => {
+      const charges = Number(sl.charges || 0);
+      const ratio = slTotalCharges > 0 ? charges / slTotalCharges : 1 / serviceLines.length;
+      sl._computedPaid = Math.round(claimTotalPaid * ratio * 100) / 100;
+      sl._computedStatus = claim.status || 'pending';
+    });
+  }
+
   const followups = claim.followups || [];
   let claimFollowups = [];
   try { claimFollowups = await store.getFollowups({ claim_id: claimId }); } catch (e) {}
@@ -984,8 +999,8 @@ async function renderClaimDetail(claimId) {
             <td class="text-sm">${escHtml(sl.icdCodes || sl.icd_codes || '')}</td>
             <td>${sl.units || 1}</td>
             <td style="text-align:right;">${_fm(sl.charges)}</td>
-            <td style="text-align:right;color:var(--green);">${_fm(sl.paidAmount || sl.paid_amount)}</td>
-            <td>${sl.status ? _claimBadge(sl.status) : '—'}</td>
+            <td style="text-align:right;color:var(--green);">${_fm(sl._computedPaid != null ? sl._computedPaid : (sl.paidAmount || sl.paid_amount))}</td>
+            <td>${_claimBadge(sl._computedStatus || sl.status || 'pending')}</td>
           </tr>`).join('')}
         </tbody>
       </table>
