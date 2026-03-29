@@ -11015,8 +11015,13 @@ function handleNppesProxy(payload) {
     </div>`;
     document.body.insertAdjacentHTML('beforeend', html);
   },
-  openPatientPaymentModal() {
-    const claims = (window._rcmClaims || []).filter(c => {
+  async openPatientPaymentModal() {
+    // Ensure claims are loaded
+    let allClaims = window._rcmClaims || [];
+    if (!allClaims.length) {
+      try { allClaims = await store.getRcmClaims(); window._rcmClaims = allClaims; } catch (e) {}
+    }
+    const claims = allClaims.filter(c => {
       const bal = Number(c.balance || 0);
       const ptResp = Number(c.patientResponsibility || c.patient_responsibility || 0);
       return (bal > 0 || ptResp > 0) && c.status !== 'voided';
@@ -11081,6 +11086,8 @@ function handleNppesProxy(payload) {
     const claims = (window._rcmClaims || []).filter(c =>
       (c.patientName || c.patient_name || '') === name && Number(c.balance || 0) > 0
     );
+    const fmtD = (d) => { if (!d) return '—'; try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; } };
+    const fmtM = (v) => '$' + (Number(v) || 0).toFixed(2);
     container.innerHTML = claims.length === 0 ? '<div style="color:var(--gray-400);font-size:12px;">No open claims for this patient.</div>' : `
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-500);margin-bottom:6px;">Apply to Claims</div>
       <div style="max-height:200px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:8px;">
@@ -11088,11 +11095,11 @@ function handleNppesProxy(payload) {
           <thead><tr style="background:var(--gray-50);"><th style="padding:6px 10px;"><input type="checkbox" checked onchange="document.querySelectorAll('.pt-pay-claim-cb').forEach(cb=>cb.checked=this.checked)"></th><th>DOS</th><th>Payer</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Balance</th></tr></thead>
           <tbody>${claims.map(c => `<tr style="border-bottom:1px solid var(--gray-100);">
             <td style="padding:4px 10px;"><input type="checkbox" class="pt-pay-claim-cb" value="${c.id}" checked data-balance="${Number(c.balance || 0).toFixed(2)}"></td>
-            <td>${formatDateDisplay(c.dateOfService || c.date_of_service)}</td>
+            <td>${fmtD(c.dateOfService || c.date_of_service)}</td>
             <td style="font-size:11px;">${escHtml(c.payerName || c.payer_name || '')}</td>
-            <td style="text-align:right;">${_fm(c.totalCharges || c.total_charges)}</td>
-            <td style="text-align:right;color:#16a34a;">${_fm(c.totalPaid || c.total_paid)}</td>
-            <td style="text-align:right;color:var(--red);font-weight:600;">${_fm(c.balance)}</td>
+            <td style="text-align:right;">${fmtM(c.totalCharges || c.total_charges)}</td>
+            <td style="text-align:right;color:#16a34a;">${fmtM(c.totalPaid || c.total_paid)}</td>
+            <td style="text-align:right;color:var(--red);font-weight:600;">${fmtM(c.balance)}</td>
           </tr>`).join('')}</tbody>
         </table>
       </div>
