@@ -757,11 +757,13 @@ function _renderFinancialsTab(clients, financials, months) {
             <thead><tr><th>Client</th><th style="text-align:right;">Claims</th><th style="text-align:right;">Billed</th><th style="text-align:right;">Collected</th><th style="text-align:right;">Denied</th><th style="text-align:right;">Rate</th></tr></thead>
             <tbody>
               ${clients.filter(c => c.status === 'active').map(c => {
+                // Use claims data if client has linked claims, otherwise fall back to financials
+                const clientClaims = (window._rcmClaims || []).filter(cl => (cl.billingClientId || cl.billing_client_id) == c.id);
                 const cf = financials.filter(f => (f.billingClientId || f.billing_client_id) == c.id);
-                const claims = cf.reduce((s, f) => s + (f.claimsSubmitted || f.claims_submitted || 0), 0);
-                const billed = cf.reduce((s, f) => s + (f.amountBilled || f.amount_billed || 0), 0);
-                const collected = cf.reduce((s, f) => s + (f.amountCollected || f.amount_collected || 0), 0);
-                const denied = cf.reduce((s, f) => s + (f.deniedAmount || f.denied_amount || 0), 0);
+                const claims = clientClaims.length || cf.reduce((s, f) => s + Number(f.claimsSubmitted || f.claims_submitted || 0), 0);
+                const billed = clientClaims.length ? clientClaims.reduce((s, cl) => s + Number(cl.totalCharges || cl.total_charges || 0), 0) : cf.reduce((s, f) => s + Number(f.amountBilled || f.amount_billed || 0), 0);
+                const collected = clientClaims.length ? clientClaims.reduce((s, cl) => s + Number(cl.totalPaid || cl.total_paid || 0), 0) : cf.reduce((s, f) => s + Number(f.amountCollected || f.amount_collected || 0), 0);
+                const denied = clientClaims.length ? clientClaims.filter(cl => cl.status === 'denied').reduce((s, cl) => s + Number(cl.totalCharges || cl.total_charges || 0), 0) : cf.reduce((s, f) => s + Number(f.deniedAmount || f.denied_amount || 0), 0);
                 const rate = billed > 0 ? ((collected / billed) * 100).toFixed(1) : '0.0';
                 return `<tr style="cursor:pointer;" onclick="window.app.viewBillingClient(${c.id})">
                   <td><strong>${escHtml(_clientName(c))}</strong></td>
