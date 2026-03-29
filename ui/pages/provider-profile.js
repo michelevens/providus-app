@@ -871,6 +871,7 @@ async function renderProviderProfilePage(providerId) {
     { id: 'overview', label: 'Overview' },
     { id: 'education', label: 'Education' },
     { id: 'boards', label: 'Board Certs' },
+    { id: 'licenses', label: 'Licenses' },
     { id: 'malpractice', label: 'Malpractice' },
     { id: 'work-history', label: 'Work History' },
     { id: 'cme', label: 'CME' },
@@ -1267,6 +1268,46 @@ async function renderProviderProfilePage(providerId) {
           <button class="btn btn-primary" onclick="window.app.saveBoard(${providerId})">Save</button>
         </div>
       </div>
+    </div>
+
+    <!-- Licenses Tab -->
+    <div class="profile-tab-content" id="tab-licenses" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h3>Licenses (${providerLicenses.length})</h3>
+          ${editButton('+ Add License', `window.app.openLicenseModal(${providerId})`)}
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${providerLicenses.length > 0 ? `<table>
+            <thead><tr><th>State</th><th>License #</th><th>Type</th><th>Issued</th><th>Expires</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              ${providerLicenses.map(l => {
+                const exp = l.expirationDate || l.expiration_date || '';
+                const isExpired = exp && new Date(exp) < new Date();
+                const isExpiring = exp && !isExpired && new Date(exp) < new Date(Date.now() + 90 * 86400000);
+                const statusColor = isExpired ? 'var(--red)' : isExpiring ? 'var(--orange,#f97316)' : 'var(--green)';
+                const statusLabel = isExpired ? 'Expired' : isExpiring ? 'Expiring Soon' : (l.status || 'Active');
+                return `<tr>
+                  <td style="font-weight:600;">${escHtml(l.state || '')}</td>
+                  <td style="font-family:monospace;">${escHtml(l.licenseNumber || l.license_number || '')}</td>
+                  <td class="text-sm">${escHtml(l.licenseType || l.license_type || l.type || '')}</td>
+                  <td class="text-sm">${formatDateDisplay(l.issueDate || l.issue_date) || '—'}</td>
+                  <td class="text-sm" style="color:${statusColor};font-weight:${isExpired || isExpiring ? '600' : '400'};">${formatDateDisplay(exp) || '—'}</td>
+                  <td><span class="badge badge-${isExpired ? 'denied' : isExpiring ? 'pending' : 'approved'}">${escHtml(statusLabel)}</span></td>
+                  <td>
+                    <button class="btn btn-sm" onclick="window.app.editLicense(${l.id})">Edit</button>
+                    <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteLicense(${l.id})">Del</button>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>` : '<div style="padding:24px;text-align:center;color:var(--gray-400);">No licenses on file. Click + Add License to add one.</div>'}
+        </div>
+      </div>
+      ${providerLicenses.some(l => { const e = l.expirationDate || l.expiration_date; return e && new Date(e) < new Date(Date.now() + 90 * 86400000); }) ? `
+      <div style="margin-top:12px;padding:12px 16px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:13px;color:#b45309;">
+        <strong>Attention:</strong> ${providerLicenses.filter(l => { const e = l.expirationDate || l.expiration_date; return e && new Date(e) < new Date(); }).length} expired, ${providerLicenses.filter(l => { const e = l.expirationDate || l.expiration_date; return e && !((new Date(e)) < new Date()) && new Date(e) < new Date(Date.now() + 90 * 86400000); }).length} expiring within 90 days
+      </div>` : ''}
     </div>
 
     <!-- Malpractice Tab -->
