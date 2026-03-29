@@ -802,7 +802,7 @@ export async function initApp() {
   await navigateTo('dashboard');
   await updateNotificationBell();
 
-  // First-run onboarding for new agency accounts
+  // First-run onboarding for new agency accounts (only if zero providers AND never dismissed)
   if (userLevel >= 3) {
     try {
       const providers = await store.getAll('providers');
@@ -810,13 +810,29 @@ export async function initApp() {
         if (!localStorage.getItem('credentik_onboarding_complete') && !localStorage.getItem('credentik_setup_dismissed')) {
           showAgencyOnboarding();
         }
+      } else {
+        // Has providers — mark onboarding as done so it never shows again
+        localStorage.setItem('credentik_onboarding_complete', '1');
+        localStorage.setItem('credentik_setup_dismissed', '1');
       }
     } catch {}
   }
 
-  // Guided tour for new users (Feature 4)
+  // Guided tour for new users — only for accounts with zero providers AND zero applications
+  // (established accounts should never see the tour)
   if (!localStorage.getItem('credentik_tour_completed')) {
-    setTimeout(() => startGuidedTour(), 1500);
+    try {
+      const provCount = (await store.getAll('providers'))?.length || 0;
+      const appCount = (await store.getAll('applications'))?.length || 0;
+      if (provCount === 0 && appCount === 0) {
+        setTimeout(() => startGuidedTour(), 1500);
+      } else {
+        // Established account — mark tour as done
+        localStorage.setItem('credentik_tour_completed', 'true');
+      }
+    } catch {
+      localStorage.setItem('credentik_tour_completed', 'true');
+    }
   }
 
   // Cmd+K / Ctrl+K command palette shortcut
