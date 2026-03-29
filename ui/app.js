@@ -12828,6 +12828,33 @@ function handleNppesProxy(payload) {
       else if (currentPage === 'billing-client-detail') await renderBillingClientDetail(window._selectedBillingClientId);
     } catch (e) { showToast('Error: ' + e.message); }
   },
+  filterTasksPage() {
+    const search = (document.getElementById('task-filter-search')?.value || '').toLowerCase();
+    const priority = document.getElementById('task-filter-priority')?.value || '';
+    const status = document.getElementById('task-filter-status')?.value || '';
+    const category = document.getElementById('task-filter-category')?.value || '';
+    const source = document.getElementById('task-filter-source')?.value || '';
+    document.querySelectorAll('.task-page-row').forEach(r => {
+      const isOverdue = r.dataset.overdue === 'true';
+      const matchSearch = !search || r.textContent.toLowerCase().includes(search);
+      const matchPriority = !priority || r.dataset.priority === priority;
+      const matchStatus = !status || r.dataset.status === status || (status === 'overdue' && isOverdue);
+      const matchCategory = !category || r.dataset.category === category;
+      const matchSource = !source || r.dataset.source === source;
+      r.style.display = matchSearch && matchPriority && matchStatus && matchCategory && matchSource ? '' : 'none';
+    });
+  },
+  async bulkCompleteTasks() {
+    const checked = document.querySelectorAll('.task-bulk-cb:checked');
+    if (!checked.length) { showToast('Select tasks to complete'); return; }
+    showToast(`Completing ${checked.length} tasks...`);
+    let completed = 0;
+    for (const cb of checked) {
+      try { await store.updateBillingTask(cb.value, { status: 'completed' }); completed++; } catch (e) {}
+    }
+    showToast(`${completed} tasks completed. Refreshing...`);
+    setTimeout(() => window.location.reload(), 1500);
+  },
   async autoGenerateTasks() {
     try {
       showToast('Scanning claims data...');
