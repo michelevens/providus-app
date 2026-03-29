@@ -6411,58 +6411,59 @@ window._appRender = {
 };
 
 // Unified hub page stubs
-async function renderCredentialingPage()     { (await _page('healthcare-credentialing')).renderCredentialingPage(); }
-async function renderComplianceHubPage()     { (await _page('compliance-hub')).renderComplianceHubPage(); }
-async function renderWorkspaceHubPage()      { (await _page('workspace-hub')).renderWorkspaceHubPage(); }
-async function renderAnalyticsHubPage()      { (await _page('analytics-hub')).renderAnalyticsHubPage(); }
-async function renderCommandCenterPage()     { (await _page('command-center')).renderCommandCenterPage(); }
-async function renderAdminHubPage()          { (await _page('admin-hub')).renderAdminHubPage(); }
+async function renderCredentialingPage()     { await (await _page('healthcare-credentialing')).renderCredentialingPage(); }
+async function renderComplianceHubPage()     { await (await _page('compliance-hub')).renderComplianceHubPage(); }
+async function renderWorkspaceHubPage()      { await (await _page('workspace-hub')).renderWorkspaceHubPage(); }
+async function renderAnalyticsHubPage()      { await (await _page('analytics-hub')).renderAnalyticsHubPage(); }
+async function renderCommandCenterPage()     { await (await _page('command-center')).renderCommandCenterPage(); }
+async function renderAdminHubPage()          { await (await _page('admin-hub')).renderAdminHubPage(); }
 
 // Convenience stubs — these look like the original functions but lazy-load from modules.
-async function renderBillingPage()           { (await _page('billing')).renderBillingPage(); }
-async function renderInvoiceDetail(id)       { (await _page('billing')).renderInvoiceDetail(id); }
-async function renderContractsPage()         { (await _page('billing')).renderContractsPage(); }
-async function renderContractDetail(id)      { (await _page('billing')).renderContractDetail(id); }
-async function renderBillingServicesPage()   { (await _page('billing-services')).renderBillingServicesPage(); }
-async function renderBillingClientDetail(id) { (await _page('billing-services')).renderBillingClientDetail(id); }
-async function renderRcmPage()              { (await _page('rcm')).renderRcmPage(); }
-async function renderRevenueCyclePage()     { (await _page('revenue-cycle')).renderRevenueCyclePage(); }
+// IMPORTANT: must await the inner call so hub pages can inject tab bars after content renders
+async function renderBillingPage()           { await (await _page('billing')).renderBillingPage(); }
+async function renderInvoiceDetail(id)       { await (await _page('billing')).renderInvoiceDetail(id); }
+async function renderContractsPage()         { await (await _page('billing')).renderContractsPage(); }
+async function renderContractDetail(id)      { await (await _page('billing')).renderContractDetail(id); }
+async function renderBillingServicesPage()   { await (await _page('billing-services')).renderBillingServicesPage(); }
+async function renderBillingClientDetail(id) { await (await _page('billing-services')).renderBillingClientDetail(id); }
+async function renderRcmPage()              { await (await _page('rcm')).renderRcmPage(); }
+async function renderRevenueCyclePage()     { await (await _page('revenue-cycle')).renderRevenueCyclePage(); }
 // renderBillingClientDetail still loaded from billing-services via revenue-cycle re-export
-async function renderExclusionsPage()        { (await _page('compliance')).renderExclusionsPage(); }
-async function renderCompliancePage()        { (await _page('compliance')).renderCompliancePage(); }
-async function renderPSVPage()               { (await _page('compliance')).renderPSVPage(); }
-async function renderMonitoringPage()        { (await _page('compliance')).renderMonitoringPage(); }
-async function renderAdminPanel()            { (await _page('admin')).renderAdminPanel(); }
-async function renderOnboardingStub()        { (await _page('admin')).renderOnboardingStub(); }
-async function renderImportPage()            { (await _page('admin')).renderImportPage(); }
-async function renderAuditTrail()            { (await _page('admin')).renderAuditTrail(); }
-async function renderFaqPage()               { (await _page('admin')).renderFaqPage(); }
-async function renderAutomationsPage()       { (await _page('admin')).renderAutomationsPage(); }
-async function renderApiDocsPage()           { (await _page('admin')).renderApiDocsPage(); }
-async function renderNotificationSettingsPage() { (await _page('admin')).renderNotificationSettingsPage(); }
-async function renderBottleneckAnalysis()    { (await _page('admin')).renderBottleneckAnalysis(); }
-async function renderProviderDashboard(u)    { (await _page('provider-profile')).renderProviderDashboard(u); }
-async function renderProviderProfilePage(id) { (await _page('provider-profile')).renderProviderProfilePage(id); }
-async function renderProviderPrintout(id)    { (await _page('provider-profile')).renderProviderPrintout(id); }
-async function renderProviderPortableProfile(id) { (await _page('provider-profile')).renderProviderPortableProfile(id); }
-async function renderFundingDashboard()      { (await _page('funding')).renderFundingDashboard(); }
-async function renderFundingFederal()        { (await _page('funding')).renderFundingFederal(); }
-async function renderFundingState()          { (await _page('funding')).renderFundingState(); }
-async function renderFundingFoundations()    { (await _page('funding')).renderFundingFoundations(); }
-async function renderFundingPipeline()       { (await _page('funding')).renderFundingPipeline(); }
-async function renderFundingCalendar()       { (await _page('funding')).renderFundingCalendar(); }
-async function renderFundingIntelligence()   { (await _page('funding')).renderFundingIntelligence(); }
-async function renderFundingDetail(id)       { (await _page('funding')).renderFundingDetail(id); }
-async function renderDocChecklistTool()      { (await _page('tools')).renderDocChecklistTool(); }
-async function renderFeeScheduleTool()       { (await _page('tools')).renderFeeScheduleTool(); }
-async function renderPayerPortalTool()       { (await _page('tools')).renderPayerPortalTool(); }
-async function renderExpirationAlertsTool()  { (await _page('tools')).renderExpirationAlertsTool(); }
-async function renderStatusExportTool()      { (await _page('tools')).renderStatusExportTool(); }
-async function renderStateLookupTool()       { (await _page('tools')).renderStateLookupTool(); }
-async function renderDeadlineTimelineTool()  { (await _page('tools')).renderDeadlineTimelineTool(); }
-async function renderLetterGeneratorTool()   { (await _page('tools')).renderLetterGeneratorTool(); }
-async function renderCaqhManager()           { (await _page('tools')).renderCaqhManager(); }
-async function renderTaxonomySearch()        { (await _page('tools')).renderTaxonomySearch(); }
+async function renderExclusionsPage()        { await (await _page('compliance')).renderExclusionsPage(); }
+async function renderCompliancePage()        { await (await _page('compliance')).renderCompliancePage(); }
+async function renderPSVPage()               { await (await _page('compliance')).renderPSVPage(); }
+async function renderMonitoringPage()        { await (await _page('compliance')).renderMonitoringPage(); }
+async function renderAdminPanel()            { await (await _page('admin')).renderAdminPanel(); }
+async function renderOnboardingStub()        { await (await _page('admin')).renderOnboardingStub(); }
+async function renderImportPage()            { await (await _page('admin')).renderImportPage(); }
+async function renderAuditTrail()            { await (await _page('admin')).renderAuditTrail(); }
+async function renderFaqPage()               { await (await _page('admin')).renderFaqPage(); }
+async function renderAutomationsPage()       { await (await _page('admin')).renderAutomationsPage(); }
+async function renderApiDocsPage()           { await (await _page('admin')).renderApiDocsPage(); }
+async function renderNotificationSettingsPage() { await (await _page('admin')).renderNotificationSettingsPage(); }
+async function renderBottleneckAnalysis()    { await (await _page('admin')).renderBottleneckAnalysis(); }
+async function renderProviderDashboard(u)    { await (await _page('provider-profile')).renderProviderDashboard(u); }
+async function renderProviderProfilePage(id) { await (await _page('provider-profile')).renderProviderProfilePage(id); }
+async function renderProviderPrintout(id)    { await (await _page('provider-profile')).renderProviderPrintout(id); }
+async function renderProviderPortableProfile(id) { await (await _page('provider-profile')).renderProviderPortableProfile(id); }
+async function renderFundingDashboard()      { await (await _page('funding')).renderFundingDashboard(); }
+async function renderFundingFederal()        { await (await _page('funding')).renderFundingFederal(); }
+async function renderFundingState()          { await (await _page('funding')).renderFundingState(); }
+async function renderFundingFoundations()    { await (await _page('funding')).renderFundingFoundations(); }
+async function renderFundingPipeline()       { await (await _page('funding')).renderFundingPipeline(); }
+async function renderFundingCalendar()       { await (await _page('funding')).renderFundingCalendar(); }
+async function renderFundingIntelligence()   { await (await _page('funding')).renderFundingIntelligence(); }
+async function renderFundingDetail(id)       { await (await _page('funding')).renderFundingDetail(id); }
+async function renderDocChecklistTool()      { await (await _page('tools')).renderDocChecklistTool(); }
+async function renderFeeScheduleTool()       { await (await _page('tools')).renderFeeScheduleTool(); }
+async function renderPayerPortalTool()       { await (await _page('tools')).renderPayerPortalTool(); }
+async function renderExpirationAlertsTool()  { await (await _page('tools')).renderExpirationAlertsTool(); }
+async function renderStatusExportTool()      { await (await _page('tools')).renderStatusExportTool(); }
+async function renderStateLookupTool()       { await (await _page('tools')).renderStateLookupTool(); }
+async function renderDeadlineTimelineTool()  { await (await _page('tools')).renderDeadlineTimelineTool(); }
+async function renderLetterGeneratorTool()   { await (await _page('tools')).renderLetterGeneratorTool(); }
+async function renderCaqhManager()           { await (await _page('tools')).renderCaqhManager(); }
+async function renderTaxonomySearch()        { await (await _page('tools')).renderTaxonomySearch(); }
 function renderNPIResultCard(prov)           { return _pageModules['tools']?.renderNPIResultCard(prov) || ''; }
 // Billing helpers — synchronous stubs (module must be loaded already when called)
 function _fmtMoney(n) { return _pageModules['billing']?._fmtMoney(n) || ('$' + Number(n || 0).toFixed(2)); }
