@@ -824,16 +824,26 @@ async function renderBillingClientDetail(clientId) {
   const body = document.getElementById('page-body');
   body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
 
-  let client = {}, tasks = [], activities = [], financials = [];
-  try { client = await store.getBillingClient(clientId); } catch (e) {
-    try { const all = await store.getBillingClients(); client = (Array.isArray(all) ? all : []).find(x => x.id == clientId) || {}; } catch {}
-  }
-  try { tasks = await store.getBillingTasks({ billing_client_id: clientId }); } catch {}
-  try { activities = await store.getBillingActivities({ billing_client_id: clientId, limit: 50 }); } catch {}
-  try { financials = await store.getBillingFinancials({ billing_client_id: clientId }); } catch {}
+  let client = {}, tasks = [], activities = [], financials = [], claims = [], denials = [];
+  const [rc, rt, ra, rf, rcl, rd] = await Promise.allSettled([
+    store.getBillingClient(clientId),
+    store.getBillingTasks({ billing_client_id: clientId }),
+    store.getBillingActivities({ billing_client_id: clientId, limit: 50 }),
+    store.getBillingFinancials({ billing_client_id: clientId }),
+    store.getRcmClaims({ billing_client_id: clientId }),
+    store.getRcmDenials({ billing_client_id: clientId }),
+  ]);
+  if (rc.status === 'fulfilled') client = rc.value;
+  if (rt.status === 'fulfilled') tasks = rt.value;
+  if (ra.status === 'fulfilled') activities = ra.value;
+  if (rf.status === 'fulfilled') financials = rf.value;
+  if (rcl.status === 'fulfilled') claims = rcl.value;
+  if (rd.status === 'fulfilled') denials = rd.value;
   if (!Array.isArray(tasks)) tasks = [];
   if (!Array.isArray(activities)) activities = [];
   if (!Array.isArray(financials)) financials = [];
+  if (!Array.isArray(claims)) claims = [];
+  if (!Array.isArray(denials)) denials = [];
   if (!client || !client.id) { body.innerHTML = '<div class="empty-state"><h3>Billing client not found</h3></div>'; return; }
 
   const orgName = _clientName(client);
@@ -841,17 +851,50 @@ async function renderBillingClientDetail(clientId) {
   const fee = _getField(client, 'monthlyFee', 'monthly_fee') || 0;
   const feeStruct = _getField(client, 'feeStructure', 'fee_structure') || 'flat';
   const feeLabels = { flat: 'Flat Monthly', per_provider: 'Per Provider/Mo', percentage: '% of Collections', per_claim: 'Per Claim' };
+  const paymentMode = _getField(client, 'paymentMode', 'payment_mode') || 'self_managed';
+  const agencyFee = _getField(client, 'agencyFeePercent', 'agency_fee_percent') || 0;
   const openTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled');
   const completedCount = tasks.filter(t => t.status === 'completed').length;
 
-  const totals = { claims: 0, billed: 0, collected: 0, denied: 0 };
-  financials.forEach(f => {
-    totals.claims += f.claimsSubmitted || f.claims_submitted || 0;
-    totals.billed += f.amountBilled || f.amount_billed || 0;
-    totals.collected += f.amountCollected || f.amount_collected || 0;
-    totals.denied += f.deniedAmount || f.denied_amount || 0;
-  });
+  // Compute totals from actual claims data (preferred) or financials (fallback)
+  const totals = { claims: 0, billed: 0, collected: 0, denied: 0, ptResp: 0, balance: 0 };
+  if (claims.length > 0) {
+    totals.claims = claims.length;
+    claims.forEach(c => {
+      totals.billed += Number(c.totalCharges || c.total_charges || 0);
+      totals.collected += Number(c.totalPaid || c.total_paid || 0);
+      totals.balance += Number(c.balance || 0);
+      totals.ptResp += Number(c.patientResponsibility || c.patient_responsibility || 0);
+      if (c.status === 'denied') totals.denied += Number(c.totalCharges || c.total_charges || 0);
+    });
+  } else {
+    financials.forEach(f => {
+      totals.claims += Number(f.claimsSubmitted || f.claims_submitted || 0);
+      totals.billed += Number(f.amountBilled || f.amount_billed || 0);
+      totals.collected += Number(f.amountCollected || f.amount_collected || 0);
+      totals.denied += Number(f.deniedAmount || f.denied_amount || 0);
+    });
+  }
   const collectionRate = totals.billed > 0 ? ((totals.collected / totals.billed) * 100).toFixed(1) : '0.0';
+  const denialRate = totals.billed > 0 ? ((totals.denied / totals.billed) * 100).toFixed(1) : '0.0';
+
+  // Claims by status
+  const claimsByStatus = {};
+  claims.forEach(c => { claimsByStatus[c.status] = (claimsByStatus[c.status] || 0) + 1; });
+
+  // Monthly trend from claims
+  const monthlyTrend = {};
+  claims.forEach(c => {
+    const m = (c.dateOfService || c.date_of_service || '').toString().slice(0, 7);
+    if (!m) return;
+    if (!monthlyTrend[m]) monthlyTrend[m] = { billed: 0, collected: 0, denied: 0 };
+    monthlyTrend[m].billed += Number(c.totalCharges || c.total_charges || 0);
+    monthlyTrend[m].collected += Number(c.totalPaid || c.total_paid || 0);
+    if (c.status === 'denied') monthlyTrend[m].denied += Number(c.totalCharges || c.total_charges || 0);
+  });
+
+  // Tab state
+  const cdTab = window._cdTab || 'overview';
 
   const pageTitle = document.getElementById('page-title');
   const pageSubtitle = document.getElementById('page-subtitle');
@@ -867,17 +910,23 @@ async function renderBillingClientDetail(clientId) {
   `;
 
   body.innerHTML = `
-    <style>.bsd-stat{background:var(--surface-card,#fff);border-radius:16px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}.bsd-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}.bsd-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}.bsd-stat .value{font-size:28px;font-weight:800;line-height:1.1;}.bsd-stat .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;}</style>
+    <style>
+      .bsd-stat{background:var(--surface-card,#fff);border-radius:14px;padding:14px 16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s;}.bsd-stat:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.1);}.bsd-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}.bsd-stat .value{font-size:24px;font-weight:800;line-height:1.1;}.bsd-stat .label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:3px;}
+      .cd-tab{padding:8px 14px;font-size:12px;font-weight:600;color:var(--gray-500);cursor:pointer;border:none;background:none;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all 0.15s;}
+      .cd-tab:hover{color:var(--brand-600);background:var(--gray-50);}.cd-tab.active{color:var(--brand-600);border-bottom-color:var(--brand-600);}
+    </style>
 
     <!-- Header -->
-    <div class="card" style="border-top:3px solid var(--brand-600);margin-bottom:20px;border-radius:16px;">
+    <div class="card" style="border-top:3px solid var(--brand-600);margin-bottom:16px;border-radius:16px;">
       <div class="card-body">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
           <div>
-            <div style="font-size:24px;font-weight:800;color:var(--gray-900);">${escHtml(orgName)}</div>
-            <div style="font-size:14px;color:var(--gray-600);margin-top:4px;">Platform: <strong>${escHtml(platform)}</strong> | Fee: <strong>${_fmtMoney(fee)}</strong> <span style="font-size:12px;color:var(--gray-400);">(${feeLabels[feeStruct] || feeStruct})</span></div>
-            ${_getField(client, 'contactName', 'contact_name') ? `<div style="font-size:13px;color:var(--gray-500);margin-top:2px;">Contact: ${escHtml(_getField(client, 'contactName', 'contact_name'))}${_getField(client, 'contactEmail', 'contact_email') ? ' — ' + escHtml(_getField(client, 'contactEmail', 'contact_email')) : ''}</div>` : ''}
-            ${_getField(client, 'startDate', 'start_date') ? `<div style="font-size:13px;color:var(--gray-500);margin-top:2px;">Since: ${formatDateDisplay(_getField(client, 'startDate', 'start_date'))}</div>` : ''}
+            <div style="font-size:22px;font-weight:800;color:var(--gray-900);">${escHtml(orgName)}</div>
+            <div style="font-size:13px;color:var(--gray-600);margin-top:4px;">
+              Platform: <strong>${escHtml(platform)}</strong> | Fee: <strong>${_fmtMoney(fee)}</strong> <span style="font-size:11px;color:var(--gray-400);">(${feeLabels[feeStruct] || feeStruct})</span>
+              | Mode: <strong>${paymentMode === 'agency_managed' ? 'Agency Managed' : 'Self Managed'}</strong>${agencyFee > 0 ? ` (${agencyFee}% fee)` : ''}
+            </div>
+            ${_getField(client, 'contactName', 'contact_name') ? `<div style="font-size:12px;color:var(--gray-500);margin-top:2px;">Contact: ${escHtml(_getField(client, 'contactName', 'contact_name'))}${_getField(client, 'contactEmail', 'contact_email') ? ' — ' + escHtml(_getField(client, 'contactEmail', 'contact_email')) : ''}${_getField(client, 'contactPhone', 'contact_phone') ? ' — ' + escHtml(_getField(client, 'contactPhone', 'contact_phone')) : ''}</div>` : ''}
           </div>
           <div>${_bsStatusBadge(client.status)}</div>
         </div>
@@ -885,56 +934,196 @@ async function renderBillingClientDetail(clientId) {
     </div>
 
     <!-- Stats -->
-    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:20px;">
-      <div class="stat-card bsd-stat"><div class="label">Open Tasks</div><div class="value" style="color:var(--gold);">${openTasks.length}</div></div>
-      <div class="stat-card bsd-stat"><div class="label">Completed</div><div class="value" style="color:var(--green);">${completedCount}</div></div>
-      <div class="stat-card bsd-stat"><div class="label">Billed</div><div class="value">${_fmtK(totals.billed)}</div></div>
-      <div class="stat-card bsd-stat"><div class="label">Collected</div><div class="value" style="color:var(--green);">${_fmtK(totals.collected)}</div></div>
-      <div class="stat-card bsd-stat"><div class="label">Denied</div><div class="value" style="color:var(--red);">${_fmtK(totals.denied)}</div></div>
-      <div class="stat-card bsd-stat"><div class="label">Collection Rate</div><div class="value" style="color:var(--brand-600);">${collectionRate}%</div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px;">
+      <div class="bsd-stat"><div class="label">Claims</div><div class="value" style="color:var(--brand-600);">${totals.claims}</div></div>
+      <div class="bsd-stat"><div class="label">Billed</div><div class="value" style="color:#7c3aed;">${_fmtK(totals.billed)}</div></div>
+      <div class="bsd-stat"><div class="label">Collected</div><div class="value" style="color:#16a34a;">${_fmtK(totals.collected)}</div><div style="font-size:10px;color:var(--gray-400);">${collectionRate}% rate</div></div>
+      <div class="bsd-stat"><div class="label">Denied</div><div class="value" style="color:#ef4444;">${_fmtK(totals.denied)}</div><div style="font-size:10px;color:var(--gray-400);">${denialRate}%</div></div>
+      <div class="bsd-stat"><div class="label">Balance</div><div class="value" style="color:#ea580c;">${_fmtK(totals.balance)}</div></div>
+      <div class="bsd-stat"><div class="label">Open Tasks</div><div class="value" style="color:#d97706;">${openTasks.length}</div></div>
+      <div class="bsd-stat"><div class="label">Denials</div><div class="value" style="color:#dc2626;">${denials.length}</div></div>
     </div>
 
-    <!-- Two columns -->
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--gray-200);overflow-x:auto;">
+      ${['overview','billing','financial','tasks','denials','activity'].map(t => `<button class="cd-tab ${cdTab === t ? 'active' : ''}" onclick="window._cdTab='${t}';window.app.viewBillingClient(${client.id})">${t === 'overview' ? 'Overview' : t === 'billing' ? 'Claims & Charges' : t === 'financial' ? 'Financial' : t === 'tasks' ? 'Tasks (' + openTasks.length + ')' : t === 'denials' ? 'Denials (' + denials.length + ')' : 'Activity'}</button>`).join('')}
+    </div>
+
+    <!-- TAB: Overview -->
+    ${cdTab === 'overview' ? `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div class="card" style="border-radius:16px;">
-        <div class="card-header"><h3>Open Tasks (${openTasks.length})</h3><button class="btn btn-sm btn-primary" onclick="window.app.openBsTaskModal(${client.id})">+ Add</button></div>
-        <div class="card-body" style="padding:0;">
-          ${openTasks.length > 0 ? `<table><thead><tr><th>Task</th><th>Category</th><th>Priority</th><th>Due</th><th></th></tr></thead><tbody>
-            ${openTasks.map(t => {
-              const cat = TASK_CATEGORIES.find(c => c.value === (t.category || t.taskCategory || t.task_category));
-              const dueDate = t.dueDate || t.due_date || '';
-              const isOverdue = dueDate && new Date(dueDate) < new Date();
-              return `<tr style="${isOverdue ? 'background:#fef2f2;' : ''}"><td><strong style="font-size:13px;">${escHtml(t.title || '—')}</strong></td><td style="font-size:12px;">${escHtml(cat ? cat.label : '')}</td><td>${_taskPriorityBadge(t.priority)}</td><td style="font-size:12px;${isOverdue ? 'color:var(--red);font-weight:600;' : ''}">${dueDate ? formatDateDisplay(dueDate) : '—'}</td><td><button class="btn btn-sm btn-primary" onclick="window.app.completeBsTask(${t.id})" style="padding:2px 8px;font-size:11px;">Done</button></td></tr>`;
-            }).join('')}
-          </tbody></table>` : '<div style="padding:1.5rem;text-align:center;color:var(--gray-500);">No open tasks</div>'}
+      <!-- Monthly Trend -->
+      <div class="card" style="border-radius:14px;">
+        <div class="card-header"><h3>Monthly Collections</h3></div>
+        <div class="card-body" style="padding:12px;">
+          ${Object.keys(monthlyTrend).length > 0 ? `<table style="width:100%;font-size:12px;border-collapse:collapse;">
+            <thead><tr style="background:var(--gray-50);"><th style="padding:6px 8px;">Month</th><th style="text-align:right;">Billed</th><th style="text-align:right;">Collected</th><th style="text-align:right;">Denied</th><th style="text-align:right;">Rate</th></tr></thead>
+            <tbody>${Object.entries(monthlyTrend).sort((a,b) => b[0].localeCompare(a[0])).map(([m, d]) => {
+              const r = d.billed > 0 ? ((d.collected / d.billed) * 100).toFixed(0) : '—';
+              return `<tr style="border-bottom:1px solid var(--gray-100);"><td style="padding:4px 8px;font-weight:600;">${m}</td><td style="text-align:right;">${_fmtMoney(d.billed)}</td><td style="text-align:right;color:#16a34a;font-weight:600;">${_fmtMoney(d.collected)}</td><td style="text-align:right;color:#ef4444;">${_fmtMoney(d.denied)}</td><td style="text-align:right;font-weight:600;">${r}%</td></tr>`;
+            }).join('')}</tbody>
+          </table>` : '<div style="color:var(--gray-400);text-align:center;padding:1rem;">No claims data</div>'}
         </div>
       </div>
-
-      <div class="card" style="border-radius:16px;">
-        <div class="card-header"><h3>Recent Activity</h3><button class="btn btn-sm btn-gold" onclick="window.app.openBsActivityModal(${client.id})">+ Log</button></div>
-        <div class="card-body" style="padding:12px 16px;">
-          ${activities.length > 0 ? activities.slice(0, 15).map(a => {
-            const type = a.activityType || a.activity_type || a.type || 'note';
-            const typeLabel = ACTIVITY_TYPES.find(t => t.value === type);
-            const amount = a.amount || 0;
-            return `<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--gray-100);font-size:13px;">
-              <div style="flex-shrink:0;margin-top:2px;">${_activityTypeIcon(type)}</div>
-              <div style="flex:1;min-width:0;"><strong>${escHtml(typeLabel ? typeLabel.label : type)}</strong>${amount ? ` — <span style="color:var(--green);font-weight:600;">${_fmtMoney(amount)}</span>` : ''}<div style="font-size:12px;color:var(--gray-600);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(a.notes || a.description || '')}</div><div style="font-size:11px;color:var(--gray-400);">${formatDateDisplay(a.activityDate || a.activity_date || a.createdAt || a.created_at)}</div></div>
+      <!-- Claims by Status -->
+      <div class="card" style="border-radius:14px;">
+        <div class="card-header"><h3>Claims by Status</h3></div>
+        <div class="card-body" style="padding:14px;">
+          ${Object.keys(claimsByStatus).length > 0 ? Object.entries(claimsByStatus).sort((a,b) => b[1] - a[1]).map(([s, cnt]) => {
+            const pct = totals.claims > 0 ? (cnt / totals.claims * 100) : 0;
+            const colors = { paid: '#16a34a', partial_paid: '#0891b2', denied: '#ef4444', submitted: '#8b5cf6', pending: '#f59e0b' };
+            return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <div style="flex:1;font-size:12px;font-weight:600;color:${colors[s] || '#666'};">${s.replace('_',' ').toUpperCase()}</div>
+              <div style="width:100px;height:6px;background:var(--gray-200);border-radius:3px;overflow:hidden;"><div style="height:100%;background:${colors[s] || '#999'};width:${pct}%;border-radius:3px;"></div></div>
+              <div style="font-size:12px;font-weight:700;min-width:30px;text-align:right;">${cnt}</div>
             </div>`;
-          }).join('') : '<div style="text-align:center;padding:1rem;color:var(--gray-500);">No activity logged yet</div>'}
+          }).join('') : '<div style="color:var(--gray-400);text-align:center;padding:1rem;">No claims</div>'}
         </div>
       </div>
     </div>
+    <!-- Recent Activity -->
+    <div class="card" style="border-radius:14px;margin-top:16px;">
+      <div class="card-header"><h3>Recent Activity</h3><button class="btn btn-sm btn-gold" onclick="window.app.openBsActivityModal(${client.id})">+ Log</button></div>
+      <div class="card-body" style="padding:12px 16px;">
+        ${activities.length > 0 ? activities.slice(0, 10).map(a => {
+          const type = a.activityType || a.activity_type || a.type || 'note';
+          const typeLabel = ACTIVITY_TYPES.find(t => t.value === type);
+          const amount = a.amount || 0;
+          return `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--gray-100);font-size:12px;">
+            <div style="flex-shrink:0;margin-top:2px;">${_activityTypeIcon(type)}</div>
+            <div style="flex:1;min-width:0;"><strong>${escHtml(typeLabel ? typeLabel.label : type)}</strong>${amount ? ` — <span style="color:var(--green);font-weight:600;">${_fmtMoney(amount)}</span>` : ''}<div style="font-size:11px;color:var(--gray-600);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(a.notes || a.description || '')}</div></div>
+            <div style="font-size:10px;color:var(--gray-400);white-space:nowrap;">${formatDateDisplay(a.activityDate || a.activity_date || a.createdAt || a.created_at)}</div>
+          </div>`;
+        }).join('') : '<div style="text-align:center;padding:1rem;color:var(--gray-500);">No activity logged</div>'}
+      </div>
+    </div>
+    ` : ''}
 
-    ${financials.length > 0 ? `<div class="card" style="border-radius:16px;margin-top:16px;"><div class="card-header"><h3>Financial History</h3></div><div class="card-body" style="padding:0;"><table><thead><tr><th>Period</th><th style="text-align:right;">Claims</th><th style="text-align:right;">Billed</th><th style="text-align:right;">Collected</th><th style="text-align:right;">Denied</th><th style="text-align:right;">Adjustments</th><th style="text-align:right;">Rate</th></tr></thead><tbody>
-      ${financials.map(f => {
-        const b = f.amountBilled || f.amount_billed || 0;
-        const c = f.amountCollected || f.amount_collected || 0;
-        const r = b > 0 ? ((c / b) * 100).toFixed(1) : '—';
-        return `<tr><td><strong>${escHtml(f.period || '—')}</strong></td><td style="text-align:right;">${f.claimsSubmitted || f.claims_submitted || 0}</td><td style="text-align:right;">${_fmtMoney(b)}</td><td style="text-align:right;color:var(--green);font-weight:600;">${_fmtMoney(c)}</td><td style="text-align:right;color:var(--red);">${_fmtMoney(f.deniedAmount || f.denied_amount || 0)}</td><td style="text-align:right;">${_fmtMoney(f.adjustments || 0)}</td><td style="text-align:right;font-weight:600;">${r}%</td></tr>`;
-      }).join('')}
-    </tbody></table></div></div>` : ''}
-    ${client.notes ? `<div class="card" style="border-radius:16px;margin-top:16px;"><div class="card-header"><h3>Notes</h3></div><div class="card-body"><p style="white-space:pre-wrap;font-size:13px;color:var(--gray-600);margin:0;">${escHtml(client.notes)}</p></div></div>` : ''}
+    <!-- TAB: Claims & Charges -->
+    ${cdTab === 'billing' ? `
+    <div class="card" style="border-radius:14px;">
+      <div class="card-header"><h3>Claims (${claims.length})</h3></div>
+      <div class="card-body" style="padding:0;"><div class="table-wrap" style="max-height:500px;overflow-y:auto;"><table style="font-size:12px;">
+        <thead><tr><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Balance</th><th>Check #</th><th>Status</th></tr></thead>
+        <tbody>
+          ${claims.map(c => `<tr style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
+            <td style="font-family:monospace;color:var(--brand-600);">${escHtml(c.claimNumber || c.claim_number || '')}</td>
+            <td>${escHtml(c.patientName || c.patient_name || '')}</td>
+            <td>${escHtml(c.payerName || c.payer_name || '')}</td>
+            <td>${formatDateDisplay(c.dateOfService || c.date_of_service)}</td>
+            <td style="text-align:right;">${_fmtMoney(c.totalCharges || c.total_charges)}</td>
+            <td style="text-align:right;color:#16a34a;font-weight:600;">${_fmtMoney(c.totalPaid || c.total_paid)}</td>
+            <td style="text-align:right;${Number(c.balance || 0) > 0 ? 'color:#ef4444;font-weight:600;' : ''}">${_fmtMoney(c.balance)}</td>
+            <td style="font-family:monospace;font-size:11px;">${escHtml(c.checkNumber || c.check_number || '—')}</td>
+            <td>${_bsStatusBadge(c.status)}</td>
+          </tr>`).join('')}
+          ${claims.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No claims for this client</td></tr>' : ''}
+        </tbody>
+      </table></div></div>
+    </div>
+    ` : ''}
+
+    <!-- TAB: Financial -->
+    ${cdTab === 'financial' ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+      <div class="card" style="border-radius:14px;">
+        <div class="card-header"><h3>Payment Ledger</h3><button class="btn btn-sm" onclick="window.app.viewClientLedger(${client.id})" style="font-size:11px;">Full Ledger</button></div>
+        <div class="card-body" style="padding:12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div style="background:#dcfce7;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:10px;font-weight:700;color:#166534;">COLLECTED</div><div style="font-size:20px;font-weight:800;color:#16a34a;">${_fmtK(totals.collected)}</div></div>
+            <div style="background:#fff7ed;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:10px;font-weight:700;color:#9a3412;">OUTSTANDING</div><div style="font-size:20px;font-weight:800;color:#ea580c;">${_fmtK(totals.balance)}</div></div>
+          </div>
+          ${paymentMode === 'agency_managed' && agencyFee > 0 ? `<div style="background:#ede9fe;border-radius:8px;padding:10px;text-align:center;margin-bottom:8px;"><div style="font-size:10px;font-weight:700;color:#5b21b6;">AGENCY FEE (${agencyFee}%)</div><div style="font-size:18px;font-weight:800;color:#7c3aed;">${_fmtMoney(totals.collected * agencyFee / 100)}</div></div>` : ''}
+        </div>
+      </div>
+      <div class="card" style="border-radius:14px;">
+        <div class="card-header"><h3>Monthly Trend</h3></div>
+        <div class="card-body" style="padding:0;max-height:300px;overflow-y:auto;"><table style="font-size:12px;">
+          <thead><tr style="background:var(--gray-50);"><th style="padding:6px 8px;">Month</th><th style="text-align:right;">Billed</th><th style="text-align:right;">Collected</th><th style="text-align:right;">Rate</th></tr></thead>
+          <tbody>${Object.entries(monthlyTrend).sort((a,b) => b[0].localeCompare(a[0])).map(([m, d]) => {
+            const r = d.billed > 0 ? ((d.collected / d.billed) * 100).toFixed(0) : '—';
+            return `<tr style="border-bottom:1px solid var(--gray-100);"><td style="padding:4px 8px;font-weight:600;">${m}</td><td style="text-align:right;">${_fmtMoney(d.billed)}</td><td style="text-align:right;color:#16a34a;">${_fmtMoney(d.collected)}</td><td style="text-align:right;font-weight:600;">${r}%</td></tr>`;
+          }).join('')}</tbody>
+        </table></div>
+      </div>
+    </div>
+    ` : ''}
+
+    <!-- TAB: Tasks -->
+    ${cdTab === 'tasks' ? `
+    <div class="card" style="border-radius:14px;">
+      <div class="card-header"><h3>Tasks (${openTasks.length} open)</h3>
+        <div style="display:flex;gap:6px;"><button class="btn btn-sm btn-primary" onclick="window.app.openBsTaskModal(${client.id})" style="font-size:11px;">+ New Task</button><button class="btn btn-sm" onclick="window.app.autoGenerateTasks()" style="font-size:11px;">Generate</button></div>
+      </div>
+      <div class="card-body" style="padding:0;max-height:500px;overflow-y:auto;"><table style="font-size:12px;">
+        <thead><tr><th>Task</th><th>Category</th><th>Priority</th><th>Due</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          ${tasks.map(t => {
+            const cat = TASK_CATEGORIES.find(c => c.value === (t.category || t.taskCategory || t.task_category));
+            const dueDate = t.dueDate || t.due_date || '';
+            const isOverdue = dueDate && new Date(dueDate) < new Date() && t.status !== 'completed' && t.status !== 'cancelled';
+            const isSystem = (t.source || '') === 'system';
+            return `<tr style="${isOverdue ? 'background:#fef2f2;' : t.status === 'completed' ? 'opacity:0.5;' : ''}">
+              <td><strong>${escHtml(t.title || '—')}</strong>${isSystem ? ' <span style="font-size:9px;padding:1px 5px;border-radius:4px;background:#dbeafe;color:#1e40af;font-weight:600;">AUTO</span>' : ''}${t.description ? `<div style="font-size:11px;color:var(--gray-500);margin-top:2px;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(t.description)}</div>` : ''}</td>
+              <td style="font-size:11px;">${escHtml(cat ? cat.label : '')}</td>
+              <td>${_taskPriorityBadge(t.priority)}</td>
+              <td style="${isOverdue ? 'color:var(--red);font-weight:600;' : ''}font-size:11px;">${dueDate ? formatDateDisplay(dueDate) : '—'}${isOverdue ? ' !' : ''}</td>
+              <td>${_taskStatusBadge(t.status)}</td>
+              <td style="white-space:nowrap;">${t.status !== 'completed' ? `<button class="btn btn-sm btn-primary" onclick="window.app.completeBsTask(${t.id})" style="font-size:10px;padding:2px 6px;">Done</button>` : ''} <button class="btn btn-sm" onclick="window.app.editBsTask(${t.id})" style="font-size:10px;">Edit</button></td>
+            </tr>`;
+          }).join('')}
+          ${tasks.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--gray-500);">No tasks</td></tr>' : ''}
+        </tbody>
+      </table></div>
+    </div>
+    ` : ''}
+
+    <!-- TAB: Denials -->
+    ${cdTab === 'denials' ? `
+    <div class="card" style="border-radius:14px;">
+      <div class="card-header"><h3>Denials (${denials.length})</h3></div>
+      <div class="card-body" style="padding:0;max-height:500px;overflow-y:auto;"><table style="font-size:12px;">
+        <thead><tr><th>Claim</th><th>Patient</th><th>Payer</th><th>Code</th><th>Reason</th><th style="text-align:right;">Amount</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          ${denials.map(d => {
+            const claim = d.claim || {};
+            return `<tr>
+              <td style="font-family:monospace;color:var(--brand-600);">${escHtml(claim.claimNumber || claim.claim_number || '')}</td>
+              <td>${escHtml(claim.patientName || claim.patient_name || '')}</td>
+              <td style="font-size:11px;">${escHtml(claim.payerName || claim.payer_name || '')}</td>
+              <td style="font-family:monospace;font-size:11px;color:#7c3aed;">${escHtml(d.denialCode || d.denial_code || '—')}</td>
+              <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(d.denialReason || d.denial_reason || '')}">${escHtml(d.denialReason || d.denial_reason || '—')}</td>
+              <td style="text-align:right;color:#ef4444;font-weight:600;">${_fmtMoney(d.deniedAmount || d.denied_amount)}</td>
+              <td>${_bsStatusBadge(d.status)}</td>
+              <td><button class="btn btn-sm" onclick="window.app.editRcmDenial(${d.id})" style="font-size:10px;">Edit</button></td>
+            </tr>`;
+          }).join('')}
+          ${denials.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No denials for this client</td></tr>' : ''}
+        </tbody>
+      </table></div>
+    </div>
+    ` : ''}
+
+    <!-- TAB: Activity -->
+    ${cdTab === 'activity' ? `
+    <div class="card" style="border-radius:14px;">
+      <div class="card-header"><h3>Activity Log</h3><button class="btn btn-sm btn-gold" onclick="window.app.openBsActivityModal(${client.id})">+ Log Activity</button></div>
+      <div class="card-body" style="padding:12px 16px;max-height:500px;overflow-y:auto;">
+        ${activities.length > 0 ? activities.map(a => {
+          const type = a.activityType || a.activity_type || a.type || 'note';
+          const typeLabel = ACTIVITY_TYPES.find(t => t.value === type);
+          const amount = a.amount || 0;
+          return `<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--gray-100);font-size:12px;">
+            <div style="flex-shrink:0;margin-top:2px;">${_activityTypeIcon(type)}</div>
+            <div style="flex:1;"><strong>${escHtml(typeLabel ? typeLabel.label : type)}</strong>${amount ? ` — <span style="color:var(--green);font-weight:600;">${_fmtMoney(amount)}</span>` : ''}<div style="font-size:11px;color:var(--gray-600);">${escHtml(a.notes || a.description || '')}</div></div>
+            <div style="font-size:10px;color:var(--gray-400);white-space:nowrap;">${formatDateDisplay(a.activityDate || a.activity_date || a.createdAt || a.created_at)}</div>
+          </div>`;
+        }).join('') : '<div style="text-align:center;padding:2rem;color:var(--gray-500);">No activity logged</div>'}
+      </div>
+    </div>
+    ` : ''}
+
+    ${client.notes ? `<div class="card" style="border-radius:14px;margin-top:16px;"><div class="card-header"><h3>Notes</h3></div><div class="card-body"><p style="white-space:pre-wrap;font-size:13px;color:var(--gray-600);margin:0;">${escHtml(client.notes)}</p></div></div>` : ''}
   `;
 }
 
