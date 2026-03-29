@@ -13796,7 +13796,7 @@ function handleNppesProxy(payload) {
   orgDetailTab(btn, tabId) {
     btn.closest('.tabs').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
-    ['od-providers', 'od-applications', 'od-locations', 'od-billing', 'od-contacts'].forEach(id => {
+    ['od-providers', 'od-applications', 'od-locations', 'od-claims', 'od-denials', 'od-tasks', 'od-billing', 'od-activity', 'od-contacts'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.toggle('hidden', id !== tabId);
     });
