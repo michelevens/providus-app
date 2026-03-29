@@ -2234,10 +2234,28 @@
   <!-- App Init -->
   <script type="module">
     import { initApp } from './ui/app.js';
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
       const token = localStorage.getItem('credentik_token');
       if (token) {
-        initApp();
+        // Validate token before init — prevents 401 cascade on stale tokens
+        try {
+          const resp = await fetch('https://api.credentik.com/api/auth/me', {
+            headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + token }
+          });
+          if (resp.ok) {
+            initApp();
+          } else if (resp.status === 401) {
+            // Token expired — clear and show login (don't reload in a loop)
+            localStorage.removeItem('credentik_token');
+            localStorage.removeItem('credentik_user');
+            document.getElementById('app-sidebar')?.classList.add('hidden');
+            document.getElementById('login-screen')?.classList.remove('hidden');
+          } else {
+            initApp(); // Other errors — try anyway
+          }
+        } catch (e) {
+          initApp(); // Network error — try anyway (offline mode)
+        }
       }
     });
 

@@ -138,6 +138,8 @@ class Auth {
             if (!response.ok) {
                 if (response.status === 401) {
                     this._clearSession();
+                    document.getElementById('app-sidebar')?.classList.add('hidden');
+                    document.getElementById('login-screen')?.classList.remove('hidden');
                     return null;
                 }
                 throw new Error('Failed to refresh user');

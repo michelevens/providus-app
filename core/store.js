@@ -117,8 +117,10 @@ class Store {
 
         if (response.status === 401) {
             auth._clearSession();
-            window.location.reload();
-            throw new Error('Session expired');
+            // Show login screen instead of reload loop
+            document.getElementById('app-sidebar')?.classList.add('hidden');
+            document.getElementById('login-screen')?.classList.remove('hidden');
+            throw new Error('Session expired — please log in again');
         }
 
         if (!response.ok) {
