@@ -1324,9 +1324,9 @@ async function renderProviderProfilePage(providerId) {
               ${malpractice.map(m => {
                 const isExpired = (m.expirationDate || m.expiration_date) && new Date(m.expirationDate || m.expiration_date) < new Date();
                 return `<tr>
-                  <td><strong>${escHtml(m.carrier || m.insuranceCarrier || m.insurance_carrier || m.carrier_name || '—')}</strong></td>
+                  <td><strong>${escHtml(m.carrierName || m.carrier_name || m.carrier || m.insuranceCarrier || m.insurance_carrier || '—')}</strong></td>
                   <td><code>${escHtml(m.policyNumber || m.policy_number || '—')}</code></td>
-                  <td>${escHtml(m.coverageAmount || m.coverage_amount || m.coverage || m.coverage_type || '—')}</td>
+                  <td>${escHtml(m.coverageType || m.coverage_type || m.coverageAmount || m.coverage_amount || m.coverage || '—')}</td>
                   <td>${formatDateDisplay(m.effectiveDate || m.effective_date)}</td>
                   <td style="${isExpired ? 'color:var(--red);' : ''}">${formatDateDisplay(m.expirationDate || m.expiration_date)}</td>
                   <td><span class="badge badge-${isExpired ? 'denied' : 'approved'}">${isExpired ? 'Expired' : 'Active'}</span></td>
@@ -1375,7 +1375,7 @@ async function renderProviderProfilePage(providerId) {
             <tbody>
               ${workHistory.map(w => `<tr>
                 <td><strong>${escHtml(w.employerName || w.employer_name || w.employer || w.organization || '—')}</strong></td>
-                <td>${escHtml(w.position || w.title || w.job_title || w.position_title || '—')}</td>
+                <td>${escHtml(w.positionTitle || w.position_title || w.position || w.title || w.job_title || '—')}</td>
                 <td>${formatDateDisplay(w.startDate || w.start_date)}</td>
                 <td>${w.endDate || w.end_date ? formatDateDisplay(w.endDate || w.end_date) : '<span class="badge badge-approved">Current</span>'}</td>
                 <td class="text-sm text-muted">${escHtml(w.reasonForLeaving || w.reason_for_leaving || '—')}</td>
@@ -1423,9 +1423,9 @@ async function renderProviderProfilePage(providerId) {
             <thead><tr><th>Course / Activity</th><th>Provider</th><th>Credits</th><th>Date Completed</th></tr></thead>
             <tbody>
               ${cme.map(c => `<tr>
-                <td><strong>${escHtml(c.title || c.courseName || c.course_name || '—')}</strong></td>
-                <td>${escHtml(c.provider || c.accreditingBody || c.accrediting_body || c.cme_provider || '—')}</td>
-                <td>${c.credits || c.hours || c.credit_hours || '—'}</td>
+                <td><strong>${escHtml(c.courseName || c.course_name || c.title || '—')}</strong></td>
+                <td>${escHtml(c.providerOrg || c.provider_org || c.provider || c.accreditingBody || c.accrediting_body || '—')}</td>
+                <td>${c.creditHours || c.credit_hours || c.credits || c.hours || '—'}</td>
                 <td>${formatDateDisplay(c.completionDate || c.completion_date || c.date || c.completed_at)}</td>
               </tr>`).join('')}
             </tbody>
@@ -1479,13 +1479,12 @@ async function renderProviderProfilePage(providerId) {
             <thead><tr><th>Name</th><th>Title / Position</th><th>Organization</th><th>Phone</th><th>Email</th><th>Relationship</th></tr></thead>
             <tbody>
               ${references.map(r => {
-                console.log('Reference data:', JSON.stringify(r));
                 const refPhone = (r.phone || r.phoneNumber || r.phone_number || '').replace(/\D/g, '');
                 const fmtPhone = refPhone.length === 10 ? `(${refPhone.slice(0,3)}) ${refPhone.slice(3,6)}-${refPhone.slice(6)}` : (r.phone || r.phoneNumber || r.phone_number || '—');
                 return `<tr>
                 <td><strong>${escHtml(r.referenceName || r.reference_name || r.name || ((r.firstName || r.first_name || '') + ' ' + (r.lastName || r.last_name || '')).trim() || '—')}</strong></td>
-                <td>${escHtml(r.title || r.position || r.jobTitle || r.job_title || r.ref_title || '—')}</td>
-                <td>${escHtml(r.organization || r.company || r.employer || r.org || '—')}</td>
+                <td>${escHtml(r.referenceTitle || r.reference_title || r.title || r.position || '—')}</td>
+                <td>${escHtml(r.referenceOrganization || r.reference_organization || r.organization || r.company || '—')}</td>
                 <td>${escHtml(fmtPhone)}</td>
                 <td>${escHtml(r.email || r.emailAddress || r.email_address || '—')}</td>
                 <td class="text-sm text-muted">${escHtml(r.relationship || r.referenceType || r.reference_type || '—')}</td>

@@ -13592,10 +13592,7 @@ function handleNppesProxy(payload) {
     try {
       await store.createProviderWorkHistory(providerId, {
         employerName: employer,
-        employer,
-        organization: employer,
-        position: getPresetValue('wh-position'),
-        title: getPresetValue('wh-position'),
+        positionTitle: getPresetValue('wh-position'),
         department: document.getElementById('wh-department')?.value?.trim() || '',
         startDate: document.getElementById('wh-start')?.value || '',
         endDate: document.getElementById('wh-end')?.value || '',
@@ -13619,13 +13616,10 @@ function handleNppesProxy(payload) {
     if (!title) { showToast('Course title is required'); return; }
     try {
       await store.createProviderCme(providerId, {
-        title,
         courseName: title,
-        provider: getPresetValue('cme-provider'),
-        accreditingBody: getPresetValue('cme-provider'),
-        credits: parseFloat(document.getElementById('cme-credits')?.value) || 0,
-        hours: parseFloat(document.getElementById('cme-credits')?.value) || 0,
-        category: document.getElementById('cme-category')?.value || '',
+        providerOrg: getPresetValue('cme-provider'),
+        creditHours: parseFloat(document.getElementById('cme-credits')?.value) || 0,
+        creditType: document.getElementById('cme-category')?.value || '',
         completionDate: document.getElementById('cme-date')?.value || '',
       });
       showToast('CME record added');
@@ -13650,8 +13644,8 @@ function handleNppesProxy(payload) {
         referenceName: `${firstName} ${lastName}`,
         firstName,
         lastName,
-        title: document.getElementById('ref-title')?.value?.trim() || '',
-        organization: document.getElementById('ref-org')?.value?.trim() || '',
+        referenceTitle: document.getElementById('ref-title')?.value?.trim() || '',
+        referenceOrganization: document.getElementById('ref-org')?.value?.trim() || '',
         phone: document.getElementById('ref-phone')?.value?.trim() || '',
         email: document.getElementById('ref-email')?.value?.trim() || '',
         relationship: document.getElementById('ref-relationship')?.value || '',
