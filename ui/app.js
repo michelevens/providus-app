@@ -10998,6 +10998,33 @@ function handleNppesProxy(payload) {
     </div>`;
     document.body.insertAdjacentHTML('beforeend', html);
   },
+  async confirmDeposit(paymentId, checkNum, amount) {
+    const html = `<div class="modal-overlay active" id="deposit-modal">
+      <div class="modal" style="max-width:400px;">
+        <div class="modal-header"><h3>Confirm Deposit</h3><button class="modal-close" onclick="document.getElementById('deposit-modal').remove()">&times;</button></div>
+        <div class="modal-body">
+          <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px;">Confirm that Check/EFT <strong>${checkNum}</strong> for <strong>$${amount.toFixed(2)}</strong> has been deposited.</p>
+          <div class="auth-field"><label>Deposit Date</label><input type="date" id="deposit-date" class="form-control" value="${new Date().toISOString().split('T')[0]}"></div>
+          <div class="auth-field"><label>Notes (optional)</label><input type="text" id="deposit-notes" class="form-control" placeholder="Bank reference, account, etc."></div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:12px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('deposit-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveDeposit(${paymentId})">Confirm Deposit</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  async saveDeposit(paymentId) {
+    try {
+      const depositDate = document.getElementById('deposit-date').value;
+      const notes = document.getElementById('deposit-notes').value.trim();
+      await store.updateRcmPayment(paymentId, { deposit_date: depositDate, status: 'reconciled', notes });
+      document.getElementById('deposit-modal').remove();
+      showToast('Deposit confirmed. Refreshing...');
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
   filterPaymentGroups() {
     const search = (document.getElementById('rcm-payment-search')?.value || '').toLowerCase();
     const dosFrom = document.getElementById('rcm-payment-dos-from')?.value || '';
@@ -11215,6 +11242,8 @@ function handleNppesProxy(payload) {
     const editId = document.getElementById('rcm-pay-edit-id').value;
     try {
       if (editId) await store.updateRcmPayment(editId, data); else await store.createRcmPayment(data);
+      // Sync charge statuses after payment
+      try { await store.syncChargeStatuses(); } catch (e) {}
       document.getElementById('rcm-payment-modal').classList.remove('active');
       showToast(editId ? 'Payment updated' : 'Payment posted');
       await renderRcmPage();

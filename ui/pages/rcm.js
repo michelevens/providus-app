@@ -536,12 +536,21 @@ async function renderRcmPage() {
         claims.forEach(c => {
           const ck = c.checkNumber || c.check_number;
           if (!ck) return;
-          if (!checkGroups[ck]) checkGroups[ck] = { claims: [], totalPaid: 0, totalCharges: 0, payer: '', date: '' };
+          if (!checkGroups[ck]) checkGroups[ck] = { claims: [], totalPaid: 0, totalCharges: 0, payer: '', date: '', depositDate: null, paymentId: null };
           checkGroups[ck].claims.push(c);
           checkGroups[ck].totalPaid += Number(c.totalPaid || c.total_paid || 0);
           checkGroups[ck].totalCharges += Number(c.totalCharges || c.total_charges || 0);
           checkGroups[ck].payer = c.payerName || c.payer_name || checkGroups[ck].payer;
           checkGroups[ck].date = c.paidDate || c.paid_date || checkGroups[ck].date;
+        });
+        // Enrich with deposit info from ClaimPayment records
+        payments.forEach(p => {
+          const ck = p.checkNumber || p.check_number || p.traceNumber || p.trace_number;
+          if (ck && checkGroups[ck]) {
+            checkGroups[ck].depositDate = p.depositDate || p.deposit_date || null;
+            checkGroups[ck].paymentId = p.id;
+            checkGroups[ck].paymentStatus = p.status || 'posted';
+          }
         });
         const checkList = Object.entries(checkGroups).sort((a,b) => (b[1].date || '').localeCompare(a[1].date || ''));
         const totalPayments = checkList.reduce((s, [,g]) => s + g.totalPaid, 0);
@@ -579,9 +588,12 @@ async function renderRcmPage() {
                 <div style="font-family:monospace;font-size:14px;font-weight:700;color:var(--brand-600);">${escHtml(checkNum)}</div>
                 <div style="font-size:11px;color:var(--gray-500);">${escHtml(group.payer)} — ${group.claims.length} claim${group.claims.length > 1 ? 's' : ''} — ${group.date ? formatDateDisplay(group.date) : ''}</div>
               </div>
-              <div style="text-align:right;">
-                <div style="font-size:16px;font-weight:800;color:#16a34a;">${_fm(group.totalPaid)}</div>
-                <div style="font-size:11px;color:var(--gray-400);">of ${_fm(group.totalCharges)} billed</div>
+              <div style="display:flex;align-items:center;gap:10px;">
+                ${group.depositDate ? `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;background:#dcfce7;color:#166534;">DEPOSITED ${formatDateDisplay(group.depositDate)}</span>` : group.paymentId ? `<button class="btn btn-sm" style="font-size:10px;padding:3px 10px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;" onclick="event.stopPropagation();window.app.confirmDeposit(${group.paymentId},'${escHtml(checkNum)}',${group.totalPaid.toFixed(2)})">Confirm Deposit</button>` : `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;background:#fef3c7;color:#92400e;">RECEIVED</span>`}
+                <div style="text-align:right;">
+                  <div style="font-size:16px;font-weight:800;color:#16a34a;">${_fm(group.totalPaid)}</div>
+                  <div style="font-size:11px;color:var(--gray-400);">of ${_fm(group.totalCharges)} billed</div>
+                </div>
               </div>
             </div>
             <div style="display:none;background:var(--gray-50);border-bottom:1px solid var(--gray-200);">
