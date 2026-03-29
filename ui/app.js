@@ -12385,6 +12385,8 @@ function handleNppesProxy(payload) {
     document.getElementById('bs-client-platform').value = editData?.billingPlatform || editData?.billing_platform || '';
     document.getElementById('bs-client-fee').value = editData?.monthlyFee || editData?.monthly_fee || '';
     document.getElementById('bs-client-fee-structure').value = editData?.feeStructure || editData?.fee_structure || 'flat';
+    document.getElementById('bs-client-payment-mode').value = editData?.paymentMode || editData?.payment_mode || 'self_managed';
+    document.getElementById('bs-client-agency-fee').value = editData?.agencyFeePercent || editData?.agency_fee_percent || '';
     document.getElementById('bs-client-status').value = editData?.status || 'onboarding';
     document.getElementById('bs-client-start').value = editData?.startDate || editData?.start_date || '';
     document.getElementById('bs-client-notes').value = editData?.notes || '';
@@ -12408,6 +12410,8 @@ function handleNppesProxy(payload) {
       billing_platform: document.getElementById('bs-client-platform').value,
       monthly_fee: parseFloat(document.getElementById('bs-client-fee').value) || 0,
       fee_structure: document.getElementById('bs-client-fee-structure').value,
+      payment_mode: document.getElementById('bs-client-payment-mode').value,
+      agency_fee_percent: parseFloat(document.getElementById('bs-client-agency-fee').value) || 0,
       status: document.getElementById('bs-client-status').value,
       start_date: document.getElementById('bs-client-start').value || null,
       notes: document.getElementById('bs-client-notes').value.trim(),
@@ -12419,6 +12423,111 @@ function handleNppesProxy(payload) {
       document.getElementById('bs-client-modal').classList.remove('active');
       showToast(editId ? 'Client updated' : 'Client added');
       await renderBillingServicesPage();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async viewClientLedger(clientId) {
+    try {
+      showToast('Generating ledger...');
+      await store.generateClientLedger(clientId);
+      const result = await store.getClientLedger(clientId);
+      const entries = result.data || [];
+      const totals = result.totals || {};
+      const client = (window._bsClients || []).find(c => c.id == clientId) || {};
+      const clientName = client.organizationName || client.organization_name || 'Client';
+      const mode = client.paymentMode || client.payment_mode || 'self_managed';
+      const feePercent = client.agencyFeePercent || client.agency_fee_percent || 0;
+
+      const html = `<div class="modal-overlay active" id="ledger-modal">
+        <div class="modal" style="max-width:950px;">
+          <div class="modal-header"><h3>Payment Ledger — ${escHtml(clientName)}</h3><button class="modal-close" onclick="document.getElementById('ledger-modal').remove()">&times;</button></div>
+          <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
+            <div style="display:flex;gap:12px;margin-bottom:16px;">
+              <div style="padding:10px 16px;background:#dcfce7;border-radius:8px;text-align:center;flex:1;">
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#166534;">Collected</div>
+                <div style="font-size:20px;font-weight:800;color:#16a34a;">$${(totals.totalCollected || totals.total_collected || 0).toFixed(2)}</div>
+              </div>
+              ${mode === 'agency_managed' ? `
+              <div style="padding:10px 16px;background:#ede9fe;border-radius:8px;text-align:center;flex:1;">
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#5b21b6;">Agency Fee (${feePercent}%)</div>
+                <div style="font-size:20px;font-weight:800;color:#7c3aed;">$${(totals.totalFee || totals.total_fee || 0).toFixed(2)}</div>
+              </div>
+              <div style="padding:10px 16px;background:#dbeafe;border-radius:8px;text-align:center;flex:1;">
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#1e40af;">Remitted to Org</div>
+                <div style="font-size:20px;font-weight:800;color:#2563eb;">$${(totals.totalRemitted || totals.total_remitted || 0).toFixed(2)}</div>
+              </div>
+              <div style="padding:10px 16px;background:#fff7ed;border-radius:8px;text-align:center;flex:1;">
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#9a3412;">Outstanding</div>
+                <div style="font-size:20px;font-weight:800;color:#ea580c;">$${(totals.totalOutstanding || totals.total_outstanding || 0).toFixed(2)}</div>
+              </div>` : ''}
+            </div>
+            <div style="font-size:11px;color:var(--gray-500);margin-bottom:8px;">Mode: <strong>${mode === 'agency_managed' ? 'Agency Managed' : 'Self Managed'}</strong>${feePercent > 0 ? ` — ${feePercent}% agency fee` : ''}</div>
+            <table style="width:100%;font-size:12px;border-collapse:collapse;">
+              <thead><tr style="background:var(--gray-100);">
+                <th style="padding:8px;">Period</th>
+                <th style="text-align:right;padding:8px;">Collected</th>
+                ${mode === 'agency_managed' ? '<th style="text-align:right;padding:8px;">Agency Fee</th><th style="text-align:right;padding:8px;">Remitted</th><th style="text-align:right;padding:8px;">Outstanding</th><th style="padding:8px;">Remittance</th>' : ''}
+                <th style="padding:8px;">Status</th>
+              </tr></thead>
+              <tbody>${entries.map(e => {
+                const collected = Number(e.totalCollected || e.total_collected || 0);
+                const fee = Number(e.agencyFee || e.agency_fee || 0);
+                const remitted = Number(e.amountRemitted || e.amount_remitted || 0);
+                const outstanding = Number(e.outstanding || 0);
+                const status = e.status || 'pending';
+                const statusColor = status === 'remitted' ? '#16a34a' : status === 'partial' ? '#f59e0b' : '#ea580c';
+                return '<tr style="border-bottom:1px solid var(--gray-200);">' +
+                  '<td style="padding:6px 8px;font-weight:600;">' + (e.period || '') + '</td>' +
+                  '<td style="text-align:right;padding:6px 8px;color:#16a34a;font-weight:600;">$' + collected.toFixed(2) + '</td>' +
+                  (mode === 'agency_managed' ?
+                    '<td style="text-align:right;padding:6px 8px;color:#7c3aed;">$' + fee.toFixed(2) + '</td>' +
+                    '<td style="text-align:right;padding:6px 8px;color:#2563eb;">$' + remitted.toFixed(2) + '</td>' +
+                    '<td style="text-align:right;padding:6px 8px;color:#ea580c;font-weight:600;">$' + outstanding.toFixed(2) + '</td>' +
+                    '<td style="padding:6px 8px;font-size:11px;">' + (e.remittanceDate || e.remittance_date ? formatDateDisplay(e.remittanceDate || e.remittance_date) + ' ' + (e.remittanceMethod || e.remittance_method || '') : status !== 'remitted' ? '<button class=\\"btn btn-sm\\" style=\\"font-size:10px;padding:2px 8px;\\" onclick=\\"window.app.openRemittanceModal(' + e.id + ',' + outstanding.toFixed(2) + ')\\">Record</button>' : '') + '</td>'
+                  : '') +
+                  '<td style="padding:6px 8px;"><span style="font-size:10px;font-weight:700;color:' + statusColor + ';">' + status.toUpperCase() + '</span></td>' +
+                '</tr>';
+              }).join('')}
+              ${entries.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray-500);">No ledger entries. Collections will appear after payment import.</td></tr>' : ''}
+              </tbody>
+            </table>
+          </div>
+          <div class="modal-footer" style="padding:12px 24px;border-top:1px solid var(--gray-200);">
+            <button class="btn" onclick="document.getElementById('ledger-modal').remove()">Close</button>
+          </div>
+        </div>
+      </div>`;
+      document.body.insertAdjacentHTML('beforeend', html);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  openRemittanceModal(ledgerId, amount) {
+    const html = `<div class="modal-overlay active" id="remittance-modal">
+      <div class="modal" style="max-width:400px;">
+        <div class="modal-header"><h3>Record Remittance</h3><button class="modal-close" onclick="document.getElementById('remittance-modal').remove()">&times;</button></div>
+        <div class="modal-body">
+          <div class="auth-field"><label>Amount</label><input type="number" id="remit-amount" class="form-control" step="0.01" value="${amount}"></div>
+          <div class="auth-field"><label>Date</label><input type="date" id="remit-date" class="form-control" value="${new Date().toISOString().split('T')[0]}"></div>
+          <div class="auth-field"><label>Method</label><select id="remit-method" class="form-control"><option value="ach">ACH</option><option value="check">Check</option><option value="wire">Wire</option><option value="zelle">Zelle</option></select></div>
+          <div class="auth-field"><label>Reference #</label><input type="text" id="remit-ref" class="form-control" placeholder="Check # or transfer ID"></div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:12px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('remittance-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveRemittance(${ledgerId})">Save</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  async saveRemittance(ledgerId) {
+    try {
+      await store.recordRemittance(ledgerId, {
+        amount_remitted: parseFloat(document.getElementById('remit-amount').value) || 0,
+        remittance_date: document.getElementById('remit-date').value,
+        remittance_method: document.getElementById('remit-method').value,
+        remittance_reference: document.getElementById('remit-ref').value.trim(),
+      });
+      document.getElementById('remittance-modal').remove();
+      document.getElementById('ledger-modal').remove();
+      showToast('Remittance recorded');
     } catch (e) { showToast('Error: ' + e.message); }
   },
   async deleteBillingClient(id) {

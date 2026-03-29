@@ -1260,6 +1260,9 @@ class Store {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-clients/${id}`);
         return result.data || result;
     }
+    async generateClientLedger(clientId) { return (await this._fetch(`${CONFIG.API_URL}/billing-clients/${clientId}/generate-ledger`, { method: 'POST' })).data || {}; }
+    async getClientLedger(clientId) { return await this._fetch(`${CONFIG.API_URL}/billing-clients/${clientId}/ledger`); }
+    async recordRemittance(ledgerId, data) { return (await this._fetch(`${CONFIG.API_URL}/billing-ledger/${ledgerId}/remittance`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; }
     async createBillingClient(data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-clients`, { method: 'POST', body: JSON.stringify(data) });
         this.clearCache();

@@ -490,7 +490,7 @@ async function renderBillingServicesPage() {
                   <td class="text-sm">${lastActDate ? formatDateDisplay(lastActDate) : '<span style="color:var(--gray-400);">Never</span>'}</td>
                   <td>${_fmtMoney(_getField(c, 'monthlyFee', 'monthly_fee'))}</td>
                   <td>${_bsStatusBadge(c.status)}</td>
-                  <td onclick="event.stopPropagation();"><button class="btn btn-sm" onclick="window.app.editBillingClient(${c.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteBillingClient(${c.id})">Del</button></td>
+                  <td onclick="event.stopPropagation();"><button class="btn btn-sm" style="color:var(--brand-600);" onclick="window.app.viewClientLedger(${c.id})">Ledger</button> <button class="btn btn-sm" onclick="window.app.editBillingClient(${c.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteBillingClient(${c.id})">Del</button></td>
                 </tr>`;
               }).join('')}
               ${clients.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No billing clients yet. Click "+ Add Client" to onboard your first billing client.</td></tr>' : ''}
@@ -627,6 +627,10 @@ async function renderBillingServicesPage() {
             <div class="auth-field" style="margin:0;"><label>Fee Structure</label>
               <select id="bs-client-fee-structure" class="form-control"><option value="flat">Flat Monthly Fee</option><option value="per_provider">Per Provider / Month</option><option value="percentage">% of Collections</option><option value="per_claim">Per Claim</option></select>
             </div>
+            <div class="auth-field" style="margin:0;"><label>Payment Mode</label>
+              <select id="bs-client-payment-mode" class="form-control" title="Agency Managed: agency receives payments, takes fee, remits to org. Self Managed: org handles own payments."><option value="self_managed">Self Managed</option><option value="agency_managed">Agency Managed</option></select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Agency Fee %</label><input type="number" id="bs-client-agency-fee" class="form-control" step="0.5" min="0" max="100" placeholder="e.g. 7" title="Percentage of collections the agency keeps as fee"></div>
             <div class="auth-field" style="margin:0;"><label>Status</label>
               <select id="bs-client-status" class="form-control"><option value="onboarding">Onboarding</option><option value="active">Active</option><option value="paused">Paused</option><option value="cancelled">Cancelled</option></select>
             </div>
