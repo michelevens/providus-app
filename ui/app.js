@@ -11686,7 +11686,193 @@ function handleNppesProxy(payload) {
     try { await store.deleteFeeSchedule(id); showToast('Deleted'); window.app.rcSwitchTab('fee-schedules'); } catch (e) { showToast('Error: ' + e.message); }
   },
   async runUnderpaymentDetection() {
-    try { const r = await store.detectUnderpayments(); showToast(r.flagged > 0 ? `${r.flagged} underpayment(s) flagged!` : 'No underpayments detected'); } catch (e) { showToast('Error: ' + e.message); }
+    showToast('Analyzing payments vs fee schedule...');
+    try {
+      // Fetch claims and fee schedules
+      const [claimsR, fsR] = await Promise.all([store.getRcmClaims(), store.getFeeSchedules()]);
+      const claims = Array.isArray(claimsR) ? claimsR : [];
+      const feeSchedules = Array.isArray(fsR) ? fsR : [];
+
+      if (feeSchedules.length === 0) { showToast('No fee schedules loaded — add rates first'); return; }
+
+      // Build fee schedule lookup: cpt -> { rate, payer, description }
+      const fsLookup = {};
+      feeSchedules.forEach(f => {
+        const cpt = f.cpt_code || f.cptCode || '';
+        if (cpt) fsLookup[cpt] = { rate: Number(f.contracted_rate || f.contractedRate || 0), payer: f.payer_name || f.payerName || '', desc: f.cpt_description || f.cptDescription || '' };
+      });
+
+      // Provider type multipliers for Medicare
+      // MD/DO = 100%, NP/PA = 85%, Licensed Clinical Social Worker = 75%, etc.
+      const PROVIDER_MULTIPLIERS = { physician: 1.0, np: 0.85, pa: 0.85, lcsw: 0.75, lpc: 0.75, default: 1.0 };
+      const paidClaims = claims.filter(c => c.status === 'paid' && Number(c.totalPaid || c.total_paid || 0) > 0);
+      const results = [];
+      let totalUnderpaid = 0, totalOverpaid = 0, totalRecoverable = 0;
+      const byPayer = {};
+
+      // Determine provider type from provider name/specialty or claim data
+      function getMultiplier(claim) {
+        const payer = (claim.payerName || claim.payer_name || '').toLowerCase();
+        const isMedicare = payer.includes('medicare') || payer.includes('medicaid');
+        if (!isMedicare) return 1.0; // Commercial payers: use full contracted rate
+        // Try to detect provider type from provider name or specialty
+        const provName = (claim.providerName || claim.provider_name || '').toLowerCase();
+        if (provName.includes(' md') || provName.includes(' do') || provName.includes('m.d.') || provName.includes('d.o.')) return 1.0;
+        if (provName.includes(' np') || provName.includes('nurse pract') || provName.includes('arnp') || provName.includes('aprn')) return 0.85;
+        if (provName.includes(' pa') || provName.includes('physician assist')) return 0.85;
+        if (provName.includes('lcsw') || provName.includes('social work')) return 0.75;
+        if (provName.includes('lpc') || provName.includes('lmhc') || provName.includes('counselor')) return 0.75;
+        if (provName.includes('psycholog') || provName.includes('ph.d') || provName.includes('psy.d')) return 1.0;
+        return 1.0; // Default to physician rate if unknown
+      }
+
+      paidClaims.forEach(c => {
+        const sls = c.serviceLines || c.service_lines || [];
+        const paid = Number(c.totalPaid || c.total_paid || 0);
+        const charged = Number(c.totalCharges || c.total_charges || 0);
+        const payer = c.payerName || c.payer_name || '';
+        const multiplier = getMultiplier(c);
+
+        let expectedTotal = 0;
+        const lineDetails = [];
+        sls.forEach(sl => {
+          const cpt = sl.cptCode || sl.cpt_code || '';
+          const units = Number(sl.units || 1);
+          const fs = fsLookup[cpt];
+          if (fs) {
+            const expected = Math.round(fs.rate * multiplier * units * 100) / 100;
+            expectedTotal += expected;
+            lineDetails.push({ cpt, desc: fs.desc, units, fsRate: fs.rate, npRate: Math.round(fs.rate * multiplier * 100) / 100, expected });
+          }
+        });
+
+        if (expectedTotal > 0) {
+          const diff = Math.round((paid - expectedTotal) * 100) / 100;
+          const pct = Math.round(paid / expectedTotal * 1000) / 10;
+          const flag = Math.abs(diff) < 1 ? 'ok' : (diff < 0 ? 'under' : 'over');
+          if (flag === 'under') { totalUnderpaid += Math.abs(diff); totalRecoverable += Math.abs(diff); }
+          if (flag === 'over') totalOverpaid += diff;
+          if (!byPayer[payer]) byPayer[payer] = { under: 0, over: 0, count: 0, claims: 0 };
+          byPayer[payer].claims++;
+          if (flag === 'under') { byPayer[payer].under += Math.abs(diff); byPayer[payer].count++; }
+          results.push({
+            claimNum: c.claimNumber || c.claim_number || '',
+            patient: c.patientName || c.patient_name || '',
+            dos: (c.dateOfService || c.date_of_service || '').slice(0, 10),
+            payer, charged, paid, expected: expectedTotal, diff, pct, flag, lineDetails,
+          });
+        }
+      });
+
+      results.sort((a, b) => a.diff - b.diff);
+
+      // Build modal
+      let modal = document.getElementById('underpayment-report-modal');
+      if (!modal) { modal = document.createElement('div'); modal.className = 'modal-overlay'; modal.id = 'underpayment-report-modal'; document.body.appendChild(modal); }
+      const underpaid = results.filter(r => r.flag === 'under');
+      const overpaid = results.filter(r => r.flag === 'over');
+
+      modal.innerHTML = `
+        <div class="modal" style="max-width:1100px;">
+          <div class="modal-header"><h3>Underpayment Analysis Report</h3><button class="modal-close" onclick="document.getElementById('underpayment-report-modal').classList.remove('active')">&times;</button></div>
+          <div class="modal-body" style="max-height:80vh;overflow-y:auto;">
+            <!-- Summary -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px;">
+              <div style="background:var(--red-50,#fef2f2);border:1px solid var(--red-200,#fecaca);border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:11px;color:var(--red-700,#b91c1c);font-weight:600;text-transform:uppercase;">Underpaid</div>
+                <div style="font-size:24px;font-weight:700;color:#dc2626;">$${totalUnderpaid.toLocaleString('en-US',{minimumFractionDigits:2})}</div>
+                <div style="font-size:12px;color:var(--gray-500);">${underpaid.length} claim${underpaid.length!==1?'s':''}</div>
+              </div>
+              <div style="background:var(--green-50,#f0fdf4);border:1px solid var(--green-200,#bbf7d0);border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:11px;color:var(--green-700,#15803d);font-weight:600;text-transform:uppercase;">Correctly Paid</div>
+                <div style="font-size:24px;font-weight:700;color:#16a34a;">${results.filter(r=>r.flag==='ok').length}</div>
+                <div style="font-size:12px;color:var(--gray-500);">claims</div>
+              </div>
+              <div style="background:var(--blue-50,#eff6ff);border:1px solid var(--blue-200,#bfdbfe);border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:11px;color:var(--blue-700,#1d4ed8);font-weight:600;text-transform:uppercase;">Claims Analyzed</div>
+                <div style="font-size:24px;font-weight:700;color:#2563eb;">${results.length}</div>
+                <div style="font-size:12px;color:var(--gray-500);">of ${paidClaims.length} paid</div>
+              </div>
+              <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:11px;color:#b45309;font-weight:600;text-transform:uppercase;">Recoverable</div>
+                <div style="font-size:24px;font-weight:700;color:#d97706;">$${totalRecoverable.toLocaleString('en-US',{minimumFractionDigits:2})}</div>
+                <div style="font-size:12px;color:var(--gray-500);">potential appeals</div>
+              </div>
+            </div>
+
+            <!-- By Payer -->
+            ${Object.keys(byPayer).length > 0 ? `
+            <h4 style="margin-bottom:8px;">By Payer</h4>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;margin-bottom:20px;">
+              ${Object.entries(byPayer).sort((a,b) => b[1].under - a[1].under).map(([p, d]) => `
+                <div style="background:white;border:1px solid var(--gray-200);border-radius:8px;padding:12px;">
+                  <div style="font-weight:600;font-size:13px;">${escHtml(p)}</div>
+                  <div style="font-size:12px;color:var(--gray-500);">${d.claims} claims analyzed, ${d.count} underpaid</div>
+                  ${d.under > 0 ? `<div style="font-size:16px;font-weight:700;color:#dc2626;margin-top:4px;">-$${d.under.toLocaleString('en-US',{minimumFractionDigits:2})}</div>` : '<div style="font-size:13px;color:#16a34a;margin-top:4px;">All correct</div>'}
+                </div>
+              `).join('')}
+            </div>` : ''}
+
+            <!-- Underpaid Claims -->
+            ${underpaid.length > 0 ? `
+            <h4 style="margin-bottom:8px;color:#dc2626;">Underpaid Claims (${underpaid.length})</h4>
+            <div style="overflow-x:auto;margin-bottom:20px;"><table style="width:100%;font-size:12px;">
+              <thead><tr><th>Claim</th><th>Patient</th><th>DOS</th><th>Payer</th><th style="text-align:right;">Charged</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Expected</th><th style="text-align:right;">Shortfall</th><th style="text-align:right;">Pct</th></tr></thead>
+              <tbody>
+                ${underpaid.map(r => `<tr>
+                  <td style="font-weight:600;"><a href="#" onclick="window.app.viewClaimDetail(${r.claimNum});document.getElementById('underpayment-report-modal').classList.remove('active');return false;" style="color:var(--brand-600);">${escHtml(r.claimNum)}</a></td>
+                  <td>${escHtml(r.patient)}</td>
+                  <td>${r.dos}</td>
+                  <td>${escHtml(r.payer)}</td>
+                  <td style="text-align:right;">$${r.charged.toFixed(2)}</td>
+                  <td style="text-align:right;">$${r.paid.toFixed(2)}</td>
+                  <td style="text-align:right;">$${r.expected.toFixed(2)}</td>
+                  <td style="text-align:right;color:#dc2626;font-weight:700;">-$${Math.abs(r.diff).toFixed(2)}</td>
+                  <td style="text-align:right;">${r.pct}%</td>
+                </tr>`).join('')}
+              </tbody>
+            </table></div>` : ''}
+
+            <!-- Charge vs Expected breakdown for worst cases -->
+            ${underpaid.length > 0 ? `
+            <h4 style="margin-bottom:8px;">Charge Analysis — Top Underpaid</h4>
+            <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px;">
+              <strong>Note:</strong> Medicare applies provider-specific multipliers: MD/DO = 100%, NP/PA = 85%, LCSW/LPC = 75% of physician fee schedule. Claims billed below the allowed amount represent revenue left on the table.
+            </div>
+            ${underpaid.slice(0, 5).map(r => `
+              <div style="background:var(--gray-50);border-radius:8px;padding:12px;margin-bottom:8px;">
+                <div style="font-weight:600;margin-bottom:6px;">${escHtml(r.claimNum)} — ${escHtml(r.patient)} (${r.dos})</div>
+                <table style="width:100%;font-size:11px;">
+                  <thead><tr><th>CPT</th><th>Description</th><th>Units</th><th style="text-align:right;">Phys Rate</th><th style="text-align:right;">NP (85%)</th><th style="text-align:right;">Line Expected</th></tr></thead>
+                  <tbody>
+                    ${r.lineDetails.map(l => `<tr>
+                      <td style="font-family:monospace;font-weight:600;">${l.cpt}</td>
+                      <td>${escHtml(l.desc)}</td>
+                      <td>${l.units}</td>
+                      <td style="text-align:right;">$${l.fsRate.toFixed(2)}</td>
+                      <td style="text-align:right;">$${l.npRate.toFixed(2)}</td>
+                      <td style="text-align:right;font-weight:600;">$${l.expected.toFixed(2)}</td>
+                    </tr>`).join('')}
+                    <tr style="border-top:2px solid var(--gray-300);font-weight:700;">
+                      <td colspan="5">Total Expected vs Paid</td>
+                      <td style="text-align:right;">$${r.expected.toFixed(2)} vs $${r.paid.toFixed(2)} = <span style="color:#dc2626;">-$${Math.abs(r.diff).toFixed(2)}</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            `).join('')}` : ''}
+
+            <div style="margin-top:16px;padding:14px;background:var(--gray-50);border-radius:8px;font-size:12px;color:var(--gray-600);">
+              <strong>Methodology:</strong> Compares actual paid amounts against contracted fee schedule rates.
+              Medicare/Medicaid: auto-detects provider type — MD/DO at 100%, NP/PA at 85%, LCSW/LPC at 75% of physician fee schedule.
+              Commercial payers: uses full contracted rate. Tolerance: &plusmn;$1.00.
+              Claims without matching fee schedule entries are excluded.
+            </div>
+          </div>
+        </div>`;
+      modal.classList.add('active');
+      showToast(`Analysis complete: ${underpaid.length} underpaid ($${totalUnderpaid.toFixed(2)}), ${results.filter(r=>r.flag==='ok').length} correct`);
+    } catch (e) { showToast('Error: ' + e.message); }
   },
   // Eligibility modal
   async openEligibilityModal() {
