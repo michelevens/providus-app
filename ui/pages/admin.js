@@ -3,7 +3,7 @@
 
 const { store, auth, CONFIG, escHtml, escAttr, formatDateDisplay, toHexId,
         showToast, getPayerById, getStateName, navigateTo, appConfirm, appPrompt,
-        editButton, deleteButton, helpTip, sortArrow, timeAgo,
+        editButton, deleteButton, helpTip, sortArrow, timeAgo, payerLink,
         PAYER_CATALOG, STATES, APPLICATION_STATUSES, CRED_DOCUMENTS, workflow } = window._credentik;
 
 async function renderAuditTrail() {
@@ -1328,7 +1328,7 @@ async function renderBottleneckAnalysis() {
     const barW = maxPayerDays > 0 ? Math.round((p.avgDays / maxPayerDays) * 100) : 0;
     return `
       <tr style="${isSlow ? 'background:rgba(239,68,68,0.04);' : ''}">
-        <td style="font-weight:600;">${escHtml(p.name)} ${isSlow ? '<span style="color:#EF4444;font-size:10px;font-weight:700;">SLOW</span>' : ''}</td>
+        <td style="font-weight:600;">${payerLink(p.name, p.id)} ${isSlow ? '<span style="color:#EF4444;font-size:10px;font-weight:700;">SLOW</span>' : ''}</td>
         <td>
           <div style="display:flex;align-items:center;gap:6px;">
             <div style="width:${barW}%;height:8px;background:${isSlow ? '#EF4444' : '#3B82F6'};border-radius:4px;min-width:2px;transition:width 0.4s;"></div>
@@ -1392,7 +1392,7 @@ async function renderBottleneckAnalysis() {
   const stuckRowsHtml = stuckApps.slice(0, 50).map(a => `
     <tr>
       <td style="font-weight:600;">${escHtml(a.provName)}</td>
-      <td>${escHtml(a.payerName)}</td>
+      <td>${payerLink(a.payerName, a.payerId)}</td>
       <td>${a.state ? escHtml(getStateName(a.state) || a.state) : ''}</td>
       <td><span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;background:${a.statusObj.bg};color:${a.statusObj.color};">${escHtml(a.statusObj.label)}</span></td>
       <td style="font-weight:700;color:${a.daysStuck > 60 ? '#DC2626' : '#F59E0B'};">${a.daysStuck}d</td>

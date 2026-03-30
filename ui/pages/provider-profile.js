@@ -4,7 +4,7 @@
 const { store, auth, CONFIG, workflow, escHtml, escAttr, formatDateDisplay, toHexId,
         showToast, getPayerById, getStateName, navigateTo, appConfirm, appPrompt,
         editButton, deleteButton, helpTip, presetSelectHtml, getPresetValue,
-        renderPayerTags, sortArrow, timeAgo,
+        renderPayerTags, payerLink, sortArrow, timeAgo,
         renderDocumentVersioning, getDocVersionBadge, getDocExpiryHtml, openSignatureModal,
         PAYER_CATALOG, STATES, APPLICATION_STATUSES, PAYER_TAG_DEFS,
         PAYER_SLA_DEFAULTS, getPayerSLA, analyzeHistoricalTimelines,
@@ -260,7 +260,7 @@ async function renderProviderDashboard(user) {
           const currentStep = statusSteps.indexOf(a.status);
           return `<div style="padding:10px 0;border-bottom:1px solid var(--gray-100);">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <div><strong style="font-size:13px;">${escHtml(a.payerName || 'Application')}</strong> <span class="text-sm text-muted">${escHtml(a.state || '')}</span></div>
+              <div><strong style="font-size:13px;">${payerLink(a.payerName || 'Application', a.payerId)}</strong> <span class="text-sm text-muted">${escHtml(a.state || '')}</span></div>
               <span class="badge badge-${a.status === 'approved' || a.status === 'credentialed' ? 'approved' : a.status === 'denied' ? 'denied' : 'pending'}">${a.status?.replace(/_/g, ' ')}</span>
             </div>
             <div style="display:flex;gap:2px;margin-bottom:6px;">
@@ -309,7 +309,7 @@ async function renderProviderDashboard(user) {
         <div class="card-body" style="padding:0;">
           ${apps.length > 0 ? `<table><thead><tr><th>Payer</th><th>State</th><th>Status</th><th>Submitted</th></tr></thead><tbody>
             ${apps.map(a => `<tr>
-              <td><strong>${escHtml(a.payerName || a.payer_name || a.payer?.name || '—')}</strong></td>
+              <td><strong>${payerLink(a.payerName || a.payer_name || a.payer?.name || '—', a.payerId)}</strong></td>
               <td>${escHtml(a.state || '—')}</td>
               <td><span class="badge badge-${a.status === 'approved' ? 'approved' : a.status === 'denied' ? 'denied' : 'pending'}">${escHtml(a.status?.replace(/_/g, ' ') || '—')}</span></td>
               <td>${formatDateDisplay(a.submittedDate || a.submitted_date)}</td>
@@ -1653,7 +1653,7 @@ async function renderProviderProfilePage(providerId) {
               const payer = getPayerById(a.payerId) || {};
               const payerName = payer.name || a.payerName || a.payer_name || (typeof a.payer === 'object' && a.payer ? a.payer.name : a.payer) || '—';
               return '<tr>' +
-                '<td><strong>' + escHtml(payerName) + '</strong>' + (payer.parentOrg ? '<br><span style="font-size:10px;color:var(--gray-400);">' + escHtml(payer.parentOrg) + '</span>' : '') + '</td>' +
+                '<td><strong>' + payerLink(payerName, a.payerId || payer.id) + '</strong>' + (payer.parentOrg ? '<br><span style="font-size:10px;color:var(--gray-400);">' + escHtml(payer.parentOrg) + '</span>' : '') + '</td>' +
                 '<td>' + escHtml(a.state || '—') + '</td>' +
                 '<td>' + fmtDate(a.effectiveDate || a.effective_date) + '</td>' +
                 '<td><code style="font-size:11px;">' + escHtml(a.enrollmentId || a.enrollment_id || a.applicationRef || a.application_ref || '—') + '</code></td>' +
@@ -1692,7 +1692,7 @@ async function renderProviderProfilePage(providerId) {
           const riskBg = pred.riskLevel === 'delayed' ? '#FEE2E2' : pred.riskLevel === 'at-risk' ? '#FEF3C7' : '#D1FAE5';
           const riskLbl = pred.riskLevel === 'delayed' ? 'Delayed' : pred.riskLevel === 'at-risk' ? 'At Risk' : 'On Track';
           return '<tr>' +
-            '<td><strong>' + escHtml(payerName) + '</strong></td>' +
+            '<td><strong>' + payerLink(payerName, a.payerId || payer.id) + '</strong></td>' +
             '<td>' + escHtml(a.state || '—') + '</td>' +
             '<td><span class="badge" style="background:' + statusColor + '22;color:' + statusColor + ';font-size:10px;font-weight:600;padding:3px 8px;border-radius:12px;">' + escHtml(statusLabel) + '</span></td>' +
             '<td>' + fmtDate(submitted) + '</td>' +
@@ -1731,7 +1731,7 @@ async function renderProviderProfilePage(providerId) {
           const payer = getPayerById(a.payerId) || {};
           const payerName = payer.name || a.payerName || a.payer_name || (typeof a.payer === 'object' && a.payer ? a.payer.name : a.payer) || '—';
           return '<tr>' +
-            '<td><strong>' + escHtml(payerName) + '</strong></td>' +
+            '<td><strong>' + payerLink(payerName, a.payerId || payer.id) + '</strong></td>' +
             '<td>' + escHtml(a.state || '—') + '</td>' +
             '<td style="font-size:12px;color:var(--gray-500);">' + escHtml(a.denialReason || a.denial_reason || a.notes || '—') + '</td>' +
             '<td>' + fmtDate(a.deniedDate || a.denied_date || a.updatedAt || a.updated_at) + '</td>' +

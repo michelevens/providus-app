@@ -3,7 +3,7 @@
 
 const { store, auth, CONFIG, escHtml, escAttr, formatDateDisplay, toHexId,
         showToast, navigateTo, appConfirm, appPrompt,
-        editButton, deleteButton, helpTip } = window._credentik;
+        editButton, deleteButton, helpTip, payerLink } = window._credentik;
 
 if (typeof window._rcmTab === 'undefined') window._rcmTab = 'claims';
 if (typeof window._rcmClaimsPage === 'undefined') window._rcmClaimsPage = 1;
@@ -398,7 +398,7 @@ async function renderRcmPage() {
             return '<tr style="' + rowBg + 'cursor:pointer;" onclick="window.app.viewClaimDetail(' + c.id + ')">' +
               '<td><strong style="font-family:monospace;font-size:11px;color:var(--brand-600);">' + escHtml(c.claimNumber || c.claim_number || '') + '</strong></td>' +
               '<td class="text-sm">' + escHtml(c.patientName || c.patient_name || '') + '</td>' +
-              '<td class="text-sm">' + escHtml(c.payerName || c.payer_name || '') + '</td>' +
+              '<td class="text-sm">' + payerLink(c.payerName || c.payer_name || '', c.payerId || c.payer_id) + '</td>' +
               '<td class="text-sm">' + formatDateDisplay(c.dateOfService || c.date_of_service) + '</td>' +
               '<td style="text-align:right;">' + _fm(c.totalCharges || c.total_charges) + '</td>' +
               '<td style="text-align:center;font-size:12px;">' + a.limit + 'd</td>' +
@@ -565,7 +565,7 @@ async function renderRcmPage() {
             ${pagedClaims.map(c => `<tr class="rcm-claim-row" style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
               <td><strong style="font-family:monospace;font-size:12px;color:var(--brand-600);">${escHtml(c.claimNumber || c.claim_number || '')}</strong></td>
               <td class="text-sm">${escHtml(c.patientName || c.patient_name || '—')}</td>
-              <td class="text-sm">${escHtml(c.payerName || c.payer_name || '—')}</td>
+              <td class="text-sm">${payerLink(c.payerName || c.payer_name || '—', c.payerId || c.payer_id)}</td>
               <td class="text-sm">${formatDateDisplay(c.dateOfService || c.date_of_service)}</td>
               <td style="text-align:right;">${_fm(c.totalCharges || c.total_charges)}</td>
               <td style="text-align:right;color:var(--green);font-weight:600;">${_fm(c.totalPaid || c.total_paid)}</td>
@@ -666,7 +666,7 @@ async function renderRcmPage() {
               <td class="text-sm">${escHtml(ch.patientName || ch.patient_name || '—')}</td>
               <td><code style="font-size:12px;color:var(--brand-700);">${escHtml(ch.cptCode || ch.cpt_code || '')}</code> <span class="text-sm text-muted">${escHtml(ch.cptDescription || ch.cpt_description || '')}</span></td>
               <td><code style="font-size:12px;">${escHtml(ch.icdCodes || ch.icd_codes || '')}</code></td>
-              <td class="text-sm">${escHtml(ch.payerName || ch.payer_name || '—')}</td>
+              <td class="text-sm">${payerLink(ch.payerName || ch.payer_name || '—', ch.payerId || ch.payer_id)}</td>
               <td style="text-align:center;">${ch.units || 1}</td>
               <td style="text-align:right;font-weight:600;">${_fm(ch.chargeAmount || ch.charge_amount)}</td>
               <td><span class="badge badge-${ch.status === 'submitted' || ch.status === 'billed' ? 'approved' : 'pending'}">${escHtml(ch.status || 'pending')}</span></td>
@@ -922,7 +922,7 @@ async function renderRcmPage() {
               return `<tr>
                 <td><strong style="font-family:monospace;font-size:12px;">${escHtml(c.claimNumber || c.claim_number || '')}</strong></td>
                 <td class="text-sm">${escHtml(c.patientName || c.patient_name || '—')}</td>
-                <td class="text-sm">${escHtml(c.payerName || c.payer_name || '—')}</td>
+                <td class="text-sm">${payerLink(c.payerName || c.payer_name || '—', c.payerId || c.payer_id)}</td>
                 <td class="text-sm">${formatDateDisplay(c.dateOfService || c.date_of_service)}</td>
                 <td style="text-align:right;">${_fm(c.totalCharges || c.total_charges)}</td>
                 <td style="text-align:right;color:var(--red);font-weight:600;">${_fm(c.balance)}</td>
@@ -1037,7 +1037,7 @@ async function renderRcmPage() {
         <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
           <input type="hidden" id="rcm-denial-edit-id" value="">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Claim *</label><select id="rcm-denial-claim" class="form-control"><option value="">Select claim...</option>${claims.map(c => `<option value="${c.id}">${escHtml(c.claimNumber || c.claim_number || '')} — ${escHtml(c.patientName || c.patient_name || '')} (${escHtml(c.payerName || c.payer_name || '')})</option>`).join('')}</select></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Claim *</label><select id="rcm-denial-claim" class="form-control"><option value="">Select claim...</option>${claims.map(c => `<option value="${c.id}">${escHtml(c.claimNumber || c.claim_number || '')} — ${escHtml(c.patientName || c.patient_name || '')} (${payerLink(c.payerName || c.payer_name || '', c.payerId || c.payer_id)})</option>`).join('')}</select></div>
             <div class="auth-field" style="margin:0;"><label>Category *</label><select id="rcm-denial-category" class="form-control">${DENIAL_CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join('')}</select></div>
             <div class="auth-field" style="margin:0;"><label>Priority</label><select id="rcm-denial-priority" class="form-control"><option value="normal">Normal</option><option value="low">Low</option><option value="high">High</option><option value="urgent">Urgent</option></select></div>
             <div class="auth-field" style="margin:0;"><label>Denied Amount</label><input type="number" id="rcm-denial-amount" class="form-control" step="0.01" placeholder="0.00"></div>
@@ -1172,7 +1172,7 @@ async function renderClaimDetail(claimId) {
         <div class="cd-title">${escHtml(claim.claimNumber || claim.claim_number || '')} ${_claimBadge(claim.status)}</div>
         <div class="cd-meta">
           <span><strong>${escHtml(claim.patientName || claim.patient_name || '')}</strong></span>
-          <span>${escHtml(claim.payerName || claim.payer_name || '')}</span>
+          <span>${payerLink(claim.payerName || claim.payer_name || '', claim.payerId || claim.payer_id)}</span>
           <span>DOS: ${formatDateDisplay(claim.dateOfService || claim.date_of_service)}</span>
           <span>${daysInAR}d in A/R</span>
         </div>

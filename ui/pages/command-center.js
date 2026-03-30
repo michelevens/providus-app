@@ -1,7 +1,7 @@
 // ui/pages/command-center.js — Agency Command Center
 // Bird's-eye view across all modules: credentialing, RCM, compliance, workspace
 
-const { store, escHtml, formatDateDisplay, showToast } = window._credentik;
+const { store, escHtml, formatDateDisplay, showToast, payerLink } = window._credentik;
 
 if (typeof window._ccTab === 'undefined') window._ccTab = 'overview';
 

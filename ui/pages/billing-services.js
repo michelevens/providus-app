@@ -3,7 +3,7 @@
 
 const { store, auth, CONFIG, escHtml, escAttr, formatDateDisplay, toHexId,
         showToast, navigateTo, appConfirm, appPrompt,
-        editButton, deleteButton, helpTip, sortArrow } = window._credentik;
+        editButton, deleteButton, helpTip, sortArrow, payerLink } = window._credentik;
 
 // Module state
 if (typeof window._bsTab === 'undefined') window._bsTab = 'dashboard';
@@ -281,7 +281,7 @@ async function renderBillingServicesPage() {
       const avgDays = p.daysToPay.length > 0 ? Math.round(p.daysToPay.reduce((s, v) => s + v, 0) / p.daysToPay.length) : null;
       const colColor = colRate >= 90 ? '#16a34a' : colRate >= 70 ? '#f59e0b' : '#ef4444';
       return '<tr>'
-        + '<td style="font-weight:600;">' + escHtml(p.name) + '</td>'
+        + '<td style="font-weight:600;">' + payerLink(p.name, p.id) + '</td>'
         + '<td style="text-align:right;">' + p.claims + '</td>'
         + '<td style="text-align:right;">' + _fmtMoney(p.charged) + '</td>'
         + '<td style="text-align:right;">' + _fmtMoney(p.paid) + '</td>'
@@ -554,7 +554,7 @@ async function renderBillingServicesPage() {
               return `<tr style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
                 <td><strong style="font-family:monospace;font-size:11px;color:var(--brand-600);">${escHtml(c.claim_number || c.claimNumber || '')}</strong></td>
                 <td class="text-sm">${escHtml(c.patient_name || c.patientName || '')}</td>
-                <td class="text-sm">${escHtml(c.payer_name || c.payerName || '')}</td>
+                <td class="text-sm">${payerLink(c.payer_name || c.payerName || '', c.payerId || c.payer_id)}</td>
                 <td style="text-align:right;color:var(--red);font-weight:600;">${_fmtMoney(c.balance)}</td>
                 <td style="font-weight:700;color:${days > 90 ? 'var(--red)' : days > 60 ? '#f97316' : '#f59e0b'};">${days}d</td>
               </tr>`;
@@ -619,7 +619,7 @@ async function renderBillingServicesPage() {
               return '<tr style="' + rowBg + 'cursor:pointer;" onclick="window.app.viewClaimDetail(' + c.id + ')">' +
                 '<td><strong style="font-family:monospace;font-size:11px;color:var(--brand-600);">' + escHtml(c.claimNumber || c.claim_number || '') + '</strong></td>' +
                 '<td class="text-sm">' + escHtml(c.patientName || c.patient_name || '') + '</td>' +
-                '<td class="text-sm">' + escHtml(c.payerName || c.payer_name || '') + '</td>' +
+                '<td class="text-sm">' + payerLink(c.payerName || c.payer_name || '', c.payerId || c.payer_id) + '</td>' +
                 '<td class="text-sm">' + formatDateDisplay(c.dateOfService || c.date_of_service) + '</td>' +
                 '<td style="text-align:right;">' + _fmtMoney(c.totalCharges || c.total_charges) + '</td>' +
                 '<td style="text-align:center;font-weight:700;color:' + daysColor + ';">' + daysText + '</td>' +
@@ -1241,7 +1241,7 @@ async function renderBillingClientDetail(clientId) {
           ${claims.map(c => `<tr style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
             <td style="font-family:monospace;color:var(--brand-600);">${escHtml(c.claimNumber || c.claim_number || '')}</td>
             <td>${escHtml(c.patientName || c.patient_name || '')}</td>
-            <td>${escHtml(c.payerName || c.payer_name || '')}</td>
+            <td>${payerLink(c.payerName || c.payer_name || '', c.payerId || c.payer_id)}</td>
             <td>${formatDateDisplay(c.dateOfService || c.date_of_service)}</td>
             <td style="text-align:right;">${_fmtMoney(c.totalCharges || c.total_charges)}</td>
             <td style="text-align:right;color:#16a34a;font-weight:600;">${_fmtMoney(c.totalPaid || c.total_paid)}</td>
@@ -1322,7 +1322,7 @@ async function renderBillingClientDetail(clientId) {
             return `<tr>
               <td style="font-family:monospace;color:var(--brand-600);">${escHtml(claim.claimNumber || claim.claim_number || '')}</td>
               <td>${escHtml(claim.patientName || claim.patient_name || '')}</td>
-              <td style="font-size:11px;">${escHtml(claim.payerName || claim.payer_name || '')}</td>
+              <td style="font-size:11px;">${payerLink(claim.payerName || claim.payer_name || '', claim.payerId || claim.payer_id)}</td>
               <td style="font-family:monospace;font-size:11px;color:#7c3aed;">${escHtml(d.denialCode || d.denial_code || '—')}</td>
               <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(d.denialReason || d.denial_reason || '')}">${escHtml(d.denialReason || d.denial_reason || '—')}</td>
               <td style="text-align:right;color:#ef4444;font-weight:600;">${_fmtMoney(d.deniedAmount || d.denied_amount)}</td>

@@ -449,6 +449,12 @@ function renderPayerTags(tags) {
   }).join(' ');
 }
 
+function payerLink(name, payerId) {
+  if (!name) return '—';
+  if (!payerId) return escHtml(name);
+  return `<a href="#" onclick="event.stopPropagation();event.preventDefault();window.app.viewPayerDetail('${payerId}')" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--gray-300);font-weight:inherit;" onmouseover="this.style.color='var(--brand-600)'" onmouseout="this.style.color='inherit'">${escHtml(name)}</a>`;
+}
+
 let _payerTagFilters = new Set();
 let _payerView = 'catalog'; // 'catalog' | 'planner'
 
@@ -2917,7 +2923,7 @@ async function renderAppTable(prefetchedApps = null) {
         <div class="v2-apps-card-body">
           <div class="v2-apps-card-top">
             <div>
-              <div class="v2-apps-card-payer">${payerName}</div>
+              <div class="v2-apps-card-payer">${payerLink(payerName, a.payerId)}</div>
               ${provName ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${escHtml(provName)}</div>` : ''}
             </div>
             <span style="font-family:monospace;font-size:10px;color:var(--gray-400);">${toHexId(a.id)}</span>
@@ -5309,7 +5315,7 @@ function renderPayerStrategicPlanner(payers) {
     return `<table>
       <thead><tr><th>Payer</th><th>Category</th><th>States</th><th>Avg Cred</th><th>Tags</th></tr></thead>
       <tbody>${list.map(p => `<tr>
-        <td><strong>${escHtml(p.name)}</strong><div class="text-sm text-muted">${escHtml(p.parentOrg) || ''}</div></td>
+        <td><strong>${payerLink(p.name, p.id)}</strong><div class="text-sm text-muted">${escHtml(p.parentOrg) || ''}</div></td>
         <td class="text-sm">${escHtml(p.category) || '-'}</td>
         <td class="text-sm">${Array.isArray(p.states) ? (p.states.length > 6 ? p.states.slice(0, 6).join(', ') + ` +${p.states.length - 6}` : p.states.join(', ')) : '-'}</td>
         <td>${p.avgCredDays ? p.avgCredDays + 'd' : '-'}</td>
@@ -15909,7 +15915,7 @@ window._credentik = {
   getPayerById, getStateName, getPresetValue, presetSelectHtml,
   // Navigation & UI
   navigateTo, appConfirm, appPrompt,
-  editButton, deleteButton, renderPayerTags, helpTip,
+  editButton, deleteButton, renderPayerTags, payerLink, helpTip,
   // Constants & reference data (getters for mutable data)
   get PAYER_CATALOG() { return PAYER_CATALOG; },
   get STATES() { return STATES; },
