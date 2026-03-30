@@ -5724,6 +5724,45 @@ async function renderSettings() {
         </div>
       </div>
 
+      <div class="card" style="border-radius:16px;border-left:4px solid #7c3aed;">
+        <div class="card-header"><h3>Availity Integration</h3></div>
+        <div class="card-body">
+          <p class="text-sm text-muted mb-4">
+            Connect your Availity account for real-time eligibility verification, claim status checks, and ERA/EFT enrollment.
+            Get your credentials from the <a href="https://apps.availity.com/availity-developer" target="_blank" style="color:var(--brand-600);">Availity Developer Portal</a>.
+          </p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+            <div class="auth-field" style="margin:0;">
+              <label>Availity Client ID</label>
+              <input type="text" class="form-control" id="availity-client-id" placeholder="Your Availity Client ID" value="${escAttr(agency.availityClientId || agency.availity_client_id || '')}">
+            </div>
+            <div class="auth-field" style="margin:0;">
+              <label>Availity Client Secret</label>
+              <input type="password" class="form-control" id="availity-client-secret" placeholder="Your Availity Client Secret" value="${escAttr(agency.availityClientSecret || agency.availity_client_secret || '')}">
+            </div>
+            <div class="auth-field" style="margin:0;">
+              <label>Availity Customer ID (Sender)</label>
+              <input type="text" class="form-control" id="availity-customer-id" placeholder="Your Availity customer/sender ID" value="${escAttr(agency.availityCustomerId || agency.availity_customer_id || '')}">
+            </div>
+            <div class="auth-field" style="margin:0;">
+              <label>Environment</label>
+              <select class="form-control" id="availity-env">
+                <option value="production" ${(agency.availityEnv || agency.availity_env || 'production') === 'production' ? 'selected' : ''}>Production</option>
+                <option value="sandbox" ${(agency.availityEnv || agency.availity_env) === 'sandbox' ? 'selected' : ''}>Sandbox (Testing)</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-primary" onclick="window.app.saveAvailitySettings()">Save Availity Settings</button>
+            <button class="btn" onclick="window.app.testAvailityConnection()">Test Connection</button>
+            <span id="availity-test-result"></span>
+          </div>
+          <div style="margin-top:16px;padding:12px;background:var(--gray-50);border-radius:10px;font-size:12px;color:var(--gray-600);">
+            <strong>Capabilities:</strong> Real-time eligibility verification (270/271), claim status inquiry (276/277), ERA enrollment status. All sponsored transactions are free on the Base Plan.
+          </div>
+        </div>
+      </div>
+
       <div class="card" style="border-radius:16px;">
         <div class="card-header"><h3>Allowed Domains</h3></div>
         <div class="card-body">
@@ -8717,6 +8756,38 @@ window.app = {
     navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard!'));
   },
 
+  async saveAvailitySettings() {
+    try {
+      await store.updateAgency({
+        availity_client_id: document.getElementById('availity-client-id').value.trim(),
+        availity_client_secret: document.getElementById('availity-client-secret').value.trim(),
+        availity_customer_id: document.getElementById('availity-customer-id').value.trim(),
+        availity_env: document.getElementById('availity-env').value,
+      });
+      showToast('Availity settings saved');
+    } catch (e) { showToast('Failed: ' + e.message); }
+  },
+  async testAvailityConnection() {
+    const result = document.getElementById('availity-test-result');
+    result.innerHTML = '<span style="color:var(--gray-500);font-size:12px;">Testing...</span>';
+    try {
+      const resp = await store.checkEligibility({
+        provider: 'availity',
+        test: true,
+        patient_name: 'Test Patient',
+        payer_name: 'Aetna',
+        member_id: 'TEST123',
+        provider_npi: '1234567890',
+      });
+      if (resp.error) {
+        result.innerHTML = `<span style="color:#dc2626;font-size:12px;">Failed: ${escHtml(resp.error)}</span>`;
+      } else {
+        result.innerHTML = '<span style="color:#16a34a;font-size:12px;">Connected successfully</span>';
+      }
+    } catch (e) {
+      result.innerHTML = `<span style="color:#dc2626;font-size:12px;">Error: ${escHtml(e.message)}</span>`;
+    }
+  },
   async saveAllowedDomains() {
     const raw = document.getElementById('embed-allowed-domains').value;
     const domains = raw.split('\n').map(d => d.trim()).filter(Boolean);

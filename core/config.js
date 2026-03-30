@@ -42,6 +42,8 @@ const CONFIG = {
         nppes_lookup: '/proxy/nppes/lookup',
         nppes_search: '/proxy/nppes/search',
         stedi_eligibility: '/proxy/stedi/eligibility',
+        availity_eligibility: '/proxy/availity/eligibility',
+        availity_claim_status: '/proxy/availity/claim-status',
         caqh: '/proxy/caqh',
     },
 

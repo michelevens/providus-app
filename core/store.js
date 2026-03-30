@@ -684,7 +684,20 @@ class Store {
     }
 
     async checkEligibility(data) {
-        const result = await this._fetch(`${CONFIG.API_URL}/proxy/stedi/eligibility`, {
+        // Try Availity first, fall back to Stedi
+        const provider = data.provider || 'availity';
+        const url = provider === 'stedi'
+            ? `${CONFIG.API_URL}${CONFIG.PROXY.stedi_eligibility}`
+            : `${CONFIG.API_URL}${CONFIG.PROXY.availity_eligibility}`;
+        const result = await this._fetch(url, {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+        return result.data || result;
+    }
+
+    async checkClaimStatus(data) {
+        const result = await this._fetch(`${CONFIG.API_URL}${CONFIG.PROXY.availity_claim_status}`, {
             method: 'POST',
             body: JSON.stringify(data),
         });
