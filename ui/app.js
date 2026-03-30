@@ -459,11 +459,11 @@ const PAYER_TAG_MAP = {
   'Aetna':                ['must_have','behavioral_health','high_volume','caqh_accepts','availity_enrolled','telehealth_friendly','substance_use'],
   'Cigna':                ['must_have','behavioral_health','high_volume','caqh_accepts','telehealth_friendly','substance_use'],
   'Humana':               ['must_have','high_volume','caqh_accepts','telehealth_friendly','medicare_advantage'],
-  'Medicare':             ['must_have','high_volume','portal_required','telehealth_friendly','behavioral_health'],
+  'Medicare':             ['must_have','high_volume','portal_required','telehealth_friendly','behavioral_health','federal_program'],
   'Centene/Ambetter':     ['high_volume','behavioral_health','telehealth_friendly','growing_market'],
   'Molina Healthcare':    ['high_volume','behavioral_health','medicaid_prerequisite','telehealth_friendly'],
   'Oscar Health':         ['telehealth_friendly','fast_credentialing','growing_market','behavioral_health'],
-  'Tricare':              ['behavioral_health','substance_use','telehealth_friendly','portal_required'],
+  'Tricare':              ['behavioral_health','substance_use','telehealth_friendly','portal_required','federal_program'],
   'Kaiser Permanente':    ['must_have','high_volume','behavioral_health','panel_often_closed','portal_required'],
   'Medicaid':             ['must_have','high_volume','behavioral_health','substance_use','portal_required'],
   // ─── BCBS — Anthem / Elevance ───
@@ -4099,17 +4099,38 @@ async function renderCoverageMatrix() {
       <div class="card-body" style="padding:0;">
         ${gapCells > 0 ? (() => {
           // ─── Expansion Scoring Engine (shared across tabs) ───
+
+          // Detect federal programs already enrolled: if payer tagged 'federal_program'
+          // and org has at least one credentialed/approved app with them → enrolled nationally
+          const federalEnrolled = new Set();
+          allMatrixPayers.forEach(payer => {
+            const tags = PAYER_TAG_MAP[payer.name] || payer.tags || [];
+            if (!tags.includes('federal_program')) return;
+            const stateMap = coverageMap[payer.id] || {};
+            const hasEnrollment = Object.values(stateMap).some(st => st === 'credentialed' || st === 'approved');
+            if (hasEnrollment) federalEnrolled.add(String(payer.id));
+          });
+
           const gaps = [];
+          const federalLocationGaps = []; // federal payers that just need a location addition
           allMatrixPayers.forEach(payer => {
             const stateMap = coverageMap[payer.id] || {};
             const payerStates = payer.states || [];
             const servesAll = payerStates.includes('ALL') || payerStates.length === 0;
             const tags = PAYER_TAG_MAP[payer.name] || payer.tags || [];
             const marketShare = payer.marketShare || payer.market_share || 0;
+            const isFederal = tags.includes('federal_program');
+            const isFederalEnrolled = federalEnrolled.has(String(payer.id));
 
             licensedStates.forEach(s => {
               if (stateMap[s]) return;
               if (!servesAll && !payerStates.includes(s)) return;
+
+              // Federal program already enrolled → not a gap, just needs location addition
+              if (isFederal && isFederalEnrolled) {
+                federalLocationGaps.push({ payer: payer.name, payerId: payer.id, payerCat: payer.category || '', state: s, marketShare: marketShare || 0 });
+                return;
+              }
 
               const pol = getLivePolicyByState(s);
               const readiness = pol ? pol.readinessScore : 0;
@@ -4226,7 +4247,7 @@ async function renderCoverageMatrix() {
             <button class="exp-tab active" onclick="document.querySelectorAll('.exp-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.querySelectorAll('.exp-panel').forEach(p=>p.classList.remove('active'));document.getElementById('exp-top').classList.add('active');">Top Ranked<span class="exp-tab-count">${topGaps.length}</span></button>
             <button class="exp-tab" onclick="document.querySelectorAll('.exp-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.querySelectorAll('.exp-panel').forEach(p=>p.classList.remove('active'));document.getElementById('exp-payer').classList.add('active');">By Payer<span class="exp-tab-count">${payerGroups.length}</span></button>
             <button class="exp-tab" onclick="document.querySelectorAll('.exp-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.querySelectorAll('.exp-panel').forEach(p=>p.classList.remove('active'));document.getElementById('exp-telehealth').classList.add('active');">Telehealth Friendly<span class="exp-tab-count">${telehealthGaps.length}</span></button>
-            <button class="exp-tab" onclick="document.querySelectorAll('.exp-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.querySelectorAll('.exp-panel').forEach(p=>p.classList.remove('active'));document.getElementById('exp-existing').classList.add('active');">Existing Credentials<span class="exp-tab-count">${existingCredGaps.length}</span></button>
+            <button class="exp-tab" onclick="document.querySelectorAll('.exp-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.querySelectorAll('.exp-panel').forEach(p=>p.classList.remove('active'));document.getElementById('exp-existing').classList.add('active');">Existing Credentials<span class="exp-tab-count">${existingCredGaps.length + federalLocationGaps.length}</span></button>
             <button class="exp-tab" onclick="document.querySelectorAll('.exp-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.querySelectorAll('.exp-panel').forEach(p=>p.classList.remove('active'));document.getElementById('exp-quick').classList.add('active');">Quick Wins<span class="exp-tab-count">${quickWins.length}</span></button>
           </div>
 
@@ -4277,8 +4298,25 @@ async function renderCoverageMatrix() {
 
           <!-- Tab 4: Existing Credentials -->
           <div class="exp-panel" id="exp-existing">
+            ${federalLocationGaps.length > 0 ? `
+            <div style="margin-bottom:16px;padding:14px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;">
+              <div style="font-weight:700;font-size:13px;color:#16a34a;margin-bottom:8px;">Federal Programs — Add Location Only</div>
+              <div style="font-size:12px;color:#4b5563;margin-bottom:10px;">
+                You're already enrolled with these federal payers. To serve patients in new states, just add a practice location (e.g., update PECOS for Medicare). No new application needed.
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                ${[...new Map(federalLocationGaps.map(g => [g.payer, g])).values()].map(g => {
+                  const states = federalLocationGaps.filter(x => x.payer === g.payer).map(x => x.state);
+                  return `<div style="background:#fff;border:1px solid #d1fae5;border-radius:10px;padding:10px 14px;min-width:180px;flex:1;max-width:280px;">
+                    <div style="font-weight:600;font-size:13px;">${escHtml(g.payer)}</div>
+                    <div style="font-size:11px;color:var(--gray-500);margin-top:4px;">Add location in ${states.length} state${states.length > 1 ? 's' : ''}:</div>
+                    <div style="font-size:12px;font-weight:600;color:#16a34a;margin-top:2px;">${states.map(s => getStateName(s)).join(', ')}</div>
+                  </div>`;
+                }).join('')}
+              </div>
+            </div>` : ''}
             <div style="margin-bottom:12px;padding:10px 14px;background:#eff6ff;border-radius:10px;font-size:12px;color:#2563eb;font-weight:500;">
-              Payers you're already credentialed with in other states. Expanding here is faster — you have the relationship, just add a new location/state.
+              Payers you're already credentialed with in other states. Expanding here is faster — you have the relationship, just add a new state.
             </div>
             ${existingCredGaps.length > 0 ? `
             <div class="table-wrap" style="overflow-x:auto;">
@@ -4295,7 +4333,8 @@ async function renderCoverageMatrix() {
                   </tr>`).join('')}
                 </tbody>
               </table>
-            </div>` : '<div style="padding:24px;text-align:center;color:var(--gray-400);">No existing credential expansion opportunities found. Get credentialed with more payers first.</div>'}
+            </div>` : ''}
+            ${existingCredGaps.length === 0 && federalLocationGaps.length === 0 ? '<div style="padding:24px;text-align:center;color:var(--gray-400);">No existing credential expansion opportunities found. Get credentialed with more payers first.</div>' : ''}
           </div>
 
           <!-- Tab 5: Quick Wins -->
