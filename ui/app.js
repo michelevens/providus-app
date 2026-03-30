@@ -19255,23 +19255,55 @@ async function renderServiceLines() {
       </div>
     </div>
 
-    <!-- Tabs -->
-    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+    <!-- Service Line Grid -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:20px;" id="sl-grid">
       ${SERVICE_LINES.map(s => `
-        <button class="btn ${s.status === 'active' ? 'btn-primary' : ''}" onclick="document.getElementById('sl-${s.id}').scrollIntoView({behavior:'smooth'})" style="border-left:3px solid ${s.color};border-radius:12px;">
-          ${s.icon} ${s.name}
-          <span style="font-size:10px;margin-left:4px;opacity:0.7;">${s.status === 'active' ? 'ACTIVE' : 'PLANNED'}</span>
-        </button>
+        <div class="sl2-card" onclick="window.app.viewServiceLine('${s.id}')" style="cursor:pointer;border-left:4px solid ${s.color};border-radius:14px;background:white;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:all 0.2s;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 6px 20px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='';this.style.boxShadow='0 1px 3px rgba(0,0,0,0.06)';">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <span style="font-size:20px;">${s.icon}</span>
+            <span style="font-size:12px;padding:2px 8px;border-radius:4px;background:${s.status === 'active' ? '#dcfce7' : '#f1f5f9'};color:${s.status === 'active' ? '#16a34a' : '#64748b'};font-weight:700;text-transform:uppercase;font-size:10px;">${s.status}</span>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:var(--gray-800);margin-bottom:4px;">${s.name}</div>
+          <div style="font-size:13px;font-weight:700;color:${s.status === 'active' ? '#16a34a' : 'var(--brand-600)'};">${s.annualRevenuePerPatient}</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:6px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escHtml(s.summary).substring(0, 120)}...</div>
+        </div>
       `).join('')}
     </div>
 
-    ${SERVICE_LINES.map(s => `
-    <div class="card sl2-card" id="sl-${s.id}" style="margin-bottom:20px;border-left:4px solid ${s.color};">
+    <!-- Detail Panel (hidden by default) -->
+    <div id="sl-detail" style="display:none;"></div>
+  `;
+
+  // Register the detail view handler
+  window.app.viewServiceLine = function(id) {
+    const s = SERVICE_LINES.find(x => x.id === id);
+    if (!s) return;
+    const intel = SERVICE_LINE_INTEL[s.id];
+    const detail = document.getElementById('sl-detail');
+    const grid = document.getElementById('sl-grid');
+
+    const _section = (title, icon, color, bgColor, items) => {
+      if (!items || !items.length) return '';
+      return '<div style="margin-bottom:20px;"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer;" onclick="const ul=this.nextElementSibling;const arrow=this.querySelector(\'.sl-arrow\');ul.style.display=ul.style.display===\'none\'?\'block\':\'none\';arrow.style.transform=ul.style.display===\'none\'?\'rotate(-90deg)\':\'rotate(0deg)\';">' +
+        '<span class="sl-arrow" style="transition:transform 0.2s;font-size:10px;color:' + color + ';">▼</span>' +
+        '<span style="font-size:14px;">' + icon + '</span>' +
+        '<h4 style="margin:0;font-size:13px;font-weight:700;color:' + color + ';text-transform:uppercase;letter-spacing:0.5px;">' + title + '</h4>' +
+      '</div>' +
+      '<ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.9;color:var(--text);background:' + bgColor + ';border-radius:10px;padding:14px 14px 14px 32px;border-left:3px solid ' + color + ';">' +
+        items.map(i => '<li style="margin-bottom:4px;">' + escHtml(i) + '</li>').join('') +
+      '</ul></div>';
+    };
+
+    detail.innerHTML = `
+    <div class="card sl2-card" style="border-left:4px solid ${s.color};margin-bottom:20px;">
       <div class="card-header" style="display:flex;align-items:center;gap:12px;">
+        <button onclick="document.getElementById('sl-detail').style.display='none';document.getElementById('sl-grid').style.display=''" style="background:none;border:1px solid var(--gray-300);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;color:var(--gray-600);display:flex;align-items:center;gap:4px;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 12L6 8l4-4"/></svg> All Lines
+        </button>
         <span style="font-size:24px;">${s.icon}</span>
         <div style="flex:1;">
           <h3 style="margin:0;">${s.name}</h3>
-          <span style="font-size:12px;padding:2px 8px;border-radius:4px;background:${s.status === 'active' ? 'var(--green)' : 'var(--sage)'}20;color:${s.status === 'active' ? 'var(--green)' : 'var(--sage)'};font-weight:600;text-transform:uppercase;">${s.status}</span>
+          <span style="font-size:12px;padding:2px 8px;border-radius:4px;background:${s.status === 'active' ? '#dcfce7' : '#f1f5f9'};color:${s.status === 'active' ? '#16a34a' : '#64748b'};font-weight:600;text-transform:uppercase;">${s.status}</span>
         </div>
         <div style="text-align:right;">
           <div style="font-size:11px;color:var(--text-muted);">Est. Revenue/Patient/Year</div>
@@ -19331,28 +19363,18 @@ async function renderServiceLines() {
           <div style="font-size:13px;color:#166534;line-height:1.5;">${escHtml(s.credentialingNotes)}</div>
         </div>
 
-        ${(() => {
-          const intel = SERVICE_LINE_INTEL[s.id];
-          if (!intel) return '';
-          const _section = (title, icon, color, bgColor, items) => {
-            if (!items || !items.length) return '';
-            return '<div style="margin-bottom:20px;"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer;" onclick="const ul=this.nextElementSibling;const arrow=this.querySelector(\'.sl-arrow\');ul.style.display=ul.style.display===\'none\'?\'block\':\'none\';arrow.style.transform=ul.style.display===\'none\'?\'rotate(-90deg)\':\'rotate(0deg)\';">' +
-              '<span class="sl-arrow" style="transition:transform 0.2s;font-size:10px;color:' + color + ';">▼</span>' +
-              '<span style="font-size:14px;">' + icon + '</span>' +
-              '<h4 style="margin:0;font-size:13px;font-weight:700;color:' + color + ';text-transform:uppercase;letter-spacing:0.5px;">' + title + '</h4>' +
-            '</div>' +
-            '<ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.9;color:var(--text);background:' + bgColor + ';border-radius:10px;padding:14px 14px 14px 32px;border-left:3px solid ' + color + ';">' +
-              items.map(i => '<li style="margin-bottom:4px;">' + escHtml(i) + '</li>').join('') +
-            '</ul></div>';
-          };
-          return _section('Business Case & ROI', '💰', '#b45309', '#fffbeb', intel.businessCase) +
-                 _section('Coding & Billing Guide', '📋', '#1d4ed8', '#eff6ff', intel.codingGuide) +
-                 _section('Clinical Protocol & Decision Algorithm', '🧠', '#7c3aed', '#f5f3ff', intel.clinicalProtocol) +
-                 _section('Launch Checklist', '🚀', '#0f766e', '#f0fdfa', intel.launchChecklist);
-        })()}
+        ${intel ? _section('Business Case & ROI', '💰', '#b45309', '#fffbeb', intel.businessCase) +
+                  _section('Coding & Billing Guide', '📋', '#1d4ed8', '#eff6ff', intel.codingGuide) +
+                  _section('Clinical Protocol & Decision Algorithm', '🧠', '#7c3aed', '#f5f3ff', intel.clinicalProtocol) +
+                  _section('Launch Checklist', '🚀', '#0f766e', '#f0fdfa', intel.launchChecklist) : ''}
       </div>
     </div>
-    `).join('')}
+    `;
+
+    grid.style.display = 'none';
+    detail.style.display = 'block';
+    detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   `;
 }
 
