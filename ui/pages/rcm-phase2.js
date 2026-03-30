@@ -342,4 +342,184 @@ async function renderProviderFeedbackTab(body) {
   `;
 }
 
-export { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection, renderPayerIntelligenceTab, renderProviderFeedbackTab };
+// ═══════════════════════════════════════════════════
+// AUTHORIZATIONS TAB
+// ═══════════════════════════════════════════════════
+const AUTH_SERVICE_TYPES = ['Outpatient Psychotherapy','Psychiatric Evaluation','Psychological Testing','Family Therapy','Group Therapy','Crisis Intervention','Other'];
+
+async function renderAuthorizationsTab(body) {
+  let auths = [];
+  try { auths = await store.getAuthorizations(); } catch (e) {}
+  if (!Array.isArray(auths)) auths = [];
+  window._authAuthorizations = auths;
+
+  const _val = (a, snake, camel) => a[snake] || a[camel] || '';
+  const _num = (a, snake, camel) => Number(a[snake] || a[camel] || 0);
+  const _patient = a => _val(a, 'patient_name', 'patientName');
+  const _payer = a => _val(a, 'payer_name', 'payerName') || _val(a, 'payer', 'payer');
+  const _authNum = a => _val(a, 'auth_number', 'authNumber');
+  const _serviceType = a => _val(a, 'service_type', 'serviceType');
+  const _approved = a => _num(a, 'approved_units', 'approvedUnits');
+  const _used = a => _num(a, 'used_units', 'usedUnits');
+  const _startDate = a => _val(a, 'start_date', 'startDate');
+  const _endDate = a => _val(a, 'end_date', 'endDate');
+  const _notes = a => _val(a, 'notes', 'notes');
+
+  const now = new Date();
+  const msDay = 86400000;
+
+  function authStatus(a) {
+    const end = new Date(_endDate(a));
+    const remaining = _approved(a) - _used(a);
+    const daysLeft = Math.ceil((end - now) / msDay);
+    if (end < now) return 'expired';
+    if (remaining <= 0) return 'exhausted';
+    if (daysLeft <= 30 || remaining < 3) return 'expiring';
+    return 'active';
+  }
+
+  function statusColor(status) {
+    switch (status) {
+      case 'active': return 'var(--green, #22c55e)';
+      case 'expiring': return '#eab308';
+      case 'exhausted': return 'var(--red, #ef4444)';
+      case 'expired': return 'var(--gray-500, #6b7280)';
+      default: return 'var(--gray-500)';
+    }
+  }
+
+  function rowColor(a) {
+    const end = new Date(_endDate(a));
+    const remaining = _approved(a) - _used(a);
+    const daysLeft = Math.ceil((end - now) / msDay);
+    const pctRemaining = _approved(a) > 0 ? remaining / _approved(a) : 0;
+    if (end < now || daysLeft < 7 || remaining < 3) return 'var(--red, #ef4444)';
+    if (pctRemaining < 0.5 || daysLeft < 30) return '#eab308';
+    return 'var(--green, #22c55e)';
+  }
+
+  // Summary counts
+  const activeCount = auths.filter(a => authStatus(a) === 'active').length;
+  const expiringCount = auths.filter(a => {
+    const end = new Date(_endDate(a));
+    const daysLeft = Math.ceil((end - now) / msDay);
+    return end >= now && daysLeft <= 30;
+  }).length;
+  const exhaustedCount = auths.filter(a => _used(a) >= _approved(a) && new Date(_endDate(a)) >= now).length;
+  const expiredCount = auths.filter(a => new Date(_endDate(a)) < now).length;
+
+  // Alerts
+  const alertExpiring7 = auths.filter(a => {
+    const end = new Date(_endDate(a));
+    const daysLeft = Math.ceil((end - now) / msDay);
+    return daysLeft >= 0 && daysLeft <= 7;
+  });
+  const alertLowUnits = auths.filter(a => {
+    const remaining = _approved(a) - _used(a);
+    return remaining > 0 && remaining < 3 && new Date(_endDate(a)) >= now;
+  });
+  const alertMissedRenewal = auths.filter(a => {
+    return new Date(_endDate(a)) < now && _used(a) < _approved(a);
+  });
+  const hasAlerts = alertExpiring7.length || alertLowUnits.length || alertMissedRenewal.length;
+
+  // Filters
+  const fSearch = (window._authFilterSearch || '').toLowerCase();
+  const fStatus = window._authFilterStatus || '';
+  const filtered = auths.filter(a => {
+    if (fStatus && authStatus(a) !== fStatus) return false;
+    if (fSearch && !_patient(a).toLowerCase().includes(fSearch) && !_payer(a).toLowerCase().includes(fSearch) && !_authNum(a).toLowerCase().includes(fSearch) && !_serviceType(a).toLowerCase().includes(fSearch)) return false;
+    return true;
+  });
+
+  body.innerHTML = `
+    ${hasAlerts ? `<div class="card rcm-card" style="margin-bottom:16px;border-left:4px solid var(--red, #ef4444);">
+      <div class="card-header"><h3 style="color:var(--red, #ef4444);">Alerts</h3></div>
+      <div class="card-body" style="padding:12px 18px;">
+        ${alertExpiring7.length ? `<div style="margin-bottom:8px;"><strong style="color:var(--red);">Expiring within 7 days (${alertExpiring7.length}):</strong>
+          ${alertExpiring7.map(a => `<div style="margin:4px 0 4px 12px;font-size:13px;">${escHtml(_patient(a))} — ${escHtml(_authNum(a))} — expires ${formatDateDisplay(_endDate(a))}</div>`).join('')}
+        </div>` : ''}
+        ${alertLowUnits.length ? `<div style="margin-bottom:8px;"><strong style="color:#eab308;">Less than 3 units remaining (${alertLowUnits.length}):</strong>
+          ${alertLowUnits.map(a => `<div style="margin:4px 0 4px 12px;font-size:13px;">${escHtml(_patient(a))} — ${escHtml(_authNum(a))} — ${_approved(a) - _used(a)} units left</div>`).join('')}
+        </div>` : ''}
+        ${alertMissedRenewal.length ? `<div><strong style="color:var(--gray-500);">Expired with unused units — missed renewal (${alertMissedRenewal.length}):</strong>
+          ${alertMissedRenewal.map(a => `<div style="margin:4px 0 4px 12px;font-size:13px;">${escHtml(_patient(a))} — ${escHtml(_authNum(a))} — ${_approved(a) - _used(a)} unused units, expired ${formatDateDisplay(_endDate(a))}</div>`).join('')}
+        </div>` : ''}
+      </div>
+    </div>` : ''}
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
+      <div class="card rcm-card" style="padding:16px;text-align:center;cursor:pointer;${fStatus === 'active' ? 'border-color:var(--green);' : ''}" onclick="window._authFilterStatus=window._authFilterStatus==='active'?'':'active';window.app.rcSwitchTab('authorizations');">
+        <div style="font-size:24px;font-weight:700;color:var(--green, #22c55e);">${activeCount}</div>
+        <div style="font-size:12px;color:var(--gray-500);">Active Auths</div>
+      </div>
+      <div class="card rcm-card" style="padding:16px;text-align:center;cursor:pointer;${fStatus === 'expiring' ? 'border-color:#eab308;' : ''}" onclick="window._authFilterStatus=window._authFilterStatus==='expiring'?'':'expiring';window.app.rcSwitchTab('authorizations');">
+        <div style="font-size:24px;font-weight:700;color:#eab308;">${expiringCount}</div>
+        <div style="font-size:12px;color:var(--gray-500);">Expiring Soon</div>
+      </div>
+      <div class="card rcm-card" style="padding:16px;text-align:center;cursor:pointer;${fStatus === 'exhausted' ? 'border-color:var(--red);' : ''}" onclick="window._authFilterStatus=window._authFilterStatus==='exhausted'?'':'exhausted';window.app.rcSwitchTab('authorizations');">
+        <div style="font-size:24px;font-weight:700;color:var(--red, #ef4444);">${exhaustedCount}</div>
+        <div style="font-size:12px;color:var(--gray-500);">Units Exhausted</div>
+      </div>
+      <div class="card rcm-card" style="padding:16px;text-align:center;cursor:pointer;${fStatus === 'expired' ? 'border-color:var(--gray-500);' : ''}" onclick="window._authFilterStatus=window._authFilterStatus==='expired'?'':'expired';window.app.rcSwitchTab('authorizations');">
+        <div style="font-size:24px;font-weight:700;color:var(--gray-500);">${expiredCount}</div>
+        <div style="font-size:12px;color:var(--gray-500);">Expired</div>
+      </div>
+    </div>
+
+    <div class="card rcm-card rcm-table">
+      <div class="card-header"><h3>Authorizations (${filtered.length}${filtered.length !== auths.length ? ' of ' + auths.length : ''})</h3>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm btn-primary" onclick="window.app.openAuthModal()">+ Add Authorization</button>
+        </div>
+      </div>
+      <div style="padding:12px 18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--gray-100);">
+        <input type="text" class="form-control" placeholder="Search patient, payer, auth #..." value="${escAttr(fSearch)}" style="height:32px;font-size:12px;width:260px;" onkeyup="window._authFilterSearch=this.value;clearTimeout(window._authSearchTimer);window._authSearchTimer=setTimeout(()=>window.app.rcSwitchTab('authorizations'),300);">
+        <select class="form-control" style="height:32px;font-size:12px;width:140px;" onchange="window._authFilterStatus=this.value;window.app.rcSwitchTab('authorizations');">
+          <option value="">All Statuses</option>
+          <option value="active" ${fStatus === 'active' ? 'selected' : ''}>Active</option>
+          <option value="expiring" ${fStatus === 'expiring' ? 'selected' : ''}>Expiring</option>
+          <option value="exhausted" ${fStatus === 'exhausted' ? 'selected' : ''}>Exhausted</option>
+          <option value="expired" ${fStatus === 'expired' ? 'selected' : ''}>Expired</option>
+        </select>
+        ${fSearch || fStatus ? `<button class="btn btn-sm" onclick="window._authFilterSearch='';window._authFilterStatus='';window.app.rcSwitchTab('authorizations');" style="font-size:11px;color:var(--red);">Clear Filters</button>` : ''}
+      </div>
+      <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+        <thead><tr><th>Patient</th><th>Payer</th><th>Auth #</th><th>Service Type</th><th>Units (Approved / Used / Remaining)</th><th>Date Range</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${filtered.map(a => {
+            const approved = _approved(a);
+            const used = _used(a);
+            const remaining = Math.max(0, approved - used);
+            const pct = approved > 0 ? Math.min(100, Math.round((used / approved) * 100)) : 0;
+            const st = authStatus(a);
+            const clr = rowColor(a);
+            return `<tr>
+              <td style="font-weight:600;">${escHtml(_patient(a))}</td>
+              <td class="text-sm">${escHtml(_payer(a))}</td>
+              <td style="font-family:monospace;font-weight:600;">${escHtml(_authNum(a))}</td>
+              <td class="text-sm">${escHtml(_serviceType(a) || '—')}</td>
+              <td style="min-width:180px;">
+                <div style="display:flex;align-items:center;gap:6px;font-size:12px;">
+                  <span>${approved}</span> / <span>${used}</span> / <strong style="color:${clr};">${remaining}</strong>
+                </div>
+                <div style="height:6px;background:var(--gray-100);border-radius:3px;margin-top:4px;overflow:hidden;">
+                  <div style="height:100%;width:${pct}%;background:${clr};border-radius:3px;transition:width 0.3s;"></div>
+                </div>
+              </td>
+              <td class="text-sm">${formatDateDisplay(_startDate(a)) || '—'} — ${formatDateDisplay(_endDate(a)) || '—'}</td>
+              <td><span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:${statusColor(st)}22;color:${statusColor(st)};">${st.toUpperCase()}</span></td>
+              <td>
+                <button class="btn btn-sm" onclick="window.app.openAuthModal(${a.id})">Edit</button>
+                <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteAuth(${a.id})">Del</button>
+              </td>
+            </tr>`;
+          }).join('')}
+          ${filtered.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No authorizations found.</td></tr>' : ''}
+        </tbody>
+      </table></div></div>
+    </div>
+  `;
+}
+
+export { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection, renderPayerIntelligenceTab, renderProviderFeedbackTab, renderAuthorizationsTab };

@@ -6592,6 +6592,219 @@ async function generateComplianceReportPDF(){
     showToast('Compliance report ready — use Save as PDF in the print dialog');
   }catch(e){showToast('Report failed: '+e.message,'error');}
 }
+async function generateClientMonthlyReport(clientId, month){
+  if(!clientId){showToast('No client selected');return;}
+  showToast('Generating monthly billing report...');
+  try{
+    // Determine report month (default = previous month)
+    var reportDate;
+    if(month){
+      var parts=month.split('-');reportDate=new Date(Number(parts[0]),Number(parts[1])-1,1);
+    }else{
+      var now=new Date();reportDate=new Date(now.getFullYear(),now.getMonth()-1,1);
+    }
+    var monthStart=reportDate.toISOString().slice(0,10);
+    var monthEnd=new Date(reportDate.getFullYear(),reportDate.getMonth()+1,0).toISOString().slice(0,10);
+    var monthLabel=reportDate.toLocaleDateString('en-US',{year:'numeric',month:'long'});
+    var monthKey=reportDate.toISOString().slice(0,7);
+    // Previous month for comparison
+    var prevDate=new Date(reportDate.getFullYear(),reportDate.getMonth()-1,1);
+    var prevStart=prevDate.toISOString().slice(0,10);
+    var prevEnd=new Date(prevDate.getFullYear(),prevDate.getMonth()+1,0).toISOString().slice(0,10);
+
+    const[client,allClaims,allDenials,allPayments,activities,orgs]=await Promise.all([
+      store.getBillingClient(clientId),
+      store.getRcmClaims({billing_client_id:clientId}),
+      store.getRcmDenials({billing_client_id:clientId}),
+      store.getRcmPayments({billing_client_id:clientId}).catch(function(){return[];}),
+      store.getBillingActivities({billing_client_id:clientId,limit:200}).catch(function(){return[];}),
+      store.getAll('organizations').catch(function(){return[];})
+    ]);
+    if(!client||!client.id){showToast('Client not found','error');return;}
+    var org=orgs[0]||{};var agencyName=org.name||'Credentik Agency';var agencyEmail=org.email||org.contactEmail||'';var agencyPhone=org.phone||'';
+    var nowStr=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+    var clientName=client.organizationName||client.organization_name||client.orgName||client.name||'Unknown Client';
+
+    // Filter claims for this month (by date_of_service or created)
+    function inRange(dateStr,start,end){if(!dateStr)return false;var d=dateStr.toString().slice(0,10);return d>=start&&d<=end;}
+    var claims=(Array.isArray(allClaims)?allClaims:[]).filter(function(c){return inRange(c.dateOfService||c.date_of_service||c.createdAt||c.created_at,monthStart,monthEnd);});
+    var prevClaims=(Array.isArray(allClaims)?allClaims:[]).filter(function(c){return inRange(c.dateOfService||c.date_of_service||c.createdAt||c.created_at,prevStart,prevEnd);});
+    var denials=(Array.isArray(allDenials)?allDenials:[]).filter(function(d){return inRange(d.denialDate||d.denial_date||d.createdAt||d.created_at,monthStart,monthEnd);});
+    var payments=(Array.isArray(allPayments)?allPayments:[]).filter(function(p){return inRange(p.paymentDate||p.payment_date||p.createdAt||p.created_at,monthStart,monthEnd);});
+    var monthActivities=(Array.isArray(activities)?activities:[]).filter(function(a){return inRange(a.activityDate||a.activity_date||a.createdAt||a.created_at,monthStart,monthEnd);});
+
+    // Executive Summary
+    var totalClaims=claims.length;
+    var totalCharged=0,totalCollected=0,totalDenied=0,totalDeniedCount=denials.length,totalBalance=0,totalPtResp=0,totalAdjustment=0;
+    claims.forEach(function(c){
+      totalCharged+=Number(c.totalCharges||c.total_charges||0);
+      totalCollected+=Number(c.totalPaid||c.total_paid||0);
+      totalBalance+=Number(c.balance||0);
+      totalPtResp+=Number(c.patientResponsibility||c.patient_responsibility||0);
+      totalAdjustment+=Number(c.adjustmentAmount||c.adjustment_amount||0);
+      if((c.status||'').toLowerCase()==='denied')totalDenied+=Number(c.totalCharges||c.total_charges||0);
+    });
+    denials.forEach(function(d){totalDenied+=Number(d.deniedAmount||d.denied_amount||d.amount||0);});
+    var collectionRate=totalCharged>0?((totalCollected/totalCharged)*100).toFixed(1):'0.0';
+    var denialRate=totalCharged>0?((totalDenied/totalCharged)*100).toFixed(1):'0.0';
+    // Prior month totals
+    var prevCharged=0,prevCollected=0;
+    prevClaims.forEach(function(c){prevCharged+=Number(c.totalCharges||c.total_charges||0);prevCollected+=Number(c.totalPaid||c.total_paid||0);});
+    var netChange=totalCollected-prevCollected;
+
+    // A/R Aging from all claims (not just this month)
+    var ar={bucket0:0,bucket30:0,bucket60:0,bucket90:0};
+    var todayMs=Date.now();
+    (Array.isArray(allClaims)?allClaims:[]).forEach(function(c){
+      var bal=Number(c.balance||0);if(bal<=0)return;
+      var dos=c.dateOfService||c.date_of_service||c.createdAt||c.created_at;
+      if(!dos)return;var days=Math.round((todayMs-new Date(dos).getTime())/86400000);
+      if(days<=30)ar.bucket0+=bal;else if(days<=60)ar.bucket30+=bal;else if(days<=90)ar.bucket60+=bal;else ar.bucket90+=bal;
+    });
+
+    function fmtM(n){return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+    function clr(n){return n>=0?'color:#16a34a;':'color:#dc2626;';}
+
+    // Build HTML
+    var html='';
+    // Header
+    html+='<div class="report-header"><div><h1>Monthly Billing Report</h1><div class="subtitle">'+_pdfEsc(clientName)+'</div><div class="subtitle" style="margin-top:2px;">Report Period: <strong>'+_pdfEsc(monthLabel)+'</strong></div></div><div class="agency"><strong>'+_pdfEsc(agencyName)+'</strong>Generated: '+_pdfEsc(nowStr)+'</div></div>';
+
+    // Executive Summary
+    html+='<div class="section"><h2>Executive Summary</h2><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">';
+    html+='<div style="background:#f0fdf4;border-radius:10px;padding:14px;text-align:center;"><div style="font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.3px;">Claims Submitted</div><div style="font-size:24px;font-weight:800;color:#166534;">'+totalClaims+'</div></div>';
+    html+='<div style="background:#f0fdf4;border-radius:10px;padding:14px;text-align:center;"><div style="font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.3px;">Total Charged</div><div style="font-size:24px;font-weight:800;color:#166534;">'+fmtM(totalCharged)+'</div></div>';
+    html+='<div style="background:#f0fdf4;border-radius:10px;padding:14px;text-align:center;"><div style="font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.3px;">Total Collected</div><div style="font-size:24px;font-weight:800;color:#166534;">'+fmtM(totalCollected)+'</div></div>';
+    html+='<div style="background:'+(Number(collectionRate)>=80?'#f0fdf4':'#fef9c3')+';border-radius:10px;padding:14px;text-align:center;"><div style="font-size:11px;font-weight:700;color:'+(Number(collectionRate)>=80?'#166534':'#854d0e')+';text-transform:uppercase;letter-spacing:0.3px;">Collection Rate</div><div style="font-size:24px;font-weight:800;color:'+(Number(collectionRate)>=80?'#166534':'#854d0e')+';">'+collectionRate+'%</div></div>';
+    html+='</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">';
+    html+='<div style="background:#fee2e2;border-radius:10px;padding:14px;text-align:center;"><div style="font-size:11px;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:0.3px;">Total Denied</div><div style="font-size:20px;font-weight:800;color:#991b1b;">'+fmtM(totalDenied)+'</div><div style="font-size:11px;color:#991b1b;">'+totalDeniedCount+' denial'+(totalDeniedCount!==1?'s':'')+'</div></div>';
+    html+='<div style="background:'+(Number(denialRate)<=10?'#f0fdf4':'#fee2e2')+';border-radius:10px;padding:14px;text-align:center;"><div style="font-size:11px;font-weight:700;color:'+(Number(denialRate)<=10?'#166534':'#991b1b')+';text-transform:uppercase;letter-spacing:0.3px;">Denial Rate</div><div style="font-size:20px;font-weight:800;color:'+(Number(denialRate)<=10?'#166534':'#991b1b')+';">'+denialRate+'%</div></div>';
+    html+='<div style="background:#eff6ff;border-radius:10px;padding:14px;text-align:center;"><div style="font-size:11px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.3px;">Outstanding Balance</div><div style="font-size:20px;font-weight:800;color:#1e40af;">'+fmtM(totalBalance)+'</div></div>';
+    html+='<div style="background:#f8fafc;border-radius:10px;padding:14px;text-align:center;"><div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.3px;">Net Change (Prior Mo)</div><div style="font-size:20px;font-weight:800;'+clr(netChange)+';">'+(netChange>=0?'+':'')+fmtM(netChange)+'</div></div>';
+    html+='</div></div>';
+
+    // Collections Detail table
+    html+='<div class="section"><h2>Collections Detail</h2>';
+    if(claims.length>0){
+      html+='<table><thead><tr><th>Claim #</th><th>Patient</th><th>DOS</th><th>CPT</th><th style="text-align:right;">Charged</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Adjustment</th><th style="text-align:right;">Pt Resp</th><th>Status</th></tr></thead><tbody>';
+      claims.forEach(function(c){
+        var claimNum=c.claimNumber||c.claim_number||c.id||'';
+        var patient=c.patientName||c.patient_name||'';
+        var dos=c.dateOfService||c.date_of_service||'';
+        var cpt=c.cptCodes||c.cpt_codes||c.procedureCode||c.procedure_code||'';
+        if(Array.isArray(cpt))cpt=cpt.join(', ');
+        var charged=Number(c.totalCharges||c.total_charges||0);
+        var paid=Number(c.totalPaid||c.total_paid||0);
+        var adj=Number(c.adjustmentAmount||c.adjustment_amount||0);
+        var ptResp=Number(c.patientResponsibility||c.patient_responsibility||0);
+        var st=c.status||'';
+        html+='<tr><td>'+_pdfEsc(claimNum)+'</td><td>'+_pdfEsc(patient)+'</td><td>'+_pdfDate(dos)+'</td><td>'+_pdfEsc(cpt)+'</td><td style="text-align:right;font-weight:600;">'+fmtM(charged)+'</td><td style="text-align:right;font-weight:600;color:#16a34a;">'+fmtM(paid)+'</td><td style="text-align:right;">'+fmtM(adj)+'</td><td style="text-align:right;">'+fmtM(ptResp)+'</td><td>'+_statusBadge(st)+'</td></tr>';
+      });
+      html+='<tr style="font-weight:800;border-top:2px solid #e2e8f0;background:#f8fafc;"><td colspan="4" style="text-align:right;font-weight:800;">TOTALS</td><td style="text-align:right;font-weight:800;">'+fmtM(totalCharged)+'</td><td style="text-align:right;font-weight:800;color:#16a34a;">'+fmtM(totalCollected)+'</td><td style="text-align:right;font-weight:800;">'+fmtM(totalAdjustment)+'</td><td style="text-align:right;font-weight:800;">'+fmtM(totalPtResp)+'</td><td></td></tr>';
+      html+='</tbody></table>';
+    }else{
+      html+='<p style="color:#94a3b8;font-size:13px;">No claims for this period.</p>';
+    }
+    html+='</div>';
+
+    // Denial Summary
+    html+='<div class="section"><h2>Denial Summary</h2>';
+    if(denials.length>0){
+      html+='<table><thead><tr><th>Claim #</th><th>Code</th><th>Reason</th><th style="text-align:right;">Amount</th><th>Status</th><th>Appeal</th></tr></thead><tbody>';
+      denials.forEach(function(d){
+        var claimNum=d.claimNumber||d.claim_number||d.claimId||d.claim_id||'';
+        var code=d.denialCode||d.denial_code||d.carcCode||d.carc_code||'';
+        var reason=d.denialReason||d.denial_reason||d.description||'';
+        var amt=Number(d.deniedAmount||d.denied_amount||d.amount||0);
+        var st=d.status||'';
+        var appeal=d.appealStatus||d.appeal_status||'N/A';
+        html+='<tr><td>'+_pdfEsc(claimNum)+'</td><td>'+_pdfEsc(code)+'</td><td>'+_pdfEsc(reason)+'</td><td style="text-align:right;font-weight:600;color:#dc2626;">'+fmtM(amt)+'</td><td>'+_statusBadge(st)+'</td><td>'+_statusBadge(appeal)+'</td></tr>';
+      });
+      html+='</tbody></table>';
+    }else{
+      html+='<p style="color:#16a34a;font-size:13px;font-weight:600;">No denials for this period.</p>';
+    }
+    html+='</div>';
+
+    // A/R Aging Snapshot
+    var arTotal=ar.bucket0+ar.bucket30+ar.bucket60+ar.bucket90;
+    html+='<div class="section"><h2>A/R Aging Snapshot</h2>';
+    html+='<table><thead><tr><th>Aging Bucket</th><th style="text-align:right;">Amount</th><th style="text-align:right;">% of Total</th></tr></thead><tbody>';
+    html+='<tr><td>0 - 30 Days</td><td style="text-align:right;font-weight:600;color:#16a34a;">'+fmtM(ar.bucket0)+'</td><td style="text-align:right;">'+(arTotal>0?((ar.bucket0/arTotal)*100).toFixed(1):'0.0')+'%</td></tr>';
+    html+='<tr><td>31 - 60 Days</td><td style="text-align:right;font-weight:600;color:#d97706;">'+fmtM(ar.bucket30)+'</td><td style="text-align:right;">'+(arTotal>0?((ar.bucket30/arTotal)*100).toFixed(1):'0.0')+'%</td></tr>';
+    html+='<tr><td>61 - 90 Days</td><td style="text-align:right;font-weight:600;color:#ea580c;">'+fmtM(ar.bucket60)+'</td><td style="text-align:right;">'+(arTotal>0?((ar.bucket60/arTotal)*100).toFixed(1):'0.0')+'%</td></tr>';
+    html+='<tr><td>90+ Days</td><td style="text-align:right;font-weight:600;color:#dc2626;">'+fmtM(ar.bucket90)+'</td><td style="text-align:right;">'+(arTotal>0?((ar.bucket90/arTotal)*100).toFixed(1):'0.0')+'%</td></tr>';
+    html+='<tr style="font-weight:800;border-top:2px solid #e2e8f0;background:#f8fafc;"><td style="font-weight:800;">TOTAL</td><td style="text-align:right;font-weight:800;">'+fmtM(arTotal)+'</td><td style="text-align:right;font-weight:800;">100%</td></tr>';
+    html+='</tbody></table></div>';
+
+    // Activity Log
+    html+='<div class="section"><h2>Activity Log</h2>';
+    if(monthActivities.length>0){
+      html+='<table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>User</th></tr></thead><tbody>';
+      monthActivities.slice(0,50).forEach(function(a){
+        var aDate=a.activityDate||a.activity_date||a.createdAt||a.created_at||'';
+        var aType=a.activityType||a.activity_type||a.type||'';
+        var aDesc=a.description||a.notes||a.title||'';
+        var aUser=a.performedBy||a.performed_by||a.userName||a.user_name||'';
+        html+='<tr><td style="white-space:nowrap;">'+_pdfDate(aDate)+'</td><td>'+_pdfEsc(aType)+'</td><td>'+_pdfEsc(aDesc)+'</td><td>'+_pdfEsc(aUser)+'</td></tr>';
+      });
+      html+='</tbody></table>';
+    }else{
+      html+='<p style="color:#94a3b8;font-size:13px;">No activities logged for this period.</p>';
+    }
+    html+='</div>';
+
+    // Action Items / Recommendations
+    var actionItems=[];
+    // Claims needing follow-up (pending/submitted older than 30 days)
+    var followUpClaims=(Array.isArray(allClaims)?allClaims:[]).filter(function(c){
+      var st=(c.status||'').toLowerCase();
+      if(!['pending','submitted','in_progress','in-progress','under review'].includes(st))return false;
+      var dos=c.dateOfService||c.date_of_service||c.createdAt||c.created_at;
+      if(!dos)return false;
+      return(todayMs-new Date(dos).getTime())/86400000>30;
+    });
+    if(followUpClaims.length>0)actionItems.push({icon:'&#9888;',color:'#d97706',text:followUpClaims.length+' claim'+(followUpClaims.length>1?'s':'')+' pending 30+ days \u2014 follow up with payer'});
+    // Denials to appeal
+    var openDenials=(Array.isArray(allDenials)?allDenials:[]).filter(function(d){var st=(d.status||'').toLowerCase();var appeal=(d.appealStatus||d.appeal_status||'').toLowerCase();return st!=='resolved'&&st!=='overturned'&&appeal!=='submitted'&&appeal!=='won';});
+    if(openDenials.length>0)actionItems.push({icon:'&#10007;',color:'#dc2626',text:openDenials.length+' open denial'+(openDenials.length>1?'s':'')+' \u2014 review for appeal opportunities'});
+    // Patient balances
+    var ptBalClaims=(Array.isArray(allClaims)?allClaims:[]).filter(function(c){return Number(c.patientResponsibility||c.patient_responsibility||0)>0&&(c.status||'').toLowerCase()!=='paid';});
+    if(ptBalClaims.length>0){var ptTotal=0;ptBalClaims.forEach(function(c){ptTotal+=Number(c.patientResponsibility||c.patient_responsibility||0);});actionItems.push({icon:'&#36;',color:'#1e40af',text:fmtM(ptTotal)+' in patient balances across '+ptBalClaims.length+' claim'+(ptBalClaims.length>1?'s':'')+' \u2014 send patient statements'});}
+    // AR aging
+    if(ar.bucket90>0)actionItems.push({icon:'&#9200;',color:'#dc2626',text:fmtM(ar.bucket90)+' in A/R aged 90+ days \u2014 escalate collection efforts'});
+    if(Number(denialRate)>15)actionItems.push({icon:'&#9888;',color:'#d97706',text:'Denial rate ('+denialRate+'%) exceeds 15% threshold \u2014 review coding and authorization processes'});
+    if(actionItems.length===0)actionItems.push({icon:'&#10003;',color:'#16a34a',text:'No critical action items \u2014 billing operations are on track'});
+
+    html+='<div class="section"><h2>Action Items &amp; Recommendations</h2>';
+    html+='<div style="display:flex;flex-direction:column;gap:8px;">';
+    actionItems.forEach(function(item){
+      html+='<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;background:#f8fafc;border-radius:8px;border-left:4px solid '+item.color+';"><span style="font-size:16px;line-height:1;">'+item.icon+'</span><span style="font-size:13px;color:#1e293b;">'+_pdfEsc(item.text)+'</span></div>';
+    });
+    html+='</div></div>';
+
+    // Footer
+    html+='<div class="report-footer"><span>Prepared by '+_pdfEsc(agencyName)+' \u2014 Confidential</span><span>'+(agencyEmail?_pdfEsc(agencyEmail):'')+(agencyPhone?' | '+_pdfEsc(agencyPhone):'')+'</span></div>';
+
+    _openReportWindow('Monthly Billing Report - '+clientName+' - '+monthLabel,html);
+    showToast('Monthly report ready \u2014 use Save as PDF in the print dialog');
+  }catch(e){showToast('Report failed: '+e.message,'error');}
+}
+async function generateAllClientMonthlyReports(month){
+  showToast('Generating reports for all active clients...');
+  try{
+    var clients=await store.getBillingClients();
+    if(!Array.isArray(clients))clients=[];
+    var active=clients.filter(function(c){return(c.status||'').toLowerCase()!=='inactive'&&(c.status||'').toLowerCase()!=='terminated';});
+    if(active.length===0){showToast('No active billing clients found','error');return;}
+    for(var i=0;i<active.length;i++){
+      await generateClientMonthlyReport(active[i].id,month);
+      if(i<active.length-1)await new Promise(function(r){setTimeout(r,600);});
+    }
+    showToast(active.length+' client report'+(active.length>1?'s':'')+' generated');
+  }catch(e){showToast('Batch report failed: '+e.message,'error');}
+}
 async function generatePayerReport(providerId){
   if(!providerId){showToast('No provider selected');return;}
   showToast('Generating payer report...');
@@ -10511,6 +10724,8 @@ function handleNppesProxy(payload) {
   generateCredentialingReport(providerId) { return generateCredentialingReport(providerId); },
   generateComplianceReportPDF() { return generateComplianceReportPDF(); },
   generatePayerReport(providerId) { return generatePayerReport(providerId); },
+  generateClientMonthlyReport(clientId, month) { return generateClientMonthlyReport(clientId, month); },
+  generateAllClientMonthlyReports(month) { return generateAllClientMonthlyReports(month); },
 
   // ── Command Center ──
   async ccSwitchTab(tab) {
@@ -11302,6 +11517,23 @@ function handleNppesProxy(payload) {
       notes: document.getElementById('rcm-claim-notes').value.trim(),
     };
     const editId = document.getElementById('rcm-claim-edit-id').value;
+    // Run claim scrubber before saving
+    try {
+      const scrubIssues = await this._scrubSingleClaimBeforeSave(data);
+      const scrubErrors = scrubIssues.filter(i => i.severity === 'error');
+      const scrubWarnings = scrubIssues.filter(i => i.severity === 'warning');
+      if (scrubErrors.length > 0 || scrubWarnings.length > 0) {
+        const issueList = [...scrubErrors, ...scrubWarnings].map(i => {
+          const badge = i.severity === 'error' ? 'ERROR' : 'WARNING';
+          return badge + ': ' + i.description + ' — ' + i.fix;
+        }).join('\n');
+        const msg = (scrubErrors.length > 0 ? scrubErrors.length + ' error(s)' : '') +
+          (scrubErrors.length > 0 && scrubWarnings.length > 0 ? ' and ' : '') +
+          (scrubWarnings.length > 0 ? scrubWarnings.length + ' warning(s)' : '') +
+          ' found:\n\n' + issueList + '\n\nSave anyway?';
+        if (!await appConfirm(msg)) return;
+      }
+    } catch (e) { /* scrub failed, proceed with save */ }
     try {
       if (editId) await store.updateRcmClaim(editId, data); else await store.createRcmClaim(data);
       document.getElementById('rcm-claim-modal').classList.remove('active');
@@ -11459,6 +11691,12 @@ function handleNppesProxy(payload) {
     document.getElementById('rcm-denial-status-sel').value = editData?.status || 'new';
     document.getElementById('rcm-denial-reason').value = editData?.denialReason || editData?.denial_reason || '';
     document.getElementById('rcm-denial-appeal-notes').value = editData?.appealNotes || editData?.appeal_notes || '';
+    // Appeal tracking fields
+    const _el = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
+    _el('rcm-denial-appeal-status', editData?.appealStatus || editData?.appeal_status || 'not_appealed');
+    _el('rcm-denial-appeal-level', editData?.appealLevel || editData?.appeal_level || '');
+    _el('rcm-denial-appeal-filed-date', editData?.appealFiledDate || editData?.appeal_filed_date || '');
+    _el('rcm-denial-appeal-outcome-amount', editData?.appealOutcomeAmount || editData?.appeal_outcome_amount || '');
     // Trigger code lookup if code is set
     const codeVal = editData?.denialCode || editData?.denial_code || '';
     if (codeVal) this.onDenialCodeChange(codeVal);
@@ -11483,6 +11721,10 @@ function handleNppesProxy(payload) {
       status: document.getElementById('rcm-denial-status-sel').value,
       denial_reason: reason,
       appeal_notes: document.getElementById('rcm-denial-appeal-notes').value.trim(),
+      appeal_status: document.getElementById('rcm-denial-appeal-status')?.value || 'not_appealed',
+      appeal_level: document.getElementById('rcm-denial-appeal-level')?.value || '',
+      appeal_filed_date: document.getElementById('rcm-denial-appeal-filed-date')?.value || null,
+      appeal_outcome_amount: parseFloat(document.getElementById('rcm-denial-appeal-outcome-amount')?.value) || 0,
     };
     const editId = document.getElementById('rcm-denial-edit-id').value;
     try {
@@ -11495,6 +11737,94 @@ function handleNppesProxy(payload) {
   async deleteRcmDenial(id) {
     if (!await appConfirm('Delete this denial record?')) return;
     try { await store.deleteRcmDenial(id); showToast('Denial deleted'); await renderRcmPage(); } catch (e) { showToast('Error: ' + e.message); }
+  },
+  generateDenialAppealLetter() {
+    // Gather denial data from the open modal
+    const claimId = document.getElementById('rcm-denial-claim')?.value;
+    const claims = window._rcmClaims || [];
+    const claim = claims.find(c => c.id == claimId) || {};
+    const denialCode = document.getElementById('rcm-denial-code')?.value?.trim() || '';
+    const denialReason = document.getElementById('rcm-denial-reason')?.value?.trim() || '';
+    const deniedAmount = document.getElementById('rcm-denial-amount')?.value || '0';
+    const appealNotes = document.getElementById('rcm-denial-appeal-notes')?.value?.trim() || '';
+    const category = document.getElementById('rcm-denial-category')?.value || '';
+    const appealLevel = document.getElementById('rcm-denial-appeal-level')?.value || '1st Level';
+    const deadline = document.getElementById('rcm-denial-deadline')?.value || '';
+
+    // Lookup provider from claim
+    const providerName = claim.providerName || claim.provider_name || '';
+    const providerNpi = claim.providerNpi || claim.provider_npi || claim.npi || '';
+    const providerTaxId = claim.providerTaxId || claim.provider_tax_id || claim.taxId || claim.tax_id || '';
+    const patientName = claim.patientName || claim.patient_name || '';
+    const memberId = claim.patientMemberId || claim.patient_member_id || '';
+    const dos = claim.dateOfService || claim.date_of_service || '';
+    const claimNumber = claim.claimNumber || claim.claim_number || '';
+    const billedAmount = claim.totalCharges || claim.total_charges || '0';
+    const payerName = claim.payerName || claim.payer_name || '';
+
+    // Lookup CARC/RARC code info
+    const codes = window.DENIAL_CODES || [];
+    const codeMatch = codes.find(c => c.code.toLowerCase() === denialCode.toLowerCase());
+
+    // Build appeal argument based on denial category
+    const appealArguments = {
+      eligibility: 'The patient was eligible for coverage on the date of service. Please find enclosed proof of eligibility, including the member ID card and verification of benefits obtained prior to the visit.',
+      authorization: 'Prior authorization was obtained for this service. If the authorization number was not included on the original claim, please find the authorization reference enclosed. We request reconsideration based on the valid authorization.',
+      coding: 'Upon review, the coding on this claim is accurate and consistent with the services rendered. The CPT/HCPCS and ICD-10 codes correctly reflect the clinical documentation. We request the claim be reprocessed with the correct coding acknowledged.',
+      medical_necessity: 'The services provided were medically necessary based on the patient\'s clinical presentation and established treatment guidelines. Supporting clinical documentation, including progress notes and treatment plans, is enclosed for your review.',
+      timely_filing: 'This claim was submitted within the contractual timely filing deadline. Enclosed is proof of original submission, including electronic confirmation/receipt. We respectfully request reconsideration.',
+      duplicate: 'This claim is not a duplicate. The dates of service, procedure codes, or modifiers differ from the previously adjudicated claim. Please review the enclosed documentation demonstrating the distinct services provided.',
+      bundling: 'The services billed represent distinct and separate procedures that should not be bundled under the applicable coding guidelines. Appropriate modifiers have been applied per CCI/NCCI edits.',
+      coordination_of_benefits: 'The coordination of benefits information has been updated. This payer is the primary/secondary payer as indicated. Please reprocess accordingly with the enclosed updated COB information.',
+      credentialing: 'The rendering provider was fully credentialed and in-network with your plan on the date of service. Enclosed is verification of the provider\'s network status and effective date.',
+      documentation: 'Complete clinical documentation supporting the services billed is enclosed, including progress notes, treatment plans, and any additional records requested. We believe the documentation supports payment of this claim.',
+      other: 'We believe this claim was denied in error. Please review the enclosed supporting documentation and reconsider this claim for payment.',
+    };
+    const appealArg = appealArguments[category] || appealArguments.other;
+
+    const nowStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const dosStr = dos ? new Date(dos).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A';
+    const deadlineStr = deadline ? new Date(deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A';
+
+    var html = '<div class="report-header"><div><h1>Appeal Letter</h1><div class="subtitle">' + _pdfEsc(appealLevel) + ' Appeal &mdash; Claim ' + _pdfEsc(claimNumber) + '</div></div><div class="agency"><strong>' + _pdfEsc(payerName) + '</strong>Date: ' + _pdfEsc(nowStr) + '</div></div>' +
+      '<div class="section"><div style="margin-bottom:24px;line-height:1.8;">' +
+      '<div>' + _pdfEsc(nowStr) + '</div>' +
+      '<div style="margin-top:12px;"><strong>' + _pdfEsc(payerName) + '</strong></div>' +
+      '<div>Appeals Department</div>' +
+      '<div style="margin-top:12px;">Re: ' + _pdfEsc(appealLevel) + ' Appeal</div>' +
+      '<div>Patient: <strong>' + _pdfEsc(patientName) + '</strong></div>' +
+      '<div>Member ID: <strong>' + _pdfEsc(memberId) + '</strong></div>' +
+      '<div>Claim Number: <strong>' + _pdfEsc(claimNumber) + '</strong></div>' +
+      '<div>Date of Service: <strong>' + _pdfEsc(dosStr) + '</strong></div>' +
+      '<div>Billed Amount: <strong>$' + _pdfEsc(Number(billedAmount).toFixed(2)) + '</strong></div>' +
+      '<div>Denied Amount: <strong>$' + _pdfEsc(Number(deniedAmount).toFixed(2)) + '</strong></div>' +
+      (denialCode ? '<div>Denial Code: <strong>' + _pdfEsc(denialCode) + '</strong>' + (codeMatch ? ' &mdash; ' + _pdfEsc(codeMatch.desc) : '') + '</div>' : '') +
+      '</div></div>' +
+      '<div class="section"><h2>Provider Information</h2><div class="info-grid">' +
+      '<div class="info-item"><div class="label">Provider Name</div><div class="value">' + _pdfEsc(providerName || 'N/A') + '</div></div>' +
+      '<div class="info-item"><div class="label">NPI</div><div class="value">' + _pdfEsc(providerNpi || 'N/A') + '</div></div>' +
+      '<div class="info-item"><div class="label">Tax ID</div><div class="value">' + _pdfEsc(providerTaxId || 'N/A') + '</div></div>' +
+      '</div></div>' +
+      '<div class="section"><h2>Denial Information</h2>' +
+      '<p style="margin-bottom:8px;"><strong>Denial Code:</strong> ' + _pdfEsc(denialCode || 'N/A') + (codeMatch ? ' &mdash; ' + _pdfEsc(codeMatch.desc) : '') + '</p>' +
+      '<p style="margin-bottom:8px;"><strong>Denial Reason:</strong> ' + _pdfEsc(denialReason) + '</p>' +
+      (codeMatch ? '<p style="margin-bottom:8px;"><strong>Suggested Action:</strong> ' + _pdfEsc(codeMatch.action) + '</p>' +
+      '<p style="margin-bottom:8px;"><strong>Recovery Likelihood:</strong> ' + _pdfEsc((codeMatch.recovery || '').toUpperCase()) + '</p>' : '') +
+      '</div>' +
+      '<div class="section"><h2>Basis for Appeal</h2>' +
+      '<p style="margin-bottom:12px;">Dear Appeals Review Committee,</p>' +
+      '<p style="margin-bottom:12px;">We are writing to formally appeal the denial of the above-referenced claim. We believe the denial was issued in error and respectfully request reconsideration for the following reasons:</p>' +
+      '<p style="margin-bottom:12px;">' + _pdfEsc(appealArg) + '</p>' +
+      (appealNotes ? '<p style="margin-bottom:12px;"><strong>Additional Notes:</strong> ' + _pdfEsc(appealNotes) + '</p>' : '') +
+      '<p style="margin-bottom:12px;">We respectfully request that this claim be reprocessed and paid at the contracted rate. If additional information is required, please contact our office.</p>' +
+      '<p style="margin-bottom:12px;">Thank you for your prompt attention to this matter.</p>' +
+      '<div style="margin-top:32px;"><p>Sincerely,</p><div style="margin-top:24px;border-top:1px solid #333;width:250px;padding-top:4px;">' + _pdfEsc(providerName || '[Provider Name]') + (providerNpi ? '<br>NPI: ' + _pdfEsc(providerNpi) : '') + '</div></div>' +
+      '</div>' +
+      (deadline ? '<div class="section" style="background:#fff7ed;padding:12px;border-radius:8px;border:1px solid #fed7aa;"><strong style="color:#ea580c;">Appeal Deadline:</strong> ' + _pdfEsc(deadlineStr) + '</div>' : '') +
+      '<div class="report-footer"><span>Generated by Credentik &mdash; ' + _pdfEsc(nowStr) + '</span><span>Confidential &mdash; Appeal Document</span></div>';
+
+    _openReportWindow('Appeal Letter - ' + (claimNumber || 'Denial'), html);
+    showToast('Appeal letter generated — use Save as PDF in the print dialog');
   },
   async saveQuickCharge() {
     const cpt = document.getElementById('rcm-qc-cpt')?.value?.trim();
@@ -11921,6 +12251,204 @@ function handleNppesProxy(payload) {
       showToast(`Analysis complete: ${underpaid.length} underpaid ($${totalUnderpaid.toFixed(2)}), ${results.filter(r=>r.flag==='ok').length} correct`);
     } catch (e) { showToast('Error: ' + e.message); }
   },
+  // ── Smart Claim Scrubber ──
+  _scrubClaimList(claims, payerRules, feeSchedules) {
+    const issues = [];
+    const now = new Date();
+    const rulesByPayer = {};
+    (payerRules || []).forEach(r => { const name = (r.payer_name || r.payerName || '').toLowerCase(); if (name) rulesByPayer[name] = r; });
+    const fsLookup = {};
+    (feeSchedules || []).forEach(f => { const key = ((f.payer_name || f.payerName || '') + '|' + (f.cpt_code || f.cptCode || '')).toLowerCase(); fsLookup[key] = f; });
+    function getFsRate(payer, cpt) {
+      const s = fsLookup[(payer + '|' + cpt).toLowerCase()]; if (s) return Number(s.rate || s.allowed_amount || s.allowedAmount || 0);
+      const g = fsLookup[('|' + cpt).toLowerCase()]; if (g) return Number(g.rate || g.allowed_amount || g.allowedAmount || 0);
+      const b = (window.CPT_CODES || []).find(c => c.code === cpt); return b ? b.rate : 0;
+    }
+    const telehealthCodes = ['90837','90834','90832','90791','90792','90846','90847','90853','90863','99212','99213','99214','99215'];
+    const addOnCodes = ['90833','90836','90838','90840','99354','99355'];
+    const primaryEMCodes = ['99202','99203','99204','99205','99211','99212','99213','99214','99215','90791','90792','90832','90834','90837','90839'];
+    const dupeMap = {};
+    claims.forEach(c => {
+      const patient = (c.patientName || c.patient_name || '').toLowerCase().trim();
+      const dos = (c.dateOfService || c.date_of_service || '').toString().slice(0,10);
+      const sls = c.serviceLines || c.service_lines || [];
+      (sls.length > 0 ? sls.map(sl => sl.cptCode || sl.cpt_code || '') : ['']).forEach(cpt => {
+        if (patient && dos) { const key = patient+'|'+dos+'|'+cpt; if (!dupeMap[key]) dupeMap[key] = []; dupeMap[key].push(c); }
+      });
+    });
+    claims.forEach(c => {
+      const claimNum = c.claimNumber || c.claim_number || '—';
+      const patient = c.patientName || c.patient_name || '';
+      const payer = c.payerName || c.payer_name || '';
+      const dos = (c.dateOfService || c.date_of_service || '').toString().slice(0,10);
+      const charges = Number(c.totalCharges || c.total_charges || 0);
+      const provider = c.providerName || c.provider_name || '';
+      const memberId = c.patientMemberId || c.patient_member_id || '';
+      const authNum = c.authorizationNumber || c.authorization_number || '';
+      const sls = c.serviceLines || c.service_lines || [];
+      const hasCpt = sls.length > 0 && sls.some(sl => (sl.cptCode || sl.cpt_code || ''));
+      const claimId = c.id;
+      function add(sev, desc, fix) { issues.push({ claimId, claimNum, patient, severity: sev, description: desc, fix }); }
+      // a. Missing Required Fields
+      if (!patient) add('error','Missing patient name','Add patient name to claim');
+      if (!payer) add('error','Missing payer name','Select an insurance payer');
+      if (!dos) add('error','Missing date of service','Add date of service');
+      if (!hasCpt && sls.length === 0) add('error','No CPT code / service lines','Add at least one service line with a CPT code');
+      if (!provider) add('warning','No provider name','Assign a rendering provider');
+      if (!memberId) add('warning','No member ID','Add patient insurance member ID');
+      // b. Timely Filing Risk
+      if (dos) {
+        const daysSinceDos = Math.floor((now - new Date(dos)) / 86400000);
+        const pr = rulesByPayer[payer.toLowerCase()];
+        const fl = pr ? Number(pr.timely_filing_days || pr.timelyFilingDays || 0) : 0;
+        if (fl > 0) { const left = fl - daysSinceDos; if (left <= 14) add('error','Timely filing deadline in '+Math.max(0,left)+' days ('+payer+': '+fl+'-day limit)','Submit claim immediately'); else if (left <= 30) add('warning','Timely filing deadline approaching — '+left+' days left ('+payer+': '+fl+'-day limit)','Prioritize submission'); }
+      }
+      // c. Charge Validation
+      if (charges === 0) add('error','Total charges = $0','Enter charge amount');
+      if (charges > 0 && sls.length > 0) { sls.forEach(sl => {
+        const cpt = sl.cptCode || sl.cpt_code || ''; const slCh = Number(sl.charges || sl.charge_amount || 0);
+        if (cpt && slCh > 0) { const fs = getFsRate(payer,cpt); if (fs > 0) { const exp = fs * Number(sl.units||1);
+          if (slCh < exp*0.8) add('warning','Undercharged: '+cpt+' billed $'+slCh.toFixed(2)+' vs fee schedule $'+exp.toFixed(2),'Review charge amount — may be leaving money on the table');
+          if (slCh > exp*1.5) add('warning','May be reduced: '+cpt+' billed $'+slCh.toFixed(2)+' vs fee schedule $'+exp.toFixed(2),'Payer may reduce to fee schedule rate');
+        }}
+      }); }
+      // d. Duplicate Detection
+      const pl = patient.toLowerCase().trim();
+      (sls.length > 0 ? sls.map(sl => sl.cptCode || sl.cpt_code || '') : ['']).forEach(cpt => {
+        if (pl && dos) { const key = pl+'|'+dos+'|'+cpt; const d = dupeMap[key];
+          if (d && d.length > 1) { const others = d.filter(x => x.id !== claimId).map(x => x.claimNumber || x.claim_number || x.id);
+            add('error','Possible duplicate — same patient + DOS'+(cpt ? ' + CPT '+cpt : '')+' (see: '+others.join(', ')+')','Verify this is not a duplicate claim before submitting');
+          }
+        }
+      });
+      // e. Modifier Check
+      sls.forEach(sl => {
+        const cpt = sl.cptCode || sl.cpt_code || ''; const mods = (sl.modifiers || sl.modifier || '').toString().toUpperCase();
+        if (telehealthCodes.includes(cpt) && !mods.includes('GT') && !mods.includes('95')) add('warning','Telehealth code '+cpt+' missing GT or 95 modifier','Add modifier GT or 95 if service was via telehealth');
+        if (addOnCodes.includes(cpt)) { const hasPri = sls.some(o => { const oc = o.cptCode || o.cpt_code || ''; return oc !== cpt && primaryEMCodes.includes(oc); });
+          if (!hasPri) add('error','Add-on code '+cpt+' without primary E/M or therapy code','Add-on codes require a primary procedure code on the same claim');
+        }
+      });
+      // f. Payer-Specific Rules
+      const pr = rulesByPayer[payer.toLowerCase()];
+      if (pr) { const ac = pr.auth_required_cpts || pr.authRequiredCpts || [];
+        if (ac.length > 0 && !authNum) { const cc = sls.map(sl => (sl.cptCode || sl.cpt_code || '').trim());
+          if (cc.some(cpt => ac.includes(cpt))) add('warning',payer+' requires prior auth for CPT '+cc.filter(cpt => ac.includes(cpt)).join(', '),'Add authorization number or obtain prior auth');
+        }
+      }
+    });
+    return issues;
+  },
+
+  async scrubClaims() {
+    showToast('Scrubbing claims...');
+    try {
+      const allClaims = window._rcmClaims || await store.getRcmClaims();
+      const unpaidStatuses = ['draft','pending','submitted','acknowledged','appealed'];
+      const claims = allClaims.filter(c => unpaidStatuses.includes(c.status));
+      let payerRules = [], feeSchedules = [];
+      try { payerRules = await store.getPayerRules(); } catch (e) {}
+      try { feeSchedules = await store.getFeeSchedules(); } catch (e) {}
+      const issues = this._scrubClaimList(claims, payerRules, feeSchedules);
+      const errors = issues.filter(i => i.severity === 'error');
+      const warnings = issues.filter(i => i.severity === 'warning');
+      const claimIdsWithIssues = new Set(issues.map(i => i.claimId));
+      const cleanClaims = claims.filter(c => !claimIdsWithIssues.has(c.id));
+      const cleanRate = claims.length > 0 ? Math.round(cleanClaims.length / claims.length * 100) : 100;
+
+      let modal = document.getElementById('claim-scrubber-modal');
+      if (!modal) { modal = document.createElement('div'); modal.className = 'modal-overlay'; modal.id = 'claim-scrubber-modal'; document.body.appendChild(modal); }
+      modal.innerHTML = `
+        <div class="modal" style="max-width:1100px;">
+          <div class="modal-header"><h3>Claim Scrubber Results</h3><button class="modal-close" onclick="document.getElementById('claim-scrubber-modal').classList.remove('active')">&times;</button></div>
+          <div class="modal-body" style="max-height:80vh;overflow-y:auto;">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
+              <div style="background:var(--blue-50,#eff6ff);border:1px solid var(--blue-200,#bfdbfe);border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:11px;color:var(--blue-700,#1d4ed8);font-weight:600;text-transform:uppercase;">Claims Scrubbed</div>
+                <div style="font-size:24px;font-weight:700;color:#2563eb;">${claims.length}</div>
+                <div style="font-size:12px;color:var(--gray-500);">unpaid claims</div>
+              </div>
+              <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:11px;color:#b91c1c;font-weight:600;text-transform:uppercase;">Errors</div>
+                <div style="font-size:24px;font-weight:700;color:#dc2626;">${errors.length}</div>
+                <div style="font-size:12px;color:var(--gray-500);">must fix before submit</div>
+              </div>
+              <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:11px;color:#b45309;font-weight:600;text-transform:uppercase;">Warnings</div>
+                <div style="font-size:24px;font-weight:700;color:#d97706;">${warnings.length}</div>
+                <div style="font-size:12px;color:var(--gray-500);">review recommended</div>
+              </div>
+              <div style="background:var(--green-50,#f0fdf4);border:1px solid var(--green-200,#bbf7d0);border-radius:10px;padding:14px;text-align:center;">
+                <div style="font-size:11px;color:var(--green-700,#15803d);font-weight:600;text-transform:uppercase;">Clean Claims</div>
+                <div style="font-size:24px;font-weight:700;color:#16a34a;">${cleanClaims.length}</div>
+                <div style="font-size:12px;color:var(--gray-500);">${cleanRate}% clean rate</div>
+              </div>
+            </div>
+            <div style="margin-bottom:20px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:4px;">
+                <span>Clean Claim Rate</span><span style="color:${cleanRate >= 90 ? '#16a34a' : cleanRate >= 70 ? '#d97706' : '#dc2626'};">${cleanRate}%</span>
+              </div>
+              <div style="height:10px;background:var(--gray-200);border-radius:5px;overflow:hidden;">
+                <div style="height:100%;width:${cleanRate}%;background:${cleanRate >= 90 ? '#16a34a' : cleanRate >= 70 ? '#d97706' : '#dc2626'};border-radius:5px;transition:width 0.5s;"></div>
+              </div>
+            </div>
+            ${errors.length > 0 ? `<h4 style="margin-bottom:8px;color:#dc2626;">Errors (${errors.length})</h4>
+            <div style="overflow-x:auto;margin-bottom:20px;"><table style="width:100%;font-size:12px;">
+              <thead><tr><th>Claim #</th><th>Patient</th><th>Issue</th><th>Suggested Fix</th></tr></thead>
+              <tbody>${errors.map(i => `<tr>
+                <td style="font-weight:600;"><a href="#" onclick="window.app.viewClaimDetail(${i.claimId});document.getElementById('claim-scrubber-modal').classList.remove('active');return false;" style="color:var(--brand-600);">${escHtml(i.claimNum)}</a></td>
+                <td>${escHtml(i.patient || '—')}</td>
+                <td><span style="display:inline-block;background:#fef2f2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px;">ERROR</span> ${escHtml(i.description)}</td>
+                <td style="font-size:11px;color:var(--gray-500);">${escHtml(i.fix)}</td>
+              </tr>`).join('')}</tbody>
+            </table></div>` : ''}
+            ${warnings.length > 0 ? `<h4 style="margin-bottom:8px;color:#d97706;">Warnings (${warnings.length})</h4>
+            <div style="overflow-x:auto;margin-bottom:20px;"><table style="width:100%;font-size:12px;">
+              <thead><tr><th>Claim #</th><th>Patient</th><th>Issue</th><th>Suggested Fix</th></tr></thead>
+              <tbody>${warnings.map(i => `<tr>
+                <td style="font-weight:600;"><a href="#" onclick="window.app.viewClaimDetail(${i.claimId});document.getElementById('claim-scrubber-modal').classList.remove('active');return false;" style="color:var(--brand-600);">${escHtml(i.claimNum)}</a></td>
+                <td>${escHtml(i.patient || '—')}</td>
+                <td><span style="display:inline-block;background:#fffbeb;color:#d97706;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px;">WARN</span> ${escHtml(i.description)}</td>
+                <td style="font-size:11px;color:var(--gray-500);">${escHtml(i.fix)}</td>
+              </tr>`).join('')}</tbody>
+            </table></div>` : ''}
+            ${issues.length === 0 ? `<div style="text-align:center;padding:40px 20px;">
+              <div style="font-size:48px;margin-bottom:12px;">&#10003;</div>
+              <div style="font-size:18px;font-weight:700;color:#16a34a;margin-bottom:4px;">All Claims Clean</div>
+              <div style="font-size:13px;color:var(--gray-500);">No errors or warnings found across ${claims.length} unpaid claim${claims.length !== 1 ? 's' : ''}.</div>
+            </div>` : ''}
+            <div style="margin-top:16px;padding:14px;background:var(--gray-50);border-radius:8px;font-size:12px;color:var(--gray-600);">
+              <strong>Methodology:</strong> Validates claims for missing fields, timely filing risk (using payer rules), charge accuracy (vs fee schedules), duplicate detection (same patient + DOS + CPT), modifier requirements (telehealth GT/95, add-on codes), and payer-specific rules (auth requirements). Only unpaid claims (draft, pending, submitted, acknowledged, appealed) are scrubbed.
+            </div>
+          </div>
+        </div>`;
+      modal.classList.add('active');
+      showToast(`Scrub complete: ${errors.length} error${errors.length!==1?'s':''}, ${warnings.length} warning${warnings.length!==1?'s':''}, ${cleanClaims.length} clean`);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+
+  async _scrubSingleClaimBeforeSave(data) {
+    const claim = { id: 0, claimNumber: 'This Claim', patientName: data.patient_name||'', payerName: data.payer_name||'',
+      dateOfService: data.date_of_service||'', totalCharges: data.total_charges||0, providerName: data.provider_name||'',
+      patientMemberId: data.patient_member_id||'', authorizationNumber: data.authorization_number||'', serviceLines: [], status: data.status||'draft' };
+    let payerRules = [], feeSchedules = [];
+    try { payerRules = await store.getPayerRules(); } catch (e) {}
+    try { feeSchedules = await store.getFeeSchedules(); } catch (e) {}
+    const issues = this._scrubClaimList([claim], payerRules, feeSchedules);
+    const allClaims = window._rcmClaims || [];
+    const editId = document.getElementById('rcm-claim-edit-id')?.value;
+    const existing = editId ? allClaims.filter(c => c.id != editId) : allClaims;
+    if (claim.patientName && claim.dateOfService) {
+      const patL = claim.patientName.toLowerCase().trim(), dosS = claim.dateOfService.toString().slice(0,10);
+      const dupes = existing.filter(c => (c.patientName||c.patient_name||'').toLowerCase().trim() === patL && (c.dateOfService||c.date_of_service||'').toString().slice(0,10) === dosS);
+      if (dupes.length > 0 && !issues.some(i => i.description.includes('Possible duplicate'))) {
+        issues.push({ claimId: 0, claimNum: 'This Claim', patient: claim.patientName, severity: 'error',
+          description: 'Possible duplicate — same patient + DOS (see: '+dupes.map(d => d.claimNumber||d.claim_number||d.id).join(', ')+')', fix: 'Verify this is not a duplicate claim' });
+      }
+    }
+    return issues;
+  },
+
   // Eligibility modal
   async openEligibilityModal() {
     // Get payers from catalog + claims
@@ -11984,6 +12512,104 @@ function handleNppesProxy(payload) {
       document.getElementById('elig-modal')?.remove();
       showToast('Eligibility check submitted');
       window.app.rcSwitchTab('eligibility');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  // Authorization Tracking
+  async openAuthModal(editId) {
+    // Get payers from claims
+    const payers = [];
+    if (window.PAYER_CATALOG && Array.isArray(window.PAYER_CATALOG)) {
+      window.PAYER_CATALOG.forEach(p => { if (p.name && !payers.includes(p.name)) payers.push(p.name); });
+    }
+    if (window._rcmClaims && Array.isArray(window._rcmClaims)) {
+      window._rcmClaims.forEach(c => { const n = c.payerName || c.payer_name; if (n && !payers.includes(n)) payers.push(n); });
+    }
+    payers.sort();
+
+    const serviceTypes = ['Outpatient Psychotherapy','Psychiatric Evaluation','Psychological Testing','Family Therapy','Group Therapy','Crisis Intervention','Other'];
+
+    // If editing, find the auth
+    let ed = null;
+    if (editId && window._authAuthorizations) {
+      ed = window._authAuthorizations.find(a => a.id === editId);
+    }
+    const _v = (snake, camel) => ed ? (ed[snake] || ed[camel] || '') : '';
+
+    const html = `<div class="modal-overlay active" id="auth-modal">
+      <div class="modal" style="max-width:600px;">
+        <div class="modal-header"><h3>${ed ? 'Edit' : 'Add'} Authorization</h3><button class="modal-close" onclick="document.getElementById('auth-modal').remove()">&times;</button></div>
+        <div class="modal-body">
+          <input type="hidden" id="auth-edit-id" value="${ed ? ed.id : ''}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Patient Name *</label><input type="text" id="auth-patient" class="form-control" placeholder="Patient name" value="${escAttr(_v('patient_name', 'patientName'))}"></div>
+            <div class="auth-field" style="margin:0;"><label>Payer *</label>
+              <select id="auth-payer" class="form-control">
+                <option value="">Select payer...</option>
+                ${payers.map(p => `<option value="${escAttr(p)}" ${(_v('payer_name', 'payerName') || _v('payer', 'payer')) === p ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Auth Number *</label><input type="text" id="auth-number" class="form-control" placeholder="Authorization number" value="${escAttr(_v('auth_number', 'authNumber'))}"></div>
+            <div class="auth-field" style="margin:0;"><label>Service Type</label>
+              <select id="auth-service-type" class="form-control">
+                <option value="">Select service...</option>
+                ${serviceTypes.map(s => `<option value="${escAttr(s)}" ${_v('service_type', 'serviceType') === s ? 'selected' : ''}>${escHtml(s)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Approved Units *</label><input type="number" id="auth-approved" class="form-control" min="0" value="${ed ? Number(_v('approved_units', 'approvedUnits') || 0) : ''}"></div>
+            <div class="auth-field" style="margin:0;"><label>Used Units</label><input type="number" id="auth-used" class="form-control" min="0" value="${ed ? Number(_v('used_units', 'usedUnits') || 0) : '0'}"></div>
+            <div class="auth-field" style="margin:0;"><label>Start Date *</label><input type="date" id="auth-start" class="form-control" value="${escAttr(_v('start_date', 'startDate'))}"></div>
+            <div class="auth-field" style="margin:0;"><label>End Date *</label><input type="date" id="auth-end" class="form-control" value="${escAttr(_v('end_date', 'endDate'))}"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Notes</label><textarea id="auth-notes" class="form-control" rows="3" placeholder="Optional notes...">${escHtml(_v('notes', 'notes'))}</textarea></div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('auth-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveAuth()">Save</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  async saveAuth() {
+    const patient = document.getElementById('auth-patient').value.trim();
+    const payer = document.getElementById('auth-payer').value;
+    const authNumber = document.getElementById('auth-number').value.trim();
+    const approvedUnits = document.getElementById('auth-approved').value;
+    const startDate = document.getElementById('auth-start').value;
+    const endDate = document.getElementById('auth-end').value;
+    if (!patient || !payer || !authNumber || !approvedUnits || !startDate || !endDate) {
+      showToast('Please fill in all required fields'); return;
+    }
+    const data = {
+      patientName: patient,
+      payerName: payer,
+      authNumber,
+      serviceType: document.getElementById('auth-service-type').value,
+      approvedUnits: Number(approvedUnits),
+      usedUnits: Number(document.getElementById('auth-used').value || 0),
+      startDate,
+      endDate,
+      notes: document.getElementById('auth-notes').value.trim()
+    };
+    const editId = document.getElementById('auth-edit-id').value;
+    try {
+      if (editId) {
+        await store.updateAuthorization(editId, data);
+        showToast('Authorization updated');
+      } else {
+        await store.createAuthorization(data);
+        showToast('Authorization created');
+      }
+      document.getElementById('auth-modal')?.remove();
+      window.app.rcSwitchTab('authorizations');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async deleteAuth(id) {
+    if (!await appConfirm('Delete this authorization?')) return;
+    try {
+      await store.deleteAuthorization(id);
+      showToast('Authorization deleted');
+      window.app.rcSwitchTab('authorizations');
     } catch (e) { showToast('Error: ' + e.message); }
   },
   // Patient Statement

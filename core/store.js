@@ -1216,6 +1216,12 @@ class Store {
     async checkEligibility(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/eligibility/check`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
     async updateEligibilityCheck(id, data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/eligibility/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; }
 
+    // Authorization Tracking
+    async getAuthorizations(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/authorizations${q ? '?' + q : ''}`)).data || []; }
+    async createAuthorization(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/authorizations`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async updateAuthorization(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/authorizations/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async deleteAuthorization(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/authorizations/${id}`, { method: 'DELETE' }); this.clearCache(); return r; }
+
     // ERA/EOB Parsing
     async parseEra(eraData) { return (await this._fetch(`${CONFIG.API_URL}/rcm/era/parse`, { method: 'POST', body: JSON.stringify({ era_data: eraData }) })).data || {}; }
     async parse837(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/837/parse`, { method: 'POST', body: JSON.stringify({ data }) })).data || {}; }
