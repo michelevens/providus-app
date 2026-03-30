@@ -5,14 +5,14 @@
  * Run this in the browser console while logged in to Credentik.
  * It will:
  *   1. Find Nageley Michel's provider record
- *   2. Match each report row to an existing application
+ *   2. DELETE auto-generated apps NOT in the Network Status Report
  *   3. UPDATE status + notes for mismatched applications
  *   4. CREATE any missing applications
  *
  * Status mapping from report:
  *   "Actively participating"                        → credentialed
  *   "Telehealth allowed; claims billed via ..."     → credentialed
- *   "In Contracting Loading Phase"                  → in_review  (not approved — no contract signed yet)
+ *   "In Contracting Loading Phase"                  → in_review  (contract not signed)
  *   "Application is still in process at payer end"  → in_review
  *   "Not available / not a coverage area"           → withdrawn
  *   "Application rejected"                          → denied
@@ -83,50 +83,87 @@
     );
     log(`  ${allPayers.length} payers in catalog, ${nageleyApps.length} existing applications for Nageley.`);
 
-    // Build payer name → id map (lowercase)
+    // Build payer name → payer map (lowercase)
     const payerMap = {};
     allPayers.forEach(p => { payerMap[p.name.toLowerCase()] = p; });
 
-    // ── Step 3: Match and sync ──
-    log('Step 3: Matching report rows to existing applications...');
-    let updated = 0, created = 0, skippedOk = 0, failed = 0;
+    // ── Helper: fuzzy-match a report row to an existing app ──
+    function matchApp(row, apps) {
+      const lookupName = row.payer.toLowerCase();
+      const catalogPayer = payerMap[lookupName] ||
+        allPayers.find(p => p.name.toLowerCase().includes(lookupName) || lookupName.includes(p.name.toLowerCase()));
 
-    const changes = []; // collect for summary table
+      return apps.find(a => {
+        if (a.state !== row.state) return false;
+        if (catalogPayer && String(a.payerId) === String(catalogPayer.id)) return true;
+        const appName = (a.payerName || '').toLowerCase();
+        return appName === lookupName || appName.includes(lookupName) || lookupName.includes(appName);
+      });
+    }
+
+    // ── Step 3: Identify auto-generated apps to DELETE ──
+    log('Step 3: Identifying auto-generated apps NOT in the Network Status Report...');
+    const matchedAppIds = new Set();
+
+    // First pass: mark which apps correspond to a report row
+    for (const row of reportRows) {
+      const match = matchApp(row, nageleyApps);
+      if (match) matchedAppIds.add(match.id);
+    }
+
+    // Apps not matched to any report row = auto-generated / bogus
+    const toDelete = nageleyApps.filter(a => !matchedAppIds.has(a.id));
+    let deleted = 0;
+
+    if (toDelete.length > 0) {
+      log(`  Found ${toDelete.length} app(s) NOT in the Network Status Report:`);
+      const deleteTable = [];
+      for (const a of toDelete) {
+        const payerName = a.payerName || (a.payerId ? (allPayers.find(p => String(p.id) === String(a.payerId)) || {}).name : '') || '?';
+        deleteTable.push({ id: a.id, state: a.state, payer: payerName, status: a.status, notes: (a.notes || '').substring(0, 60) });
+        log(`    DELETE: ${a.state} / ${payerName} — status=${a.status}, id=${a.id}, notes="${(a.notes || '').substring(0, 50)}"`);
+      }
+      console.table(deleteTable);
+
+      // Actually delete them
+      for (const a of toDelete) {
+        try {
+          await store.remove('applications', a.id);
+          deleted++;
+        } catch (e) {
+          err(`  Failed to delete id=${a.id}: ${e.message}`);
+        }
+      }
+      log(`  Deleted ${deleted} auto-generated application(s).`);
+    } else {
+      log('  No auto-generated apps found — all apps match the report.');
+    }
+
+    // ── Step 4: Sync report rows (update mismatches, create missing) ──
+    log('Step 4: Syncing report rows...');
+    let updated = 0, created = 0, skippedOk = 0, failed = 0;
+    const changes = [];
+
+    // Re-fetch apps since we deleted some
+    const freshApps = (await store.getAll('applications', { force: true })).filter(a =>
+      a.providerId === nageley.id || String(a.providerId) === String(nageley.id)
+    );
 
     for (const row of reportRows) {
-      // Find matching payer in catalog
       const lookupName = row.payer.toLowerCase();
-      let catalogPayer = payerMap[lookupName];
+      const catalogPayer = payerMap[lookupName] ||
+        allPayers.find(p => p.name.toLowerCase().includes(lookupName) || lookupName.includes(p.name.toLowerCase()));
 
-      // Try partial match
-      if (!catalogPayer) {
-        catalogPayer = allPayers.find(p =>
-          p.name.toLowerCase().includes(lookupName) ||
-          lookupName.includes(p.name.toLowerCase())
-        );
-      }
-
-      // Find existing application by state + payer (by ID or name)
-      const existing = nageleyApps.find(a => {
-        if (a.state !== row.state) return false;
-        // Match by payer ID
-        if (catalogPayer && String(a.payerId) === String(catalogPayer.id)) return true;
-        // Match by payer name (fuzzy)
-        const appPayerName = (a.payerName || '').toLowerCase();
-        if (appPayerName === lookupName) return true;
-        if (appPayerName.includes(lookupName) || lookupName.includes(appPayerName)) return true;
-        return false;
-      });
+      const existing = matchApp(row, freshApps);
 
       if (existing) {
-        // Check if status needs correction
         if (existing.status === row.status) {
-          log(`  ✓ OK: ${row.state} / ${row.payer} — already ${row.status}`);
+          log(`  OK: ${row.state} / ${row.payer} — already ${row.status}`);
           skippedOk++;
           continue;
         }
 
-        // STATUS MISMATCH — update it
+        // Status mismatch — update
         const oldStatus = existing.status;
         const updateData = {
           status: row.status,
@@ -136,15 +173,15 @@
 
         try {
           await store.update('applications', existing.id, updateData);
-          log(`  ↻ UPDATED: ${row.state} / ${row.payer} — ${oldStatus} → ${row.status} (id=${existing.id})`);
-          changes.push({ state: row.state, payer: row.payer, action: 'UPDATED', from: oldStatus, to: row.status, id: existing.id });
+          log(`  UPDATED: ${row.state} / ${row.payer} — ${oldStatus} -> ${row.status} (id=${existing.id})`);
+          changes.push({ action: 'UPDATED', state: row.state, payer: row.payer, from: oldStatus, to: row.status, id: existing.id });
           updated++;
         } catch (e) {
           err(`  Failed to update ${row.state} / ${row.payer}: ${e.message}`);
           failed++;
         }
       } else {
-        // No existing app — create one
+        // Create missing app
         const appData = {
           providerId: nageley.id,
           organizationId: nageley.organizationId || '',
@@ -162,8 +199,8 @@
 
         try {
           const result = await store.create('applications', appData);
-          log(`  ✚ CREATED: ${row.state} / ${row.payer} → ${row.status} (id=${result.id})`);
-          changes.push({ state: row.state, payer: row.payer, action: 'CREATED', from: '—', to: row.status, id: result.id });
+          log(`  CREATED: ${row.state} / ${row.payer} -> ${row.status} (id=${result.id})`);
+          changes.push({ action: 'CREATED', state: row.state, payer: row.payer, from: '—', to: row.status, id: result.id });
           created++;
         } catch (e) {
           err(`  Failed to create ${row.state} / ${row.payer}: ${e.message}`);
@@ -174,16 +211,34 @@
 
     // ── Summary ──
     console.log('');
-    log('═══════════════════════════════════════════════════');
-    log(`SYNC COMPLETE — Updated: ${updated}, Created: ${created}, Already correct: ${skippedOk}, Failed: ${failed}`);
-    log('═══════════════════════════════════════════════════');
+    log('===========================================================');
+    log(`SYNC COMPLETE`);
+    log(`  Deleted:  ${deleted} auto-generated app(s)`);
+    log(`  Updated:  ${updated} status correction(s)`);
+    log(`  Created:  ${created} new app(s)`);
+    log(`  Correct:  ${skippedOk} already matched`);
+    log(`  Failed:   ${failed}`);
+    log('===========================================================');
 
     if (changes.length > 0) {
       console.log('');
+      console.log('%cChanges:', 'font-weight:bold;font-size:14px;');
       console.table(changes);
     }
 
-    // Refresh the page view
+    if (deleted > 0) {
+      console.log('');
+      console.log('%cDeleted apps (were auto-generated, not in vendor report):', 'font-weight:bold;font-size:14px;color:#dc2626;');
+      console.table(toDelete.map(a => ({
+        id: a.id,
+        state: a.state,
+        payer: a.payerName || '?',
+        oldStatus: a.status,
+        notes: (a.notes || '').substring(0, 80),
+      })));
+    }
+
+    // Refresh the page
     if (window.app && window.app.navigateTo) {
       log('Refreshing credentialing page...');
       store.clearCache();
