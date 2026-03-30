@@ -766,6 +766,506 @@ async function _renderProviderProductivity(body) {
 }
 
 /* ═══════════════════════════════════════════════════
+   RATE ANALYSIS TAB — Contract Rate Modeling & Negotiation Support
+   ═══════════════════════════════════════════════════ */
+async function _renderRateAnalysis(body) {
+  let claims = [], feeSchedules = [];
+  const [r0, r1] = await Promise.allSettled([
+    store.getRcmClaims().catch(() => []),
+    store.getFeeSchedules().catch(() => []),
+  ]);
+  if (r0.status === 'fulfilled') claims = Array.isArray(r0.value) ? r0.value : [];
+  if (r1.status === 'fulfilled') feeSchedules = Array.isArray(r1.value) ? r1.value : [];
+
+  // ── Build Medicare (FL) benchmark lookup: cpt -> { rate, description } ──
+  const medicareLookup = {};
+  const payerFsLookup = {};
+
+  feeSchedules.forEach(f => {
+    const cpt = f.cpt_code || f.cptCode || '';
+    const payer = f.payer_name || f.payerName || '';
+    const rate = Number(f.contracted_rate || f.contractedRate || 0);
+    const desc = f.cpt_description || f.cptDescription || '';
+    if (!cpt || rate <= 0) return;
+    const pLow = payer.toLowerCase();
+    if (pLow.includes('medicare')) {
+      medicareLookup[cpt] = { rate, desc };
+    } else {
+      payerFsLookup[pLow + '|' + cpt] = { rate, desc, payer };
+    }
+  });
+
+  // ── Group claims by payer (exclude Medicare itself) ──
+  const byPayer = {};
+  claims.forEach(c => {
+    const payer = c.payerName || c.payer_name || 'Unknown';
+    if (payer.toLowerCase().includes('medicare')) return;
+    if (!byPayer[payer]) byPayer[payer] = [];
+    byPayer[payer].push(c);
+  });
+
+  // ── Build per-payer scorecards ──
+  const payerCards = [];
+  Object.keys(byPayer).sort().forEach(payer => {
+    const claimList = byPayer[payer];
+    const totalClaims = claimList.length;
+    const totalCollected = claimList.reduce((s, c) => s + Number(c.totalPaid || c.total_paid || c.paidAmount || c.paid_amount || 0), 0);
+    const pLow = payer.toLowerCase();
+
+    // Tally CPT volume from service lines
+    const cptVolume = {};
+    claimList.forEach(c => {
+      const sls = c.serviceLines || c.service_lines || [];
+      const claimPaid = Number(c.totalPaid || c.total_paid || c.paidAmount || c.paid_amount || 0);
+      if (sls.length > 0) {
+        sls.forEach(sl => {
+          const cpt = sl.cptCode || sl.cpt_code || '';
+          if (!cpt) return;
+          const units = Number(sl.units || 1);
+          const slPaid = Number(sl.paidAmount || sl.paid_amount || 0);
+          if (!cptVolume[cpt]) cptVolume[cpt] = { count: 0, totalPaid: 0, desc: sl.description || sl.cpt_description || '' };
+          cptVolume[cpt].count += units;
+          cptVolume[cpt].totalPaid += slPaid;
+        });
+      } else {
+        const cpt = c.cptCode || c.cpt_code || c.primaryCpt || c.primary_cpt || '';
+        if (cpt) {
+          if (!cptVolume[cpt]) cptVolume[cpt] = { count: 0, totalPaid: 0, desc: '' };
+          cptVolume[cpt].count += 1;
+          cptVolume[cpt].totalPaid += claimPaid;
+        }
+      }
+    });
+
+    const sortedCpts = Object.entries(cptVolume).sort((a, b) => b[1].count - a[1].count);
+    const top5 = sortedCpts.slice(0, 5);
+
+    let totalRateGap = 0;
+    let weightedMcPctSum = 0, weightedMcPctCount = 0;
+    const cptRows = top5.map(([cpt, info]) => {
+      const mcRate = medicareLookup[cpt]?.rate || 0;
+      const mcDesc = medicareLookup[cpt]?.desc || info.desc || '';
+      const fsEntry = payerFsLookup[pLow + '|' + cpt];
+      const contractedRate = fsEntry ? fsEntry.rate : (info.count > 0 ? (info.totalPaid / info.count) : 0);
+      const pctMedicare = mcRate > 0 ? (contractedRate / mcRate * 100) : 0;
+      const rateColor = pctMedicare >= 90 ? '#16a34a' : pctMedicare >= 75 ? '#d97706' : '#dc2626';
+      if (mcRate > 0 && pctMedicare < 90) {
+        totalRateGap += (mcRate * 0.90 - contractedRate) * info.count;
+      }
+      if (mcRate > 0) {
+        weightedMcPctSum += pctMedicare * info.count;
+        weightedMcPctCount += info.count;
+      }
+      return { cpt, desc: mcDesc || cpt, count: info.count, contractedRate, mcRate, pctMedicare, rateColor };
+    });
+
+    const avgMcPct = weightedMcPctCount > 0 ? (weightedMcPctSum / weightedMcPctCount) : 0;
+    const overallColor = avgMcPct >= 90 ? '#16a34a' : avgMcPct >= 75 ? '#d97706' : '#dc2626';
+
+    payerCards.push({
+      payer, totalClaims, totalCollected, avgMcPct, overallColor,
+      cptRows, totalRateGap, cptVolume: sortedCpts,
+    });
+  });
+
+  payerCards.sort((a, b) => b.totalCollected - a.totalCollected);
+
+  // ── CPT Code Comparison across all payers ──
+  const globalCptVol = {};
+  claims.forEach(c => {
+    const sls = c.serviceLines || c.service_lines || [];
+    sls.forEach(sl => {
+      const cpt = sl.cptCode || sl.cpt_code || '';
+      if (!cpt) return;
+      globalCptVol[cpt] = (globalCptVol[cpt] || 0) + Number(sl.units || 1);
+    });
+    if (sls.length === 0) {
+      const cpt = c.cptCode || c.cpt_code || c.primaryCpt || c.primary_cpt || '';
+      if (cpt) globalCptVol[cpt] = (globalCptVol[cpt] || 0) + 1;
+    }
+  });
+
+  const topGlobalCpts = Object.entries(globalCptVol)
+    .filter(([cpt]) => medicareLookup[cpt])
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([cpt]) => cpt);
+
+  const payerNames = payerCards.map(p => p.payer);
+  const noData = payerCards.length === 0;
+
+  body.innerHTML = `
+    <style>
+      ${_analyticsTableStyles()}
+      .ra-scorecard{background:white;border-radius:14px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.06);margin-bottom:16px;transition:transform 0.2s;}
+      .ra-scorecard:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.1);}
+      .ra-scorecard-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;}
+      .ra-payer-name{font-size:16px;font-weight:700;color:var(--gray-900);}
+      .ra-badge{display:inline-block;padding:3px 10px;border-radius:8px;font-size:11px;font-weight:700;}
+      .ra-stats-row{display:flex;gap:20px;margin-bottom:14px;flex-wrap:wrap;}
+      .ra-stat{text-align:center;}
+      .ra-stat-val{font-size:20px;font-weight:700;color:var(--gray-900);}
+      .ra-stat-lbl{font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.3px;}
+      .ra-simulator{background:white;border-radius:14px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+      .ra-sim-controls{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px;}
+      .ra-sim-controls label{font-size:12px;font-weight:600;color:var(--gray-600);display:flex;flex-direction:column;gap:4px;}
+      .ra-sim-controls select,.ra-sim-controls input[type=range]{padding:6px 10px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;background:white;}
+      .ra-sim-result{background:var(--gray-50);border-radius:10px;padding:16px;margin-top:8px;}
+      .ra-sim-impact{font-size:28px;font-weight:700;margin:4px 0;}
+    </style>
+
+    ${noData ? '<div style="text-align:center;padding:64px;color:var(--gray-400);font-size:14px;">No payer claim data or fee schedules found. Import fee schedules and claims to enable rate analysis.</div>' : `
+
+    <!-- Per-Payer Contract Scorecards -->
+    <div class="cc-section">
+      <div class="cc-section-title">Per-Payer Contract Scorecards</div>
+      ${payerCards.map(pc => `
+        <div class="ra-scorecard">
+          <div class="ra-scorecard-header">
+            <div class="ra-payer-name">${escHtml(pc.payer)}</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <div class="ra-badge" style="background:${pc.overallColor}20;color:${pc.overallColor};">${pc.avgMcPct > 0 ? pc.avgMcPct.toFixed(0) + '% of Medicare' : 'No benchmark'}</div>
+              <button class="btn btn-sm" style="font-size:11px;padding:4px 12px;" onclick="window._raGenerateReport(this.dataset.payer)" data-payer="${escHtml(pc.payer)}">Generate Report</button>
+            </div>
+          </div>
+          <div class="ra-stats-row">
+            <div class="ra-stat"><div class="ra-stat-val">${pc.totalClaims}</div><div class="ra-stat-lbl">Claims</div></div>
+            <div class="ra-stat"><div class="ra-stat-val">${_ccMoney(pc.totalCollected)}</div><div class="ra-stat-lbl">Collected</div></div>
+            <div class="ra-stat"><div class="ra-stat-val" style="color:${pc.overallColor};">${pc.avgMcPct > 0 ? pc.avgMcPct.toFixed(1) + '%' : '&#8212;'}</div><div class="ra-stat-lbl">Avg % of Medicare</div></div>
+            <div class="ra-stat">
+              <div class="ra-stat-val" style="color:${pc.totalRateGap > 0 ? '#dc2626' : '#16a34a'};">${pc.totalRateGap > 0 ? _ccMoney(pc.totalRateGap) : '$0'}</div>
+              <div class="ra-stat-lbl">Rate Gap (to 90%)</div>
+            </div>
+          </div>
+          ${pc.cptRows.length > 0 ? `
+          <table class="cc-analytics-table" style="margin-top:8px;">
+            <thead><tr>
+              <th>CPT</th><th>Description</th><th class="num">Volume</th><th class="num">Your Rate</th><th class="num">Medicare Rate</th><th class="num">% of Medicare</th>
+            </tr></thead>
+            <tbody>
+              ${pc.cptRows.map(r => `<tr>
+                <td style="font-weight:600;">${escHtml(r.cpt)}</td>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(r.desc)}">${escHtml(r.desc)}</td>
+                <td class="num">${r.count}</td>
+                <td class="num">$${r.contractedRate.toFixed(2)}</td>
+                <td class="num">${r.mcRate > 0 ? '$' + r.mcRate.toFixed(2) : '&#8212;'}</td>
+                <td class="num"><span style="color:${r.rateColor};font-weight:700;">${r.pctMedicare > 0 ? r.pctMedicare.toFixed(0) + '%' : '&#8212;'}</span></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+          ` : '<div style="font-size:12px;color:var(--gray-400);margin-top:8px;">No CPT-level data available for this payer.</div>'}
+        </div>
+      `).join('')}
+    </div>
+
+    <!-- CPT Code Comparison Table -->
+    <div class="cc-section">
+      <div class="cc-section-title">CPT Code Comparison Across Payers</div>
+      <div class="cc-card" style="padding:0;overflow-x:auto;">
+        ${topGlobalCpts.length === 0 ? '<div style="text-align:center;padding:48px;color:var(--gray-400);font-size:13px;">No CPT codes with Medicare benchmarks found.</div>' : `
+        <table class="cc-analytics-table">
+          <thead><tr>
+            <th>CPT</th><th>Description</th><th class="num">Medicare Rate</th>
+            ${payerNames.map(p => `<th class="num" style="max-width:100px;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(p)}">${escHtml(p.length > 14 ? p.substring(0, 12) + '..' : p)}</th><th class="num" style="font-size:9px;">%</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${topGlobalCpts.map(cpt => {
+              const mc = medicareLookup[cpt];
+              if (!mc) return '';
+              return `<tr>
+                <td style="font-weight:600;">${escHtml(cpt)}</td>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(mc.desc)}">${escHtml(mc.desc)}</td>
+                <td class="num" style="color:var(--gray-600);">$${mc.rate.toFixed(2)}</td>
+                ${payerNames.map(p => {
+                  const fsEntry = payerFsLookup[p.toLowerCase() + '|' + cpt];
+                  if (!fsEntry) return '<td class="num" style="color:var(--gray-300);">&#8212;</td><td class="num" style="color:var(--gray-300);">&#8212;</td>';
+                  const pct = mc.rate > 0 ? (fsEntry.rate / mc.rate * 100) : 0;
+                  const col = pct >= 90 ? '#16a34a' : pct >= 75 ? '#d97706' : '#dc2626';
+                  return '<td class="num">$' + fsEntry.rate.toFixed(2) + '</td><td class="num"><span style="color:' + col + ';font-weight:700;">' + pct.toFixed(0) + '%</span></td>';
+                }).join('')}
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        `}
+      </div>
+    </div>
+
+    <!-- Rate Simulator -->
+    <div class="cc-section">
+      <div class="cc-section-title">Rate Simulator</div>
+      <div class="ra-simulator">
+        <div class="ra-sim-controls">
+          <label>
+            Payer
+            <select id="ra-sim-payer" onchange="window._raSimUpdate()">
+              <option value="">-- Select Payer --</option>
+              ${payerNames.map(p => `<option value="${escHtml(p)}">${escHtml(p)}</option>`).join('')}
+            </select>
+          </label>
+          <label>
+            Target % of Medicare: <strong id="ra-sim-pct-label">90%</strong>
+            <input type="range" id="ra-sim-pct" min="75" max="120" value="90" step="5" style="width:200px;" oninput="document.getElementById('ra-sim-pct-label').textContent=this.value+'%';window._raSimUpdate();">
+          </label>
+        </div>
+        <div id="ra-sim-results" style="color:var(--gray-400);font-size:13px;">Select a payer to see projected revenue impact.</div>
+      </div>
+    </div>
+
+    `}
+  `;
+
+  // ── Wire up simulator and report globals ──
+  window._raPayerCards = payerCards;
+  window._raMedicareLookup = medicareLookup;
+  window._raPayerFsLookup = payerFsLookup;
+
+  window._raSimUpdate = function() {
+    const sel = document.getElementById('ra-sim-payer');
+    const pctSlider = document.getElementById('ra-sim-pct');
+    const resultsDiv = document.getElementById('ra-sim-results');
+    if (!sel || !pctSlider || !resultsDiv) return;
+
+    const payerName = sel.value;
+    const targetPct = Number(pctSlider.value) / 100;
+    if (!payerName) { resultsDiv.innerHTML = '<span style="color:var(--gray-400);font-size:13px;">Select a payer to see projected revenue impact.</span>'; return; }
+
+    const pc = (window._raPayerCards || []).find(p => p.payer === payerName);
+    if (!pc) { resultsDiv.innerHTML = '<span style="color:var(--gray-400);">No data for this payer.</span>'; return; }
+
+    const mcLk = window._raMedicareLookup || {};
+    const pLow = payerName.toLowerCase();
+    const fsLk = window._raPayerFsLookup || {};
+
+    let totalCurrentRev = 0, totalProjectedRev = 0;
+    const cptImpacts = [];
+
+    (pc.cptVolume || []).forEach(function(entry) {
+      const cpt = entry[0], info = entry[1];
+      const mcRate = mcLk[cpt]?.rate || 0;
+      if (mcRate <= 0) return;
+      const fsEntry = fsLk[pLow + '|' + cpt];
+      const currentRate = fsEntry ? fsEntry.rate : (info.count > 0 ? (info.totalPaid / info.count) : 0);
+      const targetRate = mcRate * targetPct;
+      const currentTotal = currentRate * info.count;
+      const projectedTotal = targetRate * info.count;
+      totalCurrentRev += currentTotal;
+      totalProjectedRev += projectedTotal;
+      const delta = projectedTotal - currentTotal;
+      if (Math.abs(delta) > 0.01) {
+        cptImpacts.push({ cpt: cpt, desc: mcLk[cpt]?.desc || cpt, count: info.count, currentRate: currentRate, targetRate: targetRate, delta: delta });
+      }
+    });
+
+    cptImpacts.sort(function(a, b) { return b.delta - a.delta; });
+    const totalDelta = totalProjectedRev - totalCurrentRev;
+    const deltaColor = totalDelta >= 0 ? '#16a34a' : '#dc2626';
+    const deltaSign = totalDelta >= 0 ? '+' : '';
+
+    let tableHtml = '';
+    if (cptImpacts.length > 0) {
+      tableHtml = '<table class="cc-analytics-table" style="font-size:11px;"><thead><tr>' +
+        '<th>CPT</th><th>Description</th><th class="num">Volume</th><th class="num">Current Rate</th><th class="num">Target Rate</th><th class="num">Impact</th>' +
+        '</tr></thead><tbody>';
+      cptImpacts.slice(0, 10).forEach(function(r) {
+        const dCol = r.delta >= 0 ? '#16a34a' : '#dc2626';
+        const dSign = r.delta >= 0 ? '+' : '';
+        tableHtml += '<tr>' +
+          '<td style="font-weight:600;">' + escHtml(r.cpt) + '</td>' +
+          '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(r.desc) + '">' + escHtml(r.desc) + '</td>' +
+          '<td class="num">' + r.count + '</td>' +
+          '<td class="num">$' + r.currentRate.toFixed(2) + '</td>' +
+          '<td class="num">$' + r.targetRate.toFixed(2) + '</td>' +
+          '<td class="num" style="color:' + dCol + ';font-weight:700;">' + dSign + _ccMoney(r.delta) + '</td>' +
+          '</tr>';
+      });
+      tableHtml += '</tbody></table>';
+    } else {
+      tableHtml = '<div style="font-size:12px;color:var(--gray-400);">No CPT-level impact data (no Medicare benchmarks matched).</div>';
+    }
+
+    resultsDiv.innerHTML =
+      '<div class="ra-sim-result">' +
+        '<div style="font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.3px;">Projected Annual Revenue Impact</div>' +
+        '<div class="ra-sim-impact" style="color:' + deltaColor + ';">' + deltaSign + _ccMoney(totalDelta) + '</div>' +
+        '<div style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">' +
+          'Current: ' + _ccMoney(totalCurrentRev) + ' &#8594; Projected: ' + _ccMoney(totalProjectedRev) + ' at ' + Math.round(targetPct * 100) + '% of Medicare' +
+        '</div>' +
+        tableHtml +
+      '</div>';
+  };
+
+  // ── Generate Negotiation Report (print-friendly window) ──
+  window._raGenerateReport = function(payerName) {
+    const pc = (window._raPayerCards || []).find(function(p) { return p.payer === payerName; });
+    if (!pc) { showToast('No data for this payer'); return; }
+
+    const mcLk = window._raMedicareLookup || {};
+    const pLow = payerName.toLowerCase();
+    const fsLk = window._raPayerFsLookup || {};
+    const otherPayers = (window._raPayerCards || []).filter(function(p) { return p.payer !== payerName; });
+
+    const cptAnalysis = [];
+    (pc.cptVolume || []).forEach(function(entry) {
+      const cpt = entry[0], info = entry[1];
+      const mcRate = mcLk[cpt]?.rate || 0;
+      if (mcRate <= 0) return;
+      const fsEntry = fsLk[pLow + '|' + cpt];
+      const currentRate = fsEntry ? fsEntry.rate : (info.count > 0 ? (info.totalPaid / info.count) : 0);
+      const pctMc = mcRate > 0 ? (currentRate / mcRate * 100) : 0;
+      const target90 = mcRate * 0.90;
+      const gap = Math.max(0, (target90 - currentRate) * info.count);
+      const impact10 = currentRate * 0.10 * info.count;
+      const impact15 = currentRate * 0.15 * info.count;
+
+      const otherRates = [];
+      otherPayers.forEach(function(op) {
+        const opFs = fsLk[op.payer.toLowerCase() + '|' + cpt];
+        if (opFs) otherRates.push({ payer: op.payer, rate: opFs.rate, pct: mcRate > 0 ? (opFs.rate / mcRate * 100) : 0 });
+      });
+
+      cptAnalysis.push({ cpt: cpt, desc: mcLk[cpt]?.desc || cpt, count: info.count, currentRate: currentRate, mcRate: mcRate, pctMc: pctMc, target90: target90, gap: gap, impact10: impact10, impact15: impact15, otherRates: otherRates });
+    });
+
+    cptAnalysis.sort(function(a, b) { return b.gap - a.gap; });
+
+    const totalGap = cptAnalysis.reduce(function(s, r) { return s + r.gap; }, 0);
+    const total10 = cptAnalysis.reduce(function(s, r) { return s + r.impact10; }, 0);
+    const total15 = cptAnalysis.reduce(function(s, r) { return s + r.impact15; }, 0);
+    const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    // Build rate table rows
+    let rateTableRows = '';
+    cptAnalysis.forEach(function(r) {
+      const cls = r.pctMc >= 90 ? 'green' : r.pctMc >= 75 ? 'yellow' : 'red';
+      const isLow = r.pctMc < 75;
+      rateTableRows += '<tr' + (isLow ? ' class="highlight-row"' : '') + '>' +
+        '<td style="font-weight:600;">' + escHtml(r.cpt) + '</td>' +
+        '<td>' + escHtml(r.desc) + '</td>' +
+        '<td class="num">' + r.count + '</td>' +
+        '<td class="num">$' + r.currentRate.toFixed(2) + '</td>' +
+        '<td class="num">$' + r.mcRate.toFixed(2) + '</td>' +
+        '<td class="num ' + cls + '" style="font-weight:700;">' + r.pctMc.toFixed(0) + '%</td>' +
+        '<td class="num red">' + (r.gap > 0 ? '$' + Math.round(r.gap).toLocaleString() : '&#8212;') + '</td>' +
+        '</tr>';
+    });
+
+    // Build payer comparison rows
+    let payerCompHtml = '';
+    if (otherPayers.length > 0) {
+      payerCompHtml = '<h2>Comparison to Other Payers in Network</h2>' +
+        '<table><thead><tr><th>Payer</th><th class="num">Claims</th><th class="num">Collected</th><th class="num">Avg % of Medicare</th></tr></thead><tbody>' +
+        '<tr style="font-weight:700;background:#eff6ff;">' +
+          '<td>' + escHtml(payerName) + ' (this payer)</td>' +
+          '<td class="num">' + pc.totalClaims + '</td>' +
+          '<td class="num">' + _ccMoney(pc.totalCollected) + '</td>' +
+          '<td class="num" style="color:' + pc.overallColor + ';">' + (pc.avgMcPct > 0 ? pc.avgMcPct.toFixed(1) + '%' : '&#8212;') + '</td>' +
+        '</tr>';
+      otherPayers.forEach(function(op) {
+        payerCompHtml += '<tr><td>' + escHtml(op.payer) + '</td>' +
+          '<td class="num">' + op.totalClaims + '</td>' +
+          '<td class="num">' + _ccMoney(op.totalCollected) + '</td>' +
+          '<td class="num" style="color:' + op.overallColor + ';">' + (op.avgMcPct > 0 ? op.avgMcPct.toFixed(1) + '%' : '&#8212;') + '</td></tr>';
+      });
+      payerCompHtml += '</tbody></table>';
+    }
+
+    // Build underpaid rows
+    const underpaid = cptAnalysis.filter(function(r) { return r.pctMc < 90; });
+    let underpaidHtml = '';
+    if (underpaid.length === 0) {
+      underpaidHtml = '<p style="color:#6b7280;">All CPT codes are at or above 90% of Medicare. No significant underpayment detected.</p>';
+    } else {
+      underpaidHtml = '<table><thead><tr><th>CPT</th><th>Description</th><th class="num">Your Rate</th><th class="num">Medicare</th><th class="num">% of MC</th><th class="num">Recommended Target</th><th class="num">Volume Impact</th></tr></thead><tbody>';
+      underpaid.slice(0, 10).forEach(function(r) {
+        underpaidHtml += '<tr><td style="font-weight:600;">' + escHtml(r.cpt) + '</td>' +
+          '<td>' + escHtml(r.desc) + '</td>' +
+          '<td class="num">$' + r.currentRate.toFixed(2) + '</td>' +
+          '<td class="num">$' + r.mcRate.toFixed(2) + '</td>' +
+          '<td class="num red" style="font-weight:700;">' + r.pctMc.toFixed(0) + '%</td>' +
+          '<td class="num green" style="font-weight:700;">$' + r.target90.toFixed(2) + '</td>' +
+          '<td class="num green">+$' + Math.round(r.gap).toLocaleString() + '</td></tr>';
+      });
+      underpaidHtml += '</tbody></table>';
+    }
+
+    // Build recommended targets
+    let recHtml = '<ul style="margin:8px 0 0;padding-left:20px;">';
+    if (underpaid.length === 0) {
+      recHtml += '<li>All codes are at or above 90% of Medicare &#8212; consider pushing for 95-100% on high-volume codes.</li>';
+    } else {
+      underpaid.slice(0, 5).forEach(function(r) {
+        recHtml += '<li><strong>' + escHtml(r.cpt) + '</strong> (' + escHtml(r.desc) + '): Current $' + r.currentRate.toFixed(2) + ' &#8594; Target <strong class="green">$' + r.target90.toFixed(2) + '</strong> (90% of Medicare)</li>';
+      });
+    }
+    recHtml += '</ul>';
+
+    const reportHtml = '<!DOCTYPE html><html><head>' +
+      '<title>Rate Analysis Report - ' + escHtml(payerName) + '</title>' +
+      '<style>' +
+        'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:900px;margin:0 auto;padding:40px;color:#1f2937;font-size:13px;line-height:1.5;}' +
+        'h1{font-size:22px;margin:0 0 4px;color:#111827;}' +
+        'h2{font-size:16px;margin:28px 0 12px;color:#374151;border-bottom:2px solid #e5e7eb;padding-bottom:6px;}' +
+        '.subtitle{font-size:14px;color:#6b7280;margin-bottom:24px;}' +
+        '.summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}' +
+        '.summary-box{background:#f9fafb;border-radius:8px;padding:14px;text-align:center;border:1px solid #e5e7eb;}' +
+        '.summary-box .val{font-size:22px;font-weight:700;color:#111827;}' +
+        '.summary-box .lbl{font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;}' +
+        'table{width:100%;border-collapse:collapse;margin:8px 0 16px;font-size:12px;}' +
+        'th{text-align:left;padding:6px 8px;background:#f9fafb;border-bottom:2px solid #e5e7eb;font-size:10px;font-weight:700;text-transform:uppercase;color:#6b7280;}' +
+        'th.num{text-align:right;}' +
+        'td{padding:6px 8px;border-bottom:1px solid #f3f4f6;}' +
+        'td.num{text-align:right;font-family:monospace;font-weight:600;}' +
+        '.green{color:#16a34a;} .yellow{color:#d97706;} .red{color:#dc2626;}' +
+        '.highlight-row{background:#fef2f2;}' +
+        '.rec-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin:8px 0;}' +
+        '.rec-box strong{color:#1d4ed8;}' +
+        '.footer{margin-top:32px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;text-align:center;}' +
+        '@media print{body{padding:20px;} .no-print{display:none;}}' +
+      '</style></head><body>' +
+      '<div class="no-print" style="margin-bottom:16px;">' +
+        '<button onclick="window.print()" style="padding:8px 20px;background:#2563eb;color:white;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Print / Save as PDF</button>' +
+      '</div>' +
+      '<h1>Rate Analysis Report &#8212; ' + escHtml(payerName) + '</h1>' +
+      '<div class="subtitle">Prepared ' + today + ' | Based on ' + pc.totalClaims + ' claims, ' + _ccMoney(pc.totalCollected) + ' collected</div>' +
+      '<div class="summary-grid">' +
+        '<div class="summary-box"><div class="val">' + pc.totalClaims + '</div><div class="lbl">Total Claims</div></div>' +
+        '<div class="summary-box"><div class="val">' + _ccMoney(pc.totalCollected) + '</div><div class="lbl">Total Collected</div></div>' +
+        '<div class="summary-box"><div class="val" style="color:' + pc.overallColor + ';">' + (pc.avgMcPct > 0 ? pc.avgMcPct.toFixed(1) + '%' : '&#8212;') + '</div><div class="lbl">Avg % of Medicare</div></div>' +
+        '<div class="summary-box"><div class="val" style="color:' + (totalGap > 0 ? '#dc2626' : '#16a34a') + ';">' + _ccMoney(totalGap) + '</div><div class="lbl">Rate Gap (to 90%)</div></div>' +
+      '</div>' +
+      '<h2>Current Contracted Rates vs Medicare Benchmarks</h2>' +
+      '<table><thead><tr><th>CPT</th><th>Description</th><th class="num">Volume</th><th class="num">Your Rate</th><th class="num">Medicare</th><th class="num">% of MC</th><th class="num">Gap ($)</th></tr></thead><tbody>' +
+      rateTableRows +
+      '</tbody></table>' +
+      '<h2>Volume-Weighted Impact Analysis</h2>' +
+      '<div class="rec-box">' +
+        '<strong>If rates increased by 10%:</strong> Projected additional revenue = <strong class="green">+' + _ccMoney(total10) + '</strong><br>' +
+        '<strong>If rates increased by 15%:</strong> Projected additional revenue = <strong class="green">+' + _ccMoney(total15) + '</strong><br>' +
+        '<strong>If brought to 90% of Medicare:</strong> Additional revenue = <strong class="green">+' + _ccMoney(totalGap) + '</strong>' +
+      '</div>' +
+      payerCompHtml +
+      '<h2>Most Underpaid CPT Codes</h2>' +
+      underpaidHtml +
+      '<h2>Recommended Rate Targets</h2>' +
+      '<div class="rec-box">' +
+        'Based on the analysis above, we recommend negotiating the following targets for <strong>' + escHtml(payerName) + '</strong>:' +
+        recHtml +
+      '</div>' +
+      '<div class="footer">Generated by Credentik | Rate Analysis Module | ' + today + '</div>' +
+      '</body></html>';
+
+    const w = window.open('', '_blank', 'width=960,height=800');
+    if (w) {
+      w.document.write(reportHtml);
+      w.document.close();
+    } else {
+      showToast('Pop-up blocked &#8212; please allow pop-ups for this site');
+    }
+  };
+}
+
+/* ═══════════════════════════════════════════════════
    SLA TRACKING TAB
    ═══════════════════════════════════════════════════ */
 async function _renderSlaTracking(body) {
