@@ -124,6 +124,7 @@ async function renderBillingServicesPage() {
   window._bsTasks = tasks;
   window._bsActivities = activities;
   window._bsOrgs = orgs;
+  if (allClaims.length > 0) window._rcmClaims = allClaims;
 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -1053,7 +1054,7 @@ async function renderBillingClientDetail(clientId) {
           <div>
             <div style="font-size:22px;font-weight:800;color:var(--gray-900);">${escHtml(orgName)}</div>
             <div style="font-size:13px;color:var(--gray-600);margin-top:4px;">
-              Platform: <strong>${escHtml(platform)}</strong> | Fee: <strong>${_fmtMoney(fee)}</strong> <span style="font-size:11px;color:var(--gray-400);">(${feeLabels[feeStruct] || feeStruct})</span>
+              Platform: <strong>${escHtml(platform)}</strong> | Fee: <strong>${_fmtMoney(fee)}</strong> <span style="font-size:11px;color:var(--gray-400);">(${feeLabels[feeStruct] || escHtml(feeStruct)})</span>
               | Mode: <strong>${paymentMode === 'agency_managed' ? 'Agency Managed' : 'Self Managed'}</strong>${agencyFee > 0 ? ` (${agencyFee}% fee)` : ''}
             </div>
             ${_getField(client, 'contactName', 'contact_name') ? `<div style="font-size:12px;color:var(--gray-500);margin-top:2px;">Contact: ${escHtml(_getField(client, 'contactName', 'contact_name'))}${_getField(client, 'contactEmail', 'contact_email') ? ' — ' + escHtml(_getField(client, 'contactEmail', 'contact_email')) : ''}${_getField(client, 'contactPhone', 'contact_phone') ? ' — ' + escHtml(_getField(client, 'contactPhone', 'contact_phone')) : ''}</div>` : ''}
