@@ -3896,7 +3896,7 @@ async function renderCoverageMatrix() {
   const filledCells = Object.values(coverageMap).reduce((sum, stateMap) =>
     sum + Object.keys(stateMap).filter(s => licensedStates.includes(s)).length, 0);
   const approvedCells = Object.values(coverageMap).reduce((sum, stateMap) =>
-    sum + Object.entries(stateMap).filter(([s, st]) => licensedStates.includes(s) && st === 'approved').length, 0);
+    sum + Object.entries(stateMap).filter(([s, st]) => licensedStates.includes(s) && (st === 'approved' || st === 'credentialed')).length, 0);
   const gapCells = totalCells - filledCells;
 
   // ─── Population Coverage Calculations ───
@@ -3919,10 +3919,10 @@ async function renderCoverageMatrix() {
     const lives = statePop * share;
     const key = `${a.payerId}_${a.state}`;
 
-    if (a.status === 'approved' && !countedApproved.has(key)) {
+    if ((a.status === 'approved' || a.status === 'credentialed') && !countedApproved.has(key)) {
       credentialedLives += lives;
       countedApproved.add(key);
-    } else if (['submitted', 'in_review', 'pending_info'].includes(a.status) && !countedInProgress.has(key) && !countedApproved.has(key)) {
+    } else if (['submitted', 'in_review', 'pending_info', 'gathering_docs'].includes(a.status) && !countedInProgress.has(key) && !countedApproved.has(key)) {
       projectedLives += lives;
       countedInProgress.add(key);
     }
@@ -4034,7 +4034,7 @@ async function renderCoverageMatrix() {
             ${allMatrixPayers.map(payer => {
               const stateMap = coverageMap[payer.id] || {};
               const coveredCount = licensedStates.filter(s => stateMap[s]).length;
-              const approvedCount = licensedStates.filter(s => stateMap[s] === 'approved').length;
+              const approvedCount = licensedStates.filter(s => stateMap[s] === 'approved' || stateMap[s] === 'credentialed').length;
               const pct = licensedStates.length > 0 ? Math.round(coveredCount / licensedStates.length * 100) : 0;
               return `<tr style="line-height:1.2;">
                 <td style="position:sticky;left:0;background:#fff;z-index:1;font-weight:600;white-space:nowrap;border-right:1px solid var(--border);padding:3px 6px;font-size:10px;">
@@ -4045,10 +4045,15 @@ async function renderCoverageMatrix() {
                   const status = stateMap[s];
                   if (!status) return `<td style="text-align:center;padding:2px 1px;"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:var(--gray-100);border:1px dashed #cbd5e1;" title="${payer.name} — ${getStateName(s)}: No application"></span></td>`;
                   const colors = {
+                    credentialed: { bg: '#bbf7d0', border: '#059669', icon: '&#10003;' },
                     approved: { bg: '#dcfce7', border: '#22c55e', icon: '&#10003;' },
                     submitted: { bg: '#dbeafe', border: '#3b82f6', icon: '&#9679;' },
                     in_review: { bg: '#e0e7ff', border: '#6366f1', icon: '&#9679;' },
+                    gathering_docs: { bg: '#e0e7ff', border: '#818cf8', icon: '&#9679;' },
                     pending_info: { bg: '#fef3c7', border: '#f59e0b', icon: '!' },
+                    planned: { bg: '#e0e7ff', border: '#6366f1', icon: '&#9675;' },
+                    on_hold: { bg: '#f3f4f6', border: '#9ca3af', icon: '&#8214;' },
+                    withdrawn: { bg: '#f3f4f6', border: '#9ca3af', icon: '&#8211;' },
                     denied: { bg: '#fee2e2', border: '#ef4444', icon: '&#10007;' },
                     not_started: { bg: '#f8fafc', border: '#94a3b8', icon: '&#8211;' },
                   };
@@ -4070,46 +4075,160 @@ async function renderCoverageMatrix() {
     <div class="card cm2-card">
       <div class="card-header"><h3>Legend</h3></div>
       <div class="card-body">
-        <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:12px;">
-          <div><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:var(--success-100);border:1px solid #22c55e;vertical-align:middle;text-align:center;font-size:10px;font-weight:700;color:#22c55e;line-height:16px;">&#10003;</span> Approved / Credentialed</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;">
+          <div><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:#bbf7d0;border:1px solid #059669;vertical-align:middle;text-align:center;font-size:10px;font-weight:700;color:#059669;line-height:16px;">&#10003;</span> Credentialed</div>
+          <div><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:#dcfce7;border:1px solid #22c55e;vertical-align:middle;text-align:center;font-size:10px;font-weight:700;color:#22c55e;line-height:16px;">&#10003;</span> Approved</div>
           <div><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:#dbeafe;border:1px solid #3b82f6;vertical-align:middle;"></span> Submitted</div>
           <div><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:#e0e7ff;border:1px solid #6366f1;vertical-align:middle;"></span> In Review</div>
           <div><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:#fef3c7;border:1px solid #f59e0b;vertical-align:middle;"></span> Pending Info</div>
+          <div><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:#e0e7ff;border:1px solid #6366f1;vertical-align:middle;text-align:center;font-size:10px;color:#6366f1;line-height:16px;">&#9675;</span> Planned</div>
+          <div><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:#f3f4f6;border:1px solid #9ca3af;vertical-align:middle;"></span> On Hold / Withdrawn</div>
           <div><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:#fee2e2;border:1px solid #ef4444;vertical-align:middle;"></span> Denied</div>
           <div><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:var(--gray-100);border:1px dashed #cbd5e1;vertical-align:middle;"></span> Gap (no application)</div>
         </div>
       </div>
     </div>
 
-    <!-- Gap Analysis -->
+    <!-- Gap Analysis — Expansion Opportunities -->
     <div class="card cm2-card">
-      <div class="card-header"><h3>Top Gaps — Expansion Opportunities</h3></div>
+      <div class="card-header"><h3>Expansion Opportunities — Ranked by Impact</h3></div>
       <div class="card-body">
         ${gapCells > 0 ? (() => {
+          // ─── Expansion Scoring Engine ───
+          // Score = state readiness (0-30) + payer priority (0-30) + market share (0-20) + revenue potential (0-20)
           const gaps = [];
           allMatrixPayers.forEach(payer => {
             const stateMap = coverageMap[payer.id] || {};
             const payerStates = payer.states || [];
             const servesAll = payerStates.includes('ALL') || payerStates.length === 0;
+            const tags = PAYER_TAG_MAP[payer.name] || payer.tags || [];
+            const marketShare = payer.marketShare || payer.market_share || 0;
+
             licensedStates.forEach(s => {
-              if (!stateMap[s] && (servesAll || payerStates.includes(s))) {
-                const pol = getLivePolicyByState(s);
-                gaps.push({ payer: payer.name, payerCat: payer.category, state: s, readiness: pol ? pol.readinessScore : 0 });
-              }
+              if (stateMap[s]) return; // already has an application
+              if (!servesAll && !payerStates.includes(s)) return; // payer doesn't serve this state
+
+              const pol = getLivePolicyByState(s);
+              const readiness = pol ? pol.readinessScore : 0;
+              const statePop = getStatePop(s);
+
+              // 1. State readiness (0-30): how favorable is the state for telehealth
+              const stateScore = Math.min(30, readiness * 3);
+
+              // 2. Payer priority (0-30): based on strategic tags
+              let payerScore = 0;
+              if (tags.includes('must_have')) payerScore += 15;
+              if (tags.includes('high_volume')) payerScore += 6;
+              if (tags.includes('behavioral_health')) payerScore += 4;
+              if (tags.includes('telehealth_friendly')) payerScore += 3;
+              if (tags.includes('fast_credentialing')) payerScore += 2;
+              if (tags.includes('substance_use')) payerScore += 2;
+              if (tags.includes('growing_market')) payerScore += 2;
+              if (tags.includes('panel_often_closed')) payerScore -= 5;
+              if (tags.includes('slow_credentialing')) payerScore -= 3;
+              if (tags.includes('medicaid_prerequisite')) payerScore -= 2;
+              payerScore = Math.max(0, Math.min(30, payerScore));
+
+              // 3. Market share (0-20): higher share = more patients
+              const shareScore = Math.min(20, Math.round(marketShare * 1.5));
+
+              // 4. Revenue potential (0-20): state population × market share
+              const estLives = statePop * (marketShare || 5) / 100;
+              const revenueScore = Math.min(20, Math.round(estLives / 200));
+
+              const totalScore = stateScore + payerScore + shareScore + revenueScore;
+
+              // Build "why" reasons
+              const reasons = [];
+              if (tags.includes('must_have')) reasons.push('Must-have payer');
+              if (tags.includes('high_volume')) reasons.push('High volume');
+              if (marketShare >= 10) reasons.push(marketShare + '% market share');
+              if (readiness >= 8) reasons.push('Strong telehealth policy');
+              if (tags.includes('behavioral_health')) reasons.push('BH-friendly');
+              if (tags.includes('fast_credentialing')) reasons.push('Fast credentialing');
+              if (tags.includes('growing_market')) reasons.push('Growing market');
+
+              gaps.push({
+                payer: payer.name,
+                payerId: payer.id,
+                payerCat: payer.category || '',
+                state: s,
+                readiness,
+                totalScore,
+                stateScore,
+                payerScore,
+                shareScore,
+                revenueScore,
+                marketShare: marketShare || 0,
+                estLives: Math.round(estLives * 1000),
+                reasons,
+                tags,
+              });
             });
           });
-          const topGaps = gaps.sort((a, b) => b.readiness - a.readiness).slice(0, 10);
-          return `<div style="display:flex;gap:10px;flex-wrap:wrap;">
-            ${topGaps.map(g => `
-              <div class="stat-card" style="min-width:150px;flex:1;max-width:200px;border-left:3px solid ${g.readiness >= 7 ? 'var(--green)' : 'var(--gold)'};">
-                <div class="label" style="font-size:11px;">${escHtml(g.payer)}</div>
-                <div style="font-size:14px;font-weight:700;">${getStateName(g.state)}</div>
-                <div class="sub">Readiness: ${g.readiness}/10</div>
-              </div>
-            `).join('')}
+
+          const topGaps = gaps.sort((a, b) => b.totalScore - a.totalScore).slice(0, 15);
+          const maxScore = topGaps.length > 0 ? topGaps[0].totalScore : 1;
+
+          return `
+          <div class="table-wrap" style="overflow-x:auto;">
+            <table style="font-size:12px;">
+              <thead>
+                <tr>
+                  <th style="width:30px;">#</th>
+                  <th>Payer</th>
+                  <th>State</th>
+                  <th style="text-align:center;">Score</th>
+                  <th style="min-width:120px;">Breakdown</th>
+                  <th>Est. Lives</th>
+                  <th>Why</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${topGaps.map((g, i) => {
+                  const pct = Math.round((g.totalScore / 100) * 100);
+                  const barColor = pct >= 70 ? '#22c55e' : pct >= 45 ? '#f59e0b' : '#94a3b8';
+                  return `<tr>
+                    <td style="font-weight:700;color:${i < 3 ? 'var(--brand-600)' : 'var(--gray-500)'};">${i + 1}</td>
+                    <td>
+                      <div style="font-weight:600;">${escHtml(g.payer)}</div>
+                      <div style="font-size:10px;color:var(--gray-400);">${g.payerCat}${g.marketShare ? ' · ' + g.marketShare + '% share' : ''}</div>
+                    </td>
+                    <td style="font-weight:600;">${getStateName(g.state)}</td>
+                    <td style="text-align:center;">
+                      <div style="font-weight:800;font-size:16px;color:${barColor};">${g.totalScore}</div>
+                      <div style="width:60px;height:4px;background:var(--gray-200);border-radius:2px;margin:2px auto 0;">
+                        <div style="width:${pct}%;height:100%;background:${barColor};border-radius:2px;"></div>
+                      </div>
+                    </td>
+                    <td>
+                      <div style="display:flex;gap:3px;font-size:9px;">
+                        <span title="State readiness" style="padding:1px 4px;border-radius:3px;background:#f0fdf4;color:#16a34a;font-weight:600;">S:${g.stateScore}</span>
+                        <span title="Payer priority" style="padding:1px 4px;border-radius:3px;background:#eff6ff;color:#2563eb;font-weight:600;">P:${g.payerScore}</span>
+                        <span title="Market share" style="padding:1px 4px;border-radius:3px;background:#fefce8;color:#ca8a04;font-weight:600;">M:${g.shareScore}</span>
+                        <span title="Revenue potential" style="padding:1px 4px;border-radius:3px;background:#fdf2f8;color:#db2777;font-weight:600;">R:${g.revenueScore}</span>
+                      </div>
+                    </td>
+                    <td style="font-weight:600;">${g.estLives > 0 ? '~' + g.estLives.toLocaleString() : '—'}</td>
+                    <td style="max-width:200px;">
+                      <div style="display:flex;gap:3px;flex-wrap:wrap;">
+                        ${g.reasons.slice(0, 3).map(r => `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:500;background:var(--brand-50,#eef2ff);color:var(--brand-600);">${r}</span>`).join('')}
+                      </div>
+                    </td>
+                    <td>
+                      <button class="btn btn-sm" style="font-size:11px;padding:3px 8px;" onclick="window.app.createAppFromGap('${g.state}','${g.payerId}','${escAttr(g.payer)}')">+ Apply</button>
+                    </td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
           </div>
-          <div class="text-sm text-muted" style="margin-top:12px;">Top 10 gaps by state readiness score. These represent the best payer-state combinations to pursue next.</div>`;
-        })() : '<div class="text-sm text-muted">No gaps — full coverage across all payer-state combinations!</div>'}
+          <div style="margin-top:14px;padding:12px 16px;background:var(--gray-50);border-radius:10px;font-size:12px;color:var(--gray-600);">
+            <strong>Scoring:</strong> State readiness (0–30) + Payer priority (0–30) + Market share (0–20) + Revenue potential (0–20) = max 100.
+            Payer priority is based on tags: must-have (+15), high-volume (+6), BH-friendly (+4), telehealth (+3). Penalized for closed panels or slow credentialing.
+          </div>`;
+        })() : '<div class="text-sm text-muted" style="padding:1rem;">Full coverage across all payer-state combinations.</div>'}
       </div>
     </div>
     `}
@@ -4117,7 +4236,7 @@ async function renderCoverageMatrix() {
 }
 
 function statusPriority(status) {
-  const order = { approved: 5, in_review: 4, submitted: 3, pending_info: 2, not_started: 1, denied: 0 };
+  const order = { credentialed: 6, approved: 5, in_review: 4, submitted: 3, pending_info: 2, gathering_docs: 1.5, planned: 1, new: 0.5, not_started: 0, on_hold: -1, withdrawn: -2, denied: -3 };
   return order[status] ?? -1;
 }
 
@@ -7981,6 +8100,31 @@ window.app = {
     window._pendingBatch = null;
     showToast(`${result.count} applications added`);
     await navigateTo('applications');
+  },
+  async createAppFromGap(state, payerId, payerName) {
+    if (!await appConfirm(`Create a "Planned" application for ${payerName} in ${getStateName(state)}?`, { title: 'New Expansion Application', okLabel: 'Create' })) return;
+    try {
+      const providers = await store.getAll('providers');
+      const provider = providers[0]; // primary provider
+      await store.create('applications', {
+        providerId: provider ? provider.id : '',
+        organizationId: provider ? (provider.organizationId || '') : '',
+        state,
+        payerId,
+        payerName,
+        status: 'planned',
+        notes: `Created from expansion opportunity analysis`,
+        type: 'individual',
+        wave: 1,
+        submittedDate: '',
+        estMonthlyRevenue: 0,
+      });
+      showToast(`Planned application created: ${payerName} — ${getStateName(state)}`);
+      store.clearCache();
+      await renderCoverageMatrix();
+    } catch (e) {
+      showToast('Failed: ' + e.message);
+    }
   },
 
   // Emails
