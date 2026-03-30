@@ -89,8 +89,8 @@ async function renderBillingServicesPage() {
     else renderBillingServicesPage();
   };
   // Fire all API calls in parallel for speed
-  let allClaims = [];
-  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, rClaims] = await Promise.allSettled([
+  let allClaims = [], payerRules = [];
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, rClaims, rPayerRules] = await Promise.allSettled([
     store.getBillingClientStats(),
     store.getBillingClients(),
     store.getBillingTasks(),
@@ -102,6 +102,7 @@ async function renderBillingServicesPage() {
     store.getAll('organizations'),
     store.getReconciliationReport(),
     store.getRcmClaims(),
+    store.getPayerRules(),
   ]);
   if (r0.status === 'fulfilled') stats = r0.value;
   if (r1.status === 'fulfilled') clients = r1.value;
@@ -114,6 +115,7 @@ async function renderBillingServicesPage() {
   if (r8.status === 'fulfilled') orgs = r8.value;
   if (r9.status === 'fulfilled') reconciliation = r9.value;
   if (rClaims.status === 'fulfilled') allClaims = Array.isArray(rClaims.value) ? rClaims.value : [];
+  if (rPayerRules.status === 'fulfilled') payerRules = Array.isArray(rPayerRules.value) ? rPayerRules.value : [];
 
   if (!Array.isArray(clients)) clients = [];
   if (!Array.isArray(tasks)) tasks = [];
@@ -125,6 +127,48 @@ async function renderBillingServicesPage() {
   window._bsActivities = activities;
   window._bsOrgs = orgs;
   if (allClaims.length > 0) window._rcmClaims = allClaims;
+
+  // ─── Timely Filing Watchdog (for dashboard card) ───
+  const _bsPayerFilingLimits = {};
+  payerRules.forEach(r => {
+    const name = (r.payer_name || r.payerName || '').toLowerCase().trim();
+    const days = parseInt(r.timely_filing_days || r.timelyFilingDays) || 0;
+    if (name && days > 0) _bsPayerFilingLimits[name] = days;
+  });
+  function _bsGetFilingLimit(payerName) {
+    const pn = (payerName || '').toLowerCase().trim();
+    if (_bsPayerFilingLimits[pn]) return _bsPayerFilingLimits[pn];
+    for (const [rName, days] of Object.entries(_bsPayerFilingLimits)) {
+      if (pn.includes(rName) || rName.includes(pn)) return days;
+    }
+    if (pn.includes('medicare')) return 365;
+    if (pn.includes('medicaid')) return 365;
+    if (pn.includes('florida blue') || pn.includes('fl blue')) return 365;
+    if (pn.includes('bcbs') || pn.includes('blue cross')) return 365;
+    return 90;
+  }
+  const _bsUnpaidStatuses = ['submitted', 'pending', 'acknowledged'];
+  const _bsNow = new Date();
+  const _bsFilingAlerts = [];
+  allClaims.forEach(c => {
+    if (!_bsUnpaidStatuses.includes(c.status)) return;
+    const dos = c.dateOfService || c.date_of_service;
+    if (!dos) return;
+    const daysElapsed = Math.floor((_bsNow - new Date(dos)) / 86400000);
+    const payer = c.payerName || c.payer_name || '';
+    const limit = _bsGetFilingLimit(payer);
+    const daysLeft = limit - daysElapsed;
+    let level = null;
+    if (daysLeft < 14) level = 'urgent';
+    else if (daysLeft < 30) level = 'warning';
+    else if (daysLeft < 60) level = 'watch';
+    if (level) _bsFilingAlerts.push({ claim: c, daysLeft, daysElapsed, limit, level });
+  });
+  _bsFilingAlerts.sort((a, b) => a.daysLeft - b.daysLeft);
+  const _bsFilingUrgent = _bsFilingAlerts.filter(a => a.level === 'urgent');
+  const _bsFilingWarning = _bsFilingAlerts.filter(a => a.level === 'warning');
+  const _bsFilingWatch = _bsFilingAlerts.filter(a => a.level === 'watch');
+  const _bsFilingTotalAtRisk = _bsFilingAlerts.reduce((s, a) => s + Number(a.claim.totalCharges || a.claim.total_charges || 0), 0);
 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -348,6 +392,15 @@ async function renderBillingServicesPage() {
         <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="7.5"/><path d="M9 5v4l2.5 1.5"/></svg>
         <strong>${inactiveClients.length} client${inactiveClients.length > 1 ? 's' : ''}</strong> with no billing activity in 7+ days: ${inactiveClients.slice(0, 3).map(c => escHtml(_clientName(c))).join(', ')}
       </div>` : ''}
+      ${_bsFilingUrgent.length > 0 ? `<div class="bs-alert bs-alert-red">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2l7.5 13H1.5z"/><path d="M9 7v3M9 12.5v.5"/></svg>
+        <strong>${_bsFilingUrgent.length} claim${_bsFilingUrgent.length !== 1 ? 's' : ''} near timely filing deadline</strong> — ${_fmtMoney(_bsFilingUrgent.reduce((s, a) => s + Number(a.claim.totalCharges || a.claim.total_charges || 0), 0))} at risk (less than 14 days left)
+        <button class="btn btn-sm" style="margin-left:auto;font-size:11px;color:var(--red);" onclick="window.app.rcSwitchTab('claims');">View Claims</button>
+      </div>` : _bsFilingWarning.length > 0 ? `<div class="bs-alert bs-alert-gold">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2l7.5 13H1.5z"/><path d="M9 7v3M9 12.5v.5"/></svg>
+        <strong>${_bsFilingWarning.length} claim${_bsFilingWarning.length !== 1 ? 's' : ''} approaching filing deadline</strong> — less than 30 days remaining
+        <button class="btn btn-sm" style="margin-left:auto;font-size:11px;color:#92400e;" onclick="window.app.rcSwitchTab('claims');">View Claims</button>
+      </div>` : ''}
 
       <!-- Stats Row -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:20px;">
@@ -530,6 +583,53 @@ async function renderBillingServicesPage() {
           </table></div>
         </div>` : ''}
       </div>` : ''}
+
+      <!-- Timely Filing Watchdog -->
+      ${_bsFilingAlerts.length === 0 ? '' : (() => {
+        const _tfBorder = _bsFilingUrgent.length > 0 ? '#fecaca' : _bsFilingWarning.length > 0 ? '#fed7aa' : '#fde68a';
+        const _tfBg = _bsFilingUrgent.length > 0 ? '#fef2f2' : _bsFilingWarning.length > 0 ? '#fff7ed' : '#fefce8';
+        const _tfColor = _bsFilingUrgent.length > 0 ? '#dc2626' : _bsFilingWarning.length > 0 ? '#ea580c' : '#a16207';
+        return '<div class="card bs-card" style="margin-top:16px;border:1px solid ' + _tfBorder + ';">' +
+          '<div class="card-header" style="background:' + _tfBg + ';">' +
+            '<h3 style="color:' + _tfColor + ';">' +
+              '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom;margin-right:4px;"><path d="M9 2l7.5 13H1.5z"/><path d="M9 7v3M9 12.5v.5"/></svg>' +
+              'Timely Filing Alerts (' + _bsFilingAlerts.length + ')' +
+            '</h3>' +
+            '<span style="font-size:12px;color:var(--gray-500);">' + _fmtMoney(_bsFilingTotalAtRisk) + ' at risk &mdash; ' +
+              (_bsFilingUrgent.length > 0 ? '<span style="color:#dc2626;font-weight:700;">' + _bsFilingUrgent.length + ' urgent</span>' : '') +
+              (_bsFilingUrgent.length > 0 && _bsFilingWarning.length > 0 ? ' &middot; ' : '') +
+              (_bsFilingWarning.length > 0 ? '<span style="color:#ea580c;font-weight:700;">' + _bsFilingWarning.length + ' warning</span>' : '') +
+              ((_bsFilingUrgent.length > 0 || _bsFilingWarning.length > 0) && _bsFilingWatch.length > 0 ? ' &middot; ' : '') +
+              (_bsFilingWatch.length > 0 ? '<span style="color:#a16207;font-weight:700;">' + _bsFilingWatch.length + ' watch</span>' : '') +
+            '</span>' +
+          '</div>' +
+          '<div class="card-body" style="padding:0;"><table style="font-size:13px;">' +
+            '<thead><tr><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:center;">Days Left</th><th>Priority</th></tr></thead>' +
+            '<tbody>' +
+            _bsFilingAlerts.slice(0, 10).map(function(a) {
+              var c = a.claim;
+              var rowBg = a.level === 'urgent' ? 'background:#fef2f2;' : a.level === 'warning' ? 'background:#fff7ed;' : '';
+              var badge = a.level === 'urgent'
+                ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;">FILING URGENT</span>'
+                : a.level === 'warning'
+                ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;">FILING WARNING</span>'
+                : '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:#fefce8;color:#a16207;border:1px solid #fde68a;">FILING WATCH</span>';
+              var daysText = a.daysLeft < 0 ? '<strong>EXPIRED</strong>' : a.daysLeft + 'd';
+              var daysColor = a.level === 'urgent' ? '#dc2626' : a.level === 'warning' ? '#ea580c' : '#a16207';
+              return '<tr style="' + rowBg + 'cursor:pointer;" onclick="window.app.viewClaimDetail(' + c.id + ')">' +
+                '<td><strong style="font-family:monospace;font-size:11px;color:var(--brand-600);">' + escHtml(c.claimNumber || c.claim_number || '') + '</strong></td>' +
+                '<td class="text-sm">' + escHtml(c.patientName || c.patient_name || '') + '</td>' +
+                '<td class="text-sm">' + escHtml(c.payerName || c.payer_name || '') + '</td>' +
+                '<td class="text-sm">' + formatDateDisplay(c.dateOfService || c.date_of_service) + '</td>' +
+                '<td style="text-align:right;">' + _fmtMoney(c.totalCharges || c.total_charges) + '</td>' +
+                '<td style="text-align:center;font-weight:700;color:' + daysColor + ';">' + daysText + '</td>' +
+                '<td>' + badge + '</td>' +
+              '</tr>';
+            }).join('') +
+            '</tbody></table>' +
+            (_bsFilingAlerts.length > 10 ? '<div style="padding:8px 16px;font-size:12px;color:var(--gray-500);border-top:1px solid var(--gray-100);">Showing 10 of ' + _bsFilingAlerts.length + ' &mdash; <a href="#" onclick="window.app.rcSwitchTab(\'claims\');return false;" style="color:var(--brand-600);">View all in Claims</a></div>' : '') +
+          '</div></div>';
+      })()}
 
       <!-- AI Denial Risk Analysis -->
       ${(denialRisk.risk_factors || []).length > 0 ? `
@@ -1037,6 +1137,7 @@ async function renderBillingClientDetail(clientId) {
     <button class="btn btn-sm btn-primary" onclick="window.app.openBsTaskModal(${client.id})">+ Task</button>
     <button class="btn btn-sm btn-gold" onclick="window.app.openBsActivityModal(${client.id})">+ Log Activity</button>
     <button class="btn btn-sm" onclick="window.app.generateBillingInvoice(${client.id})">Generate Invoice</button>
+    <button class="btn btn-sm btn-gold" onclick="window.app.generateClientMonthlyReport(${client.id})">Generate Report</button>
     <button class="btn btn-sm" onclick="window.app.editBillingClient(${client.id})">Edit</button>
   `;
 

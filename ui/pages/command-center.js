@@ -315,6 +315,10 @@ async function _renderReports(body) {
           <div class="cc-module-title" style="margin-bottom:8px;">Expiration Alert Dashboard</div>
           <div style="font-size:12px;color:var(--gray-500);">View all upcoming license, credential, and document expirations across providers.</div>
         </div>
+        <div class="cc-module" onclick="window.app.generateAllClientMonthlyReports()" style="cursor:pointer;">
+          <div class="cc-module-title" style="margin-bottom:8px;">Generate All Client Reports</div>
+          <div style="font-size:12px;color:var(--gray-500);">Generate monthly billing reports for all active billing clients at once. Each report opens in a new window for PDF export.</div>
+        </div>
       </div>
     </div>
   `;
