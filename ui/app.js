@@ -4093,13 +4093,12 @@ async function renderCoverageMatrix() {
       </div>
     </div>
 
-    <!-- Gap Analysis — Expansion Opportunities -->
+    <!-- Expansion Opportunities — Tabbed -->
     <div class="card cm2-card">
-      <div class="card-header"><h3>Expansion Opportunities — Ranked by Impact</h3></div>
-      <div class="card-body">
+      <div class="card-header"><h3>Expansion Opportunities</h3></div>
+      <div class="card-body" style="padding:0;">
         ${gapCells > 0 ? (() => {
-          // ─── Expansion Scoring Engine ───
-          // Score = state readiness (0-30) + payer priority (0-30) + market share (0-20) + revenue potential (0-20)
+          // ─── Expansion Scoring Engine (shared across tabs) ───
           const gaps = [];
           allMatrixPayers.forEach(payer => {
             const stateMap = coverageMap[payer.id] || {};
@@ -4109,17 +4108,13 @@ async function renderCoverageMatrix() {
             const marketShare = payer.marketShare || payer.market_share || 0;
 
             licensedStates.forEach(s => {
-              if (stateMap[s]) return; // already has an application
-              if (!servesAll && !payerStates.includes(s)) return; // payer doesn't serve this state
+              if (stateMap[s]) return;
+              if (!servesAll && !payerStates.includes(s)) return;
 
               const pol = getLivePolicyByState(s);
               const readiness = pol ? pol.readinessScore : 0;
               const statePop = getStatePop(s);
-
-              // 1. State readiness (0-30): how favorable is the state for telehealth
               const stateScore = Math.min(30, readiness * 3);
-
-              // 2. Payer priority (0-30): based on strategic tags
               let payerScore = 0;
               if (tags.includes('must_have')) payerScore += 15;
               if (tags.includes('high_volume')) payerScore += 6;
@@ -4132,17 +4127,12 @@ async function renderCoverageMatrix() {
               if (tags.includes('slow_credentialing')) payerScore -= 3;
               if (tags.includes('medicaid_prerequisite')) payerScore -= 2;
               payerScore = Math.max(0, Math.min(30, payerScore));
-
-              // 3. Market share (0-20): higher share = more patients
               const shareScore = Math.min(20, Math.round(marketShare * 1.5));
-
-              // 4. Revenue potential (0-20): state population × market share
               const estLives = statePop * (marketShare || 5) / 100;
               const revenueScore = Math.min(20, Math.round(estLives / 200));
-
               const totalScore = stateScore + payerScore + shareScore + revenueScore;
+              const isTelehealthFriendly = tags.includes('telehealth_friendly') || (readiness >= 7);
 
-              // Build "why" reasons
               const reasons = [];
               if (tags.includes('must_have')) reasons.push('Must-have payer');
               if (tags.includes('high_volume')) reasons.push('High volume');
@@ -4151,86 +4141,169 @@ async function renderCoverageMatrix() {
               if (tags.includes('behavioral_health')) reasons.push('BH-friendly');
               if (tags.includes('fast_credentialing')) reasons.push('Fast credentialing');
               if (tags.includes('growing_market')) reasons.push('Growing market');
+              if (isTelehealthFriendly && !reasons.includes('Strong telehealth policy')) reasons.push('Telehealth friendly');
 
-              gaps.push({
-                payer: payer.name,
-                payerId: payer.id,
-                payerCat: payer.category || '',
-                state: s,
-                readiness,
-                totalScore,
-                stateScore,
-                payerScore,
-                shareScore,
-                revenueScore,
-                marketShare: marketShare || 0,
-                estLives: Math.round(estLives * 1000),
-                reasons,
-                tags,
-              });
+              gaps.push({ payer: payer.name, payerId: payer.id, payerCat: payer.category || '', state: s, readiness, totalScore, stateScore, payerScore, shareScore, revenueScore, marketShare: marketShare || 0, estLives: Math.round(estLives * 1000), reasons, tags, isTelehealthFriendly });
             });
           });
 
+          // ─── Existing Credentials: payers you already have in other states ───
+          const credentialedPayers = {};
+          apps.forEach(a => {
+            if ((a.status === 'credentialed' || a.status === 'approved') && a.payerId) {
+              if (!credentialedPayers[a.payerId]) credentialedPayers[a.payerId] = { states: new Set(), name: a.payerName || '' };
+              credentialedPayers[a.payerId].states.add(a.state);
+            }
+          });
+          const existingCredGaps = [];
+          Object.entries(credentialedPayers).forEach(([payerId, info]) => {
+            const payer = allMatrixPayers.find(p => String(p.id) === String(payerId));
+            if (!payer) return;
+            const stateMap = coverageMap[payerId] || {};
+            const payerStates = payer.states || [];
+            const servesAll = payerStates.includes('ALL') || payerStates.length === 0;
+            licensedStates.forEach(s => {
+              if (info.states.has(s)) return; // already credentialed here
+              if (stateMap[s]) return; // already has app
+              if (!servesAll && !payerStates.includes(s)) return;
+              const pol = getLivePolicyByState(s);
+              existingCredGaps.push({
+                payer: payer.name, payerId: payer.id, payerCat: payer.category || '',
+                state: s, existingStates: [...info.states].map(st => getStateName(st)).join(', '),
+                readiness: pol ? pol.readinessScore : 0,
+                marketShare: payer.marketShare || payer.market_share || 0,
+              });
+            });
+          });
+          existingCredGaps.sort((a, b) => b.readiness - a.readiness || b.marketShare - a.marketShare);
+
+          // ─── By Payer: group gaps by payer ───
+          const byPayer = {};
+          gaps.forEach(g => {
+            if (!byPayer[g.payer]) byPayer[g.payer] = { payer: g.payer, payerId: g.payerId, payerCat: g.payerCat, marketShare: g.marketShare, totalScore: 0, states: [], tags: g.tags };
+            byPayer[g.payer].states.push(g);
+            byPayer[g.payer].totalScore = Math.max(byPayer[g.payer].totalScore, g.totalScore);
+          });
+          const payerGroups = Object.values(byPayer).sort((a, b) => b.totalScore - a.totalScore).slice(0, 12);
+
+          // ─── Telehealth: filter for telehealth-friendly ───
+          const telehealthGaps = gaps.filter(g => g.isTelehealthFriendly).sort((a, b) => b.totalScore - a.totalScore).slice(0, 15);
+
+          // ─── Quick Wins: low-effort, high-value ───
+          const quickWins = gaps.filter(g => g.tags.includes('fast_credentialing') || g.tags.includes('caqh_accepts')).sort((a, b) => b.totalScore - a.totalScore).slice(0, 15);
+
+          // ─── Row renderer (shared) ───
+          const renderRow = (g, i) => {
+            const pct = Math.round((g.totalScore / 100) * 100);
+            const barColor = pct >= 70 ? '#22c55e' : pct >= 45 ? '#f59e0b' : '#94a3b8';
+            return `<tr>
+              <td style="font-weight:700;color:${i < 3 ? 'var(--brand-600)' : 'var(--gray-500)'};">${i + 1}</td>
+              <td><div style="font-weight:600;">${escHtml(g.payer)}</div><div style="font-size:10px;color:var(--gray-400);">${g.payerCat}${g.marketShare ? ' · ' + g.marketShare + '% share' : ''}</div></td>
+              <td style="font-weight:600;">${getStateName(g.state)}</td>
+              <td style="text-align:center;"><div style="font-weight:800;font-size:16px;color:${barColor};">${g.totalScore}</div><div style="width:60px;height:4px;background:var(--gray-200);border-radius:2px;margin:2px auto 0;"><div style="width:${pct}%;height:100%;background:${barColor};border-radius:2px;"></div></div></td>
+              <td><div style="display:flex;gap:3px;font-size:9px;"><span title="State" style="padding:1px 4px;border-radius:3px;background:#f0fdf4;color:#16a34a;font-weight:600;">S:${g.stateScore}</span><span title="Payer" style="padding:1px 4px;border-radius:3px;background:#eff6ff;color:#2563eb;font-weight:600;">P:${g.payerScore}</span><span title="Market" style="padding:1px 4px;border-radius:3px;background:#fefce8;color:#ca8a04;font-weight:600;">M:${g.shareScore}</span><span title="Revenue" style="padding:1px 4px;border-radius:3px;background:#fdf2f8;color:#db2777;font-weight:600;">R:${g.revenueScore}</span></div></td>
+              <td style="font-weight:600;">${g.estLives > 0 ? '~' + g.estLives.toLocaleString() : '—'}</td>
+              <td style="max-width:200px;"><div style="display:flex;gap:3px;flex-wrap:wrap;">${g.reasons.slice(0, 3).map(r => `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:500;background:var(--brand-50,#eef2ff);color:var(--brand-600);">${r}</span>`).join('')}</div></td>
+              <td><button class="btn btn-sm" style="font-size:11px;padding:3px 8px;" onclick="window.app.createAppFromGap('${g.state}','${g.payerId}','${escAttr(g.payer)}')">+ Apply</button></td>
+            </tr>`;
+          };
+          const tableHead = '<table style="font-size:12px;"><thead><tr><th style="width:30px;">#</th><th>Payer</th><th>State</th><th style="text-align:center;">Score</th><th style="min-width:120px;">Breakdown</th><th>Est. Lives</th><th>Why</th><th>Action</th></tr></thead><tbody>';
+
           const topGaps = gaps.sort((a, b) => b.totalScore - a.totalScore).slice(0, 15);
-          const maxScore = topGaps.length > 0 ? topGaps[0].totalScore : 1;
 
           return `
-          <div class="table-wrap" style="overflow-x:auto;">
-            <table style="font-size:12px;">
-              <thead>
-                <tr>
-                  <th style="width:30px;">#</th>
-                  <th>Payer</th>
-                  <th>State</th>
-                  <th style="text-align:center;">Score</th>
-                  <th style="min-width:120px;">Breakdown</th>
-                  <th>Est. Lives</th>
-                  <th>Why</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${topGaps.map((g, i) => {
-                  const pct = Math.round((g.totalScore / 100) * 100);
-                  const barColor = pct >= 70 ? '#22c55e' : pct >= 45 ? '#f59e0b' : '#94a3b8';
-                  return `<tr>
-                    <td style="font-weight:700;color:${i < 3 ? 'var(--brand-600)' : 'var(--gray-500)'};">${i + 1}</td>
-                    <td>
-                      <div style="font-weight:600;">${escHtml(g.payer)}</div>
-                      <div style="font-size:10px;color:var(--gray-400);">${g.payerCat}${g.marketShare ? ' · ' + g.marketShare + '% share' : ''}</div>
-                    </td>
-                    <td style="font-weight:600;">${getStateName(g.state)}</td>
-                    <td style="text-align:center;">
-                      <div style="font-weight:800;font-size:16px;color:${barColor};">${g.totalScore}</div>
-                      <div style="width:60px;height:4px;background:var(--gray-200);border-radius:2px;margin:2px auto 0;">
-                        <div style="width:${pct}%;height:100%;background:${barColor};border-radius:2px;"></div>
-                      </div>
-                    </td>
-                    <td>
-                      <div style="display:flex;gap:3px;font-size:9px;">
-                        <span title="State readiness" style="padding:1px 4px;border-radius:3px;background:#f0fdf4;color:#16a34a;font-weight:600;">S:${g.stateScore}</span>
-                        <span title="Payer priority" style="padding:1px 4px;border-radius:3px;background:#eff6ff;color:#2563eb;font-weight:600;">P:${g.payerScore}</span>
-                        <span title="Market share" style="padding:1px 4px;border-radius:3px;background:#fefce8;color:#ca8a04;font-weight:600;">M:${g.shareScore}</span>
-                        <span title="Revenue potential" style="padding:1px 4px;border-radius:3px;background:#fdf2f8;color:#db2777;font-weight:600;">R:${g.revenueScore}</span>
-                      </div>
-                    </td>
-                    <td style="font-weight:600;">${g.estLives > 0 ? '~' + g.estLives.toLocaleString() : '—'}</td>
-                    <td style="max-width:200px;">
-                      <div style="display:flex;gap:3px;flex-wrap:wrap;">
-                        ${g.reasons.slice(0, 3).map(r => `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:500;background:var(--brand-50,#eef2ff);color:var(--brand-600);">${r}</span>`).join('')}
-                      </div>
-                    </td>
-                    <td>
-                      <button class="btn btn-sm" style="font-size:11px;padding:3px 8px;" onclick="window.app.createAppFromGap('${g.state}','${g.payerId}','${escAttr(g.payer)}')">+ Apply</button>
-                    </td>
-                  </tr>`;
-                }).join('')}
-              </tbody>
-            </table>
+          <style>
+            .exp-tabs{display:flex;gap:0;border-bottom:2px solid var(--gray-200);padding:0 16px;overflow-x:auto;}
+            .exp-tab{padding:10px 16px;font-size:12px;font-weight:600;color:var(--gray-500);cursor:pointer;border:none;background:none;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all 0.15s;}
+            .exp-tab:hover{color:var(--brand-600);background:var(--gray-50);}
+            .exp-tab.active{color:var(--brand-600);border-bottom-color:var(--brand-600);}
+            .exp-tab-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;font-size:10px;font-weight:700;background:var(--gray-100);color:var(--gray-500);margin-left:5px;}
+            .exp-tab.active .exp-tab-count{background:var(--brand-100,#e0e7ff);color:var(--brand-600);}
+            .exp-panel{display:none;padding:16px;}
+            .exp-panel.active{display:block;}
+          </style>
+          <div class="exp-tabs">
+            <button class="exp-tab active" onclick="document.querySelectorAll('.exp-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.querySelectorAll('.exp-panel').forEach(p=>p.classList.remove('active'));document.getElementById('exp-top').classList.add('active');">Top Ranked<span class="exp-tab-count">${topGaps.length}</span></button>
+            <button class="exp-tab" onclick="document.querySelectorAll('.exp-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.querySelectorAll('.exp-panel').forEach(p=>p.classList.remove('active'));document.getElementById('exp-payer').classList.add('active');">By Payer<span class="exp-tab-count">${payerGroups.length}</span></button>
+            <button class="exp-tab" onclick="document.querySelectorAll('.exp-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.querySelectorAll('.exp-panel').forEach(p=>p.classList.remove('active'));document.getElementById('exp-telehealth').classList.add('active');">Telehealth Friendly<span class="exp-tab-count">${telehealthGaps.length}</span></button>
+            <button class="exp-tab" onclick="document.querySelectorAll('.exp-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.querySelectorAll('.exp-panel').forEach(p=>p.classList.remove('active'));document.getElementById('exp-existing').classList.add('active');">Existing Credentials<span class="exp-tab-count">${existingCredGaps.length}</span></button>
+            <button class="exp-tab" onclick="document.querySelectorAll('.exp-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.querySelectorAll('.exp-panel').forEach(p=>p.classList.remove('active'));document.getElementById('exp-quick').classList.add('active');">Quick Wins<span class="exp-tab-count">${quickWins.length}</span></button>
           </div>
-          <div style="margin-top:14px;padding:12px 16px;background:var(--gray-50);border-radius:10px;font-size:12px;color:var(--gray-600);">
-            <strong>Scoring:</strong> State readiness (0–30) + Payer priority (0–30) + Market share (0–20) + Revenue potential (0–20) = max 100.
-            Payer priority is based on tags: must-have (+15), high-volume (+6), BH-friendly (+4), telehealth (+3). Penalized for closed panels or slow credentialing.
+
+          <!-- Tab 1: Top Ranked (default) -->
+          <div class="exp-panel active" id="exp-top">
+            <div class="table-wrap" style="overflow-x:auto;">${tableHead}${topGaps.map(renderRow).join('')}</tbody></table></div>
+            <div style="margin-top:14px;padding:12px 16px;background:var(--gray-50);border-radius:10px;font-size:12px;color:var(--gray-600);">
+              <strong>Scoring:</strong> State readiness (0–30) + Payer priority (0–30) + Market share (0–20) + Revenue potential (0–20) = max 100.
+            </div>
+          </div>
+
+          <!-- Tab 2: By Payer -->
+          <div class="exp-panel" id="exp-payer">
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              ${payerGroups.map(pg => `
+                <div style="border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--gray-50);cursor:pointer;" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'':'none';">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <div style="font-weight:700;font-size:14px;">${escHtml(pg.payer)}</div>
+                      <span style="font-size:10px;color:var(--gray-400);">${pg.payerCat}${pg.marketShare ? ' · ' + pg.marketShare + '% share' : ''}</span>
+                      <span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:var(--brand-50,#eef2ff);color:var(--brand-600);">${pg.states.length} state${pg.states.length > 1 ? 's' : ''}</span>
+                    </div>
+                    <div style="font-weight:800;font-size:16px;color:${pg.totalScore >= 70 ? '#22c55e' : pg.totalScore >= 45 ? '#f59e0b' : '#94a3b8'};">Best: ${pg.totalScore}</div>
+                  </div>
+                  <div style="display:none;padding:0;">
+                    <table style="font-size:12px;width:100%;"><thead><tr><th>State</th><th style="text-align:center;">Score</th><th>Readiness</th><th>Est. Lives</th><th>Action</th></tr></thead><tbody>
+                    ${pg.states.sort((a, b) => b.totalScore - a.totalScore).map(g => `<tr>
+                      <td style="font-weight:600;">${getStateName(g.state)}</td>
+                      <td style="text-align:center;font-weight:700;color:${g.totalScore >= 70 ? '#22c55e' : g.totalScore >= 45 ? '#f59e0b' : '#94a3b8'};">${g.totalScore}</td>
+                      <td>${g.readiness}/10</td>
+                      <td>${g.estLives > 0 ? '~' + g.estLives.toLocaleString() : '—'}</td>
+                      <td><button class="btn btn-sm" style="font-size:11px;padding:3px 8px;" onclick="window.app.createAppFromGap('${g.state}','${g.payerId}','${escAttr(g.payer)}')">+ Apply</button></td>
+                    </tr>`).join('')}
+                    </tbody></table>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Tab 3: Telehealth Friendly -->
+          <div class="exp-panel" id="exp-telehealth">
+            <div style="margin-bottom:12px;padding:10px 14px;background:#f0fdf4;border-radius:10px;font-size:12px;color:#16a34a;font-weight:500;">
+              Showing payer-state combinations where both the payer supports telehealth and the state has favorable telehealth policies (readiness 7+).
+            </div>
+            <div class="table-wrap" style="overflow-x:auto;">${tableHead}${telehealthGaps.map(renderRow).join('')}</tbody></table></div>
+          </div>
+
+          <!-- Tab 4: Existing Credentials -->
+          <div class="exp-panel" id="exp-existing">
+            <div style="margin-bottom:12px;padding:10px 14px;background:#eff6ff;border-radius:10px;font-size:12px;color:#2563eb;font-weight:500;">
+              Payers you're already credentialed with in other states. Expanding here is faster — you have the relationship, just add a new location/state.
+            </div>
+            ${existingCredGaps.length > 0 ? `
+            <div class="table-wrap" style="overflow-x:auto;">
+              <table style="font-size:12px;">
+                <thead><tr><th style="width:30px;">#</th><th>Payer</th><th>New State</th><th>Already In</th><th>Readiness</th><th>Action</th></tr></thead>
+                <tbody>
+                  ${existingCredGaps.slice(0, 20).map((g, i) => `<tr>
+                    <td style="font-weight:700;color:${i < 3 ? 'var(--brand-600)' : 'var(--gray-500)'};">${i + 1}</td>
+                    <td><div style="font-weight:600;">${escHtml(g.payer)}</div><div style="font-size:10px;color:var(--gray-400);">${g.payerCat}${g.marketShare ? ' · ' + g.marketShare + '%' : ''}</div></td>
+                    <td style="font-weight:600;">${getStateName(g.state)}</td>
+                    <td style="font-size:11px;color:var(--gray-500);">${g.existingStates}</td>
+                    <td><span style="font-weight:600;color:${g.readiness >= 7 ? '#16a34a' : g.readiness >= 5 ? '#d97706' : '#94a3b8'};">${g.readiness}/10</span></td>
+                    <td><button class="btn btn-sm" style="font-size:11px;padding:3px 8px;" onclick="window.app.createAppFromGap('${g.state}','${g.payerId}','${escAttr(g.payer)}')">+ Apply</button></td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>` : '<div style="padding:24px;text-align:center;color:var(--gray-400);">No existing credential expansion opportunities found. Get credentialed with more payers first.</div>'}
+          </div>
+
+          <!-- Tab 5: Quick Wins -->
+          <div class="exp-panel" id="exp-quick">
+            <div style="margin-bottom:12px;padding:10px 14px;background:#fefce8;border-radius:10px;font-size:12px;color:#ca8a04;font-weight:500;">
+              Payers known for fast credentialing or CAQH-based enrollment. These are the easiest to get started with.
+            </div>
+            ${quickWins.length > 0 ? `<div class="table-wrap" style="overflow-x:auto;">${tableHead}${quickWins.map(renderRow).join('')}</tbody></table></div>` : '<div style="padding:24px;text-align:center;color:var(--gray-400);">No quick-win opportunities found in current gaps.</div>'}
           </div>`;
         })() : '<div class="text-sm text-muted" style="padding:1rem;">Full coverage across all payer-state combinations.</div>'}
       </div>
