@@ -501,7 +501,7 @@ async function renderRcmPage() {
               <td class="text-sm">${escHtml(ch.payerName || ch.payer_name || '—')}</td>
               <td style="text-align:center;">${ch.units || 1}</td>
               <td style="text-align:right;font-weight:600;">${_fm(ch.chargeAmount || ch.charge_amount)}</td>
-              <td><span class="badge badge-${ch.status === 'submitted' || ch.status === 'billed' ? 'approved' : 'pending'}">${ch.status || 'pending'}</span></td>
+              <td><span class="badge badge-${ch.status === 'submitted' || ch.status === 'billed' ? 'approved' : 'pending'}">${escHtml(ch.status || 'pending')}</span></td>
               <td><button class="btn btn-sm" onclick="window.app.editRcmCharge(${ch.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteRcmCharge(${ch.id})">Del</button></td>
             </tr>`).join('')}
             ${charges.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No charge entries. Use the quick entry form above.</td></tr>' : ''}
@@ -1078,10 +1078,10 @@ async function renderClaimDetail(claimId) {
             const outcomeColors = { resolved: 'var(--green)', escalated: '#f97316', denied: 'var(--red)', resubmit: '#3b82f6', pending: 'var(--gray-500)', no_answer: 'var(--gray-400)' };
             return `<tr>
               <td class="text-sm">${formatDateDisplay(f.createdAt || f.created_at) || '—'}</td>
-              <td><span style="font-size:11px;padding:2px 6px;background:var(--gray-100);border-radius:4px;">${f.contact_method || f.contactMethod || 'phone'}</span></td>
+              <td><span style="font-size:11px;padding:2px 6px;background:var(--gray-100);border-radius:4px;">${escHtml(f.contact_method || f.contactMethod || 'phone')}</span></td>
               <td class="text-sm">${escHtml(f.payer_rep || f.payerRep || '—')}</td>
               <td style="font-family:monospace;font-size:11px;">${escHtml(f.reference_number || f.referenceNumber || '—')}</td>
-              <td><span style="font-size:11px;font-weight:600;color:${outcomeColors[f.outcome] || 'var(--gray-500)'};">${f.outcome || 'pending'}</span></td>
+              <td><span style="font-size:11px;font-weight:600;color:${outcomeColors[f.outcome] || 'var(--gray-500)'};">${escHtml(f.outcome || 'pending')}</span></td>
               <td class="text-sm">${f.followup_date || f.followupDate ? formatDateDisplay(f.followup_date || f.followupDate) : '—'}</td>
               <td class="text-sm" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">${escHtml(f.notes || '')}</td>
             </tr>`;

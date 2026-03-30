@@ -735,6 +735,7 @@ export async function initApp() {
   // Prevent multiple concurrent inits (can happen on hard refresh)
   if (_initRunning) return;
   _initRunning = true;
+  try {
 
   // Show loading state with skeleton
   const body = document.getElementById('page-body');
@@ -870,6 +871,11 @@ export async function initApp() {
     updateScopeLabel();
     await navigateTo(currentPage);
   });
+
+  } catch (e) {
+    console.error('App initialization failed:', e);
+    _initRunning = false; // Reset so retry is possible
+  }
 }
 
 // ─── Scope Selector ───

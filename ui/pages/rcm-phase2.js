@@ -262,7 +262,7 @@ async function renderPayerIntelligenceTab(body) {
               <div style="font-size:11px;color:var(--gray-500);font-weight:600;">${escHtml(p.payer || '')}</div>
               <div style="font-size:22px;font-weight:800;color:${p.denial_rate > 20 ? 'var(--red)' : p.denial_rate > 10 ? '#f59e0b' : 'var(--green)'};">${p.denial_rate || 0}%</div>
               <div style="font-size:10px;color:var(--gray-400);">${p.denied || 0}/${p.total_claims || 0} denied | ${_fk(p.avg_denied_amount || 0)} avg</div>
-              ${p.top_denial_category ? `<div style="font-size:10px;margin-top:2px;color:var(--gray-500);">Top: ${p.top_denial_category}</div>` : ''}
+              ${p.top_denial_category ? `<div style="font-size:10px;margin-top:2px;color:var(--gray-500);">Top: ${escHtml(p.top_denial_category)}</div>` : ''}
             </div>
           `).join('')}
         </div>
