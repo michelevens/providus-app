@@ -852,7 +852,9 @@ async function renderProviderProfilePage(providerId) {
       store.getProviderWorkHistory(providerId).catch(() => []),
       store.getProviderCme(providerId).catch(() => []),
       store.getProviderReferences(providerId).catch(() => []),
-      store.getAll('licenses').then(all => all.filter(l => (l.providerId || l.provider_id) === providerId)).catch(() => []),
+      store.getProviderLicenses(providerId).catch(() =>
+        store.getAll('licenses').then(all => (all || []).filter(l => String(l.providerId || l.provider_id) === String(providerId))).catch(() => [])
+      ),
     ]);
   } catch (e) { console.error('Provider profile load error:', e); }
 
@@ -862,6 +864,7 @@ async function renderProviderProfilePage(providerId) {
   if (!Array.isArray(workHistory)) workHistory = profile.workHistory || profile.work_history || [];
   if (!Array.isArray(cme)) cme = profile.cme || profile.continuingEducation || [];
   if (!Array.isArray(references)) references = profile.references || [];
+  if (!Array.isArray(providerLicenses)) providerLicenses = [];
 
   const provName = `${provider.firstName || provider.first_name || ''} ${provider.lastName || provider.last_name || ''}`.trim() || 'Unknown Provider';
   const credential = provider.credential || provider.credentials || '';
@@ -896,7 +899,11 @@ async function renderProviderProfilePage(providerId) {
 
   // --- Credential Passport computations ---
   const cpNow = new Date();
-  const cpActiveLicenses = providerLicenses.filter(l => l.status === 'active');
+  const cpActiveLicenses = providerLicenses.filter(l => {
+    const exp = l.expirationDate || l.expiration_date;
+    const isExpired = exp && new Date(exp) < cpNow;
+    return !isExpired;
+  });
   const cpActiveBoards = boards.filter(b => {
     const exp = b.expirationDate || b.expiration_date;
     return exp ? new Date(exp) > cpNow : true;

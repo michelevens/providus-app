@@ -564,6 +564,7 @@ let US_TOTAL_POP = 0;
 // ─── Local Constants ───
 
 const APPLICATION_STATUSES = [
+  { value: 'planned', label: 'Planned', color: '#6366F1', bg: '#E0E7FF' },
   { value: 'new', label: 'New', color: '#6B7280', bg: '#F3F4F6' },
   { value: 'gathering_docs', label: 'Gathering Docs', color: '#3B82F6', bg: '#DBEAFE' },
   { value: 'submitted', label: 'Submitted', color: '#8B5CF6', bg: '#EDE9FE' },
@@ -1818,7 +1819,7 @@ async function renderDashboard() {
   })).filter(s => s.count > 0);
 
   // Kanban columns (5 main statuses)
-  const kanbanStatuses = ['new', 'submitted', 'in_review', 'approved', 'credentialed'];
+  const kanbanStatuses = ['planned', 'new', 'submitted', 'in_review', 'approved', 'credentialed'];
   const kanbanCols = kanbanStatuses.map(val => {
     const statusObj = APPLICATION_STATUSES.find(s => s.value === val) || { label: val, color: '#6B7280', bg: '#F3F4F6' };
     const colApps = apps.filter(a => a.status === val);
@@ -2654,7 +2655,7 @@ async function renderApplications() {
           <option value="">All Statuses</option>
           ${APPLICATION_STATUSES.map(s => `<option value="${s.value}" ${filters.status === s.value ? 'selected' : ''}>${s.label}</option>`).join('')}
         </select>
-        ${helpTip('Statuses track each application through the credentialing pipeline: New (just created), Gathering Docs (collecting paperwork), Submitted (sent to payer), In Review (payer reviewing), Pending Info (payer needs more info), Approved/Credentialed (done!), Denied, On Hold, or Withdrawn.')}
+        ${helpTip('Statuses track each application through the credentialing pipeline: Planned (intent to file), New (just created), Gathering Docs (collecting paperwork), Submitted (sent to payer), In Review (payer reviewing), Pending Info (payer needs more info), Approved/Credentialed (done!), Denied, On Hold, or Withdrawn.')}
       </span>
       <select class="form-control" id="filter-wave" onchange="window.app.applyFilters()">
         ${groupOptions(filters.wave, true)}
@@ -6452,7 +6453,7 @@ window._appRender = {
 
 // Unified hub page stubs
 async function renderCredentialingPage()     { await (await _page('healthcare-credentialing')).renderCredentialingPage(); }
-async function renderComplianceHubPage()     { await (await _page('compliance-hub')).renderComplianceHubPage(); }
+async function renderComplianceHubPage()     { try { await (await _page('compliance-hub')).renderComplianceHubPage(); } catch(e) { console.error('Compliance hub load error:', e); document.getElementById('page-body').innerHTML = '<div class="alert alert-warning" style="margin:24px;"><strong>Failed to load Compliance.</strong> ' + (e.message || '') + '<br><button class="btn btn-sm" style="margin-top:8px;" onclick="navigateTo(\'compliance-hub\')">Retry</button></div>'; } }
 async function renderWorkspaceHubPage()      { await (await _page('workspace-hub')).renderWorkspaceHubPage(); }
 async function renderAnalyticsHubPage()      { await (await _page('analytics-hub')).renderAnalyticsHubPage(); }
 async function renderCommandCenterPage()     { await (await _page('command-center')).renderCommandCenterPage(); }

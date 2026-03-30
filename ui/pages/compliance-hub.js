@@ -18,13 +18,21 @@ export async function renderComplianceHubPage() {
   const tab = window._compTab || 'compliance';
   const R = window._appRender;
 
-  switch (tab) {
-    case 'compliance':  await R.renderCompliancePage(); break;
-    case 'exclusions':  await R.renderExclusionsPage(); break;
-    case 'psv':         await R.renderPSVPage(); break;
-    case 'monitoring':  await R.renderMonitoringPage(); break;
-    case 'licenses':    await R.renderLicenses(); break;
-    default:            await R.renderCompliancePage(); break;
+  try {
+    switch (tab) {
+      case 'compliance':  await R.renderCompliancePage(); break;
+      case 'exclusions':  await R.renderExclusionsPage(); break;
+      case 'psv':         await R.renderPSVPage(); break;
+      case 'monitoring':  await R.renderMonitoringPage(); break;
+      case 'licenses':    await R.renderLicenses(); break;
+      default:            await R.renderCompliancePage(); break;
+    }
+  } catch (e) {
+    console.error('Compliance tab render error:', e);
+    body.innerHTML = `<div class="alert alert-warning" style="margin:24px;">
+      <strong>Error loading ${tab} tab.</strong> ${e.message || 'Please try again.'}
+      <br><button class="btn btn-sm" style="margin-top:8px;" onclick="window.app.compSwitchTab('compliance')">Retry</button>
+    </div>`;
   }
 
   // Inject unified tab bar (preserve sub-page internal tabs)

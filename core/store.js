@@ -955,6 +955,12 @@ class Store {
         return result.data || result;
     }
 
+    // ── Licenses (per-provider) ──
+    async getProviderLicenses(providerId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/licenses`);
+        return result.data || result;
+    }
+
     // ── References ──
     async getProviderReferences(providerId) {
         const result = await this._fetch(`${CONFIG.API_URL}/providers/${providerId}/references`);

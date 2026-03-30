@@ -14,9 +14,14 @@ async function renderExclusionsPage() {
   let exclusions = [];
   let providers = [];
 
-  try { summary = await store.getExclusionSummary(); } catch (e) { console.error('Exclusion summary error:', e); }
-  try { exclusions = store.filterByScope(await store.getExclusions()); } catch (e) { console.error('Exclusions error:', e); }
-  try { providers = store.filterByScope(await store.getAll('providers')); } catch (e) { console.error('Providers error:', e); }
+  const [_s, _e, _p] = await Promise.allSettled([
+    store.getExclusionSummary().catch(() => summary),
+    store.getExclusions().catch(() => []),
+    store.getAll('providers'),
+  ]);
+  if (_s.status === 'fulfilled') summary = _s.value || summary;
+  if (_e.status === 'fulfilled') exclusions = store.filterByScope(_e.value || []);
+  if (_p.status === 'fulfilled') providers = store.filterByScope(_p.value || []);
 
   // Build a map of provider id -> latest exclusion result
   const exclusionMap = {};
@@ -129,12 +134,21 @@ async function renderCompliancePage() {
   let apps = [];
   let exclusions = [];
 
-  try { report = await store.getComplianceReport(); } catch (e) { console.error('Compliance report error:', e); }
-  try { licenses = store.filterByScope(await store.getAll('licenses')); } catch (e) {}
-  try { providers = store.filterByScope(await store.getAll('providers')); } catch (e) {}
-  try { exclusionSummary = await store.getExclusionSummary(); } catch (e) {}
-  try { apps = store.filterByScope(await store.getAll('applications')); } catch (e) {}
-  try { exclusions = await store.getAll('exclusions'); } catch (e) {}
+  // Fetch all data in parallel for speed
+  const [r0, r1, r2, r3, r4, r5] = await Promise.allSettled([
+    store.getComplianceReport().catch(() => ({})),
+    store.getAll('licenses'),
+    store.getAll('providers'),
+    store.getExclusionSummary().catch(() => ({})),
+    store.getAll('applications'),
+    store.getAll('exclusions').catch(() => []),
+  ]);
+  if (r0.status === 'fulfilled') report = r0.value || {};
+  if (r1.status === 'fulfilled') licenses = store.filterByScope(r1.value || []);
+  if (r2.status === 'fulfilled') providers = store.filterByScope(r2.value || []);
+  if (r3.status === 'fulfilled') exclusionSummary = r3.value || {};
+  if (r4.status === 'fulfilled') apps = store.filterByScope(r4.value || []);
+  if (r5.status === 'fulfilled') exclusions = r5.value || [];
 
   const today = new Date();
   const in30 = new Date(Date.now() + 30 * 86400000);
