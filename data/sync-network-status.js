@@ -21,6 +21,7 @@
 (async function syncNetworkStatus() {
   'use strict';
 
+  const store = window._credentik.store;
   const log = (msg) => console.log(`%c[SYNC] ${msg}`, 'color: #2563EB; font-weight: bold;');
   const warn = (msg) => console.warn(`[SYNC] ⚠ ${msg}`);
   const err = (msg) => console.error(`[SYNC] ✗ ${msg}`);
