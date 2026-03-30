@@ -67,31 +67,54 @@ async function renderRevenueCyclePage() {
   const paymentCount = (window._rcmPayments || []).length;
   const taskCount = (window._bsTasks || []).filter(t => t.status !== 'completed').length;
 
+  const _t = (key, label) => `<button class="rc-tab ${tab === key ? 'active' : ''}" onclick="window.app.rcSwitchTab('${key}')">${label}</button>`;
+
   const tabBar = `
     <style>
-      .rc-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--gray-200);overflow-x:auto;}
-      .rc-tab{padding:8px 10px;font-size:12px;font-weight:600;color:var(--gray-500);cursor:pointer;border:none;background:none;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all 0.15s;}
+      .rc-tab-group{margin-bottom:12px;}
+      .rc-tab-row{display:flex;gap:0;flex-wrap:wrap;border-bottom:2px solid var(--gray-200);}
+      .rc-tab-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-400);padding:0 10px 4px;margin-top:8px;}
+      .rc-tab{padding:6px 10px;font-size:12px;font-weight:600;color:var(--gray-500);cursor:pointer;border:none;background:none;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all 0.15s;}
       .rc-tab:hover{color:var(--brand-600);background:var(--gray-50);}
       .rc-tab.active{color:var(--brand-600);border-bottom-color:var(--brand-600);}
     </style>
-    <div class="rc-tabs">
-      <button class="rc-tab ${tab === 'dashboard' ? 'active' : ''}" onclick="window.app.rcSwitchTab('dashboard')">Dashboard</button>
-      <button class="rc-tab ${tab === 'clients' ? 'active' : ''}" onclick="window.app.rcSwitchTab('clients')">Clients (${clientCount})</button>
-      <button class="rc-tab ${tab === 'claims' ? 'active' : ''}" onclick="window.app.rcSwitchTab('claims')">Claims (${claimCount})</button>
-      <button class="rc-tab ${tab === 'charges' ? 'active' : ''}" onclick="window.app.rcSwitchTab('charges')">Charges (${chargeCount})</button>
-      <button class="rc-tab ${tab === 'denials' ? 'active' : ''}" onclick="window.app.rcSwitchTab('denials')">Denials (${denialCount})</button>
-      <button class="rc-tab ${tab === 'payments' ? 'active' : ''}" onclick="window.app.rcSwitchTab('payments')">Payments (${paymentCount})</button>
-      <button class="rc-tab ${tab === 'ar' ? 'active' : ''}" onclick="window.app.rcSwitchTab('ar')">A/R Aging</button>
-      <button class="rc-tab ${tab === 'fee-schedules' ? 'active' : ''}" onclick="window.app.rcSwitchTab('fee-schedules')">Fee Schedules</button>
-      <button class="rc-tab ${tab === 'eligibility' ? 'active' : ''}" onclick="window.app.rcSwitchTab('eligibility')">Eligibility</button>
-      <button class="rc-tab ${tab === 'statements' ? 'active' : ''}" onclick="window.app.rcSwitchTab('statements')">Statements</button>
-      <button class="rc-tab ${tab === 'payer-intel' ? 'active' : ''}" onclick="window.app.rcSwitchTab('payer-intel')">Payer Intel</button>
-      <button class="rc-tab ${tab === 'provider-feedback' ? 'active' : ''}" onclick="window.app.rcSwitchTab('provider-feedback')">Feedback</button>
-      <button class="rc-tab ${tab === 'authorizations' ? 'active' : ''}" onclick="window.app.rcSwitchTab('authorizations')">Authorizations</button>
-      <button class="rc-tab ${tab === 'modifier-guide' ? 'active' : ''}" onclick="window.app.rcSwitchTab('modifier-guide')">Modifier Guide</button>
-      <button class="rc-tab ${tab === 'tasks' ? 'active' : ''}" onclick="window.app.rcSwitchTab('tasks')">Tasks (${taskCount})</button>
-      <button class="rc-tab ${tab === 'activity' ? 'active' : ''}" onclick="window.app.rcSwitchTab('activity')">Activity</button>
-      <button class="rc-tab ${tab === 'financials' ? 'active' : ''}" onclick="window.app.rcSwitchTab('financials')">Financials</button>
+    <div class="rc-tab-group">
+      <div style="display:flex;gap:24px;flex-wrap:wrap;">
+        <div>
+          <div class="rc-tab-label">Operations</div>
+          <div class="rc-tab-row">
+            ${_t('dashboard','Dashboard')}
+            ${_t('clients',`Clients (${clientCount})`)}
+            ${_t('claims',`Claims (${claimCount})`)}
+            ${_t('charges',`Charges (${chargeCount})`)}
+            ${_t('denials',`Denials (${denialCount})`)}
+            ${_t('payments',`Payments (${paymentCount})`)}
+            ${_t('ar','A/R Aging')}
+          </div>
+        </div>
+        <div>
+          <div class="rc-tab-label">Tools & Intelligence</div>
+          <div class="rc-tab-row">
+            ${_t('fee-schedules','Fee Schedules')}
+            ${_t('authorizations','Authorizations')}
+            ${_t('eligibility','Eligibility')}
+            ${_t('statements','Statements')}
+            ${_t('payer-intel','Payer Intel')}
+            ${_t('modifier-guide','Modifiers')}
+            ${_t('provider-feedback','Feedback')}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:4px;">
+        <div>
+          <div class="rc-tab-label">Workspace</div>
+          <div class="rc-tab-row">
+            ${_t('tasks',`Tasks (${taskCount})`)}
+            ${_t('activity','Activity')}
+            ${_t('financials','Financials')}
+          </div>
+        </div>
+      </div>
     </div>
   `;
 
