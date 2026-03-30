@@ -5442,8 +5442,6 @@ async function renderSettings() {
     <div class="stv2-tabs">
       <button class="stv2-tab active" onclick="window.app.settingsTab(this, 'settings-agency')">Agency Profile</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-import')">Import / Export</button>
-      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-org')">Organization</button>
-      <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-licenses')">Licenses (${licenses.length})</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-groups')">Groups</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-caqh')">CAQH API</button>
       <button class="stv2-tab" onclick="window.app.settingsTab(this, 'settings-integrations')">Integrations</button>

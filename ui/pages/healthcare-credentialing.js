@@ -14,9 +14,24 @@ const CRED_TABS = [
 
 export async function renderCredentialingPage() {
   const body = document.getElementById('page-body');
-  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div><div style="margin-top:12px;color:var(--gray-500);font-size:13px;">Loading Credentialing...</div></div>';
-
   const tab = window._credTab || 'dashboard';
+
+  // Build tab bar first
+  const tabBar = `
+    <style>
+      .cred-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--gray-200);overflow-x:auto;}
+      .cred-tab{padding:8px 14px;font-size:12px;font-weight:600;color:var(--gray-500);cursor:pointer;border:none;background:none;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all 0.15s;}
+      .cred-tab:hover{color:var(--brand-600);background:var(--gray-50);}
+      .cred-tab.active{color:var(--brand-600);border-bottom-color:var(--brand-600);}
+    </style>
+    <div class="cred-tabs" id="cred-hub-tabs">
+      ${CRED_TABS.map(t => `<button class="cred-tab ${tab === t.key ? 'active' : ''}" onclick="window.app.credSwitchTab('${t.key}')">${t.label}</button>`).join('')}
+    </div>
+  `;
+
+  // Set tab bar + spinner, then render content below
+  body.innerHTML = tabBar + '<div id="cred-hub-content"><div style="text-align:center;padding:48px;"><div class="spinner"></div></div></div>';
+
   const R = window._appRender;
 
   // Render the active sub-tab
@@ -30,18 +45,8 @@ export async function renderCredentialingPage() {
     default:             await R.renderDashboard(); break;
   }
 
-  // Inject unified tab bar at top (preserve sub-page internal tabs)
-  const tabBar = `
-    <style>
-      .cred-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--gray-200);overflow-x:auto;}
-      .cred-tab{padding:8px 14px;font-size:12px;font-weight:600;color:var(--gray-500);cursor:pointer;border:none;background:none;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all 0.15s;}
-      .cred-tab:hover{color:var(--brand-600);background:var(--gray-50);}
-      .cred-tab.active{color:var(--brand-600);border-bottom-color:var(--brand-600);}
-    </style>
-    <div class="cred-tabs">
-      ${CRED_TABS.map(t => `<button class="cred-tab ${tab === t.key ? 'active' : ''}" onclick="window.app.credSwitchTab('${t.key}')">${t.label}</button>`).join('')}
-    </div>
-  `;
-
-  body.innerHTML = tabBar + body.innerHTML;
+  // If the sub-renderer overwrote body.innerHTML (removing our tabs), re-inject
+  if (!document.getElementById('cred-hub-tabs')) {
+    body.innerHTML = tabBar + body.innerHTML;
+  }
 }

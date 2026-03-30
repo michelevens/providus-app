@@ -90,8 +90,13 @@ async function renderRevenueCyclePage() {
             ${_t('denials',`Denials (${denialCount})`)}
             ${_t('payments',`Payments (${paymentCount})`)}
             ${_t('ar','A/R Aging')}
+            ${_t('tasks',`Tasks (${taskCount})`)}
+            ${_t('activity','Activity')}
+            ${_t('financials','Financials')}
           </div>
         </div>
+      </div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:4px;">
         <div>
           <div class="rc-tab-label">Tools & Intelligence</div>
           <div class="rc-tab-row">
@@ -102,16 +107,6 @@ async function renderRevenueCyclePage() {
             ${_t('payer-intel','Payer Intel')}
             ${_t('modifier-guide','Modifiers')}
             ${_t('provider-feedback','Feedback')}
-          </div>
-        </div>
-      </div>
-      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:4px;">
-        <div>
-          <div class="rc-tab-label">Workspace</div>
-          <div class="rc-tab-row">
-            ${_t('tasks',`Tasks (${taskCount})`)}
-            ${_t('activity','Activity')}
-            ${_t('financials','Financials')}
           </div>
         </div>
       </div>
