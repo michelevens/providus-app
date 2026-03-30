@@ -2883,6 +2883,8 @@ async function renderAppTable(prefetchedApps = null) {
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--brand-600);" onclick="window.app.requestDocument('${a.providerId}','${escAttr((allProviders?.find(p=>p.id===a.providerId)||{}).firstName||'')}','${a.id}')">Request Doc</button>
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--brand-600);" onclick="window.app.requestInfo('${a.providerId}','${escAttr((allProviders?.find(p=>p.id===a.providerId)||{}).firstName||'')}','${a.id}')">Request Info</button>
               ${['approved','credentialed'].includes(a.status) ? `<button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--brand-600);" onclick="window.app.addLocationToApp('${a.id}')">+ Add Location</button>` : ''}
+              ${a.status !== 'planned' ? `<button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:#6366f1;" onclick="window.app.moveToExpansion('${a.id}')">Move to Expansion</button>` : ''}
+              ${a.status === 'planned' ? `<button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:#16a34a;" onclick="window.app.createAppFromExpansion('${a.id}')">Create Application</button>` : ''}
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--red);" onclick="window.app.deleteApplication('${a.id}')">Delete</button>
             </div>
           </div>
@@ -2931,6 +2933,8 @@ async function renderAppTable(prefetchedApps = null) {
             <button class="btn btn-sm" onclick="window.app.editApplication('${a.id}')">Edit</button>
             <button class="btn btn-sm btn-primary" onclick="window.app.openLogEntry('${a.id}')">Follow-up</button>
             ${['approved','credentialed'].includes(a.status) ? `<button class="btn btn-sm" style="color:var(--brand-600);" onclick="window.app.addLocationToApp('${a.id}')">+ Location</button>` : ''}
+            ${a.status !== 'planned' ? `<button class="btn btn-sm" style="color:#6366f1;" onclick="event.stopPropagation();window.app.moveToExpansion('${a.id}')">To Expansion</button>` : ''}
+            ${a.status === 'planned' ? `<button class="btn btn-sm" style="color:#16a34a;" onclick="event.stopPropagation();window.app.createAppFromExpansion('${a.id}')">Create App</button>` : ''}
           </div>
         </div>
       </div>`;
@@ -8122,6 +8126,41 @@ window.app = {
       showToast(`Planned application created: ${payerName} — ${getStateName(state)}`);
       store.clearCache();
       await renderCoverageMatrix();
+    } catch (e) {
+      showToast('Failed: ' + e.message);
+    }
+  },
+
+  // ── Move to Expansion (demote to "planned") ──
+  async moveToExpansion(appId) {
+    if (!await appConfirm('Move this application to Expansion (planned)? It will be removed from the active pipeline and treated as an expansion target.', { title: 'Move to Expansion', okLabel: 'Move' })) return;
+    try {
+      const app = await store.getOne('applications', appId);
+      await store.update('applications', appId, {
+        status: 'planned',
+        source: 'batch',
+        notes: `[Moved to Expansion] Previously: ${app.status}. ${app.notes || ''}`.trim(),
+      });
+      showToast('Moved to Expansion');
+      store.clearCache();
+      await navigateTo('credentialing');
+    } catch (e) {
+      showToast('Failed: ' + e.message);
+    }
+  },
+
+  // ── Create Application from Expansion (promote "planned" to "new") ──
+  async createAppFromExpansion(appId) {
+    if (!await appConfirm('Create an active application from this expansion target? It will move to "New" status in the credentialing pipeline.', { title: 'Create Application', okLabel: 'Create' })) return;
+    try {
+      await store.update('applications', appId, {
+        status: 'new',
+        source: 'staff',
+        notes: `[Promoted from Expansion] Ready for credentialing.`,
+      });
+      showToast('Application created — now in pipeline as "New"');
+      store.clearCache();
+      await navigateTo('credentialing');
     } catch (e) {
       showToast('Failed: ' + e.message);
     }
