@@ -170,6 +170,7 @@ const DENIAL_CODES = [
   { code: 'Status-19', desc: 'Claim returned — invalid information', category: 'coding', action: 'Correct claim data and resubmit', recovery: 'high' },
 ];
 window.DENIAL_CODES = DENIAL_CODES;
+window.CPT_CODES = CPT_CODES;
 
 function _claimBadge(status) {
   const s = CLAIM_STATUSES.find(x => x.value === status) || { label: status, color: '#6b7280', bg: '#f3f4f6' };
@@ -188,10 +189,10 @@ async function renderRcmPage() {
   body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
 
   let claims = [], denials = [], payments = [], charges = [], clients = [], providers = [], payers = [];
-  let claimStats = {}, denialStats = {}, arData = {};
+  let claimStats = {}, denialStats = {}, arData = {}, payerRules = [];
 
   // Fire all API calls in parallel for speed
-  const [r0, r1, r2, r3, r4, r5, r6, r7, r8] = await Promise.allSettled([
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9] = await Promise.allSettled([
     store.getRcmClaimStats(),
     store.getRcmClaims(),
     store.getRcmDenialStats(),
@@ -201,6 +202,7 @@ async function renderRcmPage() {
     store.getBillingClients(),
     store.getRcmArAging(),
     store.getAll('providers'),
+    store.getPayerRules(),
   ]);
   if (r0.status === 'fulfilled') claimStats = r0.value;
   if (r1.status === 'fulfilled') claims = r1.value;
@@ -211,7 +213,9 @@ async function renderRcmPage() {
   if (r6.status === 'fulfilled') clients = r6.value;
   if (r7.status === 'fulfilled') arData = r7.value;
   if (r8.status === 'fulfilled') providers = r8.value;
+  if (r9.status === 'fulfilled') payerRules = r9.value;
   try { payers = window.PAYER_CATALOG || []; } catch (e) {}
+  if (!Array.isArray(payerRules)) payerRules = [];
 
   if (!Array.isArray(claims)) claims = [];
   if (!Array.isArray(denials)) denials = [];
@@ -230,6 +234,70 @@ async function renderRcmPage() {
 
   const buckets = arData.buckets || {};
   const totalAR = arData.total_ar || arData.totalAr || 0;
+
+  // ─── Timely Filing Watchdog ───
+  // Build payer name → filing limit lookup from Payer Intelligence rules
+  const _payerFilingLimits = {};
+  payerRules.forEach(r => {
+    const name = (r.payer_name || r.payerName || '').toLowerCase().trim();
+    const days = parseInt(r.timely_filing_days || r.timelyFilingDays) || 0;
+    if (name && days > 0) _payerFilingLimits[name] = days;
+  });
+
+  // Default filing limits by payer type
+  function _getFilingLimit(payerName) {
+    const pn = (payerName || '').toLowerCase().trim();
+    // Check exact match from payer rules first
+    if (_payerFilingLimits[pn]) return _payerFilingLimits[pn];
+    // Check partial match
+    for (const [rName, days] of Object.entries(_payerFilingLimits)) {
+      if (pn.includes(rName) || rName.includes(pn)) return days;
+    }
+    // Default by payer type keywords
+    if (pn.includes('medicare')) return 365;
+    if (pn.includes('medicaid')) return 365;
+    if (pn.includes('florida blue') || pn.includes('fl blue')) return 365;
+    if (pn.includes('bcbs') || pn.includes('blue cross')) return 365;
+    return 90; // Commercial default
+  }
+
+  // Calculate filing status for unpaid claims
+  const _unpaidStatuses = ['submitted', 'pending', 'acknowledged'];
+  const _now = new Date();
+  const _filingAlerts = []; // { claim, daysLeft, daysElapsed, limit, level }
+  claims.forEach(c => {
+    if (!_unpaidStatuses.includes(c.status)) return;
+    const dos = c.dateOfService || c.date_of_service;
+    if (!dos) return;
+    const dosDate = new Date(dos);
+    const daysElapsed = Math.floor((_now - dosDate) / 86400000);
+    const payer = c.payerName || c.payer_name || '';
+    const limit = _getFilingLimit(payer);
+    const daysLeft = limit - daysElapsed;
+    let level = null;
+    if (daysLeft < 14) level = 'urgent';
+    else if (daysLeft < 30) level = 'warning';
+    else if (daysLeft < 60) level = 'watch';
+    if (level) _filingAlerts.push({ claim: c, daysLeft, daysElapsed, limit, level });
+  });
+  _filingAlerts.sort((a, b) => a.daysLeft - b.daysLeft);
+  const _urgentFiling = _filingAlerts.filter(a => a.level === 'urgent');
+  const _warningFiling = _filingAlerts.filter(a => a.level === 'warning');
+  const _watchFiling = _filingAlerts.filter(a => a.level === 'watch');
+  // Build a quick lookup: claim.id → filing alert
+  const _filingByClaimId = {};
+  _filingAlerts.forEach(a => { _filingByClaimId[a.claim.id] = a; });
+  window._filingAlerts = _filingAlerts;
+  window._filingByClaimId = _filingByClaimId;
+
+  function _filingBadge(claimId) {
+    const a = _filingByClaimId[claimId];
+    if (!a) return '';
+    if (a.level === 'urgent') return ' <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;" title="' + a.daysLeft + ' days left to file (limit: ' + a.limit + 'd)">FILING URGENT</span>';
+    if (a.level === 'warning') return ' <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;" title="' + a.daysLeft + ' days left to file (limit: ' + a.limit + 'd)">FILING WARNING</span>';
+    if (a.level === 'watch') return ' <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;background:#fefce8;color:#a16207;border:1px solid #fde68a;" title="' + a.daysLeft + ' days left to file (limit: ' + a.limit + 'd)">FILING WATCH</span>';
+    return '';
+  }
 
   // Revenue Gap Analysis
   const _cv = (c, ...keys) => { for (const k of keys) { if (c[k] !== undefined && c[k] !== null) return parseFloat(c[k]) || 0; } return 0; };
@@ -291,6 +359,56 @@ async function renderRcmPage() {
         </div>
       </div>
     </div>
+
+    <!-- Timely Filing Watchdog Alert (only on Claims tab) -->
+    ${window._rcmTab !== 'claims' || _filingAlerts.length === 0 ? '' : (() => {
+      const _tfUrgent = _urgentFiling.length, _tfWarn = _warningFiling.length, _tfWatch = _watchFiling.length;
+      const _tfBorderColor = _tfUrgent > 0 ? '#fecaca' : _tfWarn > 0 ? '#fed7aa' : '#fde68a';
+      const _tfBgColor = _tfUrgent > 0 ? '#fef2f2' : _tfWarn > 0 ? '#fff7ed' : '#fefce8';
+      const _tfTextColor = _tfUrgent > 0 ? '#dc2626' : _tfWarn > 0 ? '#ea580c' : '#a16207';
+      return '<div class="card rcm-card" style="margin-bottom:18px;border:1px solid ' + _tfBorderColor + ';">' +
+        '<div class="card-header" style="background:' + _tfBgColor + ';">' +
+          '<h3 style="color:' + _tfTextColor + ';">' +
+            '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom;margin-right:4px;"><path d="M9 2l7.5 13H1.5z"/><path d="M9 7v3M9 12.5v.5"/></svg>' +
+            'Timely Filing Watchdog — ' + _filingAlerts.length + ' claim' + (_filingAlerts.length !== 1 ? 's' : '') + ' at risk' +
+          '</h3>' +
+          '<span style="font-size:12px;color:var(--gray-500);">' +
+            (_tfUrgent > 0 ? '<span style="color:#dc2626;font-weight:700;">' + _tfUrgent + ' urgent</span>' : '') +
+            (_tfUrgent > 0 && _tfWarn > 0 ? ' &middot; ' : '') +
+            (_tfWarn > 0 ? '<span style="color:#ea580c;font-weight:700;">' + _tfWarn + ' warning</span>' : '') +
+            ((_tfUrgent > 0 || _tfWarn > 0) && _tfWatch > 0 ? ' &middot; ' : '') +
+            (_tfWatch > 0 ? '<span style="color:#a16207;font-weight:700;">' + _tfWatch + ' watch</span>' : '') +
+          '</span>' +
+        '</div>' +
+        '<div class="card-body" style="padding:0;"><table style="font-size:13px;">' +
+          '<thead><tr><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:center;">Filing Limit</th><th style="text-align:center;">Days Elapsed</th><th style="text-align:center;">Days Left</th><th>Priority</th></tr></thead>' +
+          '<tbody>' +
+          _filingAlerts.slice(0, 15).map(function(a) {
+            var c = a.claim;
+            var rowBg = a.level === 'urgent' ? 'background:#fef2f2;' : a.level === 'warning' ? 'background:#fff7ed;' : '';
+            var priorityBadge = a.level === 'urgent'
+              ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;">URGENT</span>'
+              : a.level === 'warning'
+              ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;">WARNING</span>'
+              : '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:#fefce8;color:#a16207;border:1px solid #fde68a;">WATCH</span>';
+            var daysLeftText = a.daysLeft < 0 ? 'EXPIRED' : a.daysLeft + 'd';
+            var daysColor = a.level === 'urgent' ? '#dc2626' : a.level === 'warning' ? '#ea580c' : '#a16207';
+            return '<tr style="' + rowBg + 'cursor:pointer;" onclick="window.app.viewClaimDetail(' + c.id + ')">' +
+              '<td><strong style="font-family:monospace;font-size:11px;color:var(--brand-600);">' + escHtml(c.claimNumber || c.claim_number || '') + '</strong></td>' +
+              '<td class="text-sm">' + escHtml(c.patientName || c.patient_name || '') + '</td>' +
+              '<td class="text-sm">' + escHtml(c.payerName || c.payer_name || '') + '</td>' +
+              '<td class="text-sm">' + formatDateDisplay(c.dateOfService || c.date_of_service) + '</td>' +
+              '<td style="text-align:right;">' + _fm(c.totalCharges || c.total_charges) + '</td>' +
+              '<td style="text-align:center;font-size:12px;">' + a.limit + 'd</td>' +
+              '<td style="text-align:center;font-size:12px;">' + a.daysElapsed + 'd</td>' +
+              '<td style="text-align:center;font-weight:700;color:' + daysColor + ';">' + daysLeftText + '</td>' +
+              '<td>' + priorityBadge + '</td>' +
+            '</tr>';
+          }).join('') +
+          '</tbody></table>' +
+          (_filingAlerts.length > 15 ? '<div style="padding:8px 16px;font-size:12px;color:var(--gray-500);border-top:1px solid var(--gray-100);">Showing 15 of ' + _filingAlerts.length + ' at-risk claims</div>' : '') +
+        '</div></div>';
+    })()}
 
     <!-- Revenue Gap Analysis (only on Claims tab) -->
     ${window._rcmTab !== 'claims' ? '' : (() => {
@@ -408,6 +526,7 @@ async function renderRcmPage() {
             <input type="date" id="rcm-claim-dos-to" class="form-control" style="width:125px;height:32px;font-size:11px;" onchange="window.app.filterRcmClaims()" title="DOS To">
             <button class="btn btn-sm" onclick="window.app.openClaimImportModal()" style="font-size:11px;">Import</button>
             <button class="btn btn-sm" onclick="window.app.exportClaimsCSV()" style="font-size:11px;">Export</button>
+            <button class="btn btn-sm" onclick="window.app.scrubClaims()" style="font-size:11px;color:#d97706;font-weight:600;" title="Validate unpaid claims for errors and warnings before submission">Scrub Claims</button>
           </div>
         </div>
         <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
@@ -423,7 +542,7 @@ async function renderRcmPage() {
               <td style="text-align:right;color:#7c3aed;">${_fm(c.patientResponsibility || c.patient_responsibility)}</td>
               <td style="text-align:right;${(c.balance || 0) > 0 ? 'color:var(--red);font-weight:600;' : ''}">${_fm(c.balance)}</td>
               <td class="text-sm">${c.checkNumber || c.check_number ? `<a href="#" onclick="event.stopPropagation();window.app.viewCheckDetail('${escHtml(c.checkNumber || c.check_number)}')" style="font-family:monospace;font-size:11px;color:var(--brand-600);text-decoration:underline;">${escHtml(c.checkNumber || c.check_number)}</a>` : '<span style="color:var(--gray-300);">—</span>'}</td>
-              <td>${_claimBadge(c.status)}</td>
+              <td>${_claimBadge(c.status)}${_filingBadge(c.id)}</td>
               <td><button class="btn btn-sm" onclick="event.stopPropagation();window.app.editRcmClaim(${c.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="event.stopPropagation();window.app.deleteRcmClaim(${c.id})">Del</button></td>
             </tr>`).join('')}
             ${claims.length === 0 ? '<tr><td colspan="11" style="text-align:center;padding:2rem;color:var(--gray-500);">No claims yet. Click "+ New Claim" to create one.</td></tr>' : ''}
@@ -520,6 +639,30 @@ async function renderRcmPage() {
         <div class="rcm-stat"><div class="rcm-label">Appeal Success</div><div class="rcm-val" style="color:#3b82f6;">${denialStats.appeal_success_rate || denialStats.appealSuccessRate || 0}%</div></div>
         <div class="rcm-stat"><div class="rcm-label">Overdue Appeals</div><div class="rcm-val" style="color:#f59e0b;">${denialStats.overdue_appeals || denialStats.overdueAppeals || 0}</div></div>
       </div>
+      <!-- Appeal Dashboard -->
+      ${(() => {
+        const _af = denials.filter(d => {const as = d.appealStatus || d.appeal_status; return as && as !== 'not_appealed';});
+        const _aw = denials.filter(d => (d.appealStatus || d.appeal_status) === 'appeal_won');
+        const _al = denials.filter(d => (d.appealStatus || d.appeal_status) === 'appeal_lost');
+        const _ap = denials.filter(d => ['appeal_filed', 'appeal_in_review'].includes(d.appealStatus || d.appeal_status));
+        const _ar = _aw.reduce((s, d) => s + (parseFloat(d.appealOutcomeAmount || d.appeal_outcome_amount) || 0), 0);
+        const _dc = _aw.length + _al.length;
+        const _sr = _dc > 0 ? Math.round((_aw.length / _dc) * 100) : 0;
+        return _af.length > 0 ? `
+      <div class="card rcm-card" style="margin-bottom:16px;border-left:4px solid #3b82f6;">
+        <div class="card-header"><h3 style="color:#1e40af;">Appeal Dashboard</h3></div>
+        <div class="card-body" style="padding:14px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;">
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:#3b82f6;">${_af.length}</div><div style="font-size:11px;color:var(--gray-500);">Appeals Filed</div></div>
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:#f59e0b;">${_ap.length}</div><div style="font-size:11px;color:var(--gray-500);">Pending</div></div>
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:#22c55e;">${_aw.length}</div><div style="font-size:11px;color:var(--gray-500);">Won</div></div>
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:#ef4444;">${_al.length}</div><div style="font-size:11px;color:var(--gray-500);">Lost</div></div>
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:#059669;">${_fm(_ar)}</div><div style="font-size:11px;color:var(--gray-500);">Recovered</div></div>
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:#8b5cf6;">${_sr}%</div><div style="font-size:11px;color:var(--gray-500);">Success Rate</div></div>
+          </div>
+        </div>
+      </div>` : '';
+      })()}
       <!-- Denial by Category -->
       ${Array.isArray(denialStats.by_category || denialStats.byCategory) && (denialStats.by_category || denialStats.byCategory).length > 0 ? `
       <div class="card rcm-card" style="margin-bottom:16px;">
@@ -553,14 +696,20 @@ async function renderRcmPage() {
             ${denials.map(d => {
               const claim = d.claim || {};
               const deadline = d.appealDeadline || d.appeal_deadline || '';
-              const isOverdue = deadline && new Date(deadline) < new Date() && !['resolved_won', 'resolved_lost', 'resolved_partial', 'written_off'].includes(d.status);
+              const resolvedSt = ['resolved_won', 'resolved_lost', 'resolved_partial', 'written_off'];
+              const appealSt = d.appealStatus || d.appeal_status || 'not_appealed';
+              const isOverdue = deadline && new Date(deadline) < new Date() && !resolvedSt.includes(d.status);
+              const isAppealOverdue = deadline && new Date(deadline) < new Date() && appealSt === 'not_appealed' && !resolvedSt.includes(d.status);
+              const isDueSoon = deadline && !isOverdue && !resolvedSt.includes(d.status) && (new Date(deadline) - new Date()) <= 14 * 86400000 && (new Date(deadline) - new Date()) > 0 && appealSt === 'not_appealed';
               const cat = DENIAL_CATEGORIES.find(x => x.value === (d.denialCategory || d.denial_category));
-              return `<tr class="rcm-denial-row" data-status="${d.status}" data-category="${d.denialCategory || d.denial_category || ''}" style="${isOverdue ? 'background:#fef2f2;' : ''}">
+              const appealBadge = isAppealOverdue ? ' <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:#fee2e2;color:#dc2626;">APPEAL OVERDUE</span>' : isDueSoon ? ' <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:#fff7ed;color:#ea580c;">APPEAL DUE</span>' : '';
+              const appealLvl = d.appealLevel || d.appeal_level || '';
+              return `<tr class="rcm-denial-row" data-status="${d.status}" data-category="${d.denialCategory || d.denial_category || ''}" style="${isOverdue || isAppealOverdue ? 'background:#fef2f2;' : isDueSoon ? 'background:#fffbeb;' : ''}">
                 <td><strong style="font-family:monospace;font-size:12px;">${escHtml(claim.claimNumber || claim.claim_number || '')}</strong><br><span class="text-sm text-muted">${escHtml(claim.patientName || claim.patient_name || '')}</span></td>
                 <td class="text-sm">${escHtml(claim.payerName || claim.payer_name || d.payerName || '')}</td>
-                <td><span style="font-size:11px;padding:2px 8px;background:var(--gray-100);border-radius:4px;">${escHtml(cat ? cat.label : '')}</span></td>
+                <td><span style="font-size:11px;padding:2px 8px;background:var(--gray-100);border-radius:4px;">${escHtml(cat ? cat.label : '')}</span>${appealLvl ? ` <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#ede9fe;color:#7c3aed;">${escHtml(appealLvl)}</span>` : ''}</td>
                 <td style="text-align:right;color:var(--red);font-weight:600;">${_fm(d.deniedAmount || d.denied_amount)}</td>
-                <td style="font-size:12px;${isOverdue ? 'color:var(--red);font-weight:700;' : ''}">${deadline ? formatDateDisplay(deadline) : '—'}${isOverdue ? ' OVERDUE' : ''}</td>
+                <td style="font-size:12px;${isOverdue || isAppealOverdue ? 'color:var(--red);font-weight:700;' : ''}">${deadline ? formatDateDisplay(deadline) : '—'}${appealBadge}</td>
                 <td><span style="font-size:11px;font-weight:600;color:${d.priority === 'urgent' ? 'var(--red)' : d.priority === 'high' ? '#f97316' : 'var(--gray-500)'};">${d.priority || 'normal'}</span></td>
                 <td>${_denialBadge(d.status)}</td>
                 <td><button class="btn btn-sm" onclick="window.app.editRcmDenial(${d.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteRcmDenial(${d.id})">Del</button></td>
@@ -812,7 +961,7 @@ async function renderRcmPage() {
 
     <!-- Denial Modal -->
     <div class="modal-overlay" id="rcm-denial-modal">
-      <div class="modal" style="max-width:560px;">
+      <div class="modal" style="max-width:680px;">
         <div class="modal-header"><h3 id="rcm-denial-modal-title">Track Denial</h3><button class="modal-close" onclick="document.getElementById('rcm-denial-modal').classList.remove('active')">&times;</button></div>
         <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
           <input type="hidden" id="rcm-denial-edit-id" value="">
@@ -834,9 +983,17 @@ async function renderRcmPage() {
             </div>
             <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Denial Reason *</label><textarea id="rcm-denial-reason" class="form-control" rows="2" style="resize:vertical;" placeholder="Describe why the claim was denied..."></textarea></div>
             <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Appeal Notes / Suggested Action</label><textarea id="rcm-denial-appeal-notes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
+            <!-- Appeal Tracking Section -->
+            <div style="grid-column:1/-1;margin-top:8px;padding-top:12px;border-top:2px solid #dbeafe;">
+              <div style="font-size:13px;font-weight:700;color:#1e40af;margin-bottom:8px;">Appeal Tracking</div>
+            </div>
+            <div class="auth-field" style="margin:0;"><label>Appeal Status</label><select id="rcm-denial-appeal-status" class="form-control"><option value="not_appealed">Not Appealed</option><option value="appeal_filed">Appeal Filed</option><option value="appeal_in_review">Appeal In Review</option><option value="appeal_won">Appeal Won</option><option value="appeal_lost">Appeal Lost</option><option value="written_off">Written Off</option></select></div>
+            <div class="auth-field" style="margin:0;"><label>Appeal Level</label><select id="rcm-denial-appeal-level" class="form-control"><option value="">—</option><option value="1st Level">1st Level</option><option value="2nd Level">2nd Level</option><option value="External Review">External Review</option></select></div>
+            <div class="auth-field" style="margin:0;"><label>Appeal Filed Date</label><input type="date" id="rcm-denial-appeal-filed-date" class="form-control"></div>
+            <div class="auth-field" style="margin:0;"><label>Appeal Outcome Amount</label><input type="number" id="rcm-denial-appeal-outcome-amount" class="form-control" step="0.01" placeholder="0.00"></div>
           </div>
         </div>
-        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);"><button class="btn" onclick="document.getElementById('rcm-denial-modal').classList.remove('active')">Cancel</button><button class="btn btn-primary" onclick="window.app.saveRcmDenial()">Save Denial</button></div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);"><button class="btn" onclick="document.getElementById('rcm-denial-modal').classList.remove('active')">Cancel</button><button class="btn" style="color:#1e40af;border-color:#bfdbfe;background:#eff6ff;" onclick="window.app.generateDenialAppealLetter()">Generate Appeal Letter</button><button class="btn btn-primary" onclick="window.app.saveRcmDenial()">Save Denial</button></div>
       </div>
     </div>
   `;
