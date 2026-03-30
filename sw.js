@@ -1,4 +1,4 @@
-const CACHE_NAME = 'credentik-v9';
+const CACHE_NAME = 'credentik-v10';
 const API_CACHE = 'credentik-api-v2';
 const API_TTL = 60 * 60 * 1000; // 60 minutes
 const API_MAX_ENTRIES = 100;
@@ -27,6 +27,12 @@ const SHELL_FILES = [
   './ui/pages/rcm.js',
   './ui/pages/rcm-phase2.js',
   './ui/pages/revenue-cycle.js',
+  './ui/pages/healthcare-credentialing.js',
+  './ui/pages/compliance-hub.js',
+  './ui/pages/workspace-hub.js',
+  './ui/pages/analytics-hub.js',
+  './ui/pages/command-center.js',
+  './ui/pages/admin-hub.js',
   './manifest.json',
 ];
 
