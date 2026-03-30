@@ -2861,7 +2861,7 @@ async function renderAppTable(prefetchedApps = null) {
         <td><strong>${getStateName(a.state)}</strong></td>
         <td>
           <div style="font-weight:600;font-size:13px;">${payerName}</div>
-          <div style="margin-top:3px;"><span class="badge badge-${a.status}" style="font-size:10px;">${statusObj.label}</span> <span style="font-size:10px;color:var(--gray-400);">${typeLabel}</span>${a.type === 'location_addition' ? ' <span style="font-size:10px;" title="Location Addition">&#128205;</span>' : ''}</div>
+          <div style="margin-top:3px;"><span class="badge badge-${a.status}" style="font-size:10px;">${statusObj.label}</span> <span style="font-size:10px;color:var(--gray-400);">${typeLabel}</span>${a.source ? `<span style="font-size:9px;padding:1px 5px;border-radius:6px;margin-left:3px;font-weight:600;${a.source==='vendor'?'background:#fef3c7;color:#b45309;':a.source==='batch'?'background:#e0e7ff;color:#4f46e5;':'background:#f0fdf4;color:#16a34a;'}">${a.source}</span>` : ''}${a.type === 'location_addition' ? ' <span style="font-size:10px;" title="Location Addition">&#128205;</span>' : ''}</div>
           ${a.facilityId ? `<div class="loc-indicator" style="font-size:10px;margin-top:2px;" onclick="event.stopPropagation();window._selectedFacilityId=${a.facilityId};window.app.navigateTo('facility-detail');">&#128205; <span style="color:var(--brand-600);cursor:pointer;text-decoration:underline;">${escHtml(facilityName)}</span></div>` : ''}
         </td>
         <td class="text-sm">

@@ -167,16 +167,19 @@
       const existing = matchApp(row, freshApps);
 
       if (existing) {
-        if (existing.status === row.status) {
-          log(`  OK: ${row.state} / ${row.payer} — already ${row.status}`);
+        // Always tag as vendor-managed
+        const needsSourceTag = existing.source !== 'vendor';
+        if (existing.status === row.status && !needsSourceTag) {
+          log(`  OK: ${row.state} / ${row.payer} — already ${row.status} (vendor)`);
           skippedOk++;
           continue;
         }
 
-        // Status mismatch — update
+        // Update status + tag as vendor
         const oldStatus = existing.status;
         const updateData = {
           status: row.status,
+          source: 'vendor',
           notes: `[Synced from Network Status Report 03/04/2026] ${row.notes}`,
         };
         if (row.effectiveDate) updateData.effectiveDate = row.effectiveDate;
@@ -199,6 +202,7 @@
           payerId: catalogPayer ? catalogPayer.id : '',
           payerName: row.payer,
           status: row.status,
+          source: 'vendor',
           effectiveDate: row.effectiveDate,
           notes: `[Created from Network Status Report 03/04/2026] ${row.notes}`,
           type: 'individual',

@@ -86,6 +86,7 @@
           payerId: catalogPayer ? catalogPayer.id : '',
           payerName: row.payer,
           status: row.status,
+          source: 'staff',
           notes: row.notes,
           type: 'individual',
           wave: 1,
