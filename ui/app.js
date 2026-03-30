@@ -1187,6 +1187,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       await renderFeeScheduleTool();
       break;
+    case 'payer-detail':
+      pageTitle.textContent = 'Payer Detail';
+      pageSubtitle.textContent = 'Comprehensive payer intelligence';
+      pageActions.innerHTML = '<button class="btn btn-sm" onclick="history.back()">Back</button> ' + printBtn;
+      await renderPayerDetailPage(window._selectedPayerId);
+      break;
     case 'payer-portal':
       pageTitle.textContent = 'Payer Portal Directory';
       pageSubtitle.textContent = 'Quick links to payer credentialing portals & contacts';
@@ -2860,7 +2866,7 @@ async function renderAppTable(prefetchedApps = null) {
         </td>
         <td><strong>${getStateName(a.state)}</strong></td>
         <td>
-          <div style="font-weight:600;font-size:13px;">${payerName}</div>
+          <div style="font-weight:600;font-size:13px;"><a href="#" onclick="event.stopPropagation();event.preventDefault();window.app.viewPayerDetail('${a.payerId}')" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--gray-300);" onmouseover="this.style.color='var(--brand-600)'" onmouseout="this.style.color='inherit'">${payerName}</a></div>
           <div style="margin-top:3px;"><span class="badge badge-${a.status}" style="font-size:10px;">${statusObj.label}</span> <span style="font-size:10px;color:var(--gray-400);">${typeLabel}</span>${a.source ? `<span style="font-size:9px;padding:1px 5px;border-radius:6px;margin-left:3px;font-weight:600;${a.source==='vendor'?'background:#fef3c7;color:#b45309;':a.source==='batch'?'background:#e0e7ff;color:#4f46e5;':'background:#f0fdf4;color:#16a34a;'}">${a.source}</span>` : ''}${a.type === 'location_addition' ? ' <span style="font-size:10px;" title="Location Addition">&#128205;</span>' : ''}</div>
           ${a.facilityId ? `<div class="loc-indicator" style="font-size:10px;margin-top:2px;" onclick="event.stopPropagation();window._selectedFacilityId=${a.facilityId};window.app.navigateTo('facility-detail');">&#128205; <span style="color:var(--brand-600);cursor:pointer;text-decoration:underline;">${escHtml(facilityName)}</span></div>` : ''}
         </td>
@@ -5263,7 +5269,7 @@ async function renderPayers() {
             <tbody>
               ${payers.map(p => `
                 <tr>
-                  <td><strong>${escHtml(p.name)}</strong></td>
+                  <td><strong><a href="#" onclick="event.preventDefault();window.app.viewPayerDetail('${p.id}')" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--gray-300);" onmouseover="this.style.color='var(--brand-600)'" onmouseout="this.style.color='inherit'">${escHtml(p.name)}</a></strong></td>
                   <td>${escHtml(p.parentOrg) || '-'}</td>
                   <td>${p.avgCredDays ? p.avgCredDays + ' days' : '-'}</td>
                   <td class="text-sm">${Array.isArray(p.states) ? p.states.join(', ') : '-'}</td>
@@ -6696,6 +6702,7 @@ async function renderAdminHubPage()          { await (await _page('admin-hub')).
 
 // Convenience stubs — these look like the original functions but lazy-load from modules.
 // IMPORTANT: must await the inner call so hub pages can inject tab bars after content renders
+async function renderPayerDetailPage(id)     { await (await _page('payer-detail')).renderPayerDetailPage(id); }
 async function renderBillingPage()           { await (await _page('billing')).renderBillingPage(); }
 async function renderInvoiceDetail(id)       { await (await _page('billing')).renderInvoiceDetail(id); }
 async function renderContractsPage()         { await (await _page('billing')).renderContractsPage(); }
@@ -7374,6 +7381,10 @@ window.app = {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = `credentik-psv-report-${new Date().toISOString().split('T')[0]}.csv`; a.click();
     showToast('PSV report exported');
+  },
+  viewPayerDetail(payerId) {
+    window._selectedPayerId = payerId;
+    navigateTo('payer-detail');
   },
   shareProviderProfile(providerId) {
     window._selectedProviderId = providerId;
