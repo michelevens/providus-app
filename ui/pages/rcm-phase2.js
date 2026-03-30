@@ -59,7 +59,7 @@ async function renderFeeSchedulesTab(body) {
           ${planTypes.map(p => `<option value="${escAttr(p)}" ${fPlan === p ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
         </select>
         <input type="text" class="form-control" placeholder="Search CPT or description..." value="${escAttr(fSearch)}" style="height:32px;font-size:12px;width:220px;" onkeyup="window._fsFilterSearch=this.value;clearTimeout(window._fsSearchTimer);window._fsSearchTimer=setTimeout(()=>window.app.rcSwitchTab('fee-schedules'),300);">
-        ${fPayer || fPlan || fSearch ? '<button class="btn btn-sm" onclick="window._fsFilterPayer=\\'\\';window._fsFilterPlan=\\'\\';window._fsFilterSearch=\\'\\';window.app.rcSwitchTab(\\'fee-schedules\\');" style="font-size:11px;color:var(--red);">Clear Filters</button>' : ''}
+        ${fPayer || fPlan || fSearch ? `<button class="btn btn-sm" onclick="window._fsFilterPayer='';window._fsFilterPlan='';window._fsFilterSearch='';window.app.rcSwitchTab('fee-schedules');" style="font-size:11px;color:var(--red);">Clear Filters</button>` : ''}
       </div>
       <!-- Payer badges -->
       ${Object.keys(byPayer).length > 0 ? `<div style="padding:10px 18px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--gray-100);">
