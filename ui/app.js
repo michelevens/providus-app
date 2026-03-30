@@ -11723,12 +11723,31 @@ function handleNppesProxy(payload) {
 
       if (feeSchedules.length === 0) { showToast('No fee schedules loaded — add rates first'); return; }
 
-      // Build fee schedule lookup: cpt -> { rate, payer, description }
-      const fsLookup = {};
+      // Build fee schedule lookup: payer+cpt -> rate (with generic fallback)
+      const fsByPayerCpt = {};  // keyed by "payerName|cptCode"
+      const fsByCpt = {};       // fallback keyed by cptCode only (last payer wins)
       feeSchedules.forEach(f => {
         const cpt = f.cpt_code || f.cptCode || '';
-        if (cpt) fsLookup[cpt] = { rate: Number(f.contracted_rate || f.contractedRate || 0), payer: f.payer_name || f.payerName || '', desc: f.cpt_description || f.cptDescription || '' };
+        const payer = (f.payer_name || f.payerName || '').toLowerCase();
+        const rate = Number(f.contracted_rate || f.contractedRate || 0);
+        const desc = f.cpt_description || f.cptDescription || '';
+        if (cpt) {
+          if (payer) fsByPayerCpt[`${payer}|${cpt}`] = { rate, payer, desc };
+          fsByCpt[cpt] = { rate, payer, desc };
+        }
       });
+      // Lookup: try payer-specific first, fall back to generic
+      function fsLookup(claimPayer, cpt) {
+        const p = (claimPayer || '').toLowerCase();
+        // Try exact payer match
+        if (fsByPayerCpt[`${p}|${cpt}`]) return fsByPayerCpt[`${p}|${cpt}`];
+        // Try partial payer match (e.g. "Florida Blue" matches "Florida Blue (Lucet)")
+        for (const key of Object.keys(fsByPayerCpt)) {
+          if (key.endsWith(`|${cpt}`) && (key.includes(p) || p.includes(key.split('|')[0]))) return fsByPayerCpt[key];
+        }
+        // Fall back to any rate for this CPT
+        return fsByCpt[cpt] || null;
+      }
 
       // Provider type multipliers for Medicare
       // MD/DO = 100%, NP/PA = 85%, Licensed Clinical Social Worker = 75%, etc.
@@ -11766,7 +11785,7 @@ function handleNppesProxy(payload) {
         sls.forEach(sl => {
           const cpt = sl.cptCode || sl.cpt_code || '';
           const units = Number(sl.units || 1);
-          const fs = fsLookup[cpt];
+          const fs = fsLookup(payer, cpt);
           if (fs) {
             const expected = Math.round(fs.rate * multiplier * units * 100) / 100;
             expectedTotal += expected;
@@ -11850,7 +11869,7 @@ function handleNppesProxy(payload) {
                 ${underpaid.map(r => `<tr>
                   <td style="font-weight:600;"><a href="#" onclick="window.app.viewClaimDetail(${r.claimNum});document.getElementById('underpayment-report-modal').classList.remove('active');return false;" style="color:var(--brand-600);">${escHtml(r.claimNum)}</a></td>
                   <td>${escHtml(r.patient)}</td>
-                  <td>${r.dos}</td>
+                  <td>${escHtml(r.dos)}</td>
                   <td>${escHtml(r.payer)}</td>
                   <td style="text-align:right;">$${r.charged.toFixed(2)}</td>
                   <td style="text-align:right;">$${r.paid.toFixed(2)}</td>
@@ -11869,12 +11888,12 @@ function handleNppesProxy(payload) {
             </div>
             ${underpaid.slice(0, 5).map(r => `
               <div style="background:var(--gray-50);border-radius:8px;padding:12px;margin-bottom:8px;">
-                <div style="font-weight:600;margin-bottom:6px;">${escHtml(r.claimNum)} — ${escHtml(r.patient)} (${r.dos})</div>
+                <div style="font-weight:600;margin-bottom:6px;">${escHtml(r.claimNum)} — ${escHtml(r.patient)} (${escHtml(r.dos)})</div>
                 <table style="width:100%;font-size:11px;">
                   <thead><tr><th>CPT</th><th>Description</th><th>Units</th><th style="text-align:right;">Phys Rate</th><th style="text-align:right;">NP (85%)</th><th style="text-align:right;">Line Expected</th></tr></thead>
                   <tbody>
                     ${r.lineDetails.map(l => `<tr>
-                      <td style="font-family:monospace;font-weight:600;">${l.cpt}</td>
+                      <td style="font-family:monospace;font-weight:600;">${escHtml(l.cpt)}</td>
                       <td>${escHtml(l.desc)}</td>
                       <td>${l.units}</td>
                       <td style="text-align:right;">$${l.fsRate.toFixed(2)}</td>
