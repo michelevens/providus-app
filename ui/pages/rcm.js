@@ -884,7 +884,7 @@ async function renderRcmPage() {
             <div class="auth-field" style="margin:0;"><label>Patient Name *</label><input type="text" id="rcm-claim-patient" class="form-control" placeholder="Patient name"></div>
             <div class="auth-field" style="margin:0;"><label>Member ID</label><input type="text" id="rcm-claim-member" class="form-control" placeholder="Insurance member ID"></div>
             <div class="auth-field" style="margin:0;"><label>Payer *</label>
-              <select id="rcm-claim-payer" class="form-control">
+              <select id="rcm-claim-payer" class="form-control" onchange="window.app.updateClaimModifierHints&&window.app.updateClaimModifierHints()">
                 <option value="">Select payer...</option>
                 ${[...payers].sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(p => `<option value="${escAttr(p.name)}">${escHtml(p.name)}</option>`).join('')}
                 <option value="__other__">Other (type manually)</option>
@@ -892,9 +892,9 @@ async function renderRcmPage() {
               <input type="text" id="rcm-claim-payer-other" class="form-control" style="display:none;margin-top:4px;" placeholder="Enter payer name">
             </div>
             <div class="auth-field" style="margin:0;"><label>Provider</label>
-              <select id="rcm-claim-provider" class="form-control">
+              <select id="rcm-claim-provider" class="form-control" onchange="window.app.updateClaimModifierHints&&window.app.updateClaimModifierHints()">
                 <option value="">Select provider...</option>
-                ${providers.map(p => `<option value="${p.id}" data-name="${escAttr((p.firstName||p.first_name||'')+' '+(p.lastName||p.last_name||''))}">${escHtml((p.firstName||p.first_name||'')+' '+(p.lastName||p.last_name||''))} ${p.credentials ? '('+escHtml(p.credentials)+')' : ''}</option>`).join('')}
+                ${providers.map(p => `<option value="${p.id}" data-name="${escAttr((p.firstName||p.first_name||'')+' '+(p.lastName||p.last_name||''))}" data-creds="${escAttr(p.credentials||'')}">${escHtml((p.firstName||p.first_name||'')+' '+(p.lastName||p.last_name||''))} ${p.credentials ? '('+escHtml(p.credentials)+')' : ''}</option>`).join('')}
               </select>
             </div>
             <div class="auth-field" style="margin:0;"><label>Date of Service *</label><input type="date" id="rcm-claim-dos" class="form-control"></div>
@@ -904,6 +904,11 @@ async function renderRcmPage() {
             <div class="auth-field" style="margin:0;"><label>Authorization #</label><input type="text" id="rcm-claim-auth" class="form-control" placeholder="Auth number"></div>
             <div class="auth-field" style="margin:0;"><label>Submitted Date</label><input type="date" id="rcm-claim-submitted" class="form-control"></div>
             <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Notes</label><textarea id="rcm-claim-notes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
+          </div>
+          <!-- Modifier Suggestions -->
+          <div id="rcm-claim-modifier-hints" style="display:none;margin-top:12px;padding:10px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">
+            <div style="font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;margin-bottom:4px;">Suggested Modifiers</div>
+            <div id="rcm-claim-modifier-hints-body" style="font-size:12px;color:var(--gray-700);line-height:1.6;"></div>
           </div>
         </div>
         <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);"><button class="btn" onclick="document.getElementById('rcm-claim-modal').classList.remove('active')">Cancel</button><button class="btn btn-primary" onclick="window.app.saveRcmClaim()">Save Claim</button></div>

@@ -11541,6 +11541,25 @@ function handleNppesProxy(payload) {
       await renderRcmPage();
     } catch (e) { showToast('Error: ' + e.message); }
   },
+  updateClaimModifierHints() {
+    const hintsBox = document.getElementById('rcm-claim-modifier-hints');
+    const hintsBody = document.getElementById('rcm-claim-modifier-hints-body');
+    if (!hintsBox || !hintsBody) return;
+    const provSel = document.getElementById('rcm-claim-provider');
+    const payerSel = document.getElementById('rcm-claim-payer');
+    const provOpt = provSel?.selectedOptions[0];
+    const provName = (provOpt?.dataset?.name || '') + ' ' + (provOpt?.dataset?.creds || '');
+    const payerVal = payerSel?.value === '__other__' ? (document.getElementById('rcm-claim-payer-other')?.value || '') : (payerSel?.value || '');
+    if (!provName.trim() && !payerVal.trim()) { hintsBox.style.display = 'none'; return; }
+    const suggestions = this.suggestModifiers({ provider_name: provName, payer_name: payerVal });
+    if (suggestions.length === 0) { hintsBox.style.display = 'none'; return; }
+    const confColors = { high: '#16a34a', medium: '#d97706', info: '#6b7280' };
+    hintsBody.innerHTML = suggestions.map(s => {
+      const color = confColors[s.confidence] || '#6b7280';
+      return `<div style="margin-bottom:2px;"><code style="font-weight:700;color:var(--brand-700);background:var(--brand-50,#eff6ff);padding:1px 6px;border-radius:3px;">${escHtml(s.modifier)}</code> <span style="color:var(--gray-600);">${escHtml(s.reason)}</span> <span style="font-size:10px;color:${color};font-weight:600;">${escHtml(s.confidence).toUpperCase()}</span></div>`;
+    }).join('');
+    hintsBox.style.display = 'block';
+  },
   async deleteRcmClaim(id) {
     if (!await appConfirm('Delete this claim?')) return;
     try { await store.deleteRcmClaim(id); showToast('Claim deleted'); await renderRcmPage(); } catch (e) { showToast('Error: ' + e.message); }
@@ -12251,6 +12270,65 @@ function handleNppesProxy(payload) {
       showToast(`Analysis complete: ${underpaid.length} underpaid ($${totalUnderpaid.toFixed(2)}), ${results.filter(r=>r.flag==='ok').length} correct`);
     } catch (e) { showToast('Error: ' + e.message); }
   },
+  // ── Modifier Intelligence: Auto-Suggest ──
+  suggestModifiers(claimData) {
+    const suggestions = [];
+    const provider = (claimData.provider_name || claimData.providerName || '').toUpperCase();
+    const payer = (claimData.payer_name || claimData.payerName || '').toUpperCase();
+    const cpt = (claimData.cpt_code || claimData.cptCode || '').toString();
+    const placeOfService = (claimData.place_of_service || claimData.placeOfService || '').toString();
+    const isTelehealth = placeOfService === '10' || placeOfService === '02' || (claimData.telehealth === true);
+
+    // Provider credential-based modifiers
+    const credentialPatterns = {
+      HO: [/\bLCSW\b/, /\bLPC\b/, /\bLMFT\b/, /\bLMHC\b/, /\bLISW\b/, /\bLCPC\b/],
+      HN: [/\bQBHP\b/, /\bBHT\b/, /\bBACHELOR/],
+      SA: [/\bNP\b/, /\bARNP\b/, /\bAPRN\b/, /\bNURSE PRACT/],
+    };
+    for (const [mod, patterns] of Object.entries(credentialPatterns)) {
+      if (patterns.some(p => p.test(provider))) {
+        if (mod === 'SA') suggestions.push({ modifier: 'SA', reason: 'NP/ARNP provider — some payers require SA', confidence: 'medium' });
+        else if (mod === 'HO') suggestions.push({ modifier: 'HO', reason: "Master's-level clinician (" + provider.match(/LCSW|LPC|LMFT|LMHC|LISW|LCPC/)?.[0] + ')', confidence: 'high' });
+        else if (mod === 'HN') suggestions.push({ modifier: 'HN', reason: "Bachelor's-level clinician", confidence: 'high' });
+      }
+    }
+
+    // Telehealth modifiers
+    const telehealthCpts = ['90837','90834','90832','90791','90792','90846','90847','90853','90863','99212','99213','99214','99215'];
+    if (isTelehealth || (cpt && telehealthCpts.includes(cpt) && isTelehealth)) {
+      suggestions.push({ modifier: 'GT', reason: 'Telehealth session via interactive video', confidence: 'high' });
+    }
+
+    // Group therapy
+    if (cpt === '90853') {
+      suggestions.push({ modifier: 'HQ', reason: 'Group therapy code requires HQ modifier', confidence: 'high' });
+    }
+
+    // FL Blue MAT / substance abuse
+    const isFlBlue = /FL.*BLUE|FLORIDA.*BLUE|BLUE.*FLORIDA|BCBS.*FL|BCBSFL/i.test(payer);
+    const matEMCodes = ['99212','99213','99214','99215','99202','99203','99204','99205'];
+    if (isFlBlue && matEMCodes.includes(cpt)) {
+      suggestions.push({ modifier: 'HF', reason: 'FL Blue may require HF for MAT/substance abuse E/M services', confidence: 'medium' });
+    }
+
+    // Medicare NP modifier
+    const isMedicare = /MEDICARE/i.test(payer);
+    if (isMedicare && /\bNP\b|\bARNP\b|\bAPRN\b/.test(provider)) {
+      suggestions.push({ modifier: 'SA', reason: 'Medicare requires SA modifier for NP services', confidence: 'high' });
+    }
+
+    // Remove HO/HN for Medicare (they don't accept these)
+    if (isMedicare) {
+      const filtered = suggestions.filter(s => s.modifier !== 'HO' && s.modifier !== 'HN');
+      if (filtered.length !== suggestions.length) {
+        filtered.push({ modifier: '—', reason: 'Medicare does not accept HO/HN modifiers', confidence: 'info' });
+      }
+      return filtered;
+    }
+
+    return suggestions;
+  },
+
   // ── Smart Claim Scrubber ──
   _scrubClaimList(claims, payerRules, feeSchedules) {
     const issues = [];
@@ -12322,12 +12400,24 @@ function handleNppesProxy(payload) {
         }
       });
       // e. Modifier Check
+      const provUpper = provider.toUpperCase();
+      const payerUpper = payer.toUpperCase();
+      const isLcswLpc = /\bLCSW\b|\bLPC\b|\bLMFT\b|\bLMHC\b|\bLISW\b|\bLCPC\b/.test(provUpper);
+      const isNpProvider = /\bNP\b|\bARNP\b|\bAPRN\b/.test(provUpper);
+      const isMedicarePayer = /MEDICARE/i.test(payer);
+      const isFlBluePayer = /FL.*BLUE|FLORIDA.*BLUE|BLUE.*FLORIDA|BCBS.*FL|BCBSFL/i.test(payer);
+      const matEMCodes = ['99212','99213','99214','99215','99202','99203','99204','99205'];
       sls.forEach(sl => {
         const cpt = sl.cptCode || sl.cpt_code || ''; const mods = (sl.modifiers || sl.modifier || '').toString().toUpperCase();
         if (telehealthCodes.includes(cpt) && !mods.includes('GT') && !mods.includes('95')) add('warning','Telehealth code '+cpt+' missing GT or 95 modifier','Add modifier GT or 95 if service was via telehealth');
         if (addOnCodes.includes(cpt)) { const hasPri = sls.some(o => { const oc = o.cptCode || o.cpt_code || ''; return oc !== cpt && primaryEMCodes.includes(oc); });
           if (!hasPri) add('error','Add-on code '+cpt+' without primary E/M or therapy code','Add-on codes require a primary procedure code on the same claim');
         }
+        // BH Modifier Intelligence checks
+        if (isLcswLpc && !mods.includes('HO') && !isMedicarePayer && cpt) add('warning','LCSW/LPC/LMFT/LMHC provider without HO modifier on '+cpt,'Add HO modifier for master\'s-level clinician services');
+        if (isNpProvider && !mods.includes('SA') && (isMedicarePayer || isFlBluePayer) && cpt) add('warning','NP/ARNP provider without SA modifier on '+cpt+' ('+payer+' may require)','Add SA modifier for nurse practitioner services');
+        if (cpt === '90853' && !mods.includes('HQ')) add('warning','Group therapy code 90853 missing HQ modifier','Add HQ modifier for group setting services');
+        if (isFlBluePayer && matEMCodes.includes(cpt) && !mods.includes('HF')) add('warning','FL Blue MAT E/M code '+cpt+' may need HF modifier','Add HF modifier if service is for substance abuse/MAT program');
       });
       // f. Payer-Specific Rules
       const pr = rulesByPayer[payer.toLowerCase()];
@@ -12418,7 +12508,7 @@ function handleNppesProxy(payload) {
               <div style="font-size:13px;color:var(--gray-500);">No errors or warnings found across ${claims.length} unpaid claim${claims.length !== 1 ? 's' : ''}.</div>
             </div>` : ''}
             <div style="margin-top:16px;padding:14px;background:var(--gray-50);border-radius:8px;font-size:12px;color:var(--gray-600);">
-              <strong>Methodology:</strong> Validates claims for missing fields, timely filing risk (using payer rules), charge accuracy (vs fee schedules), duplicate detection (same patient + DOS + CPT), modifier requirements (telehealth GT/95, add-on codes), and payer-specific rules (auth requirements). Only unpaid claims (draft, pending, submitted, acknowledged, appealed) are scrubbed.
+              <strong>Methodology:</strong> Validates claims for missing fields, timely filing risk (using payer rules), charge accuracy (vs fee schedules), duplicate detection (same patient + DOS + CPT), modifier requirements (telehealth GT/95, add-on codes, BH credential modifiers HO/HN/SA, group therapy HQ, substance abuse HF), and payer-specific rules (auth requirements, FL Blue MAT, Medicare modifier restrictions). Only unpaid claims (draft, pending, submitted, acknowledged, appealed) are scrubbed.
             </div>
           </div>
         </div>`;

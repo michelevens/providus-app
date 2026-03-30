@@ -522,4 +522,130 @@ async function renderAuthorizationsTab(body) {
   `;
 }
 
-export { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection, renderPayerIntelligenceTab, renderProviderFeedbackTab, renderAuthorizationsTab };
+// ═══════════════════════════════════════════════════
+// MODIFIER GUIDE TAB — Behavioral Health Modifier Intelligence
+// ═══════════════════════════════════════════════════
+async function renderModifierGuideTab(body) {
+  let payerRules = [];
+  try { payerRules = await store.getPayerRules(); } catch (e) {}
+  if (!Array.isArray(payerRules)) payerRules = [];
+
+  const modifiers = [
+    { code: 'GT', name: 'Telehealth (via video)', when: 'Telehealth sessions via interactive video', providers: 'All', example: '90837-GT' },
+    { code: '95', name: 'Synchronous Telehealth', when: 'Alternative to GT for telehealth', providers: 'All', example: '90837-95' },
+    { code: 'HO', name: "Master's Level", when: "Services by master's-level clinician", providers: 'LCSW, LPC, LMFT, LMHC', example: '90834-HO' },
+    { code: 'HN', name: "Bachelor's Level", when: "Services by bachelor's-level clinician", providers: 'QBHP, BHT', example: '90834-HN' },
+    { code: 'HQ', name: 'Group Setting', when: 'Services in a group setting', providers: 'All', example: '90853-HQ' },
+    { code: 'XE', name: 'Separate Encounter', when: 'Distinct encounter on same day', providers: 'All', example: '90837-XE' },
+    { code: 'XS', name: 'Separate Structure', when: 'Different anatomical structure/organ', providers: 'All', example: '—' },
+    { code: '25', name: 'Significant E/M', when: 'Separate E/M service same day as procedure', providers: 'MD, DO, NP, PA', example: '99213-25' },
+    { code: '76', name: 'Repeat Procedure', when: 'Same procedure, same provider, same day', providers: 'All', example: '—' },
+    { code: '59', name: 'Distinct Procedure', when: 'Different procedure/service', providers: 'All', example: '—' },
+    { code: 'HF', name: 'Substance Abuse', when: 'Substance use disorder program', providers: 'All', example: '99213-HF' },
+    { code: 'SA', name: 'Nurse Practitioner', when: 'Services by NP (some payers require)', providers: 'NP, ARNP, APRN', example: '90837-SA' },
+  ];
+
+  // Build payer-specific rules from payer intel data if available, otherwise show defaults
+  const defaultPayerModRules = [
+    { payer: 'FL Blue / Florida Blue', rules: 'Requires GT or 95 for telehealth. HF required for MAT services. Accepts HO for LCSW/LPC.' },
+    { payer: 'Medicare', rules: 'Does not accept HO/HN modifiers. Uses SA for Nurse Practitioner services. 95 preferred over GT for telehealth.' },
+    { payer: 'Medicaid', rules: 'Requires HO for LCSW/LPC providers. HN required for supervised bachelor\'s-level clinicians.' },
+  ];
+
+  // Merge with any known payer rules
+  const knownPayers = {};
+  payerRules.forEach(r => { const n = (r.payer_name || r.payerName || '').trim(); if (n) knownPayers[n] = r; });
+
+  body.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:16px;justify-content:flex-end;">
+      <button class="btn btn-sm btn-primary" onclick="window.app.scrubClaims()" title="Run claim scrubber with modifier checks">Run Claim Scrubber</button>
+    </div>
+
+    <!-- BH Modifier Reference Table -->
+    <div class="card rcm-card rcm-table">
+      <div class="card-header"><h3>Behavioral Health Modifier Reference</h3></div>
+      <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+        <thead><tr><th>Modifier</th><th>Name</th><th>When to Use</th><th>Provider Types</th><th>Example</th></tr></thead>
+        <tbody>
+          ${modifiers.map(m => `<tr>
+            <td><code style="font-size:13px;font-weight:700;color:var(--brand-700);background:var(--brand-50,#eff6ff);padding:2px 8px;border-radius:4px;">${escHtml(m.code)}</code></td>
+            <td style="font-weight:600;">${escHtml(m.name)}</td>
+            <td class="text-sm">${escHtml(m.when)}</td>
+            <td class="text-sm">${escHtml(m.providers)}</td>
+            <td style="font-family:monospace;font-size:12px;color:var(--gray-600);">${escHtml(m.example)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div></div>
+    </div>
+
+    <!-- Payer-Specific Modifier Rules -->
+    <div class="card rcm-card" style="margin-top:16px;">
+      <div class="card-header"><h3>Payer-Specific Modifier Rules</h3></div>
+      <div class="card-body" style="padding:14px;">
+        ${defaultPayerModRules.map(r => `
+          <div style="padding:10px 14px;margin-bottom:8px;background:var(--gray-50);border-radius:8px;border-left:3px solid var(--brand-600);">
+            <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:var(--gray-800);">${escHtml(r.payer)}</div>
+            <div style="font-size:12px;color:var(--gray-600);line-height:1.5;">${escHtml(r.rules)}</div>
+          </div>
+        `).join('')}
+        ${Object.keys(knownPayers).length > 0 ? `
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--gray-200);">
+            <div style="font-weight:600;font-size:12px;color:var(--gray-500);margin-bottom:8px;text-transform:uppercase;">Additional Configured Payers</div>
+            ${Object.entries(knownPayers).map(([name, r]) => `
+              <div style="padding:8px 14px;margin-bottom:6px;background:var(--gray-50);border-radius:8px;border-left:3px solid var(--gray-400);">
+                <div style="font-weight:700;font-size:13px;color:var(--gray-800);">${escHtml(name)}</div>
+                <div style="font-size:12px;color:var(--gray-500);margin-top:2px;">
+                  Timely filing: ${r.timely_filing_days || r.timelyFilingDays ? (r.timely_filing_days || r.timelyFilingDays) + ' days' : '—'}
+                  ${(r.auth_required_cpts || r.authRequiredCpts || []).length > 0 ? ' | Auth required for: ' + escHtml((r.auth_required_cpts || r.authRequiredCpts).join(', ')) : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+    </div>
+
+    <!-- Quick Reference: Common Scenarios -->
+    <div class="card rcm-card" style="margin-top:16px;">
+      <div class="card-header"><h3>Common BH Billing Scenarios</h3></div>
+      <div class="card-body" style="padding:14px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;">
+          <div style="padding:12px;background:#eff6ff;border-radius:8px;">
+            <div style="font-weight:700;font-size:12px;color:#1d4ed8;margin-bottom:6px;">Telehealth Session (LCSW)</div>
+            <div style="font-size:12px;color:var(--gray-600);line-height:1.6;">
+              CPT: 90837 | Modifiers: GT, HO<br>
+              <code style="font-size:11px;">90837-GT-HO</code> for master's-level clinician via video
+            </div>
+          </div>
+          <div style="padding:12px;background:#f0fdf4;border-radius:8px;">
+            <div style="font-weight:700;font-size:12px;color:#15803d;margin-bottom:6px;">Group Therapy</div>
+            <div style="font-size:12px;color:var(--gray-600);line-height:1.6;">
+              CPT: 90853 | Modifier: HQ<br>
+              <code style="font-size:11px;">90853-HQ</code> always required for group sessions
+            </div>
+          </div>
+          <div style="padding:12px;background:#fefce8;border-radius:8px;">
+            <div style="font-weight:700;font-size:12px;color:#a16207;margin-bottom:6px;">NP Visit + Therapy Same Day</div>
+            <div style="font-size:12px;color:var(--gray-600);line-height:1.6;">
+              E/M: 99213-25-SA | Therapy: 90837<br>
+              <code style="font-size:11px;">25</code> for separate E/M, <code style="font-size:11px;">SA</code> for NP
+            </div>
+          </div>
+          <div style="padding:12px;background:#fdf2f8;border-radius:8px;">
+            <div style="font-weight:700;font-size:12px;color:#be185d;margin-bottom:6px;">MAT / Substance Abuse (FL Blue)</div>
+            <div style="font-size:12px;color:var(--gray-600);line-height:1.6;">
+              E/M: 99213-HF | Add HF modifier<br>
+              <code style="font-size:11px;">99213-HF</code> required by FL Blue for MAT services
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;padding:14px;background:var(--gray-50);border-radius:8px;font-size:12px;color:var(--gray-600);">
+      <strong>Note:</strong> Modifier requirements vary by payer, state, and plan type. The claim scrubber automatically checks for missing modifiers when you run it. Suggested modifiers also appear when creating or editing claims. Always verify modifier requirements with the specific payer contract.
+    </div>
+  `;
+}
+
+export { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection, renderPayerIntelligenceTab, renderProviderFeedbackTab, renderAuthorizationsTab, renderModifierGuideTab };

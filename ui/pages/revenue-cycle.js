@@ -11,7 +11,7 @@ export { CLAIM_STATUSES, DENIAL_CATEGORIES, DENIAL_STATUSES, CPT_CODES, ICD_CODE
 // Import renderers from sub-modules
 import { renderBillingServicesPage, renderBillingClientDetail, TASK_CATEGORIES, ACTIVITY_TYPES } from './billing-services.js';
 import { renderRcmPage } from './rcm.js';
-import { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection, renderPayerIntelligenceTab, renderProviderFeedbackTab, renderAuthorizationsTab } from './rcm-phase2.js';
+import { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection, renderPayerIntelligenceTab, renderProviderFeedbackTab, renderAuthorizationsTab, renderModifierGuideTab } from './rcm-phase2.js';
 
 if (typeof window._rcTab === 'undefined') window._rcTab = 'dashboard';
 
@@ -24,7 +24,7 @@ async function renderRevenueCyclePage() {
   // Determine which sub-module to render based on tab
   const bsTabs = ['dashboard', 'clients', 'activity', 'financials'];
   const rcmTabs = ['claims', 'charges', 'denials', 'payments', 'ar'];
-  const phase2Tabs = ['fee-schedules', 'eligibility', 'statements', 'payer-intel', 'provider-feedback', 'authorizations'];
+  const phase2Tabs = ['fee-schedules', 'eligibility', 'statements', 'payer-intel', 'provider-feedback', 'authorizations', 'modifier-guide'];
 
   // Set the sub-module tab state
   if (bsTabs.includes(tab)) {
@@ -43,6 +43,7 @@ async function renderRevenueCyclePage() {
     else if (tab === 'payer-intel') await renderPayerIntelligenceTab(body);
     else if (tab === 'provider-feedback') await renderProviderFeedbackTab(body);
     else if (tab === 'authorizations') await renderAuthorizationsTab(body);
+    else if (tab === 'modifier-guide') await renderModifierGuideTab(body);
   } else if (bsTabs.includes(tab)) {
     await renderBillingServicesPage();
   } else {
@@ -87,6 +88,7 @@ async function renderRevenueCyclePage() {
       <button class="rc-tab ${tab === 'payer-intel' ? 'active' : ''}" onclick="window.app.rcSwitchTab('payer-intel')">Payer Intel</button>
       <button class="rc-tab ${tab === 'provider-feedback' ? 'active' : ''}" onclick="window.app.rcSwitchTab('provider-feedback')">Feedback</button>
       <button class="rc-tab ${tab === 'authorizations' ? 'active' : ''}" onclick="window.app.rcSwitchTab('authorizations')">Authorizations</button>
+      <button class="rc-tab ${tab === 'modifier-guide' ? 'active' : ''}" onclick="window.app.rcSwitchTab('modifier-guide')">Modifier Guide</button>
       <button class="rc-tab ${tab === 'tasks' ? 'active' : ''}" onclick="window.app.rcSwitchTab('tasks')">Tasks (${taskCount})</button>
       <button class="rc-tab ${tab === 'activity' ? 'active' : ''}" onclick="window.app.rcSwitchTab('activity')">Activity</button>
       <button class="rc-tab ${tab === 'financials' ? 'active' : ''}" onclick="window.app.rcSwitchTab('financials')">Financials</button>
