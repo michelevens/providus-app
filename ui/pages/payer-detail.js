@@ -108,6 +108,14 @@ export async function renderPayerDetailPage(payerId) {
   if (tags.includes('must_have') && payerApps.length === 0) insights.push({ type: 'opportunity', text: 'This is a must-have payer but you have no applications. High priority to begin credentialing.' });
   const openFollowups = payerFollowups.filter(f => f.status !== 'completed' && f.status !== 'done');
   if (openFollowups.length > 0) insights.push({ type: 'action', text: `${openFollowups.length} open follow-up(s) pending for this payer.` });
+  // EDI/ERA/EFT insights
+  const ediStatus = payer.ediStatus || payer.edi_status;
+  const eraStatus = payer.eraStatus || payer.era_status;
+  const eftStatus = payer.eftStatus || payer.eft_status;
+  if (!ediStatus && payerClaims.length > 0) insights.push({ type: 'alert', text: 'EDI not enrolled — claims may be submitted manually. Set up electronic claim submission for faster processing.' });
+  if (!eraStatus && claimsPaid > 0) insights.push({ type: 'warning', text: 'ERA not enrolled — payment posting is likely manual. Set up electronic remittance for auto-posting.' });
+  if (!eftStatus && claimsPaid > 0) insights.push({ type: 'warning', text: 'EFT not enrolled — payments may arrive by check. Set up direct deposit for faster funding.' });
+  if (ediStatus === 'enrolled' && eraStatus === 'enrolled' && eftStatus === 'enrolled') insights.push({ type: 'good', text: 'Full electronic billing setup — EDI, ERA, and EFT all enrolled.' });
 
   const insightColors = { alert: '#dc2626', warning: '#d97706', opportunity: '#2563eb', info: '#0891b2', good: '#16a34a', action: '#7c3aed' };
   const insightIcons = { alert: '&#9888;', warning: '&#9888;', opportunity: '&#10024;', info: '&#8505;', good: '&#10003;', action: '&#9889;' };
@@ -296,6 +304,49 @@ export async function renderPayerDetailPage(payerId) {
           <strong>SLA:</strong> ${sla.minDays}–${sla.maxDays} days (avg ${sla.avgDays}d).
           ${isFederal ? 'Federal program — one enrollment covers all licensed states.' : ''}
         </div>
+      </div>
+    </div>
+
+    <!-- EDI / ERA / EFT Enrollment -->
+    <div class="card pd-section" style="border-radius:16px;overflow:hidden;border-left:4px solid #7c3aed;">
+      <div class="card-header">
+        <h3>EDI / ERA / EFT Enrollment</h3>
+        <button class="btn btn-sm" onclick="window.app.editPayerEdi('${payerId}')">Edit</button>
+      </div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px;">
+          ${[
+            { key: 'edi', label: 'EDI (Claims)', desc: 'Electronic claim submission (837)', field: payer.ediStatus || payer.edi_status },
+            { key: 'era', label: 'ERA (Remittance)', desc: 'Electronic remittance advice (835)', field: payer.eraStatus || payer.era_status },
+            { key: 'eft', label: 'EFT (Payment)', desc: 'Electronic funds transfer', field: payer.eftStatus || payer.eft_status },
+          ].map(e => {
+            const status = e.field || 'not_enrolled';
+            const colors = { enrolled: { bg: '#dcfce7', border: '#22c55e', text: '#16a34a', label: 'Enrolled' }, pending: { bg: '#fef3c7', border: '#f59e0b', text: '#b45309', label: 'Pending' }, not_enrolled: { bg: '#fee2e2', border: '#ef4444', text: '#dc2626', label: 'Not Enrolled' } };
+            const c = colors[status] || colors.not_enrolled;
+            return `<div style="padding:16px;border:2px solid ${c.border};border-radius:14px;background:${c.bg};">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <div style="font-weight:700;font-size:14px;color:var(--gray-800);">${e.label}</div>
+                <span style="padding:3px 10px;border-radius:8px;font-size:11px;font-weight:700;background:${c.border};color:#fff;">${c.label}</span>
+              </div>
+              <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;">${e.desc}</div>
+              ${status === 'enrolled' ? `<div style="font-size:11px;color:${c.text};">Effective: ${formatDateDisplay(payer[e.key + 'EffectiveDate'] || payer[e.key + '_effective_date']) || '—'}</div>` : ''}
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+          <div style="padding:12px 16px;border:1px solid var(--gray-200);border-radius:10px;background:var(--gray-50);">
+            <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:4px;">CLEARINGHOUSE</div>
+            <div style="font-size:14px;font-weight:600;color:var(--gray-800);">${escHtml(payer.clearinghouse || payer.clearingHouse || '—')}</div>
+          </div>
+          <div style="padding:12px 16px;border:1px solid var(--gray-200);border-radius:10px;background:var(--gray-50);">
+            <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:4px;">EDI PAYER ID</div>
+            <div style="font-size:14px;font-weight:600;font-family:monospace;color:var(--gray-800);">${escHtml(payer.ediPayerId || payer.edi_payer_id || '—')}</div>
+          </div>
+        </div>
+        ${!(payer.ediStatus || payer.edi_status) && !(payer.eraStatus || payer.era_status) && !(payer.eftStatus || payer.eft_status) ? `
+        <div style="margin-top:14px;padding:10px 14px;background:#fef3c7;border-radius:10px;font-size:12px;color:#b45309;font-weight:500;">
+          No EDI/ERA/EFT enrollment data on file. Click "Edit" to set up electronic billing enrollment for this payer.
+        </div>` : ''}
       </div>
     </div>
 

@@ -648,6 +648,15 @@ class Store {
         return result.data || result;
     }
 
+    async updatePayer(payerId, data) {
+        const result = await this._fetch(`${CONFIG.API_URL}/payers/${payerId}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+        this._invalidateCache('payers');
+        return result.data || result;
+    }
+
     async getPayerPlans(payerId) {
         const result = await this._fetch(`${CONFIG.API_URL}/payers/${payerId}/plans`);
         return result.data || result;

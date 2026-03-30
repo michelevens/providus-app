@@ -5267,6 +5267,7 @@ async function renderPayers() {
                 <th>Payer</th>
                 <th>Parent Org</th>
                 <th>Avg Cred Days</th>
+                <th>EDI/ERA/EFT</th>
                 <th>States</th>
                 <th>Tags</th>
                 <th>Notes</th>
@@ -5278,6 +5279,13 @@ async function renderPayers() {
                   <td><strong><a href="#" onclick="event.preventDefault();window.app.viewPayerDetail('${p.id}')" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--gray-300);" onmouseover="this.style.color='var(--brand-600)'" onmouseout="this.style.color='inherit'">${escHtml(p.name)}</a></strong></td>
                   <td>${escHtml(p.parentOrg) || '-'}</td>
                   <td>${p.avgCredDays ? p.avgCredDays + ' days' : '-'}</td>
+                  <td style="text-align:center;">${(() => {
+                    const edi = p.ediStatus || p.edi_status;
+                    const era = p.eraStatus || p.era_status;
+                    const eft = p.eftStatus || p.eft_status;
+                    const dot = (s) => s === 'enrolled' ? '<span style="color:#22c55e;" title="Enrolled">&#9679;</span>' : s === 'pending' ? '<span style="color:#f59e0b;" title="Pending">&#9679;</span>' : '<span style="color:#e5e7eb;" title="Not enrolled">&#9679;</span>';
+                    return dot(edi) + ' ' + dot(era) + ' ' + dot(eft);
+                  })()}</td>
                   <td class="text-sm">${Array.isArray(p.states) ? p.states.join(', ') : '-'}</td>
                   <td>${renderPayerTags(p.tags)}</td>
                   <td class="text-sm text-muted">${escHtml(p.notes) || ''}</td>
@@ -7395,6 +7403,77 @@ window.app = {
   shareProviderProfile(providerId) {
     window._selectedProviderId = providerId;
     navigateTo('provider-profile-share');
+  },
+  async editPayerEdi(payerId) {
+    const allPayers = await store.getPayers();
+    const payer = allPayers.find(p => String(p.id) === String(payerId));
+    if (!payer) { showToast('Payer not found'); return; }
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:580px;">
+        <div class="modal-header"><h3>EDI / ERA / EFT — ${escHtml(payer.name)}</h3><button class="modal-close" onclick="this.closest('.modal-backdrop').remove()">&times;</button></div>
+        <div class="modal-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field"><label>EDI Status (Claims 837)</label>
+              <select class="form-control" id="edi-status"><option value="">Not Enrolled</option><option value="enrolled" ${(payer.ediStatus||payer.edi_status)==='enrolled'?'selected':''}>Enrolled</option><option value="pending" ${(payer.ediStatus||payer.edi_status)==='pending'?'selected':''}>Pending</option></select>
+            </div>
+            <div class="auth-field"><label>EDI Effective Date</label>
+              <input type="date" class="form-control" id="edi-effective" value="${payer.ediEffectiveDate||payer.edi_effective_date||''}">
+            </div>
+            <div class="auth-field"><label>ERA Status (Remittance 835)</label>
+              <select class="form-control" id="era-status"><option value="">Not Enrolled</option><option value="enrolled" ${(payer.eraStatus||payer.era_status)==='enrolled'?'selected':''}>Enrolled</option><option value="pending" ${(payer.eraStatus||payer.era_status)==='pending'?'selected':''}>Pending</option></select>
+            </div>
+            <div class="auth-field"><label>ERA Effective Date</label>
+              <input type="date" class="form-control" id="era-effective" value="${payer.eraEffectiveDate||payer.era_effective_date||''}">
+            </div>
+            <div class="auth-field"><label>EFT Status (Direct Deposit)</label>
+              <select class="form-control" id="eft-status"><option value="">Not Enrolled</option><option value="enrolled" ${(payer.eftStatus||payer.eft_status)==='enrolled'?'selected':''}>Enrolled</option><option value="pending" ${(payer.eftStatus||payer.eft_status)==='pending'?'selected':''}>Pending</option></select>
+            </div>
+            <div class="auth-field"><label>EFT Effective Date</label>
+              <input type="date" class="form-control" id="eft-effective" value="${payer.eftEffectiveDate||payer.eft_effective_date||''}">
+            </div>
+            <div class="auth-field"><label>Clearinghouse</label>
+              <select class="form-control" id="edi-clearinghouse">
+                <option value="">Select...</option>
+                ${['Availity','Change Healthcare','Trizetto','Office Ally','Waystar','Claim.MD','Payer Direct'].map(c => `<option value="${c}" ${(payer.clearinghouse||payer.clearingHouse)===c?'selected':''}>${c}</option>`).join('')}
+              </select>
+            </div>
+            <div class="auth-field"><label>EDI Payer ID</label>
+              <input type="text" class="form-control" id="edi-payer-id" placeholder="e.g. 62308" value="${escAttr(payer.ediPayerId||payer.edi_payer_id||'')}">
+            </div>
+          </div>
+          <div class="auth-field" style="margin-top:8px;"><label>Notes</label>
+            <textarea class="form-control" id="edi-notes" rows="2" placeholder="Enrollment notes, contact info, reference numbers...">${escHtml(payer.ediNotes||payer.edi_notes||'')}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="this.closest('.modal-backdrop').remove()">Cancel</button>
+          <button class="btn btn-primary" id="edi-save-btn">Save</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+
+    document.getElementById('edi-save-btn').onclick = async () => {
+      try {
+        await store.updatePayer(payerId, {
+          ediStatus: document.getElementById('edi-status').value || null,
+          ediEffectiveDate: document.getElementById('edi-effective').value || null,
+          eraStatus: document.getElementById('era-status').value || null,
+          eraEffectiveDate: document.getElementById('era-effective').value || null,
+          eftStatus: document.getElementById('eft-status').value || null,
+          eftEffectiveDate: document.getElementById('eft-effective').value || null,
+          clearinghouse: document.getElementById('edi-clearinghouse').value || null,
+          ediPayerId: document.getElementById('edi-payer-id').value || null,
+          ediNotes: document.getElementById('edi-notes').value || null,
+        });
+        modal.remove();
+        showToast('EDI/ERA/EFT enrollment updated');
+        store.clearCache();
+        await renderPayerDetailPage(payerId);
+      } catch (e) { showToast('Failed: ' + e.message); }
+    };
   },
   copyProviderProfileLink(providerId) {
     const url = `${window.location.origin}${window.location.pathname}#provider-profile-share&id=${providerId}`;
