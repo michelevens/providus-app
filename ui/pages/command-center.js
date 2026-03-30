@@ -13,6 +13,8 @@ const CC_TABS = [
   { key: 'client-profitability', label: 'Client Profitability' },
   { key: 'payer-performance',    label: 'Payer Performance' },
   { key: 'provider-productivity', label: 'Provider Productivity' },
+  { key: 'rate-analysis',         label: 'Rate Analysis' },
+  { key: 'sla-tracking',          label: 'SLA Tracking' },
 ];
 
 function _ccMoney(n) {
@@ -44,6 +46,10 @@ export async function renderCommandCenterPage() {
     await _renderPayerPerformance(body);
   } else if (tab === 'provider-productivity') {
     await _renderProviderProductivity(body);
+  } else if (tab === 'rate-analysis') {
+    await _renderRateAnalysis(body);
+  } else if (tab === 'sla-tracking') {
+    await _renderSlaTracking(body);
   }
 
   _injectTabBar(body, tab);
@@ -757,4 +763,492 @@ async function _renderProviderProductivity(body) {
       </div>
     </div>
   `;
+}
+
+/* ═══════════════════════════════════════════════════
+   SLA TRACKING TAB
+   ═══════════════════════════════════════════════════ */
+async function _renderSlaTracking(body) {
+  let claims = [], denials = [], tasks = [], bsClients = [], billingTasks = [];
+  const [r0, r1, r2, r3, r4] = await Promise.allSettled([
+    store.getRcmClaims().catch(() => []),
+    store.getRcmDenials().catch(() => []),
+    store.getAll('tasks'),
+    store.getBillingClients().catch(() => []),
+    store.getBillingTasks().catch(() => []),
+  ]);
+  if (r0.status === 'fulfilled') claims = Array.isArray(r0.value) ? r0.value : [];
+  if (r1.status === 'fulfilled') denials = Array.isArray(r1.value) ? r1.value : [];
+  if (r2.status === 'fulfilled') tasks = r2.value || [];
+  if (r3.status === 'fulfilled') bsClients = Array.isArray(r3.value) ? r3.value : [];
+  if (r4.status === 'fulfilled') billingTasks = Array.isArray(r4.value) ? r4.value : [];
+
+  const allTasks = [
+    ...(Array.isArray(tasks) ? tasks : []),
+    ...(Array.isArray(billingTasks) ? billingTasks : []),
+  ];
+
+  const today = new Date();
+
+  // ── Helper: get client name ──
+  const clientMap = {};
+  bsClients.forEach(c => {
+    clientMap[c.id] = c.organizationName || c.organization_name || c.name || 'Unknown';
+  });
+
+  // ── SLA 1: DOS to Claim Submission ──
+  const dosToSubmit = [];
+  claims.forEach(c => {
+    const dos = c.dateOfService || c.date_of_service;
+    const subDate = c.submittedDate || c.submitted_date || c.createdAt || c.created_at;
+    if (!dos || !subDate) return;
+    const days = _ccDaysBetween(dos, subDate);
+    if (days !== null && days >= 0) {
+      dosToSubmit.push({ days, clientId: c.billingClientId || c.billing_client_id || '_unassigned', dos });
+    }
+  });
+  const avgDosToSubmit = dosToSubmit.length > 0 ? (dosToSubmit.reduce((s, x) => s + x.days, 0) / dosToSubmit.length) : null;
+
+  // ── SLA 2: Denial to Appeal Filed ──
+  const denialToAppeal = [];
+  denials.forEach(d => {
+    const appealStatus = d.appealStatus || d.appeal_status || '';
+    if (!appealStatus || appealStatus === 'not_appealed') return;
+    const denialDate = d.denialDate || d.denial_date || d.createdAt || d.created_at;
+    const appealDate = d.appealFiledDate || d.appeal_filed_date;
+    if (!denialDate || !appealDate) return;
+    const days = _ccDaysBetween(denialDate, appealDate);
+    if (days !== null && days >= 0) {
+      denialToAppeal.push({ days, clientId: d.billingClientId || d.billing_client_id || '_unassigned' });
+    }
+  });
+  const avgDenialToAppeal = denialToAppeal.length > 0 ? (denialToAppeal.reduce((s, x) => s + x.days, 0) / denialToAppeal.length) : null;
+
+  // ── SLA 3: Days in A/R (DOS to Payment) ──
+  const daysInAR = [];
+  claims.forEach(c => {
+    if (c.status !== 'paid') return;
+    const dos = c.dateOfService || c.date_of_service;
+    const pd = c.paidDate || c.paid_date;
+    if (!dos || !pd) return;
+    const days = _ccDaysBetween(dos, pd);
+    if (days !== null && days >= 0) {
+      daysInAR.push({ days, clientId: c.billingClientId || c.billing_client_id || '_unassigned', payer: c.payerName || c.payer_name || 'Unknown' });
+    }
+  });
+  const avgDaysInAR = daysInAR.length > 0 ? (daysInAR.reduce((s, x) => s + x.days, 0) / daysInAR.length) : null;
+
+  // ── SLA 4: Claim to First Payment (all claims with paid date) ──
+  const claimToPayment = [];
+  claims.forEach(c => {
+    const subDate = c.submittedDate || c.submitted_date || c.createdAt || c.created_at;
+    const pd = c.paidDate || c.paid_date;
+    if (!subDate || !pd) return;
+    const days = _ccDaysBetween(subDate, pd);
+    if (days !== null && days >= 0) {
+      claimToPayment.push({ days, clientId: c.billingClientId || c.billing_client_id || '_unassigned', payer: c.payerName || c.payer_name || 'Unknown' });
+    }
+  });
+  const avgClaimToPayment = claimToPayment.length > 0 ? (claimToPayment.reduce((s, x) => s + x.days, 0) / claimToPayment.length) : null;
+
+  // ── SLA 5: Task overdue metrics ──
+  const openTasks = allTasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled' && !t.completed && !t.isCompleted);
+  const overdueTasks = openTasks.filter(t => {
+    const dd = t.dueDate || t.due_date;
+    return dd && new Date(dd) < today;
+  });
+  const overdueCount = overdueTasks.length;
+  const overduePct = openTasks.length > 0 ? (overdueCount / openTasks.length * 100) : 0;
+
+  // Avg days overdue
+  let totalOverdueDays = 0;
+  overdueTasks.forEach(t => {
+    const dd = t.dueDate || t.due_date;
+    const days = _ccDaysBetween(dd, today.toISOString());
+    if (days !== null) totalOverdueDays += days;
+  });
+  const avgOverdueDays = overdueCount > 0 ? Math.round(totalOverdueDays / overdueCount) : 0;
+
+  // ── SLA Scorecard grading ──
+  let slaWarnings = 0;
+  let slaCritical = 0;
+  if (avgDosToSubmit !== null) { if (avgDosToSubmit > 5) slaCritical++; else if (avgDosToSubmit > 3) slaWarnings++; }
+  if (avgDenialToAppeal !== null) { if (avgDenialToAppeal > 10) slaCritical++; else if (avgDenialToAppeal > 5) slaWarnings++; }
+  if (avgDaysInAR !== null) { if (avgDaysInAR > 60) slaCritical++; else if (avgDaysInAR > 35) slaWarnings++; }
+  if (overduePct > 30) slaCritical++; else if (overduePct > 15) slaWarnings++;
+  if (avgClaimToPayment !== null) { if (avgClaimToPayment > 45) slaCritical++; else if (avgClaimToPayment > 30) slaWarnings++; }
+
+  let grade = 'A', gradeColor = '#16a34a', gradeBg = '#f0fdf4', gradeLabel = 'All SLAs Met';
+  if (slaCritical >= 2) { grade = 'D'; gradeColor = '#dc2626'; gradeBg = '#fef2f2'; gradeLabel = 'Critical SLA Failures'; }
+  else if (slaCritical >= 1) { grade = 'C'; gradeColor = '#ea580c'; gradeBg = '#fff7ed'; gradeLabel = 'Multiple SLAs Missed'; }
+  else if (slaWarnings >= 1) { grade = 'B'; gradeColor = '#d97706'; gradeBg = '#fffbeb'; gradeLabel = 'Most SLAs Met, Minor Warnings'; }
+
+  // ── Helper for SLA card status ──
+  function _slaStatus(value, warnThreshold, critThreshold, unit) {
+    if (value === null) return '<span style="font-size:11px;color:var(--gray-400);">No data</span>';
+    const v = Math.round(value * 10) / 10;
+    let color = '#16a34a', label = 'ON TARGET';
+    if (value > critThreshold) { color = '#dc2626'; label = 'CRITICAL'; }
+    else if (value > warnThreshold) { color = '#d97706'; label = 'WARNING'; }
+    return `<span style="font-size:24px;font-weight:800;color:${color};">${v}</span><span style="font-size:12px;color:var(--gray-500);margin-left:4px;">${escHtml(unit)}</span>
+            <div style="margin-top:4px;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:${color}20;color:${color};">${label}</span></div>`;
+  }
+
+  // ── Monthly SLA Trend ──
+  const monthlyData = {};
+  claims.forEach(c => {
+    const dos = c.dateOfService || c.date_of_service;
+    if (!dos) return;
+    const m = dos.toString().slice(0, 7); // YYYY-MM
+    if (!monthlyData[m]) monthlyData[m] = { claims: 0, submitDays: [], paidClaims: 0, arDays: [] };
+    monthlyData[m].claims++;
+    const subDate = c.submittedDate || c.submitted_date || c.createdAt || c.created_at;
+    if (subDate) {
+      const d = _ccDaysBetween(dos, subDate);
+      if (d !== null && d >= 0) monthlyData[m].submitDays.push(d);
+    }
+    if (c.status === 'paid') {
+      monthlyData[m].paidClaims++;
+      const pd = c.paidDate || c.paid_date;
+      if (pd) { const d = _ccDaysBetween(dos, pd); if (d !== null && d >= 0) monthlyData[m].arDays.push(d); }
+    }
+  });
+
+  // Denials worked per month
+  const monthlyDenials = {};
+  denials.forEach(d => {
+    const dt = d.denialDate || d.denial_date || d.createdAt || d.created_at;
+    if (!dt) return;
+    const m = dt.toString().slice(0, 7);
+    if (!monthlyDenials[m]) monthlyDenials[m] = { total: 0, worked: 0, workDays: [] };
+    monthlyDenials[m].total++;
+    const appealStatus = d.appealStatus || d.appeal_status || '';
+    const resolved = d.status === 'resolved' || d.status === 'closed';
+    if (appealStatus && appealStatus !== 'not_appealed' || resolved) {
+      monthlyDenials[m].worked++;
+      const denialDate = d.denialDate || d.denial_date || d.createdAt || d.created_at;
+      const resolveDate = d.resolvedDate || d.resolved_date || d.updatedAt || d.updated_at;
+      if (denialDate && resolveDate) {
+        const days = _ccDaysBetween(denialDate, resolveDate);
+        if (days !== null && days >= 0) monthlyDenials[m].workDays.push(days);
+      }
+    }
+  });
+
+  // Tasks per month
+  const monthlyTasks = {};
+  allTasks.forEach(t => {
+    const completedAt = t.completedAt || t.completed_at || (t.status === 'completed' ? (t.updatedAt || t.updated_at || '') : '');
+    if (!completedAt) return;
+    const m = completedAt.toString().slice(0, 7);
+    if (!monthlyTasks[m]) monthlyTasks[m] = { completed: 0, overdue: 0 };
+    monthlyTasks[m].completed++;
+    const dd = t.dueDate || t.due_date;
+    if (dd && new Date(completedAt) > new Date(dd)) monthlyTasks[m].overdue++;
+  });
+  // Also count currently overdue tasks by their due month
+  overdueTasks.forEach(t => {
+    const dd = t.dueDate || t.due_date;
+    if (!dd) return;
+    const m = dd.toString().slice(0, 7);
+    if (!monthlyTasks[m]) monthlyTasks[m] = { completed: 0, overdue: 0 };
+    monthlyTasks[m].overdue++;
+  });
+
+  const allMonths = [...new Set([...Object.keys(monthlyData), ...Object.keys(monthlyDenials), ...Object.keys(monthlyTasks)])].sort();
+  const recentMonths = allMonths.slice(-12);
+
+  // ── Task Performance by Category ──
+  const taskByCat = {};
+  allTasks.forEach(t => {
+    const cat = t.category || t.taskCategory || t.task_category || 'other';
+    if (!taskByCat[cat]) taskByCat[cat] = { total: 0, completed: 0, overdue: 0, completionDays: [] };
+    taskByCat[cat].total++;
+    const isCompleted = t.status === 'completed' || t.completed || t.isCompleted;
+    if (isCompleted) {
+      taskByCat[cat].completed++;
+      const created = t.createdAt || t.created_at || '';
+      const completedAt = t.completedAt || t.completed_at || t.updatedAt || t.updated_at || '';
+      if (created && completedAt) {
+        const d = _ccDaysBetween(created, completedAt);
+        if (d !== null) taskByCat[cat].completionDays.push(d);
+      }
+    } else {
+      const dd = t.dueDate || t.due_date;
+      if (dd && new Date(dd) < today) taskByCat[cat].overdue++;
+    }
+  });
+
+  const catLabels = {
+    charge_entry: 'Charge Entry', claim_submission: 'Claim Submission', claim_followup: 'Claim Follow-up',
+    denial_management: 'Denial Management', payment_posting: 'Payment Posting', eligibility: 'Eligibility',
+    authorization: 'Authorization', credentialing: 'Credentialing', other: 'Other',
+  };
+
+  // ── Per-Client SLA data ──
+  function _computeClientSLA(clientId) {
+    const cDos = dosToSubmit.filter(x => String(x.clientId) === String(clientId));
+    const cDenial = denialToAppeal.filter(x => String(x.clientId) === String(clientId));
+    const cAR = daysInAR.filter(x => String(x.clientId) === String(clientId));
+    const cPay = claimToPayment.filter(x => String(x.clientId) === String(clientId));
+    const cTasks = allTasks.filter(t => String(t.billingClientId || t.billing_client_id) === String(clientId));
+    const cOpen = cTasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled' && !t.completed && !t.isCompleted);
+    const cOverdue = cOpen.filter(t => { const dd = t.dueDate || t.due_date; return dd && new Date(dd) < today; });
+
+    return {
+      avgDosToSubmit: cDos.length > 0 ? (cDos.reduce((s, x) => s + x.days, 0) / cDos.length) : null,
+      avgDenialToAppeal: cDenial.length > 0 ? (cDenial.reduce((s, x) => s + x.days, 0) / cDenial.length) : null,
+      avgDaysInAR: cAR.length > 0 ? (cAR.reduce((s, x) => s + x.days, 0) / cAR.length) : null,
+      avgClaimToPayment: cPay.length > 0 ? (cPay.reduce((s, x) => s + x.days, 0) / cPay.length) : null,
+      openTasks: cOpen.length,
+      overdueTasks: cOverdue.length,
+      overduePct: cOpen.length > 0 ? (cOverdue.length / cOpen.length * 100) : 0,
+      claimCount: cDos.length,
+      denialCount: cDenial.length,
+    };
+  }
+
+  body.innerHTML = `
+    <style>
+      ${_analyticsTableStyles()}
+      .sla-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:24px;}
+      .sla-card{background:white;border-radius:14px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.06);text-align:center;position:relative;}
+      .sla-card-label{font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;}
+      .sla-card-target{font-size:10px;color:var(--gray-400);margin-top:6px;}
+      .sla-grade-box{display:flex;align-items:center;gap:20px;background:${gradeBg};border:2px solid ${gradeColor}30;border-radius:16px;padding:24px 32px;margin-bottom:24px;}
+      .sla-grade-letter{font-size:64px;font-weight:900;color:${gradeColor};line-height:1;}
+      .sla-grade-details{flex:1;}
+      .sla-grade-label{font-size:18px;font-weight:700;color:${gradeColor};}
+      .sla-grade-sub{font-size:12px;color:var(--gray-500);margin-top:4px;}
+      .sla-filter-bar{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+      .sla-filter-bar select{padding:6px 12px;border-radius:8px;border:1px solid var(--gray-200);font-size:12px;background:white;}
+      .sla-compare-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;}
+      .sla-compare-cell{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:var(--gray-50);border-radius:8px;font-size:12px;}
+      .sla-compare-label{color:var(--gray-600);font-weight:600;}
+      .sla-compare-val{font-weight:800;font-size:14px;}
+    </style>
+
+    <!-- SLA Scorecard -->
+    <div class="cc-section">
+      <div class="cc-section-title">SLA Scorecard</div>
+      <div class="sla-grade-box">
+        <div class="sla-grade-letter">${grade}</div>
+        <div class="sla-grade-details">
+          <div class="sla-grade-label">${escHtml(gradeLabel)}</div>
+          <div class="sla-grade-sub">${slaCritical > 0 ? escHtml(slaCritical + ' critical') : ''}${slaCritical > 0 && slaWarnings > 0 ? ' &middot; ' : ''}${slaWarnings > 0 ? escHtml(slaWarnings + ' warning(s)') : ''}${slaCritical === 0 && slaWarnings === 0 ? 'All operational metrics within target ranges' : ''}</div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:#f0fdf4;color:#16a34a;font-weight:600;">A = All SLAs Met</span>
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:#fffbeb;color:#d97706;font-weight:600;">B = Minor Warnings</span>
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:#fff7ed;color:#ea580c;font-weight:600;">C = Multiple Missed</span>
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:#fef2f2;color:#dc2626;font-weight:600;">D = Critical Failures</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Key SLA Cards -->
+    <div class="cc-section">
+      <div class="cc-section-title">Key SLA Metrics</div>
+      <div class="sla-cards">
+        <div class="sla-card">
+          <div class="sla-card-label">Avg Days: DOS to Submission</div>
+          ${_slaStatus(avgDosToSubmit, 3, 5, 'days')}
+          <div class="sla-card-target">Target: &lt;3 days &middot; ${dosToSubmit.length} claims measured</div>
+        </div>
+        <div class="sla-card">
+          <div class="sla-card-label">Avg Days: Denial to Appeal</div>
+          ${_slaStatus(avgDenialToAppeal, 5, 10, 'days')}
+          <div class="sla-card-target">Target: &lt;5 days &middot; ${denialToAppeal.length} appeals measured</div>
+        </div>
+        <div class="sla-card">
+          <div class="sla-card-label">Avg Days in A/R (DOS to Pay)</div>
+          ${_slaStatus(avgDaysInAR, 35, 60, 'days')}
+          <div class="sla-card-target">Target: &lt;35 days &middot; ${daysInAR.length} paid claims</div>
+        </div>
+        <div class="sla-card">
+          <div class="sla-card-label">Avg Days: Submit to Payment</div>
+          ${_slaStatus(avgClaimToPayment, 30, 45, 'days')}
+          <div class="sla-card-target">Target: &lt;30 days &middot; ${claimToPayment.length} claims</div>
+        </div>
+        <div class="sla-card">
+          <div class="sla-card-label">Open Tasks Overdue</div>
+          <span style="font-size:24px;font-weight:800;color:${overdueCount > 0 ? (overduePct > 30 ? '#dc2626' : overduePct > 15 ? '#d97706' : '#16a34a') : '#16a34a'};">${overdueCount}</span>
+          <span style="font-size:12px;color:var(--gray-500);margin-left:4px;">of ${openTasks.length}</span>
+          <div style="margin-top:4px;">
+            <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:${overduePct > 30 ? '#dc262620' : overduePct > 15 ? '#d9770620' : '#16a34a20'};color:${overduePct > 30 ? '#dc2626' : overduePct > 15 ? '#d97706' : '#16a34a'};">${overduePct.toFixed(0)}% overdue</span>
+          </div>
+          <div class="sla-card-target">Avg ${avgOverdueDays} days overdue</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Monthly SLA Trend -->
+    <div class="cc-section">
+      <div class="cc-section-title">Monthly SLA Trend</div>
+      <div class="cc-card" style="padding:0;overflow-x:auto;">
+        ${recentMonths.length === 0 ? '<div style="text-align:center;padding:48px;color:var(--gray-400);font-size:13px;">No monthly data available.</div>' : `
+        <table class="cc-analytics-table">
+          <thead><tr>
+            <th>Month</th><th class="num">Claims Submitted</th><th class="num">Avg Days to Submit</th>
+            <th class="num">Denials Worked</th><th class="num">Avg Days to Work</th>
+            <th class="num">Tasks Completed</th><th class="num">Tasks Overdue</th>
+          </tr></thead>
+          <tbody>
+            ${recentMonths.map(m => {
+              const cd = monthlyData[m] || { claims: 0, submitDays: [] };
+              const dd = monthlyDenials[m] || { total: 0, worked: 0, workDays: [] };
+              const td = monthlyTasks[m] || { completed: 0, overdue: 0 };
+              const avgSub = cd.submitDays.length > 0 ? (cd.submitDays.reduce((s, x) => s + x, 0) / cd.submitDays.length).toFixed(1) : '—';
+              const avgWork = dd.workDays.length > 0 ? (dd.workDays.reduce((s, x) => s + x, 0) / dd.workDays.length).toFixed(1) : '—';
+              const subColor = avgSub !== '—' ? (Number(avgSub) > 5 ? '#dc2626' : Number(avgSub) > 3 ? '#d97706' : '#16a34a') : 'var(--gray-400)';
+              const workColor = avgWork !== '—' ? (Number(avgWork) > 10 ? '#dc2626' : Number(avgWork) > 5 ? '#d97706' : '#16a34a') : 'var(--gray-400)';
+              return `<tr>
+                <td style="font-weight:600;">${escHtml(m)}</td>
+                <td class="num">${cd.claims}</td>
+                <td class="num" style="color:${subColor};font-weight:700;">${avgSub}${avgSub !== '—' ? 'd' : ''}</td>
+                <td class="num">${dd.worked} <span style="font-size:10px;color:var(--gray-400);">/ ${dd.total}</span></td>
+                <td class="num" style="color:${workColor};font-weight:700;">${avgWork}${avgWork !== '—' ? 'd' : ''}</td>
+                <td class="num">${td.completed}</td>
+                <td class="num" style="color:${td.overdue > 0 ? '#dc2626' : 'var(--gray-400)'};">${td.overdue > 0 ? td.overdue : '—'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        `}
+      </div>
+    </div>
+
+    <!-- Task Performance by Category -->
+    <div class="cc-section">
+      <div class="cc-section-title">Task Performance by Category</div>
+      <div class="cc-card" style="padding:0;overflow-x:auto;">
+        ${Object.keys(taskByCat).length === 0 ? '<div style="text-align:center;padding:48px;color:var(--gray-400);font-size:13px;">No task data available.</div>' : `
+        <table class="cc-analytics-table">
+          <thead><tr>
+            <th>Category</th><th class="num">Total</th><th class="num">Completed</th><th class="num">On Time</th>
+            <th class="num">Overdue</th><th class="num">Avg Completion (days)</th>
+          </tr></thead>
+          <tbody>
+            ${Object.keys(taskByCat).sort().map(cat => {
+              const d = taskByCat[cat];
+              const onTime = d.completed - d.overdue; // completed minus those currently overdue is approximate
+              const avgComp = d.completionDays.length > 0 ? (d.completionDays.reduce((s, x) => s + x, 0) / d.completionDays.length).toFixed(1) : '—';
+              return `<tr>
+                <td style="font-weight:600;">${escHtml(catLabels[cat] || cat)}</td>
+                <td class="num">${d.total}</td>
+                <td class="num" style="color:#16a34a;">${d.completed}</td>
+                <td class="num">${d.completed > 0 ? d.completed : '—'}</td>
+                <td class="num" style="color:${d.overdue > 0 ? '#dc2626' : 'var(--gray-400)'};">${d.overdue > 0 ? d.overdue : '—'}</td>
+                <td class="num">${avgComp}${avgComp !== '—' ? 'd' : ''}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        `}
+      </div>
+    </div>
+
+    <!-- Per-Client SLA View -->
+    <div class="cc-section">
+      <div class="cc-section-title">Per-Client SLA Performance</div>
+      <div class="sla-filter-bar">
+        <label style="font-size:12px;font-weight:600;color:var(--gray-600);">Filter by Client:</label>
+        <select id="sla-client-filter" onchange="window._slaFilterClient()">
+          <option value="">All Clients (Agency Average)</option>
+          ${bsClients.map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || c.name || 'Unknown')}</option>`).join('')}
+        </select>
+      </div>
+      <div id="sla-client-detail"></div>
+    </div>
+  `;
+
+  // Render default (all clients) view
+  _renderClientSlaDetail('', clientMap);
+
+  // Wire up filter
+  window._slaFilterClient = function() {
+    const sel = document.getElementById('sla-client-filter');
+    if (sel) _renderClientSlaDetail(sel.value, clientMap);
+  };
+
+  function _renderClientSlaDetail(clientId, cMap) {
+    const container = document.getElementById('sla-client-detail');
+    if (!container) return;
+
+    if (!clientId) {
+      // Agency average
+      container.innerHTML = `
+        <div class="cc-card" style="padding:20px;">
+          <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:16px;">Agency-Wide SLA Summary</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">
+            <div class="sla-compare-cell"><span class="sla-compare-label">DOS to Submit</span><span class="sla-compare-val" style="color:${avgDosToSubmit !== null ? (avgDosToSubmit > 3 ? '#d97706' : '#16a34a') : 'var(--gray-400)'};">${avgDosToSubmit !== null ? avgDosToSubmit.toFixed(1) + 'd' : 'N/A'}</span></div>
+            <div class="sla-compare-cell"><span class="sla-compare-label">Denial to Appeal</span><span class="sla-compare-val" style="color:${avgDenialToAppeal !== null ? (avgDenialToAppeal > 5 ? '#d97706' : '#16a34a') : 'var(--gray-400)'};">${avgDenialToAppeal !== null ? avgDenialToAppeal.toFixed(1) + 'd' : 'N/A'}</span></div>
+            <div class="sla-compare-cell"><span class="sla-compare-label">Days in A/R</span><span class="sla-compare-val" style="color:${avgDaysInAR !== null ? (avgDaysInAR > 35 ? '#d97706' : '#16a34a') : 'var(--gray-400)'};">${avgDaysInAR !== null ? avgDaysInAR.toFixed(1) + 'd' : 'N/A'}</span></div>
+            <div class="sla-compare-cell"><span class="sla-compare-label">Submit to Payment</span><span class="sla-compare-val" style="color:${avgClaimToPayment !== null ? (avgClaimToPayment > 30 ? '#d97706' : '#16a34a') : 'var(--gray-400)'};">${avgClaimToPayment !== null ? avgClaimToPayment.toFixed(1) + 'd' : 'N/A'}</span></div>
+            <div class="sla-compare-cell"><span class="sla-compare-label">Tasks Overdue</span><span class="sla-compare-val" style="color:${overdueCount > 0 ? '#dc2626' : '#16a34a'};">${overdueCount} (${overduePct.toFixed(0)}%)</span></div>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    const clientName = cMap[clientId] || ('Client #' + clientId);
+    const cs = _computeClientSLA(clientId);
+
+    function _compareVal(clientVal, agencyVal, unit) {
+      if (clientVal === null) return '<span style="color:var(--gray-400);">N/A</span>';
+      const cv = clientVal.toFixed(1);
+      let arrow = '', compColor = '#16a34a';
+      if (agencyVal !== null) {
+        if (clientVal > agencyVal * 1.1) { arrow = ' &#9650;'; compColor = '#dc2626'; }
+        else if (clientVal < agencyVal * 0.9) { arrow = ' &#9660;'; compColor = '#16a34a'; }
+        else { arrow = ' &#9644;'; compColor = '#d97706'; }
+      }
+      return '<span style="font-weight:800;color:' + compColor + ';">' + cv + unit + arrow + '</span>';
+    }
+
+    container.innerHTML = `
+      <div class="cc-card" style="padding:20px;">
+        <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:4px;">${escHtml(clientName)}</div>
+        <div style="font-size:11px;color:var(--gray-500);margin-bottom:16px;">${cs.claimCount} claims measured &middot; ${cs.denialCount} appeals measured &middot; ${cs.openTasks} open tasks</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--gray-200);border-radius:10px;overflow:hidden;">
+          <div style="background:white;padding:14px;">
+            <div style="font-size:11px;color:var(--gray-500);margin-bottom:6px;font-weight:600;">DOS to Submit</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>${_compareVal(cs.avgDosToSubmit, avgDosToSubmit, 'd')}</div>
+              <div style="font-size:10px;color:var(--gray-400);">Avg: ${avgDosToSubmit !== null ? avgDosToSubmit.toFixed(1) + 'd' : 'N/A'}</div>
+            </div>
+          </div>
+          <div style="background:white;padding:14px;">
+            <div style="font-size:11px;color:var(--gray-500);margin-bottom:6px;font-weight:600;">Denial to Appeal</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>${_compareVal(cs.avgDenialToAppeal, avgDenialToAppeal, 'd')}</div>
+              <div style="font-size:10px;color:var(--gray-400);">Avg: ${avgDenialToAppeal !== null ? avgDenialToAppeal.toFixed(1) + 'd' : 'N/A'}</div>
+            </div>
+          </div>
+          <div style="background:white;padding:14px;">
+            <div style="font-size:11px;color:var(--gray-500);margin-bottom:6px;font-weight:600;">Days in A/R</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>${_compareVal(cs.avgDaysInAR, avgDaysInAR, 'd')}</div>
+              <div style="font-size:10px;color:var(--gray-400);">Avg: ${avgDaysInAR !== null ? avgDaysInAR.toFixed(1) + 'd' : 'N/A'}</div>
+            </div>
+          </div>
+          <div style="background:white;padding:14px;">
+            <div style="font-size:11px;color:var(--gray-500);margin-bottom:6px;font-weight:600;">Submit to Payment</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>${_compareVal(cs.avgClaimToPayment, avgClaimToPayment, 'd')}</div>
+              <div style="font-size:10px;color:var(--gray-400);">Avg: ${avgClaimToPayment !== null ? avgClaimToPayment.toFixed(1) + 'd' : 'N/A'}</div>
+            </div>
+          </div>
+          <div style="background:white;padding:14px;grid-column:span 2;">
+            <div style="font-size:11px;color:var(--gray-500);margin-bottom:6px;font-weight:600;">Tasks Overdue</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-weight:800;color:${cs.overdueTasks > 0 ? '#dc2626' : '#16a34a'};">${cs.overdueTasks} of ${cs.openTasks} (${cs.overduePct.toFixed(0)}%)</span>
+              <div style="font-size:10px;color:var(--gray-400);">Agency: ${overdueCount} of ${openTasks.length} (${overduePct.toFixed(0)}%)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
 }
