@@ -23,7 +23,13 @@ class Store {
 
     setScope(type, orgId = null, providerId = null, orgName = '', providerName = '') {
         this._scope = { type, orgId, providerId, orgName, providerName };
-        this.clearCache(); // Force fresh data on scope change
+        // Selective invalidation: only bust scope-dependent collections
+        this._invalidateCacheByPattern('providers');
+        this._invalidateCacheByPattern('applications');
+        this._invalidateCacheByPattern('licenses');
+        this._invalidateCacheByPattern('tasks');
+        this._invalidateCacheByPattern('rcm');
+        this._invalidateCacheByPattern('billing');
         this._emit('scope-changed', this._scope);
     }
 
@@ -221,6 +227,19 @@ class Store {
         Object.keys(localStorage)
             .filter(k => k.startsWith(CONFIG.CACHE_PREFIX))
             .forEach(k => localStorage.removeItem(k));
+    }
+
+    _invalidateCacheByPattern(prefix) {
+        Object.keys(this.cache).forEach(key => {
+            if (key.startsWith(CONFIG.CACHE_PREFIX) && key.includes(prefix)) {
+                delete this.cache[key];
+            }
+        });
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith(CONFIG.CACHE_PREFIX) && key.includes(prefix)) {
+                localStorage.removeItem(key);
+            }
+        });
     }
 
     // Auto-purge expired entries from localStorage on startup
@@ -1137,39 +1156,39 @@ class Store {
 
     // ── RCM: Claims, Denials, Payments, Charges, AR ──
     async getRcmClaimStats(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/stats${q ? '?' + q : ''}`)).data || {}; }
-    async getRcmClaims(params = {}) { if (!params.per_page) params.per_page = 1000; const q = new URLSearchParams(params).toString(); const r = await this._fetch(`${CONFIG.API_URL}/rcm/claims${q ? '?' + q : ''}`); return r.data?.data || r.data || []; }
+    async getRcmClaims(params = {}) { if (!params.per_page) params.per_page = 500; const q = new URLSearchParams(params).toString(); const r = await this._fetch(`${CONFIG.API_URL}/rcm/claims${q ? '?' + q : ''}`); return r.data?.data || r.data || []; }
     async getRcmClaim(id) { return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`)).data || {}; }
-    async createRcmClaim(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async updateRcmClaim(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async deleteRcmClaim(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`, { method: 'DELETE' }); this.clearCache(); return r; }
+    async createRcmClaim(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async updateRcmClaim(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async deleteRcmClaim(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/claims/${id}`, { method: 'DELETE' }); this._invalidateCacheByPattern('rcm'); return r; }
     async bulkImportClaims(claims) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/claims/bulk-import`, { method: 'POST', body: JSON.stringify({ claims }) })); return r.data || r; }
     async bulkMatchPayments(payments) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payments/bulk-match`, { method: 'POST', body: JSON.stringify({ payments }) })); return r.data || r; }
 
     async getRcmDenialStats() { return (await this._fetch(`${CONFIG.API_URL}/rcm/denials/stats`)).data || {}; }
     async getRcmDenials(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/denials${q ? '?' + q : ''}`)).data || []; }
-    async createRcmDenial(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/denials`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async updateRcmDenial(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/denials/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async deleteRcmDenial(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/denials/${id}`, { method: 'DELETE' }); this.clearCache(); return r; }
+    async createRcmDenial(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/denials`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async updateRcmDenial(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/denials/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async deleteRcmDenial(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/denials/${id}`, { method: 'DELETE' }); this._invalidateCacheByPattern('rcm'); return r; }
 
     async getRcmPayments(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/payments${q ? '?' + q : ''}`)).data || []; }
-    async createRcmPayment(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payments`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async updateRcmPayment(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payments/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async deleteRcmPayment(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/payments/${id}`, { method: 'DELETE' }); this.clearCache(); return r; }
+    async createRcmPayment(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payments`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async updateRcmPayment(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payments/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async deleteRcmPayment(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/payments/${id}`, { method: 'DELETE' }); this._invalidateCacheByPattern('rcm'); return r; }
 
     async getRcmCharges(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/charges${q ? '?' + q : ''}`)).data || []; }
-    async createRcmCharge(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/charges`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async updateRcmCharge(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/charges/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async deleteRcmCharge(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/charges/${id}`, { method: 'DELETE' }); this.clearCache(); return r; }
-    async bulkImportCharges(charges) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/charges/bulk-import`, { method: 'POST', body: JSON.stringify({ charges }) }); this.clearCache(); return r.data || r; }
+    async createRcmCharge(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/charges`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async updateRcmCharge(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/charges/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async deleteRcmCharge(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/charges/${id}`, { method: 'DELETE' }); this._invalidateCacheByPattern('rcm'); return r; }
+    async bulkImportCharges(charges) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/charges/bulk-import`, { method: 'POST', body: JSON.stringify({ charges }) }); this._invalidateCacheByPattern('rcm'); return r.data || r; }
 
     async getRcmArAging() { return (await this._fetch(`${CONFIG.API_URL}/rcm/ar-aging`)).data || {}; }
 
     // ── RCM Phase 2: Advanced Features ──
     // Fee Schedules
     async getFeeSchedules(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/fee-schedules${q ? '?' + q : ''}`)).data || []; }
-    async createFeeSchedule(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/fee-schedules`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async updateFeeSchedule(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/fee-schedules/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async deleteFeeSchedule(id) { await this._fetch(`${CONFIG.API_URL}/rcm/fee-schedules/${id}`, { method: 'DELETE' }); this.clearCache(); }
+    async createFeeSchedule(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/fee-schedules`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async updateFeeSchedule(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/fee-schedules/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async deleteFeeSchedule(id) { await this._fetch(`${CONFIG.API_URL}/rcm/fee-schedules/${id}`, { method: 'DELETE' }); this._invalidateCacheByPattern('rcm'); }
     async bulkImportFeeSchedules(schedules) { return (await this._fetch(`${CONFIG.API_URL}/rcm/fee-schedules/bulk-import`, { method: 'POST', body: JSON.stringify({ schedules }) })); }
 
     // Work Queues
@@ -1177,25 +1196,25 @@ class Store {
 
     // Appeal Templates & Denial Workflow
     async getAppealTemplates() { return (await this._fetch(`${CONFIG.API_URL}/rcm/appeal-templates`)).data || []; }
-    async createAppealTemplate(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/appeal-templates`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async updateAppealTemplate(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/appeal-templates/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async deleteAppealTemplate(id) { await this._fetch(`${CONFIG.API_URL}/rcm/appeal-templates/${id}`, { method: 'DELETE' }); this.clearCache(); }
+    async createAppealTemplate(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/appeal-templates`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async updateAppealTemplate(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/appeal-templates/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async deleteAppealTemplate(id) { await this._fetch(`${CONFIG.API_URL}/rcm/appeal-templates/${id}`, { method: 'DELETE' }); this._invalidateCacheByPattern('rcm'); }
     async generateAppealLetter(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/denials/generate-appeal`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
     async escalateDenials() { return (await this._fetch(`${CONFIG.API_URL}/rcm/denials/escalate`, { method: 'POST' })).data || {}; }
 
     // Multi-Claim Payment Allocation
-    async batchAllocatePayment(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payments/batch-allocate`, { method: 'POST', body: JSON.stringify(data) })); this.clearCache(); return r.data || r; }
+    async batchAllocatePayment(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payments/batch-allocate`, { method: 'POST', body: JSON.stringify(data) })); this._invalidateCacheByPattern('rcm'); return r.data || r; }
 
     // Payer Follow-Up Tracking
     async getFollowups(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/followups${q ? '?' + q : ''}`)).data || []; }
-    async createFollowup(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/followups`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async updateFollowup(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/followups/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async deleteFollowup(id) { await this._fetch(`${CONFIG.API_URL}/rcm/followups/${id}`, { method: 'DELETE' }); this.clearCache(); }
+    async createFollowup(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/followups`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async updateFollowup(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/followups/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async deleteFollowup(id) { await this._fetch(`${CONFIG.API_URL}/rcm/followups/${id}`, { method: 'DELETE' }); this._invalidateCacheByPattern('rcm'); }
 
     // Underpayment Detection
     async detectUnderpayments() { return (await this._fetch(`${CONFIG.API_URL}/rcm/underpayments/detect`, { method: 'POST' })).data || {}; }
     async getUnderpayments(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/underpayments${q ? '?' + q : ''}`)).data || []; }
-    async updateUnderpayment(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/underpayments/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async updateUnderpayment(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/underpayments/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
 
     // Export
     async exportClaims(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/export/claims${q ? '?' + q : ''}`)).data || []; }
@@ -1207,8 +1226,8 @@ class Store {
 
     // Patient Statements
     async getPatientStatements(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/patient-statements${q ? '?' + q : ''}`)).data || []; }
-    async createPatientStatement(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/patient-statements`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async updatePatientStatement(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/patient-statements/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async createPatientStatement(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/patient-statements`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async updatePatientStatement(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/patient-statements/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
     async generatePatientStatements() { return (await this._fetch(`${CONFIG.API_URL}/rcm/patient-statements/generate`, { method: 'POST' })).data || {}; }
 
     // Eligibility Verification
@@ -1218,9 +1237,9 @@ class Store {
 
     // Authorization Tracking
     async getAuthorizations(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/authorizations${q ? '?' + q : ''}`)).data || []; }
-    async createAuthorization(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/authorizations`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async updateAuthorization(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/authorizations/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async deleteAuthorization(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/authorizations/${id}`, { method: 'DELETE' }); this.clearCache(); return r; }
+    async createAuthorization(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/authorizations`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async updateAuthorization(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/authorizations/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async deleteAuthorization(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/authorizations/${id}`, { method: 'DELETE' }); this._invalidateCacheByPattern('rcm'); return r; }
 
     // ERA/EOB Parsing
     async parseEra(eraData) { return (await this._fetch(`${CONFIG.API_URL}/rcm/era/parse`, { method: 'POST', body: JSON.stringify({ era_data: eraData }) })).data || {}; }
@@ -1234,9 +1253,9 @@ class Store {
     // Payer Intelligence Hub
     async getPayerRules() { return (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules`)).data || []; }
     async getPayerRule(payerName) { return (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/${encodeURIComponent(payerName)}`)).data || {}; }
-    async createPayerRule(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async updatePayerRule(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async deletePayerRule(id) { await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/${id}`, { method: 'DELETE' }); this.clearCache(); }
+    async createPayerRule(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async updatePayerRule(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async deletePayerRule(id) { await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/${id}`, { method: 'DELETE' }); this._invalidateCacheByPattern('rcm'); }
     async checkPayerRules(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/check`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
     async extractPayerPolicy(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/payer-rules/extract-policy`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
 
@@ -1245,8 +1264,8 @@ class Store {
 
     // Provider Feedback
     async getProviderFeedback(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/provider-feedback${q ? '?' + q : ''}`)).data || []; }
-    async createProviderFeedback(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/provider-feedback`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
-    async updateProviderFeedback(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/provider-feedback/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this.clearCache(); return r; }
+    async createProviderFeedback(data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/provider-feedback`, { method: 'POST', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
+    async updateProviderFeedback(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/provider-feedback/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
     async autoGenerateProviderFeedback() { return (await this._fetch(`${CONFIG.API_URL}/rcm/provider-feedback/auto-generate`, { method: 'POST' })).data || {}; }
 
     // Real-time Eligibility
@@ -1273,17 +1292,17 @@ class Store {
     async recordRemittance(ledgerId, data) { return (await this._fetch(`${CONFIG.API_URL}/billing-ledger/${ledgerId}/remittance`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; }
     async createBillingClient(data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-clients`, { method: 'POST', body: JSON.stringify(data) });
-        this.clearCache();
+        this._invalidateCacheByPattern('billing');
         return result.data || result;
     }
     async updateBillingClient(id, data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-clients/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-        this.clearCache();
+        this._invalidateCacheByPattern('billing');
         return result.data || result;
     }
     async deleteBillingClient(id) {
         const r = await this._fetch(`${CONFIG.API_URL}/billing-clients/${id}`, { method: 'DELETE' });
-        this.clearCache();
+        this._invalidateCacheByPattern('billing');
         return r;
     }
     async getBillingClientStats() {
@@ -1301,17 +1320,17 @@ class Store {
     async dismissTask(id) { return (await this._fetch(`${CONFIG.API_URL}/billing-tasks/${id}/dismiss`, { method: 'POST' })).data || {}; }
     async createBillingTask(data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-tasks`, { method: 'POST', body: JSON.stringify(data) });
-        this.clearCache();
+        this._invalidateCacheByPattern('billing');
         return result.data || result;
     }
     async updateBillingTask(id, data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-        this.clearCache();
+        this._invalidateCacheByPattern('billing');
         return result.data || result;
     }
     async deleteBillingTask(id) {
         const r = await this._fetch(`${CONFIG.API_URL}/billing-tasks/${id}`, { method: 'DELETE' });
-        this.clearCache();
+        this._invalidateCacheByPattern('billing');
         return r;
     }
 
@@ -1323,17 +1342,17 @@ class Store {
     }
     async createBillingActivity(data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-activities`, { method: 'POST', body: JSON.stringify(data) });
-        this.clearCache();
+        this._invalidateCacheByPattern('billing');
         return result.data || result;
     }
     async updateBillingActivity(id, data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-activities/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-        this.clearCache();
+        this._invalidateCacheByPattern('billing');
         return result.data || result;
     }
     async deleteBillingActivity(id) {
         const r = await this._fetch(`${CONFIG.API_URL}/billing-activities/${id}`, { method: 'DELETE' });
-        this.clearCache();
+        this._invalidateCacheByPattern('billing');
         return r;
     }
 
@@ -1345,12 +1364,12 @@ class Store {
     }
     async createBillingFinancial(data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-financials`, { method: 'POST', body: JSON.stringify(data) });
-        this.clearCache();
+        this._invalidateCacheByPattern('billing');
         return result.data || result;
     }
     async updateBillingFinancial(id, data) {
         const result = await this._fetch(`${CONFIG.API_URL}/billing-financials/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-        this.clearCache();
+        this._invalidateCacheByPattern('billing');
         return result.data || result;
     }
 

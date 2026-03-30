@@ -85,7 +85,7 @@ async function _renderOverview(body) {
     store.getAll('followups'),
     store.getBillingClientStats().catch(() => ({})),
     store.getBillingClients().catch(() => []),
-    store.getRcmClaims().catch(() => []),
+    store.getRcmClaims({ per_page: 200 }).catch(() => []),
     store.getRcmDenials().catch(() => []),
     store.getRcmPayments().catch(() => []),
   ]);

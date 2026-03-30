@@ -12,7 +12,7 @@ const CONFIG = {
 
     // Cache
     CACHE_PREFIX: 'credentik_',
-    CACHE_TTL: 15 * 60 * 1000, // 15 minutes
+    CACHE_TTL: 60 * 60 * 1000, // 60 minutes
     CACHE_TTL_STATS: 10 * 60 * 1000, // 10 minutes for stats/aggregates
 
     // Collections that map to API endpoints
