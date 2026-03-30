@@ -878,6 +878,19 @@ export async function initApp() {
   }
 }
 
+// ─── Hub-Aware Re-render ───
+// When sub-pages (kanban, calendar, messages, etc.) re-render themselves inside a hub,
+// they overwrite page-body and remove the hub tab bar. This wrapper re-renders through
+// the hub if we're on a hub page, otherwise renders directly.
+async function _hubAwareRender(renderFn) {
+  const wsPages = ['workspace','tasks','kanban','calendar','messages','communications'];
+  if (wsPages.includes(currentPage)) {
+    await renderWorkspaceHubPage();
+  } else {
+    await renderFn();
+  }
+}
+
 // ─── Scope Selector ───
 
 function initScopeSelector() {
@@ -14756,14 +14769,14 @@ function handleNppesProxy(payload) {
       navigateTo('communications');
     } catch (e) { showToast('Error: ' + e.message); }
   },
-  filterComms() { renderCommunicationsPage(); },
+  filterComms() { _hubAwareRender(renderCommunicationsPage); },
 
   // ─── Messages / Inbox ───
   openNewMessage(opts) { openNewMessage(opts); },
   async sendMessage() { await sendMessage(); },
   async openThread(id) { await openThread(id); },
   async sendReply() { await sendReply(); },
-  filterMessages() { renderMessagesPage(); },
+  filterMessages() { _hubAwareRender(renderMessagesPage); },
   // Quick action: request doc from provider
   requestDocument(providerId, provName, appId) {
     openNewMessage({
@@ -14801,10 +14814,10 @@ function handleNppesProxy(payload) {
       workflow.processAutomationRules('application.status_changed', {
         appId, oldStatus: '', newStatus, application: null,
       }).catch(err => console.warn('[Automation] kanban trigger error:', err));
-      await renderKanbanBoard();
+      await _hubAwareRender(renderKanbanBoard);
     } catch (e) {
       showToast('Cannot transition: ' + (e.message || 'Invalid status change'));
-      await renderKanbanBoard();
+      await _hubAwareRender(renderKanbanBoard);
     }
   },
 
@@ -14813,11 +14826,11 @@ function handleNppesProxy(payload) {
   _calYear: new Date().getFullYear(),
   _calFilters: { licenses: true, tasks: true, followups: true, applications: true, compliance: true },
   _calSelectedDay: null,
-  calPrev() { window.app._calMonth--; if (window.app._calMonth < 0) { window.app._calMonth = 11; window.app._calYear--; } renderCalendarPage(); },
-  calNext() { window.app._calMonth++; if (window.app._calMonth > 11) { window.app._calMonth = 0; window.app._calYear++; } renderCalendarPage(); },
-  calToday() { window.app._calMonth = new Date().getMonth(); window.app._calYear = new Date().getFullYear(); window.app._calSelectedDay = null; renderCalendarPage(); },
-  calToggleFilter(type) { window.app._calFilters[type] = !window.app._calFilters[type]; renderCalendarPage(); },
-  calSelectDay(day) { window.app._calSelectedDay = day; renderCalendarPage(); },
+  calPrev() { window.app._calMonth--; if (window.app._calMonth < 0) { window.app._calMonth = 11; window.app._calYear--; } _hubAwareRender(renderCalendarPage); },
+  calNext() { window.app._calMonth++; if (window.app._calMonth > 11) { window.app._calMonth = 0; window.app._calYear++; } _hubAwareRender(renderCalendarPage); },
+  calToday() { window.app._calMonth = new Date().getMonth(); window.app._calYear = new Date().getFullYear(); window.app._calSelectedDay = null; _hubAwareRender(renderCalendarPage); },
+  calToggleFilter(type) { window.app._calFilters[type] = !window.app._calFilters[type]; _hubAwareRender(renderCalendarPage); },
+  calSelectDay(day) { window.app._calSelectedDay = day; _hubAwareRender(renderCalendarPage); },
 
   // ─── Funding Hub ───
   enterFundingHub() {
@@ -19444,12 +19457,12 @@ async function renderKanbanBoard() {
       placeholder: 'e.g. Received confirmation from payer...',
       okLabel: 'Move'
     });
-    if (note === null) { await renderKanbanBoard(); return; } // Cancelled
+    if (note === null) { await _hubAwareRender(renderKanbanBoard); return; } // Cancelled
     try {
       await window.app.kanbanDrop(appId, newStatus);
     } catch(err) {
       showToast('Error: ' + (err.message || 'Could not transition'));
-      await renderKanbanBoard();
+      await _hubAwareRender(renderKanbanBoard);
     }
   };
 
@@ -19467,27 +19480,27 @@ async function renderKanbanBoard() {
 
   window.app._kbToggleCol = function(key) {
     kb.collapsed[key] = !kb.collapsed[key];
-    renderKanbanBoard();
+    _hubAwareRender(renderKanbanBoard);
   };
 
   window.app._kbSetView = function(view) {
     kb.view = view;
-    renderKanbanBoard();
+    _hubAwareRender(renderKanbanBoard);
   };
 
   window.app._kbFilter = function(field, value) {
     kb[field] = value;
-    renderKanbanBoard();
+    _hubAwareRender(renderKanbanBoard);
   };
 
   window.app._kbSearch = function(value) {
     kb.search = value;
-    renderKanbanBoard();
+    _hubAwareRender(renderKanbanBoard);
   };
 
   window.app._kbToggleEmpty = function(checked) {
     kb.showEmpty = checked;
-    renderKanbanBoard();
+    _hubAwareRender(renderKanbanBoard);
   };
 
   window.app._kbFollowUp = async function(id) {
