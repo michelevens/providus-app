@@ -6,6 +6,8 @@ const { store, auth, CONFIG, escHtml, escAttr, formatDateDisplay, toHexId,
         editButton, deleteButton, helpTip } = window._credentik;
 
 if (typeof window._rcmTab === 'undefined') window._rcmTab = 'claims';
+if (typeof window._rcmClaimsPage === 'undefined') window._rcmClaimsPage = 1;
+if (typeof window._rcmChargesPage === 'undefined') window._rcmChargesPage = 1;
 
 function _fm(n) { return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function _fk(n) { n = Number(n || 0); return n >= 1000 ? '$' + (n / 1000).toFixed(1) + 'k' : _fm(n); }
@@ -511,19 +513,47 @@ async function renderRcmPage() {
     </div>
 
     <!-- ═══ CLAIMS TAB ═══ -->
+    ${(() => {
+      // Apply saved filters to claims
+      const _fStatus = window._rcmClaimFilterStatus || '';
+      const _fClient = window._rcmClaimFilterClient || '';
+      const _fPayer = window._rcmClaimFilterPayer || '';
+      const _fSearch = (window._rcmClaimFilterSearch || '').toLowerCase();
+      const _fDosFrom = window._rcmClaimFilterDosFrom || '';
+      const _fDosTo = window._rcmClaimFilterDosTo || '';
+      const filteredClaims = claims.filter(c => {
+        const dos = (c.dateOfService || c.date_of_service || '').toString().slice(0, 10);
+        const clientId = String(c.billingClientId || c.billing_client_id || '');
+        const payer = c.payerName || c.payer_name || '';
+        const searchText = ((c.claimNumber || c.claim_number || '') + ' ' + (c.patientName || c.patient_name || '') + ' ' + payer).toLowerCase();
+        return (!_fStatus || c.status === _fStatus)
+          && (!_fClient || clientId === _fClient)
+          && (!_fPayer || payer === _fPayer)
+          && (!_fSearch || searchText.includes(_fSearch))
+          && (!_fDosFrom || dos >= _fDosFrom)
+          && (!_fDosTo || dos <= _fDosTo);
+      });
+      const PAGE_SIZE = 50;
+      const totalPages = Math.ceil(filteredClaims.length / PAGE_SIZE) || 1;
+      if ((window._rcmClaimsPage || 1) > totalPages) window._rcmClaimsPage = 1;
+      const page = Math.min(window._rcmClaimsPage || 1, totalPages);
+      const pagedClaims = filteredClaims.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+      const hasFilters = _fStatus || _fClient || _fPayer || _fSearch || _fDosFrom || _fDosTo;
+      return `
     <div id="rcm-claims" class="${window._rcmTab !== 'claims' ? 'hidden' : ''}">
       <div class="card rcm-card rcm-table">
-        <div class="card-header" style="flex-wrap:wrap;gap:8px;"><h3>Claims</h3>
+        <div class="card-header" style="flex-wrap:wrap;gap:8px;"><h3>Claims${hasFilters ? ' <span style="font-size:12px;font-weight:400;color:var(--gray-500);">(' + filteredClaims.length + ' of ' + claims.length + ')</span>' : ''}</h3>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-            <input type="text" id="rcm-claim-search" placeholder="Search patient, claim #..." class="form-control" style="width:170px;height:32px;font-size:12px;" oninput="window.app.filterRcmClaims()">
+            <input type="text" id="rcm-claim-search" placeholder="Search patient, claim #..." class="form-control" style="width:170px;height:32px;font-size:12px;" value="${escAttr(_fSearch)}" oninput="window.app.filterRcmClaims()">
             <select id="rcm-claim-payer" class="form-control" style="width:140px;height:32px;font-size:12px;" onchange="window.app.filterRcmClaims()">
               <option value="">All Payers</option>
-              ${[...new Set(claims.map(c => c.payerName || c.payer_name || '').filter(Boolean))].sort().map(p => `<option value="${escAttr(p)}">${escHtml(p.length > 25 ? p.slice(0,25) + '...' : p)}</option>`).join('')}
+              ${[...new Set(claims.map(c => c.payerName || c.payer_name || '').filter(Boolean))].sort().map(p => `<option value="${escAttr(p)}" ${_fPayer === p ? 'selected' : ''}>${escHtml(p.length > 25 ? p.slice(0,25) + '...' : p)}</option>`).join('')}
             </select>
-            <select id="rcm-claim-status" class="form-control" style="width:110px;height:32px;font-size:12px;" onchange="window.app.filterRcmClaims()"><option value="">All Status</option>${CLAIM_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}</select>
-            <select id="rcm-claim-client" class="form-control" style="width:130px;height:32px;font-size:12px;" onchange="window.app.filterRcmClaims()"><option value="">All Clients</option>${clients.map(c => `<option value="${c.id}">${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}</select>
-            <input type="date" id="rcm-claim-dos-from" class="form-control" style="width:125px;height:32px;font-size:11px;" onchange="window.app.filterRcmClaims()" title="DOS From">
-            <input type="date" id="rcm-claim-dos-to" class="form-control" style="width:125px;height:32px;font-size:11px;" onchange="window.app.filterRcmClaims()" title="DOS To">
+            <select id="rcm-claim-status" class="form-control" style="width:110px;height:32px;font-size:12px;" onchange="window.app.filterRcmClaims()"><option value="">All Status</option>${CLAIM_STATUSES.map(s => `<option value="${s.value}" ${_fStatus === s.value ? 'selected' : ''}>${s.label}</option>`).join('')}</select>
+            <select id="rcm-claim-client" class="form-control" style="width:130px;height:32px;font-size:12px;" onchange="window.app.filterRcmClaims()"><option value="">All Clients</option>${clients.map(c => `<option value="${c.id}" ${_fClient === String(c.id) ? 'selected' : ''}>${escHtml(c.organizationName || c.organization_name || '')}</option>`).join('')}</select>
+            <input type="date" id="rcm-claim-dos-from" class="form-control" style="width:125px;height:32px;font-size:11px;" value="${_fDosFrom}" onchange="window.app.filterRcmClaims()" title="DOS From">
+            <input type="date" id="rcm-claim-dos-to" class="form-control" style="width:125px;height:32px;font-size:11px;" value="${_fDosTo}" onchange="window.app.filterRcmClaims()" title="DOS To">
+            ${hasFilters ? `<button class="btn btn-sm" onclick="window.app.clearRcmClaimFilters()" style="font-size:11px;color:var(--red);">Clear</button>` : ''}
             <button class="btn btn-sm" onclick="window.app.openClaimImportModal()" style="font-size:11px;">Import</button>
             <button class="btn btn-sm" onclick="window.app.exportClaimsCSV()" style="font-size:11px;">Export</button>
             <button class="btn btn-sm" onclick="window.app.scrubClaims()" style="font-size:11px;color:#d97706;font-weight:600;" title="Validate unpaid claims for errors and warnings before submission">Scrub Claims</button>
@@ -532,7 +562,7 @@ async function renderRcmPage() {
         <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
           <thead><tr><th title="Unique claim identifier from 837 or payer">Claim #</th><th>Patient</th><th title="Insurance company or plan">Payer</th><th title="Date of Service">DOS</th><th style="text-align:right;" title="Amount billed to insurance">Charges</th><th style="text-align:right;" title="Amount paid by insurance — money received">Paid</th><th style="text-align:right;" title="Copay, deductible, or coinsurance owed by patient">Pt Resp</th><th style="text-align:right;" title="Remaining amount owed (Charges - Paid - Pt Resp)">Balance</th><th title="Check or EFT number from payer — click to see all claims on this payment">Check #</th><th title="Current claim status">Status</th><th>Actions</th></tr></thead>
           <tbody id="rcm-claims-tbody">
-            ${claims.map(c => `<tr class="rcm-claim-row" data-status="${c.status}" data-client="${c.billingClientId || c.billing_client_id || ''}" data-payer="${escAttr(c.payerName || c.payer_name || '')}" data-dos="${(c.dateOfService || c.date_of_service || '').toString().slice(0,10)}" style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
+            ${pagedClaims.map(c => `<tr class="rcm-claim-row" style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
               <td><strong style="font-family:monospace;font-size:12px;color:var(--brand-600);">${escHtml(c.claimNumber || c.claim_number || '')}</strong></td>
               <td class="text-sm">${escHtml(c.patientName || c.patient_name || '—')}</td>
               <td class="text-sm">${escHtml(c.payerName || c.payer_name || '—')}</td>
@@ -545,11 +575,23 @@ async function renderRcmPage() {
               <td>${_claimBadge(c.status)}${_filingBadge(c.id)}</td>
               <td><button class="btn btn-sm" onclick="event.stopPropagation();window.app.editRcmClaim(${c.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="event.stopPropagation();window.app.deleteRcmClaim(${c.id})">Del</button></td>
             </tr>`).join('')}
-            ${claims.length === 0 ? '<tr><td colspan="11" style="text-align:center;padding:2rem;color:var(--gray-500);">No claims yet. Click "+ New Claim" to create one.</td></tr>' : ''}
+            ${filteredClaims.length === 0 ? '<tr><td colspan="11" style="text-align:center;padding:2rem;color:var(--gray-500);">' + (hasFilters ? 'No claims match the current filters.' : 'No claims yet. Click "+ New Claim" to create one.') + '</td></tr>' : ''}
           </tbody>
-        </table></div></div>
+        </table></div>
+        ${filteredClaims.length <= PAGE_SIZE ? '' : `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid var(--gray-200);">
+            <span style="font-size:12px;color:var(--gray-500);">Showing ${(page-1)*PAGE_SIZE+1}\u2013${Math.min(page*PAGE_SIZE, filteredClaims.length)} of ${filteredClaims.length} claims</span>
+            <div style="display:flex;gap:4px;align-items:center;">
+              <button class="btn btn-sm" onclick="window._rcmClaimsPage=1;window.app.rcSwitchTab('claims');" ${page===1?'disabled':''}>First</button>
+              <button class="btn btn-sm" onclick="window._rcmClaimsPage=${page-1};window.app.rcSwitchTab('claims');" ${page===1?'disabled':''}>Prev</button>
+              <span style="padding:4px 12px;font-size:12px;">Page ${page} of ${totalPages}</span>
+              <button class="btn btn-sm" onclick="window._rcmClaimsPage=${page+1};window.app.rcSwitchTab('claims');" ${page>=totalPages?'disabled':''}>Next</button>
+              <button class="btn btn-sm" onclick="window._rcmClaimsPage=${totalPages};window.app.rcSwitchTab('claims');" ${page>=totalPages?'disabled':''}>Last</button>
+            </div>
+          </div>`}
+        </div>
       </div>
-    </div>
+    </div>`;
+    })()}
 
     <!-- ═══ CHARGES TAB ═══ -->
     <div id="rcm-charges" class="${window._rcmTab !== 'charges' ? 'hidden' : ''}">
@@ -612,7 +654,14 @@ async function renderRcmPage() {
         <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
           <thead><tr><th>DOS</th><th>Patient</th><th>CPT</th><th>ICD</th><th>Payer</th><th style="text-align:center;">Units</th><th style="text-align:right;">Amount</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="rcm-charges-tbody">
-            ${charges.map(ch => `<tr>
+            ${(() => {
+              const PAGE_SIZE = 50;
+              const page = window._rcmChargesPage || 1;
+              const totalPages = Math.ceil(charges.length / PAGE_SIZE) || 1;
+              if (page > totalPages) window._rcmChargesPage = 1;
+              const curPage = Math.min(page, totalPages);
+              const pagedCharges = charges.slice((curPage - 1) * PAGE_SIZE, curPage * PAGE_SIZE);
+              return pagedCharges.map(ch => `<tr>
               <td class="text-sm">${formatDateDisplay(ch.dateOfService || ch.date_of_service)}</td>
               <td class="text-sm">${escHtml(ch.patientName || ch.patient_name || '—')}</td>
               <td><code style="font-size:12px;color:var(--brand-700);">${escHtml(ch.cptCode || ch.cpt_code || '')}</code> <span class="text-sm text-muted">${escHtml(ch.cptDescription || ch.cpt_description || '')}</span></td>
@@ -622,10 +671,27 @@ async function renderRcmPage() {
               <td style="text-align:right;font-weight:600;">${_fm(ch.chargeAmount || ch.charge_amount)}</td>
               <td><span class="badge badge-${ch.status === 'submitted' || ch.status === 'billed' ? 'approved' : 'pending'}">${escHtml(ch.status || 'pending')}</span></td>
               <td><button class="btn btn-sm" onclick="window.app.editRcmCharge(${ch.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteRcmCharge(${ch.id})">Del</button></td>
-            </tr>`).join('')}
-            ${charges.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No charge entries. Use the quick entry form above.</td></tr>' : ''}
+            </tr>`).join('') + (charges.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No charge entries. Use the quick entry form above.</td></tr>' : '');
+            })()}
           </tbody>
-        </table></div></div>
+        </table></div>
+        ${(() => {
+          const PAGE_SIZE = 50;
+          const page = Math.min(window._rcmChargesPage || 1, Math.ceil(charges.length / PAGE_SIZE) || 1);
+          const totalPages = Math.ceil(charges.length / PAGE_SIZE) || 1;
+          if (charges.length <= PAGE_SIZE) return '';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid var(--gray-200);">
+            <span style="font-size:12px;color:var(--gray-500);">Showing ${(page-1)*PAGE_SIZE+1}\u2013${Math.min(page*PAGE_SIZE, charges.length)} of ${charges.length} charges</span>
+            <div style="display:flex;gap:4px;align-items:center;">
+              <button class="btn btn-sm" onclick="window._rcmChargesPage=1;window.app.rcSwitchTab('charges');" ${page===1?'disabled':''}>First</button>
+              <button class="btn btn-sm" onclick="window._rcmChargesPage=${page-1};window.app.rcSwitchTab('charges');" ${page===1?'disabled':''}>Prev</button>
+              <span style="padding:4px 12px;font-size:12px;">Page ${page} of ${totalPages}</span>
+              <button class="btn btn-sm" onclick="window._rcmChargesPage=${page+1};window.app.rcSwitchTab('charges');" ${page>=totalPages?'disabled':''}>Next</button>
+              <button class="btn btn-sm" onclick="window._rcmChargesPage=${totalPages};window.app.rcSwitchTab('charges');" ${page>=totalPages?'disabled':''}>Last</button>
+            </div>
+          </div>`;
+        })()}
+        </div>
       </div>
     </div>
 

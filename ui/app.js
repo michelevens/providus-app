@@ -11174,23 +11174,25 @@ function handleNppesProxy(payload) {
     });
   },
   filterRcmClaims() {
-    const status = document.getElementById('rcm-claim-status')?.value || '';
-    const client = document.getElementById('rcm-claim-client')?.value || '';
-    const payer = document.getElementById('rcm-claim-payer')?.value || '';
-    const search = (document.getElementById('rcm-claim-search')?.value || '').toLowerCase();
-    const dosFrom = document.getElementById('rcm-claim-dos-from')?.value || '';
-    const dosTo = document.getElementById('rcm-claim-dos-to')?.value || '';
-    document.querySelectorAll('.rcm-claim-row').forEach(r => {
-      const dos = r.dataset.dos || '';
-      r.style.display =
-        (!status || r.dataset.status === status) &&
-        (!client || r.dataset.client === client) &&
-        (!payer || r.dataset.payer === payer) &&
-        (!search || r.textContent.toLowerCase().includes(search)) &&
-        (!dosFrom || dos >= dosFrom) &&
-        (!dosTo || dos <= dosTo)
-        ? '' : 'none';
-    });
+    window._rcmClaimsPage = 1;
+    // Save filter state so it persists across pagination re-renders
+    window._rcmClaimFilterStatus = document.getElementById('rcm-claim-status')?.value || '';
+    window._rcmClaimFilterClient = document.getElementById('rcm-claim-client')?.value || '';
+    window._rcmClaimFilterPayer = document.getElementById('rcm-claim-payer')?.value || '';
+    window._rcmClaimFilterSearch = document.getElementById('rcm-claim-search')?.value || '';
+    window._rcmClaimFilterDosFrom = document.getElementById('rcm-claim-dos-from')?.value || '';
+    window._rcmClaimFilterDosTo = document.getElementById('rcm-claim-dos-to')?.value || '';
+    window.app.rcSwitchTab('claims');
+  },
+  clearRcmClaimFilters() {
+    window._rcmClaimFilterStatus = '';
+    window._rcmClaimFilterClient = '';
+    window._rcmClaimFilterPayer = '';
+    window._rcmClaimFilterSearch = '';
+    window._rcmClaimFilterDosFrom = '';
+    window._rcmClaimFilterDosTo = '';
+    window._rcmClaimsPage = 1;
+    window.app.rcSwitchTab('claims');
   },
   viewCheckDetail(checkNum) {
     if (!checkNum) return;
@@ -11431,6 +11433,7 @@ function handleNppesProxy(payload) {
     });
   },
   filterRcmCharges() {
+    window._rcmChargesPage = 1;
     const patient = (document.getElementById('rcm-charge-patient')?.value || '').toLowerCase();
     const cpt = (document.getElementById('rcm-charge-cpt')?.value || '').toLowerCase();
     const payer = (document.getElementById('rcm-charge-payer')?.value || '').toLowerCase();
@@ -18379,11 +18382,11 @@ async function renderOrgDetailPage(orgId) {
     <!-- Claims Tab -->
     <div id="od-claims" class="hidden">
       <div class="card odv2-card">
-        <div class="card-header"><h3>Claims (${rcmClaims.length})</h3></div>
+        <div class="card-header"><h3>Claims (${rcmClaims.length})</h3>${rcmClaims.length > 50 ? `<button class="btn btn-sm" id="od-claims-toggle" onclick="var rows=document.querySelectorAll('#od-claims-tbody tr.od-claim-extra');var show=rows[0]&&rows[0].style.display==='none';rows.forEach(function(r){r.style.display=show?'':'none';});this.textContent=show?'Show first 50':'Show all ${rcmClaims.length}';document.getElementById('od-claims-info').textContent=show?'Showing all ${rcmClaims.length} claims':'Showing first 50 of ${rcmClaims.length} claims';" style="font-size:11px;">Show all ${rcmClaims.length}</button>` : ''}</div>
         <div class="card-body" style="padding:0;"><div style="max-height:500px;overflow-y:auto;"><table style="font-size:12px;">
           <thead><tr><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Balance</th><th>Check #</th><th>Status</th></tr></thead>
-          <tbody>
-            ${rcmClaims.map(c => `<tr style="cursor:pointer;" onclick="window.app.viewClaimDetail(${c.id})">
+          <tbody id="od-claims-tbody">
+            ${rcmClaims.map((c, i) => `<tr style="cursor:pointer;${i >= 50 ? 'display:none;' : ''}" class="${i >= 50 ? 'od-claim-extra' : ''}" onclick="window.app.viewClaimDetail(${c.id})">
               <td style="font-family:monospace;color:var(--brand-600);">${escHtml(c.claimNumber || c.claim_number || '')}</td>
               <td>${escHtml(c.patientName || c.patient_name || '')}</td>
               <td style="font-size:11px;">${escHtml(c.payerName || c.payer_name || '')}</td>
@@ -18397,6 +18400,7 @@ async function renderOrgDetailPage(orgId) {
             ${rcmClaims.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No claims</td></tr>' : ''}
           </tbody>
         </table></div></div>
+        ${rcmClaims.length > 50 ? `<div id="od-claims-info" style="padding:8px 16px;border-top:1px solid var(--gray-200);font-size:12px;color:var(--gray-500);">Showing first 50 of ${rcmClaims.length} claims</div>` : ''}
       </div>
     </div>
 
