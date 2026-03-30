@@ -18054,6 +18054,14 @@ async function renderServiceLines() {
   const totalLines = SERVICE_LINES.length;
   const activeLines = active.length;
 
+  // Compute combined revenue dynamically from all service lines
+  let revMin = 0, revMax = 0;
+  SERVICE_LINES.forEach(s => {
+    const m = (s.annualRevenuePerPatient || '').match(/\$([\d,]+)\s*-\s*\$([\d,]+)/);
+    if (m) { revMin += parseInt(m[1].replace(/,/g, '')); revMax += parseInt(m[2].replace(/,/g, '')); }
+  });
+  const fmtK = (n) => n >= 1000 ? '$' + Math.round(n / 1000) + 'k' : '$' + n;
+
   body.innerHTML = `
     <style>
       .sl2-stat{position:relative;overflow:hidden;border-radius:16px;padding:20px 24px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.2s,box-shadow 0.2s;}
@@ -18079,7 +18087,7 @@ async function renderServiceLines() {
       </div>
       <div class="sl2-stat">
         <div class="sl2-accent" style="background:linear-gradient(90deg,#a855f7,#c084fc);"></div>
-        <div class="sl2-label">Combined Revenue/Patient</div><div class="sl2-val" style="font-size:16px;color:var(--brand-600);">$12,000 - $21,000/yr</div><div class="sl2-sub">if patient uses all lines</div>
+        <div class="sl2-label">Combined Revenue</div><div class="sl2-val" style="font-size:20px;color:var(--brand-600);">${fmtK(revMin)} – ${fmtK(revMax)}/yr</div><div class="sl2-sub">per patient, all lines</div>
       </div>
     </div>
 
