@@ -11954,9 +11954,15 @@ function handleNppesProxy(payload) {
       r.style.display = show ? '' : 'none';
     });
   },
-  openRcmClaimModal(editData) {
-    const modal = document.getElementById('rcm-claim-modal');
-    if (!modal) { showToast('Navigate to Claims & RCM first'); return; }
+  async openRcmClaimModal(editData) {
+    let modal = document.getElementById('rcm-claim-modal');
+    if (!modal) {
+      // Navigate to RCM page to load the modal, then open it
+      window._rcTab = 'claims';
+      await navigateTo('revenue-cycle');
+      modal = document.getElementById('rcm-claim-modal');
+      if (!modal) { showToast('Could not load claim form. Please try from the Claims tab.'); return; }
+    }
     document.getElementById('rcm-claim-modal-title').textContent = editData ? 'Edit Claim' : 'New Claim';
     document.getElementById('rcm-claim-edit-id').value = editData?.id || '';
     document.getElementById('rcm-claim-client').value = editData?.billingClientId || editData?.billing_client_id || '';
@@ -12067,9 +12073,14 @@ function handleNppesProxy(payload) {
     if (!await appConfirm('Delete this claim?')) return;
     try { await store.deleteRcmClaim(id); showToast('Claim deleted'); await renderRcmPage(); } catch (e) { showToast('Error: ' + e.message); }
   },
-  openRcmPaymentModal(editData) {
-    const modal = document.getElementById('rcm-payment-modal');
-    if (!modal) { showToast('Navigate to Claims & RCM first'); return; }
+  async openRcmPaymentModal(editData) {
+    let modal = document.getElementById('rcm-payment-modal');
+    if (!modal) {
+      window._rcTab = 'payments';
+      await navigateTo('revenue-cycle');
+      modal = document.getElementById('rcm-payment-modal');
+      if (!modal) { showToast('Could not load payment form. Please try from the Payments tab.'); return; }
+    }
     document.getElementById('rcm-payment-modal-title').textContent = editData ? 'Edit Payment' : 'Post Payment';
     document.getElementById('rcm-pay-edit-id').value = editData?.id || '';
     document.getElementById('rcm-pay-client').value = editData?.billingClientId || editData?.billing_client_id || '';
@@ -12199,9 +12210,14 @@ function handleNppesProxy(payload) {
       infoBox.style.display = 'none';
     }
   },
-  openRcmDenialModal(editData) {
-    const modal = document.getElementById('rcm-denial-modal');
-    if (!modal) { showToast('Navigate to Claims & RCM first'); return; }
+  async openRcmDenialModal(editData) {
+    let modal = document.getElementById('rcm-denial-modal');
+    if (!modal) {
+      window._rcTab = 'denials';
+      await navigateTo('revenue-cycle');
+      modal = document.getElementById('rcm-denial-modal');
+      if (!modal) { showToast('Could not load denial form. Please try from the Denials tab.'); return; }
+    }
     document.getElementById('rcm-denial-modal-title').textContent = editData ? 'Edit Denial' : 'Track Denial';
     document.getElementById('rcm-denial-edit-id').value = editData?.id || '';
     document.getElementById('rcm-denial-claim').value = editData?.claimId || editData?.claim_id || '';
@@ -14221,9 +14237,14 @@ function handleNppesProxy(payload) {
   },
 
   // Billing Tasks
-  openBsTaskModal(clientId) {
-    const modal = document.getElementById('bs-task-modal');
-    if (!modal) { showToast('Task modal not found — navigate to Billing Services first'); return; }
+  async openBsTaskModal(clientId) {
+    let modal = document.getElementById('bs-task-modal');
+    if (!modal) {
+      window._rcTab = 'tasks';
+      await navigateTo('revenue-cycle');
+      modal = document.getElementById('bs-task-modal');
+      if (!modal) { showToast('Could not load task form. Please try from the Tasks tab.'); return; }
+    }
     document.getElementById('bs-task-modal-title').textContent = 'Add Billing Task';
     document.getElementById('bs-task-edit-id').value = '';
     document.getElementById('bs-task-title').value = '';
@@ -14353,9 +14374,14 @@ function handleNppesProxy(payload) {
   },
 
   // Billing Activity
-  openBsActivityModal(clientId) {
-    const modal = document.getElementById('bs-activity-modal');
-    if (!modal) { showToast('Activity modal not found — navigate to Billing Services first'); return; }
+  async openBsActivityModal(clientId) {
+    let modal = document.getElementById('bs-activity-modal');
+    if (!modal) {
+      window._rcTab = 'activity';
+      await navigateTo('revenue-cycle');
+      modal = document.getElementById('bs-activity-modal');
+      if (!modal) { showToast('Could not load activity form. Please try from the Activity tab.'); return; }
+    }
     document.getElementById('bs-act-client').value = clientId || '';
     document.getElementById('bs-act-type').value = 'claim_submitted';
     document.getElementById('bs-act-provider').value = '';
