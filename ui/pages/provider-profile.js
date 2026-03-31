@@ -515,6 +515,19 @@ async function renderProviderDashboard(user) {
               <input type="date" id="provider-doc-upload-expiry" class="form-control">
             </div>
             <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Link to Application</label>
+              <select id="provider-doc-upload-app" class="form-control">
+                <option value="">None — general provider document</option>
+                ${apps.map(a => {
+                  const payer = a.payerName || a.payer_name || 'Unknown Payer';
+                  const state = a.state || '';
+                  const status = (a.status || '').replace(/_/g, ' ');
+                  return `<option value="${a.id}">${escHtml(payer)} (${state}) — ${status}</option>`;
+                }).join('')}
+              </select>
+              <div style="font-size:11px;color:var(--gray-400);margin-top:3px;">If linked, this file will also appear under the application's attachments.</div>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
               <label class="form-label">Notes</label>
               <textarea id="provider-doc-upload-notes" class="form-control" rows="2" placeholder="Optional notes..."></textarea>
             </div>
@@ -584,7 +597,7 @@ async function renderProviderDashboard(user) {
     const modal = document.getElementById('provider-doc-upload-modal');
     if (!modal) return;
     // Reset fields
-    ['provider-doc-upload-type','provider-doc-upload-name','provider-doc-upload-file','provider-doc-upload-expiry','provider-doc-upload-notes'].forEach(f => {
+    ['provider-doc-upload-type','provider-doc-upload-name','provider-doc-upload-file','provider-doc-upload-expiry','provider-doc-upload-notes','provider-doc-upload-app'].forEach(f => {
       const el = document.getElementById(f); if (el) el.value = '';
     });
     // Pre-fill if a specific doc type was clicked
@@ -617,11 +630,19 @@ async function renderProviderDashboard(user) {
 
         newBtn.disabled = true; newBtn.textContent = 'Uploading...';
         try {
+          const linkedAppId = document.getElementById('provider-doc-upload-app')?.value;
+          // Upload to provider documents
           await store.uploadProviderDocument(
             provId, file, docType, docName,
             document.getElementById('provider-doc-upload-expiry')?.value || null,
             document.getElementById('provider-doc-upload-notes')?.value?.trim() || null
           );
+          // Also upload as application attachment if linked
+          if (linkedAppId) {
+            try {
+              await store.uploadApplicationAttachment(linkedAppId, file, docName || file.name, 'Uploaded from provider documents');
+            } catch (e) { console.warn('App attachment upload failed (API may not be deployed yet):', e.message); }
+          }
           showToast('Document uploaded successfully');
           modal.classList.remove('active');
           // Refresh the provider dashboard
