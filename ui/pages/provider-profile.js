@@ -949,6 +949,12 @@ async function renderProviderProfilePage(providerId) {
   const credential = provider.credential || provider.credentials || '';
   const documents = profile.documents || [];
 
+  // Fetch provider's applications for the "Link to Application" dropdown
+  let providerApps = [];
+  try {
+    providerApps = (await store.getAll('applications')).filter(a => String(a.providerId || a.provider_id) === String(providerId));
+  } catch (e) { /* ignore */ }
+
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'education', label: 'Education' },
@@ -1924,7 +1930,7 @@ async function renderProviderProfilePage(providerId) {
               <label class="form-label">Link to Application</label>
               <select id="doc-upload-app" class="form-control">
                 <option value="">None — general provider document</option>
-                ${apps.map(a => {
+                ${providerApps.map(a => {
                   const payer = a.payerName || a.payer_name || 'Unknown Payer';
                   const st = a.state || '';
                   const stat = (a.status || '').replace(/_/g, ' ');
