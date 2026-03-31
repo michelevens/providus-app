@@ -7520,6 +7520,111 @@ window.app = {
       } catch (e) { showToast('Failed: ' + e.message); }
     };
   },
+  async editPayerBillingStandards(payerId) {
+    const allPayers = await store.getPayers();
+    const payer = allPayers.find(p => String(p.id) === String(payerId));
+    if (!payer) { showToast('Payer not found'); return; }
+    const bs = payer.billingStandards || payer.billing_standards || {};
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:620px;">
+        <div class="modal-header"><h3>Billing Standards — ${escHtml(payer.name)}</h3><button class="modal-close" onclick="this.closest('.modal-backdrop').remove()">&times;</button></div>
+        <div class="modal-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field"><label>Telehealth Modifier</label>
+              <select class="form-control" id="bs-telehealth-mod">
+                <option value="">Not set</option>
+                <option value="95 — Synchronous telehealth" ${(bs.telehealthModifier||bs.telehealth_modifier||'').startsWith('95')?'selected':''}>95 — Synchronous telehealth</option>
+                <option value="GT — Interactive audio/video" ${(bs.telehealthModifier||bs.telehealth_modifier||'').startsWith('GT')?'selected':''}>GT — Interactive audio/video</option>
+                <option value="GQ — Asynchronous (store-and-forward)" ${(bs.telehealthModifier||bs.telehealth_modifier||'').startsWith('GQ')?'selected':''}>GQ — Asynchronous</option>
+                <option value="95 + GT (both accepted)" ${(bs.telehealthModifier||bs.telehealth_modifier||'').includes('both')?'selected':''}>95 + GT (both accepted)</option>
+                <option value="None required" ${(bs.telehealthModifier||bs.telehealth_modifier)==='None required'?'selected':''}>None required</option>
+              </select>
+            </div>
+            <div class="auth-field"><label>Place of Service Code</label>
+              <select class="form-control" id="bs-pos-code">
+                <option value="">Not set</option>
+                <option value="02 — Telehealth (facility)" ${(bs.posCode||bs.pos_code||'').startsWith('02')?'selected':''}>02 — Telehealth (facility)</option>
+                <option value="10 — Telehealth (patient home)" ${(bs.posCode||bs.pos_code||'').startsWith('10')?'selected':''}>10 — Telehealth (patient home)</option>
+                <option value="11 — Office" ${(bs.posCode||bs.pos_code||'').startsWith('11')?'selected':''}>11 — Office</option>
+                <option value="02 or 10 (both accepted)" ${(bs.posCode||bs.pos_code||'').includes('both')?'selected':''}>02 or 10 (both accepted)</option>
+              </select>
+            </div>
+            <div class="auth-field"><label>Audio-Only Policy</label>
+              <select class="form-control" id="bs-audio-only">
+                <option value="">Not set</option>
+                <option value="Allowed — modifier 93 or FQ" ${(bs.audioOnlyPolicy||bs.audio_only_policy||'').startsWith('Allowed')?'selected':''}>Allowed — modifier 93 or FQ</option>
+                <option value="Allowed — E/M only" ${(bs.audioOnlyPolicy||bs.audio_only_policy||'').includes('E/M only')?'selected':''}>Allowed — E/M only</option>
+                <option value="Not allowed" ${(bs.audioOnlyPolicy||bs.audio_only_policy)==='Not allowed'?'selected':''}>Not allowed</option>
+                <option value="COVID flexibilities extended" ${(bs.audioOnlyPolicy||bs.audio_only_policy||'').includes('COVID')?'selected':''}>COVID flexibilities extended</option>
+              </select>
+            </div>
+            <div class="auth-field"><label>NP Billing Rule</label>
+              <select class="form-control" id="bs-np-rule">
+                <option value="">Not set</option>
+                <option value="Independent — bills under own NPI" ${(bs.npBillingRule||bs.np_billing_rule||'').includes('Independent')?'selected':''}>Independent — own NPI</option>
+                <option value="Incident-to — bills under physician NPI" ${(bs.npBillingRule||bs.np_billing_rule||'').includes('Incident')?'selected':''}>Incident-to — physician NPI</option>
+                <option value="Both accepted" ${(bs.npBillingRule||bs.np_billing_rule||'').includes('Both')?'selected':''}>Both accepted</option>
+                <option value="NP not accepted" ${(bs.npBillingRule||bs.np_billing_rule||'').includes('not accepted')?'selected':''}>NP not accepted</option>
+              </select>
+            </div>
+            <div class="auth-field"><label>Timely Filing Limit</label>
+              <select class="form-control" id="bs-timely-filing">
+                <option value="">Not set</option>
+                ${['90 days','120 days','180 days','365 days (1 year)','No limit'].map(t => `<option value="${t}" ${(bs.timelyFiling||bs.timely_filing)===t?'selected':''}>${t}</option>`).join('')}
+              </select>
+            </div>
+            <div class="auth-field"><label>Claim Format</label>
+              <select class="form-control" id="bs-claim-format">
+                <option value="">Not set</option>
+                ${['837P (Professional)','837I (Institutional)','837P + 837I','CMS-1500 (paper)','UB-04 (paper)'].map(f => `<option value="${f}" ${(bs.claimFormat||bs.claim_format)===f?'selected':''}>${f}</option>`).join('')}
+              </select>
+            </div>
+            <div class="auth-field"><label>Prior Auth Required</label>
+              <select class="form-control" id="bs-prior-auth">
+                <option value="">Not set</option>
+                ${['No — most services','Yes — all services','Yes — specific CPT codes only','Varies by plan'].map(p => `<option value="${p}" ${(bs.priorAuthRequired||bs.prior_auth_required)===p?'selected':''}>${p}</option>`).join('')}
+              </select>
+            </div>
+            <div class="auth-field"><label>Reimbursement Info</label>
+              <input type="text" class="form-control" id="bs-reimburse" placeholder="e.g. 85% of Medicare, contracted rate" value="${escAttr(bs.reimbursementInfo||bs.reimbursement_info||'')}">
+            </div>
+          </div>
+          <div class="auth-field" style="margin-top:10px;"><label>Billing Notes / Policy References</label>
+            <textarea class="form-control" id="bs-notes" rows="3" placeholder="Modifier rules, policy document references (e.g. CPCP033), payer-specific quirks, contact info...">${escHtml(bs.notes||'')}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="this.closest('.modal-backdrop').remove()">Cancel</button>
+          <button class="btn btn-primary" id="bs-save-btn">Save</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+
+    document.getElementById('bs-save-btn').onclick = async () => {
+      try {
+        await store.updatePayer(payerId, {
+          billingStandards: {
+            telehealthModifier: document.getElementById('bs-telehealth-mod').value || null,
+            posCode: document.getElementById('bs-pos-code').value || null,
+            audioOnlyPolicy: document.getElementById('bs-audio-only').value || null,
+            npBillingRule: document.getElementById('bs-np-rule').value || null,
+            timelyFiling: document.getElementById('bs-timely-filing').value || null,
+            claimFormat: document.getElementById('bs-claim-format').value || null,
+            priorAuthRequired: document.getElementById('bs-prior-auth').value || null,
+            reimbursementInfo: document.getElementById('bs-reimburse').value || null,
+            notes: document.getElementById('bs-notes').value || null,
+          },
+        });
+        modal.remove();
+        showToast('Billing standards updated');
+        store.clearCache();
+        await renderPayerDetailPage(payerId);
+      } catch (e) { showToast('Failed: ' + e.message); }
+    };
+  },
   copyProviderProfileLink(providerId) {
     const url = `${window.location.origin}${window.location.pathname}#provider-profile-share&id=${providerId}`;
     navigator.clipboard.writeText(url).then(() => showToast('Profile link copied!')).catch(() => showToast('Failed to copy link'));

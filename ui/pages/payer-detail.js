@@ -332,6 +332,35 @@ export async function renderPayerDetailPage(payerId) {
       </div>
     </div>
 
+    <!-- Billing Standards -->
+    <div class="card pd-section" style="border-radius:16px;overflow:hidden;border-left:4px solid #0891b2;">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <h3>Billing Standards</h3>
+        <button class="btn btn-sm" onclick="window.app.editPayerBillingStandards('${payerId}')">Edit</button>
+      </div>
+      <div class="card-body">
+        ${(() => {
+          const bs = payer.billingStandards || payer.billing_standards || {};
+          const hasData = bs.telehealthModifier || bs.telehealth_modifier || bs.posCode || bs.pos_code || bs.audioOnlyPolicy || bs.audio_only_policy;
+          if (!hasData) {
+            return '<div style="text-align:center;padding:20px;"><div style="font-size:14px;color:var(--gray-400);margin-bottom:8px;">No billing standards configured for this payer.</div><div style="font-size:12px;color:var(--gray-400);">Click "Edit" to add telehealth modifiers, POS codes, NP billing rules, timely filing limits, and more.</div></div>';
+          }
+          const _pill = (label, value, color) => value ? '<div style="padding:10px 14px;border:1px solid ' + color + '30;border-radius:10px;background:' + color + '08;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:' + color + ';margin-bottom:4px;">' + label + '</div><div style="font-size:13px;font-weight:600;color:var(--gray-800);">' + escHtml(value) + '</div></div>' : '';
+          return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:14px;">' +
+            _pill('Telehealth Modifier', bs.telehealthModifier || bs.telehealth_modifier, '#0891b2') +
+            _pill('Place of Service', bs.posCode || bs.pos_code, '#7c3aed') +
+            _pill('Audio-Only Policy', bs.audioOnlyPolicy || bs.audio_only_policy, '#2563eb') +
+            _pill('NP Billing Rule', bs.npBillingRule || bs.np_billing_rule, '#16a34a') +
+            _pill('Timely Filing', bs.timelyFiling || bs.timely_filing, '#dc2626') +
+            _pill('Claim Format', bs.claimFormat || bs.claim_format, '#b45309') +
+            _pill('Prior Auth Required', bs.priorAuthRequired || bs.prior_auth_required, '#8b5cf6') +
+            _pill('Reimbursement Rate', bs.reimbursementInfo || bs.reimbursement_info, '#16a34a') +
+          '</div>' +
+          (bs.notes ? '<div style="padding:10px 14px;border-radius:10px;background:var(--gray-50);border:1px solid var(--gray-200);font-size:12px;color:var(--gray-600);line-height:1.6;">' + escHtml(bs.notes) + '</div>' : '');
+        })()}
+      </div>
+    </div>
+
     <!-- EDI / ERA / EFT Enrollment -->
     <div class="card pd-section" style="border-radius:16px;overflow:hidden;border-left:4px solid #7c3aed;">
       <div class="card-header">
