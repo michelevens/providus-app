@@ -100,6 +100,39 @@ async function renderProviderDashboard(user) {
         store.getAll('tasks').catch(() => []),
         store.getAll('exclusions').then(e => e.filter(x => (x.providerId || x.provider_id) == providerId)).catch(() => []),
       ]);
+      // Also fetch application attachments and merge into documents
+      if (apps && apps.length > 0) {
+        const appAttachments = await Promise.all(
+          apps.map(a => store.getApplicationAttachments(a.id).catch(() => []))
+        );
+        appAttachments.forEach((attachments, i) => {
+          if (Array.isArray(attachments)) {
+            attachments.forEach(att => {
+              documents.push({
+                id: 'app-att-' + (att.id || ''),
+                documentType: 'application_attachment',
+                document_type: 'application_attachment',
+                documentName: att.label || att.originalName || att.original_name || 'Attachment',
+                document_name: att.label || att.originalName || att.original_name || 'Attachment',
+                status: 'received',
+                receivedDate: att.createdAt || att.created_at,
+                received_date: att.createdAt || att.created_at,
+                filePath: att.filePath || att.file_path,
+                file_path: att.filePath || att.file_path,
+                fileSize: att.fileSize || att.file_size,
+                file_size: att.fileSize || att.file_size,
+                mimeType: att.mimeType || att.mime_type,
+                notes: (apps[i]?.payerName || 'Application') + ' — ' + (att.label || att.originalName || att.original_name || ''),
+                _isAppAttachment: true,
+                _applicationId: apps[i]?.id,
+                _attachmentId: att.id,
+                _payerName: apps[i]?.payerName || apps[i]?.payer_name || '',
+                _state: apps[i]?.state || '',
+              });
+            });
+          }
+        });
+      }
     }
   } catch (e) { console.error('Provider dashboard error:', e); }
 
@@ -402,23 +435,48 @@ async function renderProviderDashboard(user) {
           })()}
           ${(() => {
             const knownTypes = new Set(CRED_DOCUMENTS.map(d => d.id));
-            const extraDocs = documents.filter(d => !knownTypes.has(d.documentType || d.document_type || d.type));
-            if (extraDocs.length === 0) return '';
-            return `<div style="margin-top:14px;border-top:1px solid var(--gray-200);padding-top:10px;">
-              <strong style="font-size:13px;color:var(--gray-600);">Other Documents</strong>
-              ${extraDocs.map(d => {
-                const hasFile = d.filePath || d.file_path;
-                return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray-50);">
-                  <div style="width:24px;height:24px;border-radius:6px;background:#dcfce7;color:#16a34a;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;">&#10003;</div>
-                  <div style="flex:1;min-width:0;">
-                    <div style="font-size:13px;">${escHtml(d.documentName || d.document_name || d.name || '—')}</div>
-                    <div style="font-size:11px;color:var(--gray-500);">${escHtml((d.documentType || d.document_type || d.type || '').replace(/_/g, ' '))}</div>
-                  </div>
-                  <span class="badge badge-${d.status === 'verified' || d.status === 'received' ? 'approved' : d.status === 'expired' ? 'denied' : 'pending'}" style="font-size:10px;">${escHtml(d.status || 'pending')}</span>
-                  ${hasFile ? `<button class="btn btn-sm" onclick="window.app.downloadDocument('${providerId}', ${d.id})" style="padding:2px 8px;font-size:11px;">View</button>` : ''}
-                </div>`;
-              }).join('')}
-            </div>`;
+            const extraDocs = documents.filter(d => !knownTypes.has(d.documentType || d.document_type || d.type) && !d._isAppAttachment);
+            const appAttDocs = documents.filter(d => d._isAppAttachment);
+            let html = '';
+            if (appAttDocs.length > 0) {
+              html += `<div style="margin-top:14px;border-top:2px solid var(--brand-100);padding-top:10px;">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+                  <span style="font-size:14px;">&#128206;</span>
+                  <strong style="font-size:13px;color:var(--brand-600);">Application Attachments</strong>
+                  <span style="font-size:11px;color:var(--gray-400);">${appAttDocs.length} file(s)</span>
+                </div>
+                ${appAttDocs.map(d => {
+                  const hasFile = d.filePath || d.file_path;
+                  return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray-50);">
+                    <div style="width:24px;height:24px;border-radius:6px;background:#ede9fe;color:#7c3aed;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;">&#128206;</div>
+                    <div style="flex:1;min-width:0;">
+                      <div style="font-size:13px;font-weight:500;">${escHtml(d.documentName || d.document_name || '—')}</div>
+                      <div style="font-size:11px;color:var(--gray-500);">${escHtml(d._payerName || '')}${d._state ? ' (' + d._state + ')' : ''} — ${formatDateDisplay(d.receivedDate || d.received_date)}</div>
+                    </div>
+                    <span class="badge badge-approved" style="font-size:10px;">received</span>
+                    ${hasFile ? `<button class="btn btn-sm" onclick="window.app.downloadAppAttachment('${d._applicationId}', '${d._attachmentId}')" style="padding:2px 8px;font-size:11px;">Download</button>` : ''}
+                  </div>`;
+                }).join('')}
+              </div>`;
+            }
+            if (extraDocs.length > 0) {
+              html += `<div style="margin-top:14px;border-top:1px solid var(--gray-200);padding-top:10px;">
+                <strong style="font-size:13px;color:var(--gray-600);">Other Documents</strong>
+                ${extraDocs.map(d => {
+                  const hasFile = d.filePath || d.file_path;
+                  return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray-50);">
+                    <div style="width:24px;height:24px;border-radius:6px;background:#dcfce7;color:#16a34a;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;">&#10003;</div>
+                    <div style="flex:1;min-width:0;">
+                      <div style="font-size:13px;">${escHtml(d.documentName || d.document_name || d.name || '—')}</div>
+                      <div style="font-size:11px;color:var(--gray-500);">${escHtml((d.documentType || d.document_type || d.type || '').replace(/_/g, ' '))}</div>
+                    </div>
+                    <span class="badge badge-${d.status === 'verified' || d.status === 'received' ? 'approved' : d.status === 'expired' ? 'denied' : 'pending'}" style="font-size:10px;">${escHtml(d.status || 'pending')}</span>
+                    ${hasFile ? `<button class="btn btn-sm" onclick="window.app.downloadDocument('${providerId}', ${d.id})" style="padding:2px 8px;font-size:11px;">View</button>` : ''}
+                  </div>`;
+                }).join('')}
+              </div>`;
+            }
+            return html;
           })()}
           <div style="margin-top:14px;display:flex;gap:8px;">
             <button class="btn btn-primary" onclick="window._credentik._providerUploadDoc('${providerId}', '', '')">
