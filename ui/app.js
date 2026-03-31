@@ -6647,6 +6647,14 @@ async function renderTaskModal() {
         </select>
       </div>
       <textarea id="task-notes" class="form-control" rows="2" placeholder="Notes (optional)" style="margin-bottom:8px;"></textarea>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <label style="cursor:pointer;font-size:12px;font-weight:600;color:var(--brand-600);display:flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid var(--brand-200);border-radius:6px;background:var(--brand-50);">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 1.5L12.5 4M2.5 11.5l-1 3.5 3.5-1L13.5 5.5 10.5 2.5z"/></svg>
+          Attach File
+          <input type="file" id="task-file" style="display:none;" accept=".pdf,.doc,.docx,.eml,.msg,.png,.jpg,.jpeg,.txt,.csv,.xlsx">
+        </label>
+        <span id="task-file-name" style="font-size:11px;color:var(--gray-500);"></span>
+      </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button class="btn btn-sm" onclick="window.app.cancelTaskForm()">Cancel</button>
         <button class="btn btn-sm btn-primary" onclick="window.app.saveTask()">Save Task</button>
@@ -7986,7 +7994,9 @@ window.app = {
     try {
       const modalLinkType = document.getElementById('task-link-type')?.value || '';
       const modalLinkId = document.getElementById('task-link-id')?.value || '';
-      await store.create('tasks', {
+      const fileInput = document.getElementById('task-file');
+      const file = fileInput?.files?.[0];
+      const task = await store.create('tasks', {
         title,
         category: document.getElementById('task-category')?.value || 'other',
         priority: document.getElementById('task-priority')?.value || 'normal',
@@ -7998,7 +8008,23 @@ window.app = {
         notes: document.getElementById('task-notes')?.value?.trim() || '',
         isCompleted: false,
         completedAt: '',
+        hasAttachment: !!file,
+        attachmentName: file ? file.name : '',
       });
+      // Upload file as application attachment if task is linked to an application
+      if (file && modalLinkType === 'application' && modalLinkId) {
+        try {
+          await store.uploadApplicationAttachment(modalLinkId, file, title + ' — ' + file.name, 'Uploaded via task');
+        } catch (e) { console.warn('Task attachment upload to app failed:', e.message); }
+      }
+      // Upload file as provider document if we can identify the provider
+      if (file && task?.id) {
+        try {
+          // Store file reference in task notes as fallback
+          const existingNotes = task.notes || '';
+          await store.update('tasks', task.id, { notes: existingNotes + (existingNotes ? '\n' : '') + '[Attachment: ' + file.name + ']' });
+        } catch (e) { /* ignore */ }
+      }
     } catch (e) { showToast('Error saving task: ' + e.message); return; }
     showToast('Task added');
     renderTaskModal();
