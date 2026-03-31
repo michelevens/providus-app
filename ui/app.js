@@ -19375,7 +19375,6 @@ async function renderServiceLines() {
     detail.style.display = 'block';
     detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-  `;
 }
 
 // ─── Helpers ───
