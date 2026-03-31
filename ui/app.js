@@ -14969,6 +14969,41 @@ function handleNppesProxy(payload) {
     } catch (e) { showToast('PDF generation failed: ' + e.message); }
   },
 
+  // ─── Application Attachments ───
+  async uploadAppAttachment(appId, input) {
+    const file = input?.files?.[0];
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) { showToast('File must be under 20MB'); return; }
+    const label = await appPrompt('Label for this attachment (optional):', { title: 'Upload Attachment', placeholder: 'e.g. CareFirst approval email, contract, letter...' });
+    try {
+      showToast('Uploading...');
+      await store.uploadApplicationAttachment(appId, file, label || file.name, '');
+      showToast('Attachment uploaded');
+      // Refresh the modal to show the new attachment
+      await openApplicationModal(appId);
+    } catch (e) {
+      showToast('Upload failed: ' + e.message);
+    }
+  },
+  async downloadAppAttachment(appId, attachmentId) {
+    try {
+      const result = await store.downloadApplicationAttachment(appId, attachmentId);
+      if (result.url) {
+        window.open(result.url, '_blank');
+      } else {
+        showToast('No download URL available');
+      }
+    } catch (e) { showToast('Download failed: ' + e.message); }
+  },
+  async deleteAppAttachment(appId, attachmentId) {
+    if (!await appConfirm('Delete this attachment? This cannot be undone.', { title: 'Delete Attachment', okLabel: 'Delete', okClass: 'btn-danger' })) return;
+    try {
+      await store.deleteApplicationAttachment(appId, attachmentId);
+      showToast('Attachment deleted');
+      await openApplicationModal(appId);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+
   // ─── Organization Management ───
   viewOrg(id) {
     window._selectedOrgId = id;
@@ -16204,9 +16239,61 @@ async function openApplicationModal(id) {
       <div class="form-group"><label>Payer Contact Email</label><input type="email" class="form-control" id="field-payer-email" value="${escAttr(existing?.payerContactEmail || existing?.payer_contact_email || '')}" placeholder="e.g. cred@payer.com"></div>
     </div>
     <div class="form-group"><label>Notes</label><textarea class="form-control" id="field-notes">${existing?.notes || ''}</textarea></div>
+
+    ${id ? `
+    <!-- Attachments -->
+    <div style="margin-top:16px;padding-top:16px;border-top:2px solid var(--gray-200);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <label style="font-weight:700;font-size:13px;margin:0;">Attachments</label>
+        <label style="cursor:pointer;font-size:12px;font-weight:600;color:var(--brand-600);display:flex;align-items:center;gap:4px;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M4.5 5.5L8 2l3.5 3.5"/><path d="M2 10v3a1 1 0 001 1h10a1 1 0 001-1v-3"/></svg>
+          Upload File
+          <input type="file" style="display:none;" onchange="window.app.uploadAppAttachment('${id}', this)" accept=".pdf,.doc,.docx,.eml,.msg,.png,.jpg,.jpeg,.txt,.csv,.xlsx">
+        </label>
+      </div>
+      <div id="app-attachments-list" style="min-height:24px;">
+        <div style="text-align:center;color:var(--gray-400);font-size:12px;padding:8px;">Loading attachments...</div>
+      </div>
+    </div>
+    ` : `
+    <div style="margin-top:12px;padding:10px;border-radius:8px;background:var(--gray-50);border:1px solid var(--gray-200);font-size:12px;color:var(--gray-500);text-align:center;">
+      Save the application first, then you can attach files (emails, letters, contracts).
+    </div>
+    `}
   `;
 
   modal.classList.add('active');
+
+  // Load attachments if editing
+  if (id) {
+    try {
+      const attachments = await store.getApplicationAttachments(id);
+      const list = document.getElementById('app-attachments-list');
+      if (!list) return;
+      if (!attachments || attachments.length === 0) {
+        list.innerHTML = '<div style="text-align:center;color:var(--gray-400);font-size:12px;padding:8px;">No attachments yet. Upload emails, letters, or contracts.</div>';
+      } else {
+        list.innerHTML = attachments.map(a => {
+          const name = a.originalName || a.original_name || a.label || a.fileName || a.file_name || 'File';
+          const date = a.createdAt || a.created_at || '';
+          const size = a.fileSize || a.file_size;
+          const sizeStr = size ? (size > 1048576 ? (size / 1048576).toFixed(1) + ' MB' : Math.round(size / 1024) + ' KB') : '';
+          return '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;background:var(--gray-50);border:1px solid var(--gray-200);margin-bottom:4px;">' +
+            '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--gray-500)" stroke-width="1.5"><path d="M4 1.5h5l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1v-12a1 1 0 011-1z"/><path d="M9 1.5v4h4"/></svg>' +
+            '<div style="flex:1;min-width:0;">' +
+              '<div style="font-size:12px;font-weight:600;color:var(--gray-800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(name) + '</div>' +
+              '<div style="font-size:10px;color:var(--gray-400);">' + (date ? formatDateDisplay(date) : '') + (sizeStr ? ' · ' + sizeStr : '') + (a.label ? ' · ' + escHtml(a.label) : '') + '</div>' +
+            '</div>' +
+            '<button class="btn btn-sm" style="font-size:10px;padding:2px 8px;" onclick="window.app.downloadAppAttachment(\'' + id + '\',\'' + (a.id || '') + '\')">Download</button>' +
+            '<button class="btn btn-sm" style="font-size:10px;padding:2px 8px;color:var(--red);" onclick="window.app.deleteAppAttachment(\'' + id + '\',\'' + (a.id || '') + '\')">×</button>' +
+          '</div>';
+        }).join('');
+      }
+    } catch (e) {
+      const list = document.getElementById('app-attachments-list');
+      if (list) list.innerHTML = '<div style="text-align:center;color:var(--gray-400);font-size:12px;padding:8px;">Attachments not available yet.</div>';
+    }
+  }
 }
 
 

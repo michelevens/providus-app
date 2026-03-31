@@ -1076,6 +1076,41 @@ class Store {
         return this._fetch(`${CONFIG.API_URL}/providers/${providerId}/documents/${documentId}`, { method: 'DELETE' });
     }
 
+    // ─── Application Attachments ───
+    async uploadApplicationAttachment(applicationId, file, label = '', notes = '') {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('label', label);
+        if (notes) formData.append('notes', notes);
+
+        const headers = { 'Accept': 'application/json' };
+        const token = auth.getToken();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (this.activeAgencyId) headers['X-Agency-Id'] = String(this.activeAgencyId);
+
+        const response = await fetch(`${CONFIG.API_URL}/applications/${applicationId}/attachments`, {
+            method: 'POST', headers, body: formData,
+        });
+        if (response.status === 401) { auth._clearSession(); document.getElementById('app-sidebar')?.classList.add('hidden'); document.getElementById('login-screen')?.classList.remove('hidden'); throw new Error('Session expired'); }
+        if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.message || err.error || `HTTP ${response.status}`); }
+        const json = await response.json();
+        return this._snakeToCamel(json);
+    }
+
+    async getApplicationAttachments(applicationId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/applications/${applicationId}/attachments`);
+        return result.data || result;
+    }
+
+    async downloadApplicationAttachment(applicationId, attachmentId) {
+        const result = await this._fetch(`${CONFIG.API_URL}/applications/${applicationId}/attachments/${attachmentId}/download`);
+        return result.data || result;
+    }
+
+    async deleteApplicationAttachment(applicationId, attachmentId) {
+        return this._fetch(`${CONFIG.API_URL}/applications/${applicationId}/attachments/${attachmentId}`, { method: 'DELETE' });
+    }
+
     async downloadProviderPacketPdf(providerId) {
         const headers = { 'Accept': 'application/pdf' };
         const token = auth.getToken();
