@@ -38,7 +38,10 @@ function fundingOppCard(opp) {
     <p style="margin:0 0 10px;font-size:12px;color:var(--gray-400);line-height:1.4;">${escHtml(opp.description || '')}</p>
     <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--gray-500);">
       <span>${escHtml(opp.agency || '')}</span>
-      ${daysLeft !== null ? `<span style="${urgency}">${daysLeft > 0 ? daysLeft + ' days left' : 'EXPIRED'}</span>` : '<span>Open</span>'}
+      <div style="display:flex;align-items:center;gap:8px;">
+        ${opp.fit ? `<span style="padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:${opp.fit >= 85 ? 'rgba(16,185,129,0.15);color:#10b981' : opp.fit >= 70 ? 'rgba(245,158,11,0.15);color:#f59e0b' : 'rgba(107,114,128,0.15);color:#6b7280'};">${opp.fit}% fit</span>` : ''}
+        ${daysLeft !== null ? `<span style="${urgency}">${daysLeft > 0 ? daysLeft + ' days left' : 'EXPIRED'}</span>` : '<span>Open</span>'}
+      </div>
     </div>
   </div>`;
 }
@@ -71,15 +74,24 @@ async function renderFundingDashboard() {
   } catch (e) {
     console.warn('Funding API not available, using sample data', e);
     // Fallback to sample data if API not yet deployed
+    // EnnHealth-specific opportunities based on service line analysis
     opportunities = [
-      { title: 'Community Mental Health Centers Grant', source: 'federal', agency: 'SAMHSA', amount: '$500K–$1M', deadline: '2026-05-15', description: 'Funding for community-based mental health services expansion including telehealth and crisis intervention programs.' },
-      { title: 'Certified Community Behavioral Health Clinic (CCBHC) Expansion', source: 'federal', agency: 'SAMHSA', amount: '$1M–$4M', deadline: '2026-06-01', description: 'Multi-year expansion grants for CCBHCs providing comprehensive behavioral health care.' },
-      { title: 'Mental Health Block Grant', source: 'federal', agency: 'SAMHSA', amount: 'Varies', deadline: '2026-07-30', description: 'State formula grants for community mental health services for adults with SMI and children with SED.' },
-      { title: 'State Opioid Response Grant (SOR)', source: 'federal', agency: 'SAMHSA', amount: '$2M–$10M', deadline: '2026-04-20', description: 'Address opioid and stimulant use disorders through prevention, treatment, and recovery services.' },
-      { title: 'Behavioral Health Workforce Development', source: 'federal', agency: 'HRSA', amount: '$250K–$750K', deadline: '2026-05-30', description: 'Training and education programs to expand the behavioral health workforce.' },
-      { title: 'State Mental Health Innovation Fund', source: 'state', agency: 'State BH Authority', amount: '$50K–$200K', deadline: '2026-04-15', description: 'Competitive grants for innovative approaches to behavioral health service delivery.' },
-      { title: 'Community Foundation Mental Health Initiative', source: 'foundation', agency: 'Robert Wood Johnson', amount: '$100K–$500K', deadline: '2026-08-01', description: 'Supporting community organizations addressing mental health disparities.' },
-      { title: 'VA Community Care Partnership', source: 'va', agency: 'Dept of Veterans Affairs', amount: 'Contract', deadline: '2026-06-15', description: 'Community provider contracts for veteran mental health and substance use services.' },
+      { title: 'NIH SBIR Phase I — Health IT Innovation (Credentik)', source: 'federal', agency: 'NIH / NIAAA / NIMH', amount: '$275K–$1.75M', deadline: '2026-09-05', description: 'SBIR funding for Credentik as AI-powered credentialing and RCM platform. Phase I: $275K (6-12 mo), Phase II: $1.75M (2 yr). 20-25% success rate.', fit: 95 },
+      { title: 'SAMHSA Primary & Behavioral Health Care Integration (PBHCI)', source: 'federal', agency: 'SAMHSA', amount: '$500K/yr × 4yr', deadline: '2026-06-01', description: 'EnnHealth already operates integrated psych + primary care via telehealth — this is a flagship fit. Funds community orgs integrating behavioral and primary care.', fit: 95 },
+      { title: 'SAMHSA MAT-PDOA — Medication-Assisted Treatment Expansion', source: 'federal', agency: 'SAMHSA', amount: '$500K/yr × 3yr', deadline: '2026-04-30', description: 'Expand MAT services using FDA-approved medications. Must partner with community org. AUD/MAT are core EnnHealth services.', fit: 92 },
+      { title: 'NHSC Loan Repayment — SUD Workforce', source: 'federal', agency: 'HRSA / NHSC', amount: '$75K/provider (tax-free)', deadline: '2026-04-15', description: 'Up to $75K for 3-year commitment for SUD providers at NHSC-approved sites. PMHNPs are high-priority. Step 1: apply for NHSC site approval.', fit: 90 },
+      { title: 'CCBHC Expansion Grant', source: 'federal', agency: 'SAMHSA', amount: '$1M–$4M/yr × 4yr', deadline: '2026-06-01', description: 'Enhanced Medicaid rates ($200-$500/visit vs $50-$100). Requires 9 core services. Psych + SUD services already qualify. Gap: add crisis services and peer support.', fit: 88 },
+      { title: 'VA Community Care Network Enrollment', source: 'va', agency: 'VA / Optum / TriWest', amount: 'Revenue stream', deadline: null, description: 'Not a grant — register as community provider for VA CCN. Veterans access EnnHealth for psych and SUD services. Mental health is VA highest-demand service.', fit: 92 },
+      { title: 'Opioid Settlement Funds — State Distribution', source: 'state', agency: 'State Settlement Admin', amount: '$50K–$500K+', deadline: null, description: '$50B+ being distributed through 2038. MAT/AUD services directly qualify. Contact FL AG office and county opioid response coordinators.', fit: 90 },
+      { title: 'HRSA Telehealth Network Program (EB-TNP)', source: 'federal', agency: 'HRSA', amount: '$250K–$500K/yr × 4yr', deadline: '2026-06-15', description: 'Evidence-based telehealth network grants. EnnHealth is telehealth-native psych + primary care. Stronger if serving rural/underserved populations.', fit: 85 },
+      { title: 'NHSC Standard Loan Repayment', source: 'federal', agency: 'HRSA / NHSC', amount: '$50K/provider (tax-free)', deadline: '2026-04-15', description: 'Up to $50K for 2-year commitment. PMHNPs and FNPs are high-priority disciplines. Telehealth sites can qualify if serving HPSA populations.', fit: 88 },
+      { title: 'SAMHSA Community Mental Health Block Grant (sub-award)', source: 'state', agency: 'FL DCF / NM HSD', amount: '$50K–$500K', deadline: null, description: 'Apply through state mental health authority. Psych services for SMI directly qualify. Contact FL DCF or NM HSD for current sub-award cycle.', fit: 85 },
+      { title: 'SBA 7(a) Loan — Business Expansion', source: 'federal', agency: 'SBA', amount: 'Up to $5M', deadline: null, description: 'Standard business financing for expansion, hiring, technology development. EnnHealth qualifies as small business. Up to 25-year terms.', fit: 80 },
+      { title: 'USDA Distance Learning & Telemedicine Grant', source: 'federal', agency: 'USDA', amount: '$50K–$1M', deadline: '2026-02-28', description: 'Telehealth equipment and infrastructure for rural areas (pop <20K). Strong if EnnHealth documents rural patient base.', fit: 75 },
+      { title: 'FCC Connected Care Pilot Program', source: 'federal', agency: 'FCC', amount: 'Up to $1M (85% of costs)', deadline: '2026-07-01', description: 'Covers broadband connectivity, devices, network equipment for telehealth patients. Directly supports telehealth infrastructure.', fit: 80 },
+      { title: 'Wellbeing Trust — Mental Health Innovation', source: 'foundation', agency: 'Wellbeing Trust', amount: '$50K–$200K', deadline: '2026-08-01', description: 'Tech-enabled mental health is their mission. Strong fit for EnnHealth telehealth + Credentik platform. Less competitive than federal.', fit: 82 },
+      { title: 'FQHC Look-Alike Designation', source: 'federal', agency: 'HRSA', amount: 'Enhanced reimbursement (50-100% higher)', deadline: null, description: 'Strategic long-term play. Unlocks: enhanced Medicaid/Medicare rates, 340B drug pricing (40-50% off psych meds), NHSC eligibility, free malpractice (FTCA).', fit: 70 },
+      { title: 'Medicaid MCO Provider Development Grants', source: 'state', agency: 'Molina / Centene / UHC', amount: '$5K–$50K', deadline: null, description: 'Many Medicaid MCOs offer recruitment bonuses, practice transformation grants, telehealth infrastructure grants. Contact provider relations in your operating states.', fit: 78 },
     ];
   }
 
@@ -188,12 +200,19 @@ async function renderFundingFederal() {
   } catch (e) {
     // Fallback sample data
     grants = [
-      { title: 'Community Mental Health Centers Grant', agency: 'SAMHSA', cfda: '93.958', amount: '$500K–$1M', deadline: '2026-05-15', status: 'Open', description: 'Funding for community-based mental health services expansion.' },
-      { title: 'CCBHC Expansion Grants', agency: 'SAMHSA', cfda: '93.829', amount: '$1M–$4M', deadline: '2026-06-01', status: 'Open', description: 'Multi-year expansion grants for Certified Community Behavioral Health Clinics.' },
-      { title: 'Mental Health Block Grant (MHBG)', agency: 'SAMHSA', cfda: '93.958', amount: 'Formula', deadline: '2026-07-30', status: 'Open', description: 'State formula grants for adults with SMI and children with SED.' },
-      { title: 'State Opioid Response (SOR)', agency: 'SAMHSA', cfda: '93.788', amount: '$2M–$10M', deadline: '2026-04-20', status: 'Closing Soon', description: 'Opioid and stimulant use disorder prevention and treatment.' },
-      { title: 'Behavioral Health Workforce', agency: 'HRSA', cfda: '93.732', amount: '$250K–$750K', deadline: '2026-05-30', status: 'Open', description: 'Expand and diversify the behavioral health workforce.' },
-      { title: 'NIMH Research Grants (R01)', agency: 'NIH', cfda: '93.242', amount: '$250K+/yr', deadline: 'Rolling', status: 'Open', description: 'Support mental health research projects of significance.' },
+      { title: 'NIH SBIR Phase I — Health IT (Credentik)', agency: 'NIH/NIAAA/NIMH', cfda: '93.242', amount: '$275K–$1.75M', deadline: '2026-09-05', status: 'Open', description: 'AI-powered credentialing and RCM platform. Highly competitive for NIAAA (AUD tech) and NIMH (MH tech). EnnHealth fit: 95%' },
+      { title: 'SAMHSA PBHCI — Integrated BH + Primary Care', agency: 'SAMHSA', cfda: '93.243', amount: '$500K/yr × 4yr', deadline: '2026-06-01', status: 'Open', description: 'EnnHealth already runs integrated psych + primary care. Flagship opportunity. EnnHealth fit: 95%' },
+      { title: 'SAMHSA MAT-PDOA — Addiction Treatment Expansion', agency: 'SAMHSA', cfda: '93.243', amount: '$500K/yr × 3yr', deadline: '2026-04-30', status: 'Closing Soon', description: 'Expand MAT/AUD services. Requires community partner. Core EnnHealth services. EnnHealth fit: 92%' },
+      { title: 'CCBHC Expansion Grant', agency: 'SAMHSA', cfda: '93.829', amount: '$1M–$4M/yr', deadline: '2026-06-01', status: 'Open', description: 'Enhanced Medicaid rates ($200-$500/visit). Requires 9 core services. Gap: crisis + peer support. EnnHealth fit: 88%' },
+      { title: 'NHSC SUD Workforce Loan Repayment', agency: 'HRSA/NHSC', cfda: '93.165', amount: '$75K/provider', deadline: '2026-04-15', status: 'Closing Soon', description: 'Tax-free loan repayment for SUD providers. PMHNPs high-priority. Must be NHSC-approved site. EnnHealth fit: 90%' },
+      { title: 'NHSC Standard Loan Repayment', agency: 'HRSA/NHSC', cfda: '93.165', amount: '$50K/provider', deadline: '2026-04-15', status: 'Closing Soon', description: 'Up to $50K for 2yr commitment. FNPs and PMHNPs are priority disciplines. Telehealth sites eligible. EnnHealth fit: 88%' },
+      { title: 'HRSA Telehealth Network Program (EB-TNP)', agency: 'HRSA', cfda: '93.211', amount: '$250K–$500K/yr', deadline: '2026-06-15', status: 'Open', description: 'Evidence-based telehealth. EnnHealth is telehealth-native. Stronger with rural/underserved data. EnnHealth fit: 85%' },
+      { title: 'HRSA Behavioral Health Workforce (BHWET)', agency: 'HRSA', cfda: '93.732', amount: '$100K–$500K/yr', deadline: '2026-05-30', status: 'Open', description: 'Training programs for BH workforce. Need academic partnership. NP-led model is strength. EnnHealth fit: 65%' },
+      { title: 'SBA 7(a) Business Loan', agency: 'SBA', cfda: '59.012', amount: 'Up to $5M', deadline: 'Rolling', status: 'Open', description: 'Standard business expansion financing. Up to 25-year terms. EnnHealth qualifies. EnnHealth fit: 80%' },
+      { title: 'SBA SBIR — Health IT', agency: 'SBA/HHS', cfda: '93.103', amount: '$275K–$1.75M', deadline: '2026-09-05', status: 'Open', description: 'Small business innovation research for health IT. Credentik platform is highly competitive. EnnHealth fit: 90%' },
+      { title: 'USDA Distance Learning & Telemedicine', agency: 'USDA', cfda: '10.855', amount: '$50K–$1M', deadline: '2026-02-28', status: 'Closing Soon', description: 'Telehealth infrastructure for rural areas. Strong if serving rural patients. EnnHealth fit: 75%' },
+      { title: 'FCC Connected Care Pilot', agency: 'FCC', cfda: 'N/A', amount: 'Up to $1M', deadline: '2026-07-01', status: 'Open', description: 'Covers 85% of broadband/device costs for telehealth patients. EnnHealth fit: 80%' },
+      { title: 'FQHC Look-Alike Designation', agency: 'HRSA', cfda: '93.224', amount: 'Enhanced rates', deadline: 'Rolling', status: 'Open', description: 'Long-term strategic play. 50-100% higher Medicaid rates, 340B drug pricing, FTCA malpractice. EnnHealth fit: 70%' },
     ];
   }
 
@@ -235,12 +254,55 @@ async function renderFundingState() {
   document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === 'funding-state'));
 
   const statePrograms = [
-    { state: 'TX', name: 'Texas HHSC Behavioral Health Services', type: 'Contract', amount: 'Varies', deadline: '2026-04-30', status: 'Open' },
-    { state: 'CA', name: 'DHCS Community Mental Health Grant', type: 'Grant', amount: '$100K–$500K', deadline: '2026-05-15', status: 'Open' },
-    { state: 'NY', name: 'OMH Community Reinvestment Program', type: 'Grant', amount: '$200K–$1M', deadline: '2026-06-01', status: 'Open' },
-    { state: 'FL', name: 'DCF Behavioral Health Managing Entity', type: 'Contract', amount: '$1M+', deadline: 'Ongoing', status: 'Open' },
-    { state: 'OH', name: 'OhioMHAS Prevention Grant', type: 'Grant', amount: '$50K–$200K', deadline: '2026-05-01', status: 'Open' },
-    { state: 'PA', name: 'OMHSAS Community MH Services', type: 'Grant', amount: '$75K–$300K', deadline: '2026-07-15', status: 'Upcoming' },
+    // ─── EnnHealth Operating States ───
+    { state: 'FL', name: 'DCF Behavioral Health Managing Entity Contracts', type: 'Contract', amount: '$1M+', deadline: 'Ongoing', status: 'Open', notes: 'PRIMARY — contact FL DCF for sub-awards' },
+    { state: 'FL', name: 'FL Opioid Settlement Fund Distribution', type: 'Grant', amount: '$50K–$500K', deadline: 'Rolling', status: 'Open', notes: 'Contact county opioid response coordinators' },
+    { state: 'FL', name: 'Florida Blue Foundation — BH Access Grants', type: 'Grant', amount: '$25K–$150K', deadline: '2026-06-30', status: 'Open', notes: 'Behavioral health access focus' },
+    { state: 'NM', name: 'NM HSD Behavioral Health Division Sub-grants', type: 'Grant', amount: '$50K–$300K', deadline: 'Rolling', status: 'Open', notes: 'SAMHSA block grant sub-awards' },
+    { state: 'NM', name: 'NM Opioid Settlement Fund', type: 'Grant', amount: '$50K–$250K', deadline: 'Rolling', status: 'Open', notes: 'State legislature administered' },
+    // ─── High-Population / High-Opportunity States ───
+    { state: 'TX', name: 'HHSC Behavioral Health Services', type: 'Contract', amount: 'Varies', deadline: '2026-04-30', status: 'Open', notes: 'Largest state BH budget' },
+    { state: 'CA', name: 'DHCS Community Mental Health Grant', type: 'Grant', amount: '$100K–$500K', deadline: '2026-05-15', status: 'Open', notes: 'CalAIM behavioral health integration' },
+    { state: 'CA', name: 'MHSA Innovation Fund', type: 'Grant', amount: '$100K–$1M', deadline: 'Rolling', status: 'Open', notes: 'Mental Health Services Act — telehealth innovation' },
+    { state: 'NY', name: 'OMH Community Reinvestment Program', type: 'Grant', amount: '$200K–$1M', deadline: '2026-06-01', status: 'Open', notes: 'Community-based MH services' },
+    { state: 'PA', name: 'OMHSAS Community MH Services', type: 'Grant', amount: '$75K–$300K', deadline: '2026-07-15', status: 'Upcoming', notes: '' },
+    { state: 'OH', name: 'OhioMHAS Prevention Grant', type: 'Grant', amount: '$50K–$200K', deadline: '2026-05-01', status: 'Open', notes: '' },
+    { state: 'IL', name: 'DHS Division of MH — Community Grants', type: 'Grant', amount: '$50K–$400K', deadline: '2026-05-30', status: 'Open', notes: '' },
+    { state: 'GA', name: 'DBHDD Behavioral Health Provider Grants', type: 'Grant', amount: '$75K–$250K', deadline: '2026-06-15', status: 'Open', notes: '' },
+    { state: 'NC', name: 'NC DHHS — BH Tailored Plan Provider', type: 'Contract', amount: 'Varies', deadline: 'Ongoing', status: 'Open', notes: 'Medicaid transformation — BH providers needed' },
+    { state: 'MI', name: 'MDHHS Behavioral Health Innovation', type: 'Grant', amount: '$50K–$200K', deadline: '2026-07-01', status: 'Open', notes: '' },
+    { state: 'VA', name: 'DBHDS — BH Enhancement Grants', type: 'Grant', amount: '$100K–$500K', deadline: '2026-05-15', status: 'Open', notes: 'Marcus Alert expansion — crisis services' },
+    { state: 'AZ', name: 'AHCCCS BH Innovation Grant', type: 'Grant', amount: '$50K–$300K', deadline: '2026-06-01', status: 'Open', notes: 'Medicaid BH integration focus' },
+    { state: 'MA', name: 'DMH Community MH Center Expansion', type: 'Grant', amount: '$100K–$500K', deadline: '2026-05-30', status: 'Open', notes: 'Roadmap for BH reform funds' },
+    { state: 'WA', name: 'HCA — BH Telehealth Expansion', type: 'Grant', amount: '$50K–$200K', deadline: '2026-06-30', status: 'Open', notes: 'Telehealth-specific BH funding' },
+    { state: 'CO', name: 'BHA — Behavioral Health Entity Grants', type: 'Grant', amount: '$75K–$400K', deadline: '2026-05-15', status: 'Open', notes: 'New Behavioral Health Administration' },
+    { state: 'OR', name: 'OHA — BH Treatment & Recovery', type: 'Grant', amount: '$50K–$250K', deadline: '2026-07-01', status: 'Open', notes: 'Measure 110 reinvestment funds' },
+    { state: 'TN', name: 'TDMHSAS SUD Treatment Expansion', type: 'Grant', amount: '$50K–$300K', deadline: '2026-06-15', status: 'Open', notes: 'Opioid response focused' },
+    { state: 'MD', name: 'BHA — Crisis Services Expansion', type: 'Grant', amount: '$100K–$500K', deadline: '2026-05-01', status: 'Open', notes: '988 crisis infrastructure' },
+    { state: 'IN', name: 'DMHA — Recovery Works Provider', type: 'Contract', amount: 'Varies', deadline: 'Ongoing', status: 'Open', notes: 'SUD treatment voucher program' },
+    { state: 'MN', name: 'DHS — BH Fund Grants', type: 'Grant', amount: '$50K–$200K', deadline: '2026-06-01', status: 'Open', notes: '' },
+    { state: 'MO', name: 'DMH — Comprehensive Substance Treatment', type: 'Grant', amount: '$75K–$300K', deadline: '2026-07-15', status: 'Upcoming', notes: '' },
+    { state: 'WI', name: 'DHS — Mental Health Block Grant Sub-awards', type: 'Grant', amount: '$25K–$150K', deadline: 'Rolling', status: 'Open', notes: 'SAMHSA pass-through' },
+    { state: 'SC', name: 'DMH — Community Mental Health Services', type: 'Grant', amount: '$50K–$200K', deadline: '2026-06-30', status: 'Open', notes: '' },
+    { state: 'AL', name: 'ADMH — SUD Provider Expansion', type: 'Grant', amount: '$50K–$150K', deadline: '2026-05-30', status: 'Open', notes: '' },
+    { state: 'KY', name: 'DBHDID — BH Provider Development', type: 'Grant', amount: '$50K–$200K', deadline: '2026-06-15', status: 'Open', notes: '' },
+    { state: 'LA', name: 'LDH — BH Medicaid Provider Recruitment', type: 'Contract', amount: 'Varies', deadline: 'Ongoing', status: 'Open', notes: 'Telehealth BH providers needed' },
+    { state: 'NV', name: 'DPBH — BH Workforce & Access Grants', type: 'Grant', amount: '$50K–$200K', deadline: '2026-07-01', status: 'Open', notes: 'Severe provider shortage state' },
+    { state: 'CT', name: 'DMHAS — SUD Treatment Innovation', type: 'Grant', amount: '$75K–$300K', deadline: '2026-05-15', status: 'Open', notes: '' },
+    { state: 'UT', name: 'DSAMH — BH Telehealth Grants', type: 'Grant', amount: '$25K–$100K', deadline: '2026-06-01', status: 'Open', notes: 'Rural telehealth focus' },
+    { state: 'OK', name: 'ODMHSAS — SUD/MH Provider Grants', type: 'Grant', amount: '$50K–$250K', deadline: '2026-06-30', status: 'Open', notes: 'Tribal + rural priority' },
+    { state: 'MS', name: 'DMH — Community MH Services', type: 'Grant', amount: '$25K–$150K', deadline: '2026-07-15', status: 'Upcoming', notes: '' },
+    { state: 'AR', name: 'DHS — BH Provider Expansion', type: 'Grant', amount: '$50K–$150K', deadline: '2026-06-01', status: 'Open', notes: '' },
+    { state: 'KS', name: 'KDADS — BH Crisis & Treatment', type: 'Grant', amount: '$50K–$200K', deadline: '2026-05-30', status: 'Open', notes: '' },
+    { state: 'NE', name: 'DHHS — BH Regional Center Grants', type: 'Grant', amount: '$25K–$100K', deadline: '2026-07-01', status: 'Open', notes: '' },
+    { state: 'IA', name: 'DHS — Mental Health & Disability Services', type: 'Grant', amount: '$50K–$200K', deadline: '2026-06-15', status: 'Open', notes: '' },
+    { state: 'WV', name: 'DHHR — BH & SUD Treatment Expansion', type: 'Grant', amount: '$50K–$250K', deadline: '2026-05-15', status: 'Open', notes: 'Opioid crisis priority state' },
+    // ─── Opioid Settlement (All States) ───
+    { state: 'ALL', name: 'National Opioid Settlement — State Distributions', type: 'Settlement', amount: '$50B+ total (2022–2038)', deadline: 'Ongoing', status: 'Open', notes: 'Every state distributing. Contact state AG office + county coordinators.' },
+    // ─── VA (National) ───
+    { state: 'ALL', name: 'VA Community Care Network (CCN) Enrollment', type: 'Revenue', amount: 'Revenue stream', deadline: 'Ongoing', status: 'Open', notes: 'Register with Optum/TriWest. No application — just enroll as community provider.' },
+    // ─── MCO Provider Development (National) ───
+    { state: 'ALL', name: 'Medicaid MCO Provider Development Programs', type: 'Grant', amount: '$5K–$50K', deadline: 'Ongoing', status: 'Open', notes: 'Contact Molina, Centene, UHC, Humana, Aetna Better Health provider relations.' },
   ];
 
   body.innerHTML = `
@@ -249,15 +311,16 @@ async function renderFundingState() {
       <div class="card-header"><h3 style="margin:0;">State & Local Behavioral Health Funding</h3></div>
       <div class="card-body" style="padding:0;">
         <table>
-          <thead><tr><th>State</th><th>Program</th><th>Type</th><th>Amount</th><th>Deadline</th><th>Status</th></tr></thead>
+          <thead><tr><th>State</th><th>Program</th><th>Type</th><th>Amount</th><th>Deadline</th><th>Status</th><th>Notes</th></tr></thead>
           <tbody>
-            ${statePrograms.map(p => `<tr>
-              <td><span style="font-weight:700;color:var(--brand-400);">${escHtml(p.state)}</span></td>
+            ${statePrograms.map(p => `<tr style="${p.state === 'FL' || p.state === 'NM' ? 'background:rgba(16,185,129,0.05);' : ''}">
+              <td><span style="font-weight:700;${p.state === 'FL' || p.state === 'NM' ? 'color:#10b981;' : p.state === 'ALL' ? 'color:#8b5cf6;' : 'color:var(--brand-400);'}">${escHtml(p.state)}</span></td>
               <td><strong>${escHtml(p.name)}</strong></td>
               <td><span class="funding-source-badge funding-source-state">${escHtml(p.type)}</span></td>
-              <td style="font-weight:600;color:#10b981;">${escHtml(p.amount)}</td>
-              <td>${escHtml(p.deadline)}</td>
+              <td style="font-weight:600;color:#10b981;white-space:nowrap;">${escHtml(p.amount)}</td>
+              <td style="white-space:nowrap;">${escHtml(p.deadline)}</td>
               <td style="font-size:12px;color:${p.status === 'Upcoming' ? 'var(--gray-400)' : '#10b981'};">${escHtml(p.status)}</td>
+              <td style="font-size:11px;color:var(--gray-400);">${escHtml(p.notes || '')}</td>
             </tr>`).join('')}
           </tbody>
         </table>
@@ -274,12 +337,21 @@ async function renderFundingFoundations() {
   document.querySelectorAll('.funding-nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === 'funding-foundations'));
 
   const foundations = [
-    { name: 'Robert Wood Johnson Foundation', focus: 'Health equity, community health', amount: '$100K–$500K', cycle: 'Annual', deadline: '2026-08-01' },
-    { name: 'Hogg Foundation for Mental Health', focus: 'Mental health services (Texas)', amount: '$50K–$250K', cycle: 'Biannual', deadline: '2026-05-15' },
-    { name: 'NAMI Local Affiliate Grants', focus: 'Mental health advocacy & support', amount: '$5K–$25K', cycle: 'Annual', deadline: '2026-06-30' },
-    { name: 'Substance Abuse & MH Services Foundation', focus: 'SUD & MH treatment access', amount: '$25K–$100K', cycle: 'Quarterly', deadline: 'Rolling' },
-    { name: 'BCBS Foundation', focus: 'Behavioral health integration', amount: '$50K–$200K', cycle: 'Annual', deadline: '2026-09-01' },
-    { name: 'Wellcome Trust Mental Health', focus: 'Mental health research & innovation', amount: '$100K–$1M', cycle: 'Annual', deadline: '2026-07-01' },
+    { name: 'Wellbeing Trust', focus: 'Tech-enabled mental health innovation', amount: '$50K–$200K', cycle: 'Annual', deadline: '2026-08-01', fit: 'STRONG — telehealth MH is their core mission' },
+    { name: 'Robert Wood Johnson Foundation', focus: 'Health equity, community health, Pioneering Ideas', amount: '$100K–$500K', cycle: 'Annual', deadline: '2026-08-01', fit: 'MODERATE — telehealth BH innovation aligns' },
+    { name: 'Bristol-Myers Squibb Foundation', focus: 'Mental health equity, SMI disparities', amount: '$50K–$250K', cycle: 'Annual', deadline: '2026-06-15', fit: 'MODERATE-STRONG — psych for underserved' },
+    { name: 'BCBS Foundation', focus: 'Behavioral health integration', amount: '$50K–$200K', cycle: 'Annual', deadline: '2026-09-01', fit: 'STRONG — integrated care model aligns' },
+    { name: 'Kresge Foundation — Health Program', focus: 'Health equity, social determinants', amount: '$100K–$500K', cycle: 'Annual', deadline: '2026-07-15', fit: 'MODERATE — frame through equity lens' },
+    { name: 'NAMI Local Affiliate Grants', focus: 'Mental health advocacy & support', amount: '$5K–$25K', cycle: 'Annual', deadline: '2026-06-30', fit: 'LOW — small but easy to apply' },
+    { name: 'American Foundation for Suicide Prevention', focus: 'Suicide prevention research & practice', amount: '$25K–$100K', cycle: 'Annual', deadline: '2026-05-30', fit: 'MODERATE — crisis/psych services' },
+    { name: 'Meadows Mental Health Policy Institute', focus: 'BH systems innovation', amount: 'TA + small grants', cycle: 'Rolling', deadline: 'Rolling', fit: 'MODERATE — technical assistance value' },
+    // ─── VC / Accelerators ───
+    { name: 'Rock Health (Seed VC)', focus: 'Digital health seed investment', amount: '$250K–$2M', cycle: 'Rolling', deadline: 'Rolling', fit: 'STRONG — Credentik as SaaS platform' },
+    { name: 'StartUp Health', focus: 'Healthcare moonshots', amount: '$250K + network', cycle: 'Rolling', deadline: 'Rolling', fit: 'STRONG — health tech acceleration' },
+    { name: 'Techstars Healthcare', focus: 'Healthcare startup accelerator', amount: '$120K', cycle: 'Annual cohort', deadline: '2026-05-01', fit: 'STRONG — accelerator model' },
+    { name: '7wire Ventures', focus: 'Digital health growth', amount: '$1M–$20M', cycle: 'Rolling', deadline: 'Rolling', fit: 'STRONG — growth stage' },
+    { name: 'Oak HC/FT', focus: 'Health IT venture capital', amount: '$5M–$50M', cycle: 'Rolling', deadline: 'Rolling', fit: 'STRONG — Credentik platform focus' },
+    { name: 'Pipe / Clearco / Lighter Capital', focus: 'Revenue-based financing (non-dilutive)', amount: '1–5x MRR', cycle: 'Rolling', deadline: 'Rolling', fit: 'STRONG — if Credentik has SaaS revenue' },
   ];
 
   body.innerHTML = `
@@ -290,11 +362,12 @@ async function renderFundingFoundations() {
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;">
           ${foundations.map(f => `<div class="funding-opp-card" style="border-radius:16px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-              <span class="funding-source-badge funding-source-foundation">FOUNDATION</span>
+              <span class="funding-source-badge funding-source-foundation">${f.amount.includes('VC') || f.amount.includes('MRR') || f.amount.includes('$1M') || f.amount.includes('$5M') || f.amount.includes('$250K') || f.amount.includes('$120K') ? 'VENTURE' : 'FOUNDATION'}</span>
               <span style="font-weight:700;color:#10b981;font-size:13px;">${escHtml(f.amount)}</span>
             </div>
             <h4 style="margin:0 0 4px;font-size:14px;font-weight:600;color:var(--text-primary);">${escHtml(f.name)}</h4>
-            <p style="margin:0 0 8px;font-size:12px;color:var(--gray-400);">${escHtml(f.focus)}</p>
+            <p style="margin:0 0 4px;font-size:12px;color:var(--gray-400);">${escHtml(f.focus)}</p>
+            ${f.fit ? `<p style="margin:0 0 8px;font-size:11px;color:${f.fit.startsWith('STRONG') ? '#10b981' : '#f59e0b'};font-weight:600;">EnnHealth: ${escHtml(f.fit)}</p>` : ''}
             <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-500);">
               <span>Cycle: ${escHtml(f.cycle)}</span>
               <span>Deadline: ${escHtml(f.deadline)}</span>
@@ -489,10 +562,14 @@ async function renderFundingIntelligence() {
       <div class="card-body" style="padding:16px;">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;">
           ${[
-            { icon: '📈', title: 'CCBHC Expansion Surge', detail: 'SAMHSA expanded CCBHC to all 50 states. If your agency isn\'t a CCBHC, consider applying — enhanced reimbursement rates avg 30% higher.' },
-            { icon: '🔄', title: '988 Funding Wave', detail: 'New 988 Suicide & Crisis Lifeline funding creating $1B+ in contracts for crisis services. Position for mobile crisis team RFPs.' },
-            { icon: '💡', title: 'Telehealth MH Grants Growing', detail: 'Post-COVID telehealth grants up 200%. FCC, HRSA, and state BH authorities all funding virtual behavioral health expansion.' },
-            { icon: '⚠️', title: 'Medicaid Unwinding Impact', detail: 'States reinvesting Medicaid savings into BH grants. Watch for new RFPs as states redirect funds from enrollment to services.' },
+            { icon: '🎯', title: 'EnnHealth Hits 5 Federal Priorities', detail: 'Telehealth access + behavioral health/SUD + NP-led workforce + health IT innovation + integrated care. Most applicants hit 1-2. This positions EnnHealth to win across HRSA, SAMHSA, NIH, CMS, and VA simultaneously.' },
+            { icon: '💰', title: 'NIH SBIR: Credentik\'s Best Shot', detail: 'SBIR Phase I ($275K) and Phase II ($1.75M) for health IT innovation. Credentik as AI-powered credentialing + RCM platform is highly competitive at NIAAA (AUD tech) and NIMH (MH tech). 20-25% success rate. Next deadline: Sep 2026.' },
+            { icon: '🏥', title: 'CCBHC = Transformative Revenue', detail: 'CCBHC certification changes Medicaid rates from $50-$100/visit to $200-$500/visit. SAMHSA grants up to $4M/yr for 4 years. Gap analysis: EnnHealth needs to add crisis services + peer support to qualify.' },
+            { icon: '💊', title: 'Opioid Settlement: $50B+ Through 2038', detail: 'Every state is distributing funds. MAT/AUD services directly qualify. This is not competitive — it\'s allocation-based. Contact FL AG office and county opioid response coordinators. Ongoing through 2038.' },
+            { icon: '🎖️', title: 'VA Community Care: Immediate Revenue', detail: 'Not a grant — just enroll as community provider with Optum/TriWest. Veterans access EnnHealth for psych and SUD. Mental health is VA\'s #1 shortage. No application process, just registration.' },
+            { icon: '📋', title: 'NHSC Site Approval: Unlock $75K/Provider', detail: 'Apply for NHSC site approval. Once approved, every PMHNP/FNP you hire can get $50-$75K in tax-free loan repayment. Powerful recruitment tool. Telehealth sites eligible if serving HPSAs.' },
+            { icon: '📈', title: 'Telehealth MH Grants +200% Post-COVID', detail: 'FCC Connected Care ($1M), HRSA Telehealth Network ($500K/yr), USDA DLT ($1M), and state BH authorities all funding virtual behavioral health expansion. EnnHealth is telehealth-native — perfect positioning.' },
+            { icon: '🔮', title: 'FQHC Designation: Long-Term Strategic Play', detail: 'FQHC Look-Alike unlocks: 50-100% higher Medicaid rates, 340B drug pricing (40-50% off psych meds), free malpractice (FTCA), NHSC eligibility, and priority for nearly all federal health grants.' },
           ].map(insight => `<div style="padding:14px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);">
             <div style="font-size:20px;margin-bottom:6px;">${insight.icon}</div>
             <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">${escHtml(insight.title)}</div>
