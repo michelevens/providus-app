@@ -2891,7 +2891,7 @@ async function renderAppTable(prefetchedApps = null) {
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.openLogEntry('${a.id}')">Log Activity</button>
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.viewApplicationDetail('${a.id}')">Timeline</button>
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.openDocChecklist('${a.id}')">Documents</button>
-              <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.editApplication('${a.id}')">Edit</button>
+              <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;" onclick="window.app.editApplication('${a.id}')">Edit / Attachments</button>
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--brand-600);" onclick="window.app.requestDocument('${a.providerId}','${escAttr((allProviders?.find(p=>p.id===a.providerId)||{}).firstName||'')}','${a.id}')">Request Doc</button>
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--brand-600);" onclick="window.app.requestInfo('${a.providerId}','${escAttr((allProviders?.find(p=>p.id===a.providerId)||{}).firstName||'')}','${a.id}')">Request Info</button>
               ${['approved','credentialed'].includes(a.status) ? `<button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--brand-600);" onclick="window.app.addLocationToApp('${a.id}')">+ Add Location</button>` : ''}
@@ -2942,7 +2942,7 @@ async function renderAppTable(prefetchedApps = null) {
             <div><div class="cs-label">Est. $/mo</div><div class="cs-val" style="color:var(--brand-600);font-size:14px;">$${(Number(a.estMonthlyRevenue) || 0).toLocaleString()}</div></div>
           </div>
           <div class="v2-apps-card-actions">
-            <button class="btn btn-sm" onclick="window.app.editApplication('${a.id}')">Edit</button>
+            <button class="btn btn-sm" onclick="window.app.editApplication('${a.id}')">Edit / Attach</button>
             <button class="btn btn-sm btn-primary" onclick="window.app.openLogEntry('${a.id}')">Follow-up</button>
             ${['approved','credentialed'].includes(a.status) ? `<button class="btn btn-sm" style="color:var(--brand-600);" onclick="window.app.addLocationToApp('${a.id}')">+ Location</button>` : ''}
             ${a.status !== 'planned' ? `<button class="btn btn-sm" style="color:#6366f1;" onclick="event.stopPropagation();window.app.moveToExpansion('${a.id}')">To Expansion</button>` : ''}
