@@ -14905,7 +14905,7 @@ function handleNppesProxy(payload) {
 
   // ─── Document Upload/Download ───
   openDocUploadModal(providerId) {
-    ['doc-upload-type','doc-upload-name','doc-upload-file','doc-upload-expiry','doc-upload-notes'].forEach(f => {
+    ['doc-upload-type','doc-upload-name','doc-upload-file','doc-upload-expiry','doc-upload-notes','doc-upload-app'].forEach(f => {
       const el = document.getElementById(f); if (el) el.value = '';
     });
     document.getElementById('doc-upload-modal').classList.add('active');
@@ -14928,6 +14928,13 @@ function handleNppesProxy(payload) {
         document.getElementById('doc-upload-expiry')?.value || null,
         document.getElementById('doc-upload-notes')?.value?.trim() || null
       );
+      // Also upload as application attachment if linked
+      const linkedAppId = document.getElementById('doc-upload-app')?.value;
+      if (linkedAppId) {
+        try {
+          await store.uploadApplicationAttachment(linkedAppId, file, docName || file.name, 'Uploaded from provider documents');
+        } catch (e) { console.warn('App attachment upload failed:', e.message); }
+      }
       showToast('Document uploaded successfully');
       // Fire automation rules for document upload
       workflow.processAutomationRules('document.uploaded', {

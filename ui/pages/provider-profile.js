@@ -1921,6 +1921,19 @@ async function renderProviderProfilePage(providerId) {
               <input type="file" id="doc-upload-file" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.tif,.tiff">
             </div>
             <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Link to Application</label>
+              <select id="doc-upload-app" class="form-control">
+                <option value="">None — general provider document</option>
+                ${apps.map(a => {
+                  const payer = a.payerName || a.payer_name || 'Unknown Payer';
+                  const st = a.state || '';
+                  const stat = (a.status || '').replace(/_/g, ' ');
+                  return `<option value="${a.id}">${escHtml(payer)} (${st}) — ${stat}</option>`;
+                }).join('')}
+              </select>
+              <div style="font-size:11px;color:var(--gray-400);margin-top:3px;">If linked, file also appears under the application's attachments.</div>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
               <label class="form-label">Expiration Date</label>
               <input type="date" id="doc-upload-expiry" class="form-control">
             </div>
