@@ -16162,6 +16162,27 @@ async function openApplicationModal(id) {
     </div>
     <div class="form-row">
       <div class="form-group">
+        <label>Virtual Visit Status</label>
+        <select class="form-control" id="field-telehealth-status">
+          <option value="" ${!(existing?.telehealthStatus || existing?.telehealth_status) ? 'selected' : ''}>Not Set</option>
+          <option value="enabled" ${(existing?.telehealthStatus || existing?.telehealth_status) === 'enabled' ? 'selected' : ''}>✅ Enabled — virtual visits active on payer portal</option>
+          <option value="pending" ${(existing?.telehealthStatus || existing?.telehealth_status) === 'pending' ? 'selected' : ''}>⏳ Pending — address added, awaiting activation</option>
+          <option value="not_enrolled" ${(existing?.telehealthStatus || existing?.telehealth_status) === 'not_enrolled' ? 'selected' : ''}>❌ Not Enrolled — need to add virtual visit address</option>
+          <option value="not_applicable" ${(existing?.telehealthStatus || existing?.telehealth_status) === 'not_applicable' ? 'selected' : ''}>N/A — in-person only</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Service Mode</label>
+        <select class="form-control" id="field-service-mode">
+          <option value="" ${!(existing?.serviceMode || existing?.service_mode) ? 'selected' : ''}>Not Set</option>
+          <option value="telehealth_only" ${(existing?.serviceMode || existing?.service_mode) === 'telehealth_only' ? 'selected' : ''}>Telehealth Only</option>
+          <option value="in_person_only" ${(existing?.serviceMode || existing?.service_mode) === 'in_person_only' ? 'selected' : ''}>In-Person Only</option>
+          <option value="both" ${(existing?.serviceMode || existing?.service_mode) === 'both' ? 'selected' : ''}>Both (Telehealth + In-Person)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
         <label>Assigned To</label>
         <select class="form-control" id="field-assigned-to">
           <option value="">Unassigned</option>
@@ -16217,6 +16238,8 @@ window.saveApplication = async function() {
     providerId: document.getElementById('field-provider').value || '',
     facilityId: document.getElementById('field-facility')?.value || '',
     assignedTo: document.getElementById('field-assigned-to')?.value || '',
+    telehealthStatus: document.getElementById('field-telehealth-status')?.value || '',
+    serviceMode: document.getElementById('field-service-mode')?.value || '',
     organizationId: '',
   };
 

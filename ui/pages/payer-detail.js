@@ -239,16 +239,25 @@ export async function renderPayerDetailPage(payerId) {
         </div>
         ${payerApps.length > 0 ? `
         <div class="table-wrap"><table style="font-size:12px;">
-          <thead><tr><th>State</th><th>Provider</th><th>Status</th><th>Source</th><th>Submitted</th><th>Effective</th><th>Assigned</th><th>Notes</th></tr></thead>
+          <thead><tr><th>State</th><th>Provider</th><th>Status</th><th>Virtual</th><th>Mode</th><th>Submitted</th><th>Effective</th><th>Assigned</th><th>Notes</th></tr></thead>
           <tbody>
             ${payerApps.map(a => {
               const prov = providerMap[a.providerId];
               const provName = prov ? `${prov.firstName || ''} ${prov.lastName || ''}`.trim() : '—';
+              const th = a.telehealthStatus || a.telehealth_status || '';
+              const thBadge = th === 'enabled' ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#dcfce7;color:#16a34a;font-weight:600;">📹 Enabled</span>'
+                : th === 'pending' ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#fef3c7;color:#b45309;font-weight:600;">⏳ Pending</span>'
+                : th === 'not_enrolled' ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#fee2e2;color:#dc2626;font-weight:600;">❌ Not Set Up</span>'
+                : th === 'not_applicable' ? '<span style="font-size:10px;color:var(--gray-400);">N/A</span>'
+                : '<span style="font-size:10px;color:var(--gray-400);">—</span>';
+              const sm = a.serviceMode || a.service_mode || '';
+              const smLabel = sm === 'telehealth_only' ? 'Telehealth' : sm === 'in_person_only' ? 'In-Person' : sm === 'both' ? 'Both' : '—';
               return `<tr>
                 <td style="font-weight:600;">${getStateName(a.state)}</td>
                 <td class="text-sm">${escHtml(provName)}</td>
                 <td><span class="badge badge-${a.status}" style="font-size:10px;">${(a.status || '').replace(/_/g, ' ')}</span></td>
-                <td>${a.source ? `<span style="font-size:9px;padding:1px 5px;border-radius:6px;font-weight:600;${a.source==='vendor'?'background:#fef3c7;color:#b45309;':a.source==='batch'?'background:#e0e7ff;color:#4f46e5;':'background:#f0fdf4;color:#16a34a;'}">${a.source}</span>` : '—'}</td>
+                <td>${thBadge}</td>
+                <td class="text-sm">${smLabel}</td>
                 <td class="text-sm">${formatDateDisplay(a.submittedDate) || '—'}</td>
                 <td class="text-sm" style="color:var(--green);">${formatDateDisplay(a.effectiveDate) || '—'}</td>
                 <td class="text-sm">${a.assignedTo ? escHtml(a.assignedTo) : '—'}</td>
@@ -268,7 +277,12 @@ export async function renderPayerDetailPage(payerId) {
           <div>
             <div style="font-size:11px;font-weight:700;color:#16a34a;margin-bottom:6px;">Credentialed (${credentialedStates.length})</div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;">
-              ${credentialedStates.length > 0 ? credentialedStates.map(s => `<span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;background:#dcfce7;color:#16a34a;">${s}</span>`).join('') : '<span style="color:var(--gray-400);font-size:12px;">None</span>'}
+              ${credentialedStates.length > 0 ? credentialedStates.map(s => {
+                const app = payerApps.find(a => a.state === s && (a.status === 'credentialed' || a.status === 'approved'));
+                const th = app?.telehealthStatus || app?.telehealth_status || '';
+                const thIcon = th === 'enabled' ? ' 📹' : th === 'pending' ? ' ⏳' : th === 'not_enrolled' ? ' ❌' : '';
+                return `<span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;background:#dcfce7;color:#16a34a;" title="${th === 'enabled' ? 'Virtual visits enabled' : th === 'pending' ? 'Virtual visit pending' : th === 'not_enrolled' ? 'Virtual visit NOT enrolled — add on payer portal' : 'Virtual visit status not set'}">${s}${thIcon}</span>`;
+              }).join('') : '<span style="color:var(--gray-400);font-size:12px;">None</span>'}
             </div>
           </div>
           <div>
@@ -285,6 +299,17 @@ export async function renderPayerDetailPage(payerId) {
           </div>
         </div>
         ${deniedStates.length > 0 ? `<div style="margin-top:12px;"><div style="font-size:11px;font-weight:700;color:#d97706;margin-bottom:6px;">Denied / On Hold / Withdrawn</div><div style="display:flex;gap:4px;flex-wrap:wrap;">${deniedStates.map(s => `<span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;background:#fef3c7;color:#b45309;">${s}</span>`).join('')}</div></div>` : ''}
+        ${(() => {
+          const vEnabled = payerApps.filter(a => (a.telehealthStatus || a.telehealth_status) === 'enabled').map(a => a.state);
+          const vNotEnrolled = payerApps.filter(a => (a.status === 'credentialed' || a.status === 'approved') && (a.telehealthStatus || a.telehealth_status) !== 'enabled' && (a.telehealthStatus || a.telehealth_status) !== 'not_applicable').map(a => a.state);
+          if (vEnabled.length === 0 && vNotEnrolled.length === 0) return '';
+          return '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border-color);">' +
+            '<div style="font-size:11px;font-weight:700;color:#7c3aed;margin-bottom:8px;">Virtual Visit Status</div>' +
+            '<div style="display:flex;gap:16px;flex-wrap:wrap;">' +
+              (vEnabled.length > 0 ? '<div><div style="font-size:10px;color:#16a34a;font-weight:600;margin-bottom:4px;">📹 Enabled (' + vEnabled.length + ')</div><div style="display:flex;gap:3px;flex-wrap:wrap;">' + vEnabled.map(s => '<span style="padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;background:#dcfce7;color:#16a34a;">' + s + '</span>').join('') + '</div></div>' : '') +
+              (vNotEnrolled.length > 0 ? '<div><div style="font-size:10px;color:#dc2626;font-weight:600;margin-bottom:4px;">❌ Need Virtual Visit Setup (' + vNotEnrolled.length + ')</div><div style="display:flex;gap:3px;flex-wrap:wrap;">' + vNotEnrolled.map(s => '<span style="padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;background:#fee2e2;color:#dc2626;">' + s + '</span>').join('') + '</div></div>' : '') +
+            '</div></div>';
+        })()}
       </div>
     </div>
 
