@@ -183,6 +183,11 @@ async function checkUsageWarnings() {
 }
 
 async function _checkResourceLimit(resourceKey, label) {
+  // Agency and superadmin roles bypass resource limits
+  const currentUser = auth.getUser();
+  const role = currentUser?.uiRole || currentUser?.ui_role || currentUser?.role || '';
+  if (['superadmin', 'agency', 'owner', 'admin'].includes(role)) return true;
+
   const sub = await _getCachedSubscription();
   if (!sub) return true; // allow if we can't check
   const usage = sub.usage || {};
