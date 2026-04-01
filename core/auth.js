@@ -36,7 +36,9 @@ class Auth {
     }
 
     isAgency() {
-        return ['superadmin', 'agency'].includes(this.user?.role);
+        const user = this.getUser();
+        const role = user?.role || user?.uiRole || user?.ui_role || '';
+        return ['superadmin', 'agency', 'admin', 'owner'].includes(role);
     }
 
     isStaffOrAbove() {

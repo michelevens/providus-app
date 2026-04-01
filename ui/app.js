@@ -19121,8 +19121,10 @@ async function openOrgContactForm(orgId, contactId) {
 
 async function renderUsersStub() {
   const body = document.getElementById('page-body');
-  if (!auth.isAgency()) {
-    body.innerHTML = '<div class="alert alert-danger">You do not have permission to manage users.</div>';
+  const currentUser = auth.getUser();
+  const userRole = currentUser?.role || currentUser?.uiRole || currentUser?.ui_role || '';
+  if (!['superadmin', 'agency', 'admin', 'owner'].includes(userRole)) {
+    body.innerHTML = '<div class="alert alert-danger">You do not have permission to manage users. (Your role: ' + escHtml(userRole || 'unknown') + ')</div>';
     return;
   }
   let users = [], orgs = [], providers = [];
