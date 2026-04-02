@@ -14061,14 +14061,7 @@ function handleNppesProxy(payload) {
     if (!await appConfirm('Delete this payer rule?')) return;
     try { await store.deletePayerRule(id); showToast('Deleted'); window.app.rcSwitchTab('payer-intel'); } catch (e) { showToast('Error: ' + e.message); }
   },
-  async viewPayerDetail(payerName) {
-    try {
-      const data = await store.getPayerRule(payerName);
-      const rule = data.rule || {};
-      const stats = data.stats || {};
-      showToast(`${payerName}: ${stats.total_claims} claims, ${stats.denial_rate}% denial rate, ${stats.collection_rate}% collected`);
-    } catch (e) { showToast('Error: ' + e.message); }
-  },
+  // viewPayerDetail — uses the primary definition at line ~7484 which navigates to payer-detail page
   // 837 Claim File Import
   open837ImportModal() {
     const clients = window._rcmClients || window._bsClients || [];
