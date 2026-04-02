@@ -25,7 +25,7 @@ export async function renderPayerDetailPage(payerId) {
   if (!payer) { body.innerHTML = '<div class="alert alert-warning">Payer not found.</div>'; return; }
 
   // ── Load all data in parallel ──
-  const [apps, claims, denials, payments, licenses, providers, orgs, facilities, followups, activityLogs] = await Promise.all([
+  const [apps, claims, denials, payments, licenses, providers, orgs, facilities, followups, activityLogs, agencyUsers] = await Promise.all([
     store.getAll('applications').catch(() => []),
     store.getRcmClaims().catch(() => []),
     store.getRcmDenials().catch(() => []),
@@ -36,7 +36,14 @@ export async function renderPayerDetailPage(payerId) {
     store.getFacilities().catch(() => []),
     store.getAll('followups').catch(() => []),
     store.getActivityLogs ? store.getActivityLogs({ collection: 'applications' }).catch(() => []) : Promise.resolve([]),
+    store.getAgencyUsers ? store.getAgencyUsers().catch(() => []) : Promise.resolve([]),
   ]);
+
+  // Build staff ID → name lookup
+  const staffMap = {};
+  (Array.isArray(agencyUsers) ? agencyUsers : []).forEach(u => {
+    staffMap[u.id] = ((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || '')).trim();
+  });
 
   // ── Filter for this payer ──
   const matchPayer = (item) => {
@@ -260,7 +267,7 @@ export async function renderPayerDetailPage(payerId) {
                 <td class="text-sm">${smLabel}</td>
                 <td class="text-sm">${formatDateDisplay(a.submittedDate) || '—'}</td>
                 <td class="text-sm" style="color:var(--green);">${formatDateDisplay(a.effectiveDate) || '—'}</td>
-                <td class="text-sm">${a.assignedTo ? escHtml(a.assignedTo) : '—'}</td>
+                <td class="text-sm">${a.assignedTo ? `<span style="background:var(--brand-50);color:var(--brand-600);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">${escHtml(staffMap[a.assignedTo] || 'Staff #' + a.assignedTo)}</span>` : '—'}</td>
                 <td class="text-sm text-muted" style="max-width:180px;">${escHtml((a.notes || '').substring(0, 80))}</td>
               </tr>`;
             }).join('')}
