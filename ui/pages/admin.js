@@ -1071,6 +1071,17 @@ const NOTIFICATION_TYPES = {
   milestone: { label: 'Milestone', icon: '🏆', color: '#0891b2' },
   followup_created: { label: 'Follow-up Created', icon: '📅', color: '#dc2626' },
   weekly_summary: { label: 'Weekly Summary', icon: '📊', color: '#6366f1' },
+  // RCM / Billing notification types
+  claim_created: { label: 'Claim Created', icon: '📋', color: '#0d9488' },
+  claim_updated: { label: 'Claim Updated', icon: '📋', color: '#0d9488' },
+  payment_posted: { label: 'Payment Posted', icon: '💰', color: '#16a34a' },
+  payment_updated: { label: 'Payment Updated', icon: '💰', color: '#16a34a' },
+  denial_created: { label: 'Denial Tracked', icon: '⚠️', color: '#dc2626' },
+  denial_updated: { label: 'Denial Updated', icon: '⚠️', color: '#dc2626' },
+  denial_escalated: { label: 'Denial Escalated', icon: '🚨', color: '#b91c1c' },
+  charge_created: { label: 'Charge Entered', icon: '🧾', color: '#7c3aed' },
+  claims_imported: { label: 'Claims Imported', icon: '📥', color: '#2563eb' },
+  payments_imported: { label: 'Payments Imported', icon: '📥', color: '#16a34a' },
 };
 
 async function renderNotificationSettingsPage() {
@@ -1174,6 +1185,50 @@ async function renderNotificationSettingsPage() {
               <div class="notif-pref-desc">Send a weekly summary of credentialing activity every Monday morning</div>
             </div>
             <label class="notif-toggle"><input type="checkbox" id="notif-pref-weekly" ${prefs.weeklySummary ? 'checked' : ''}><span class="slider"></span></label>
+          </div>
+
+          <div style="margin-top:24px;margin-bottom:8px;padding-bottom:8px;border-bottom:2px solid var(--brand-100,#dbeafe);">
+            <strong style="font-size:14px;color:var(--brand-700,#1d4ed8);">Revenue Cycle / Billing</strong>
+          </div>
+
+          <div class="notif-pref-row">
+            <div class="notif-pref-info">
+              <div class="notif-pref-title">Claim Notifications</div>
+              <div class="notif-pref-desc">Send email when claims are created or updated</div>
+            </div>
+            <label class="notif-toggle"><input type="checkbox" id="notif-pref-rcm-claims" ${prefs.rcmClaims !== false ? 'checked' : ''}><span class="slider"></span></label>
+          </div>
+
+          <div class="notif-pref-row">
+            <div class="notif-pref-info">
+              <div class="notif-pref-title">Payment Notifications</div>
+              <div class="notif-pref-desc">Send email when payments are posted or updated</div>
+            </div>
+            <label class="notif-toggle"><input type="checkbox" id="notif-pref-rcm-payments" ${prefs.rcmPayments !== false ? 'checked' : ''}><span class="slider"></span></label>
+          </div>
+
+          <div class="notif-pref-row">
+            <div class="notif-pref-info">
+              <div class="notif-pref-title">Denial Notifications</div>
+              <div class="notif-pref-desc">Send email when denials are tracked, updated, or escalated</div>
+            </div>
+            <label class="notif-toggle"><input type="checkbox" id="notif-pref-rcm-denials" ${prefs.rcmDenials !== false ? 'checked' : ''}><span class="slider"></span></label>
+          </div>
+
+          <div class="notif-pref-row">
+            <div class="notif-pref-info">
+              <div class="notif-pref-title">Charge Entry Notifications</div>
+              <div class="notif-pref-desc">Send email when charges are entered</div>
+            </div>
+            <label class="notif-toggle"><input type="checkbox" id="notif-pref-rcm-charges" ${prefs.rcmCharges !== false ? 'checked' : ''}><span class="slider"></span></label>
+          </div>
+
+          <div class="notif-pref-row">
+            <div class="notif-pref-info">
+              <div class="notif-pref-title">Bulk Import Notifications</div>
+              <div class="notif-pref-desc">Send email when claims or payments are imported in bulk</div>
+            </div>
+            <label class="notif-toggle"><input type="checkbox" id="notif-pref-rcm-imports" ${prefs.rcmImports !== false ? 'checked' : ''}><span class="slider"></span></label>
           </div>
 
           <div style="margin-top:20px;display:flex;gap:10px;">

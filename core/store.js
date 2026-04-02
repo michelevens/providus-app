@@ -1544,6 +1544,12 @@ class Store {
             documentRequests: true,
             weeklySummary: false,
             recipientEmail: '',
+            // RCM / Billing notifications
+            rcmClaims: true,
+            rcmPayments: true,
+            rcmDenials: true,
+            rcmCharges: true,
+            rcmImports: true,
         };
     }
 

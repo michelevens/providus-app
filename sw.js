@@ -1,6 +1,6 @@
-const CACHE_NAME = 'credentik-v13';
+const CACHE_NAME = 'credentik-v14';
 const API_CACHE = 'credentik-api-v2';
-const API_TTL = 60 * 60 * 1000; // 60 minutes
+const API_TTL = 5 * 60 * 1000; // 5 minutes
 const API_MAX_ENTRIES = 100;
 
 const SHELL_FILES = [
@@ -105,6 +105,9 @@ function isCacheableApi(url) {
 
 self.addEventListener('fetch', e => {
   const { request } = e;
+
+  // Never cache auth endpoints — must always hit the network
+  if (request.url.includes('/api/auth/')) return;
 
   // NetworkFirst for cacheable GET API calls
   if (request.method === 'GET' && request.url.includes('/api/') && isCacheableApi(request.url)) {

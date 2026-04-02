@@ -776,6 +776,12 @@ export async function initApp() {
   // Enrich existing payers with strategic tags (lazy-load supplemental payers in background)
   enrichPayerTags(); // async — doesn't block init
 
+  // Expose reference data on window so lazy-loaded page modules can access them
+  window.STATES = STATES;
+  window.PAYER_CATALOG = PAYER_CATALOG;
+  window.PAYER_TAG_DEFS = PAYER_TAG_DEFS;
+  window.TELEHEALTH_POLICIES = TELEHEALTH_POLICIES;
+
   // Load custom group definitions from agency config
   try {
     const agencyConfig = await store.getAgencyConfig();
@@ -886,7 +892,8 @@ export async function initApp() {
 
   } catch (e) {
     console.error('App initialization failed:', e);
-    _initRunning = false; // Reset so retry is possible
+  } finally {
+    _initRunning = false; // Always reset so re-init works on refresh
   }
 }
 
@@ -1059,8 +1066,11 @@ async function navigateTo(page) {
   // Update badges in background (non-blocking — don't delay page render)
   updateNavBadges();
 
-  // Render page
+  // Show loading skeleton immediately so the user sees instant feedback
   const pageBody = document.getElementById('page-body');
+  if (pageBody) pageBody.innerHTML = `<div style="padding:8px 0;"><div class="skeleton" style="height:32px;width:40%;border-radius:8px;margin-bottom:16px;"></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">${'<div class="skeleton" style="height:72px;border-radius:10px;"></div>'.repeat(4)}</div><div class="skeleton" style="height:180px;border-radius:12px;"></div></div>`;
+
+  // Render page
   const pageTitle = document.getElementById('page-title');
   const pageSubtitle = document.getElementById('page-subtitle');
   const pageActions = document.getElementById('page-actions');
@@ -1092,14 +1102,16 @@ async function navigateTo(page) {
     case 'applications':
     case 'followups':
     case 'licenses':
+    case 'states':
       // Map old page names to credentialing tabs
       if (page === 'dashboard') window._credTab = 'dashboard';
       else if (page === 'applications') window._credTab = 'applications';
       else if (page === 'followups') window._credTab = 'followups';
       else if (page === 'licenses') window._credTab = 'licenses';
+      else if (page === 'states') window._credTab = 'states';
       else if (!window._credTab) window._credTab = 'dashboard';
       pageTitle.textContent = 'Healthcare Credentialing';
-      pageSubtitle.textContent = 'Dashboard, providers, applications, follow-ups, licenses, locations';
+      pageSubtitle.textContent = 'Dashboard, providers, applications, follow-ups, licenses, locations, states, payers';
       pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openProviderModal()">+ Provider</button> <button class="btn" onclick="window.app.openLicenseModal()">+ License</button>' + printBtn;
       // Highlight the credentialing nav item for all sub-tabs
       document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'credentialing'));
@@ -1136,9 +1148,9 @@ async function navigateTo(page) {
       pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openProviderModal()">+ Add Provider</button> <button class="btn" onclick="window.app.navigateTo(\'provider-onboard\')">Guided Setup</button>' + printBtn;
       await renderProviders();
       break;
-    // payers → admin hub
+    // payers → credentialing hub
     case 'payers':
-      window._adminTab = 'payers'; window.app.navigateTo('admin-hub'); return;
+      window._credTab = 'payers'; window.app.navigateTo('credentialing'); return;
     // ─── Analytics & Strategy (unified) ───
     case 'analytics':
     case 'bottleneck':
@@ -5921,9 +5933,30 @@ async function renderSettings() {
             <div><strong style="font-size:13px;">Document requests</strong><div style="font-size:11px;color:var(--gray-400);">Notify when documents are needed</div></div>
             <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;"><input type="checkbox" id="settings-notif-docs" checked style="opacity:0;width:0;height:0;position:absolute;"><span style="position:absolute;inset:0;background:var(--gray-300);border-radius:11px;transition:0.2s;"></span></label>
           </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--gray-100);">
             <div><strong style="font-size:13px;">Weekly summary digest</strong><div style="font-size:11px;color:var(--gray-400);">Weekly recap every Monday</div></div>
             <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;"><input type="checkbox" id="settings-notif-weekly" style="opacity:0;width:0;height:0;position:absolute;"><span style="position:absolute;inset:0;background:var(--gray-300);border-radius:11px;transition:0.2s;"></span></label>
+          </div>
+          <div style="padding:16px 0 8px 0;"><strong style="font-size:14px;color:var(--brand-700);">Revenue Cycle / Billing</strong></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--gray-100);">
+            <div><strong style="font-size:13px;">Claim notifications</strong><div style="font-size:11px;color:var(--gray-400);">Email when claims are created or updated</div></div>
+            <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;"><input type="checkbox" id="settings-notif-rcm-claims" checked style="opacity:0;width:0;height:0;position:absolute;"><span style="position:absolute;inset:0;background:var(--gray-300);border-radius:11px;transition:0.2s;"></span></label>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--gray-100);">
+            <div><strong style="font-size:13px;">Payment notifications</strong><div style="font-size:11px;color:var(--gray-400);">Email when payments are posted or updated</div></div>
+            <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;"><input type="checkbox" id="settings-notif-rcm-payments" checked style="opacity:0;width:0;height:0;position:absolute;"><span style="position:absolute;inset:0;background:var(--gray-300);border-radius:11px;transition:0.2s;"></span></label>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--gray-100);">
+            <div><strong style="font-size:13px;">Denial notifications</strong><div style="font-size:11px;color:var(--gray-400);">Email when denials are tracked, updated, or escalated</div></div>
+            <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;"><input type="checkbox" id="settings-notif-rcm-denials" checked style="opacity:0;width:0;height:0;position:absolute;"><span style="position:absolute;inset:0;background:var(--gray-300);border-radius:11px;transition:0.2s;"></span></label>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--gray-100);">
+            <div><strong style="font-size:13px;">Charge entry notifications</strong><div style="font-size:11px;color:var(--gray-400);">Email when charges are entered</div></div>
+            <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;"><input type="checkbox" id="settings-notif-rcm-charges" checked style="opacity:0;width:0;height:0;position:absolute;"><span style="position:absolute;inset:0;background:var(--gray-300);border-radius:11px;transition:0.2s;"></span></label>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
+            <div><strong style="font-size:13px;">Bulk import notifications</strong><div style="font-size:11px;color:var(--gray-400);">Email when claims or payments are imported in bulk</div></div>
+            <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;"><input type="checkbox" id="settings-notif-rcm-imports" checked style="opacity:0;width:0;height:0;position:absolute;"><span style="position:absolute;inset:0;background:var(--gray-300);border-radius:11px;transition:0.2s;"></span></label>
           </div>
           <div style="margin-top:16px;"><button class="btn btn-primary" onclick="window.app.saveSettingsNotifPrefs()">Save Notification Settings</button></div>
         </div>
@@ -6751,7 +6784,7 @@ window._appRender = {
   renderTasksPage, renderKanbanBoard, renderCalendarPage, renderMessagesPage, renderCommunicationsPage,
   renderBottleneckAnalysis, renderRevenueForecast, renderCoverageMatrix, renderReimbursement,
   renderStatePolicies, renderRenewalCalendar, renderServiceLines,
-  renderSettings, renderBillingPage, renderContractsPage, renderPayers,
+  renderSettings, renderBillingPage, renderContractsPage, renderPayers, renderStatesPage, renderPayersPage,
   renderUsersStub, renderOnboardingStub, renderImportPage, renderAutomationsPage,
   renderFaqPage, renderApiDocsPage, renderAuditTrail,
 };
@@ -6774,6 +6807,8 @@ async function renderContractDetail(id)      { await (await _page('billing')).re
 async function renderBillingServicesPage()   { await (await _page('billing-services')).renderBillingServicesPage(); }
 async function renderBillingClientDetail(id) { await (await _page('billing-services')).renderBillingClientDetail(id); }
 async function renderRcmPage()              { await (await _page('rcm')).renderRcmPage(); }
+async function renderStatesPage()           { await (await _page('states')).renderStatesPage(); }
+async function renderPayersPage()           { await (await _page('payers-page')).renderPayersPage(); }
 async function renderRevenueCyclePage()     { await (await _page('revenue-cycle')).renderRevenueCyclePage(); }
 // renderBillingClientDetail still loaded from billing-services via revenue-cycle re-export
 async function renderExclusionsPage()        { await (await _page('compliance')).renderExclusionsPage(); }
@@ -10527,6 +10562,35 @@ function handleNppesProxy(payload) {
     });
   },
 
+  // ── States Page ──
+  async renderStatesTab() {
+    // Re-render states tab with current filters
+    window._credTab = 'states';
+    await renderCredentialingPage();
+  },
+  filterStates() {
+    _page('states').then(m => m.filterStates());
+  },
+  viewStateDetail(stateCode) {
+    // Navigate to state policies with this state pre-selected
+    window._analyticsTab = 'policies';
+    filters._policyFilter = 'all';
+    navigateTo('analytics');
+    // After render, try to show detail for this state
+    setTimeout(() => {
+      if (window.app.showPolicyDetail) window.app.showPolicyDetail(stateCode);
+    }, 500);
+  },
+
+  // ── Payers Page (Credentialing tab) ──
+  async renderPayersTab() {
+    window._credTab = 'payers';
+    await renderCredentialingPage();
+  },
+  filterPayerRows() {
+    _page('payers-page').then(m => m.filterPayerRows());
+  },
+
   // ── Billing & Invoicing ──
   billingTab(btn, tabId) {
     window._billingTab = tabId;
@@ -11754,6 +11818,13 @@ function handleNppesProxy(payload) {
         document.getElementById('claim-import-modal').classList.remove('active');
         showToast(`${matched} payments matched to existing claims${created > 0 ? `, ${created} new claims created` : ''}${errors.length ? ` (${errors.length} errors)` : ''}. Refreshing...`);
         if (errors.length) console.warn('Payment match errors:', errors);
+        _triggerRcmNotification(
+          'payments_imported',
+          'rcmImports',
+          `Payments Imported — ${matched} matched${created > 0 ? `, ${created} new claims` : ''}`,
+          `A bulk payment import has completed.\n\nPayments Matched: ${matched}${created > 0 ? '\nNew Claims Created: ' + created : ''}${errors.length ? '\nErrors: ' + errors.length : ''}\n\nLog in to Credentik to review.`,
+          { matched, created, errorCount: errors.length }
+        ).catch(() => {});
         setTimeout(() => { window.location.reload(); }, 1500);
       } else {
         const result = await store.bulkImportClaims(cleaned);
@@ -11762,6 +11833,13 @@ function handleNppesProxy(payload) {
         const errors = result.errors || [];
         document.getElementById('claim-import-modal').classList.remove('active');
         showToast(`${imported} claims imported successfully${errors.length ? ` (${errors.length} errors)` : ''}. Refreshing...`);
+        _triggerRcmNotification(
+          'claims_imported',
+          'rcmImports',
+          `${imported} Claims Imported Successfully`,
+          `A bulk claim import has completed.\n\nClaims Imported: ${imported}${errors.length ? '\nErrors: ' + errors.length : ''}\n\nLog in to Credentik to review.`,
+          { imported, errorCount: errors.length }
+        ).catch(() => {});
         setTimeout(() => { window.location.reload(); }, 1500);
       }
     } catch (e) {
@@ -12156,7 +12234,18 @@ function handleNppesProxy(payload) {
     try {
       if (editId) await store.updateRcmClaim(editId, data); else await store.createRcmClaim(data);
       document.getElementById('rcm-claim-modal').classList.remove('active');
-      showToast(editId ? 'Claim updated' : 'Claim created');
+      const isEdit = !!editId;
+      showToast(isEdit ? 'Claim updated' : 'Claim created');
+      const patientLabel = data.patient_name || 'Patient';
+      const payerLabel = data.payer_name || 'Payer';
+      const amtLabel = data.total_charges ? `$${parseFloat(data.total_charges).toFixed(2)}` : '';
+      _triggerRcmNotification(
+        isEdit ? 'claim_updated' : 'claim_created',
+        'rcmClaims',
+        isEdit ? `Claim Updated — ${patientLabel} / ${payerLabel}` : `New Claim Created — ${patientLabel} / ${payerLabel}`,
+        `${isEdit ? 'A claim has been updated' : 'A new claim has been created'}.\n\nPatient: ${patientLabel}\nPayer: ${payerLabel}${amtLabel ? '\nAmount: ' + amtLabel : ''}\n\nLog in to Credentik to view details.`,
+        { claimId: editId || null, patient: patientLabel, payer: payerLabel }
+      ).catch(() => {});
       await renderRcmPage();
     } catch (e) { showToast('Error: ' + e.message); }
   },
@@ -12287,7 +12376,17 @@ function handleNppesProxy(payload) {
       // Sync charge statuses after payment
       try { await store.syncChargeStatuses(); } catch (e) {}
       document.getElementById('rcm-payment-modal').classList.remove('active');
-      showToast(editId ? 'Payment updated' : 'Payment posted');
+      const isEdit = !!editId;
+      showToast(isEdit ? 'Payment updated' : 'Payment posted');
+      const payerLabel = data.payer_name || 'Payer';
+      const amtLabel = data.total_amount ? `$${parseFloat(data.total_amount).toFixed(2)}` : '';
+      _triggerRcmNotification(
+        isEdit ? 'payment_updated' : 'payment_posted',
+        'rcmPayments',
+        isEdit ? `Payment Updated — ${payerLabel}${amtLabel ? ' ' + amtLabel : ''}` : `Payment Posted — ${payerLabel}${amtLabel ? ' ' + amtLabel : ''}`,
+        `${isEdit ? 'A payment has been updated' : 'A new payment has been posted'}.\n\nPayer: ${payerLabel}${amtLabel ? '\nAmount: ' + amtLabel : ''}\nType: ${data.payment_type || 'N/A'}\nDate: ${data.payment_date || 'N/A'}\n\nLog in to Credentik to view details.`,
+        { paymentId: editId || null, payer: payerLabel, amount: data.total_amount }
+      ).catch(() => {});
       await renderRcmPage();
     } catch (e) { showToast('Error: ' + e.message); }
   },
@@ -12378,7 +12477,18 @@ function handleNppesProxy(payload) {
     try {
       if (editId) await store.updateRcmDenial(editId, data); else await store.createRcmDenial(data);
       document.getElementById('rcm-denial-modal').classList.remove('active');
-      showToast(editId ? 'Denial updated' : 'Denial tracked');
+      const isEdit = !!editId;
+      showToast(isEdit ? 'Denial updated' : 'Denial tracked');
+      const codeLabel = data.denial_code || 'N/A';
+      const amtLabel = data.denied_amount ? `$${parseFloat(data.denied_amount).toFixed(2)}` : '';
+      const appealLabel = data.appeal_status ? data.appeal_status.replace(/_/g, ' ') : '';
+      _triggerRcmNotification(
+        isEdit ? 'denial_updated' : 'denial_created',
+        'rcmDenials',
+        isEdit ? `Denial Updated — ${codeLabel}${amtLabel ? ' ' + amtLabel : ''}` : `New Denial Tracked — ${codeLabel}${amtLabel ? ' ' + amtLabel : ''}`,
+        `${isEdit ? 'A denial record has been updated' : 'A new denial has been tracked'}.\n\nDenial Code: ${codeLabel}\nReason: ${data.denial_reason || 'N/A'}${amtLabel ? '\nDenied Amount: ' + amtLabel : ''}${appealLabel ? '\nAppeal Status: ' + appealLabel : ''}\nDeadline: ${data.appeal_deadline || 'N/A'}\n\nLog in to Credentik to view details.`,
+        { denialId: editId || null, code: codeLabel, amount: data.denied_amount, appealStatus: data.appeal_status }
+      ).catch(() => {});
       await renderRcmPage();
     } catch (e) { showToast('Error: ' + e.message); }
   },
@@ -12492,6 +12602,16 @@ function handleNppesProxy(payload) {
     try {
       await store.createRcmCharge(data);
       showToast('Charge entered');
+      const patientLabel = data.patient_name || 'Patient';
+      const cptLabel = data.cpt_code || '';
+      const amtLabel = data.charge_amount ? `$${parseFloat(data.charge_amount).toFixed(2)}` : '';
+      _triggerRcmNotification(
+        'charge_created',
+        'rcmCharges',
+        `Charge Entered — ${cptLabel}${amtLabel ? ' ' + amtLabel : ''}`,
+        `A new charge has been entered.\n\nPatient: ${patientLabel}\nCPT: ${cptLabel}\nPayer: ${data.payer_name || 'N/A'}${amtLabel ? '\nAmount: ' + amtLabel : ''}\nDOS: ${data.date_of_service || 'N/A'}\n\nLog in to Credentik to view details.`,
+        { patient: patientLabel, cpt: cptLabel, amount: data.charge_amount }
+      ).catch(() => {});
       ['rcm-qc-patient', 'rcm-qc-payer', 'rcm-qc-cpt', 'rcm-qc-icd', 'rcm-qc-amount'].forEach(f => { const e = document.getElementById(f); if (e) e.value = ''; });
       document.getElementById('rcm-qc-units').value = '1';
       await renderRcmPage();
@@ -12560,7 +12680,17 @@ function handleNppesProxy(payload) {
   async escalateDenials() {
     try {
       const r = await store.escalateDenials();
-      showToast(r.escalated > 0 ? `${r.escalated} denial(s) escalated to urgent with follow-up tasks created` : 'No denials need escalation right now');
+      const count = r.escalated || 0;
+      showToast(count > 0 ? `${count} denial(s) escalated to urgent with follow-up tasks created` : 'No denials need escalation right now');
+      if (count > 0) {
+        _triggerRcmNotification(
+          'denial_escalated',
+          'rcmDenials',
+          `${count} Denial(s) Escalated to Urgent`,
+          `${count} denial(s) have been escalated to urgent priority with follow-up tasks created.\n\nLog in to Credentik to review and take action.`,
+          { escalatedCount: count }
+        ).catch(() => {});
+      }
       await renderRcmPage();
     } catch (e) { showToast('Error: ' + e.message); }
   },
@@ -15659,6 +15789,12 @@ function handleNppesProxy(payload) {
       documentRequests: document.getElementById('notif-pref-docs')?.checked || false,
       weeklySummary: document.getElementById('notif-pref-weekly')?.checked || false,
       recipientEmail: document.getElementById('notif-recipient-email')?.value?.trim() || '',
+      // RCM / Billing
+      rcmClaims: document.getElementById('notif-pref-rcm-claims')?.checked ?? true,
+      rcmPayments: document.getElementById('notif-pref-rcm-payments')?.checked ?? true,
+      rcmDenials: document.getElementById('notif-pref-rcm-denials')?.checked ?? true,
+      rcmCharges: document.getElementById('notif-pref-rcm-charges')?.checked ?? true,
+      rcmImports: document.getElementById('notif-pref-rcm-imports')?.checked ?? true,
     };
     try {
       await store.updateNotificationPreferences(prefs);
@@ -15688,6 +15824,12 @@ function handleNppesProxy(payload) {
       licenseExpirationDays: parseInt(document.getElementById('settings-notif-exp')?.value || '0', 10),
       documentRequests: document.getElementById('settings-notif-docs')?.checked || false,
       weeklySummary: document.getElementById('settings-notif-weekly')?.checked || false,
+      // RCM / Billing
+      rcmClaims: document.getElementById('settings-notif-rcm-claims')?.checked ?? true,
+      rcmPayments: document.getElementById('settings-notif-rcm-payments')?.checked ?? true,
+      rcmDenials: document.getElementById('settings-notif-rcm-denials')?.checked ?? true,
+      rcmCharges: document.getElementById('settings-notif-rcm-charges')?.checked ?? true,
+      rcmImports: document.getElementById('settings-notif-rcm-imports')?.checked ?? true,
     };
     try {
       await store.updateNotificationPreferences(prefs);
@@ -20811,7 +20953,7 @@ function _getNotificationPrefs() {
     const stored = localStorage.getItem('credentik_notification_prefs');
     if (stored) return JSON.parse(stored);
   } catch {}
-  return { statusChanges: true, licenseExpirationDays: 30, documentRequests: true, weeklySummary: false };
+  return { statusChanges: true, licenseExpirationDays: 30, documentRequests: true, weeklySummary: false, rcmClaims: true, rcmPayments: true, rcmDenials: true, rcmCharges: true, rcmImports: true };
 }
 
 async function _triggerStatusChangeNotification(appId, newStatus) {
@@ -20845,6 +20987,30 @@ async function _triggerFollowupNotification(followupId, outcome) {
       subject: `Follow-up Completed — ${outcome || 'No outcome recorded'}`,
       body: `A follow-up has been completed.\n\nFollow-up ID: ${followupId}\nOutcome: ${outcome || 'N/A'}\n\nLog in to Credentik to view details.`,
       metadata: { followupId, outcome },
+    });
+  } catch {}
+}
+
+// ─── RCM / Billing Notification Trigger ───
+
+/**
+ * Fire-and-forget notification for any RCM action.
+ * @param {string} type - notification type key (e.g. 'claim_created', 'payment_posted')
+ * @param {string} prefKey - preference gate key (rcmClaims, rcmPayments, rcmDenials, rcmCharges, rcmImports)
+ * @param {string} subject - email subject
+ * @param {string} body - email body text
+ * @param {object} metadata - extra data stored with the notification
+ */
+async function _triggerRcmNotification(type, prefKey, subject, body, metadata = {}) {
+  const prefs = _getNotificationPrefs();
+  if (prefs[prefKey] === false) return; // default true if missing
+  try {
+    await store.sendNotification(type, {
+      recipientEmail: prefs.recipientEmail || '',
+      recipientName: '',
+      subject,
+      body,
+      metadata,
     });
   } catch {}
 }

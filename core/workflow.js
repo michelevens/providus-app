@@ -308,7 +308,7 @@ const DEFAULT_ENGINE_RULES = [
         event: 'application.status_changed',
         match: (data) => data.newStatus === 'denied',
         action: 'create_task',
-        describe: 'When app status → denied: create task "Review denial and resubmit"',
+        describe: 'When app status → denied: create task "Review denial and resubmit" + send notification',
         execute: async (data) => {
             try {
                 await store.create('tasks', {
@@ -318,6 +318,18 @@ const DEFAULT_ENGINE_RULES = [
                     status: 'pending',
                     priority: 'high',
                     applicationId: data.appId,
+                });
+                // Also send email notification for denied status
+                const app = data.application || await store.getOne('applications', data.appId).catch(() => null);
+                const provName = app?.providerName || 'Provider';
+                const payerName = app?.payerName || 'Payer';
+                await store.sendNotification('status_change', {
+                    recipientEmail: '',
+                    recipientName: provName,
+                    subject: `Application Denied — ${payerName}`,
+                    body: `The credentialing application for ${provName} with ${payerName} (${app?.state || ''}) has been denied.\n\nA task has been created to review the denial and prepare a resubmission (due in 7 days).\n\nLog in to Credentik to view details and take action.`,
+                    providerId: app?.providerId || null,
+                    metadata: { appId: data.appId, newStatus: 'denied', payerName, state: app?.state },
                 });
                 _logAutomation('_engine_denied_task', 'application.status_changed', data);
             } catch (err) { console.warn('[Automation] denied-task creation failed:', err); }

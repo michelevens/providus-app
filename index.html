@@ -2159,10 +2159,11 @@
         // Validate token before init — prevents 401 cascade on stale tokens
         try {
           const resp = await fetch('https://api.credentik.com/api/auth/me', {
-            headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + token }
+            headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + token },
+            cache: 'no-store', // Bypass SW/browser cache for auth check
           });
           if (resp.ok) {
-            initApp();
+            await initApp();
           } else if (resp.status === 401) {
             // Token expired — clear and show login (don't reload in a loop)
             localStorage.removeItem('credentik_token');
@@ -2170,10 +2171,10 @@
             document.getElementById('app-sidebar')?.classList.add('hidden');
             document.getElementById('login-screen')?.classList.remove('hidden');
           } else {
-            initApp(); // Other errors — try anyway
+            await initApp(); // Other errors — try anyway
           }
         } catch (e) {
-          initApp(); // Network error — try anyway (offline mode)
+          await initApp(); // Network error — try anyway (offline mode)
         }
       }
     });

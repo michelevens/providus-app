@@ -10,6 +10,8 @@ const CRED_TABS = [
   { key: 'followups',    label: 'Follow-ups' },
   { key: 'licenses',     label: 'Licenses' },
   { key: 'locations',    label: 'Locations' },
+  { key: 'states',       label: 'States' },
+  { key: 'payers',       label: 'Payers' },
 ];
 
 export async function renderCredentialingPage() {
@@ -42,6 +44,8 @@ export async function renderCredentialingPage() {
     case 'followups':    await R.renderFollowups(); break;
     case 'licenses':     await R.renderLicenses(); break;
     case 'locations':    await R.renderFacilitiesPage(); break;
+    case 'states':       await R.renderStatesPage(); break;
+    case 'payers':       await R.renderPayersPage(); break;
     default:             await R.renderDashboard(); break;
   }
 

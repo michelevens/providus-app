@@ -7,7 +7,6 @@ const ADMIN_TABS = [
   { key: 'settings',    label: 'Settings' },
   { key: 'billing',     label: 'Billing & Invoicing' },
   { key: 'contracts',   label: 'Contracts' },
-  { key: 'payers',      label: 'Payers' },
   { key: 'users',       label: 'Users' },
   { key: 'onboarding',  label: 'Onboarding' },
   { key: 'import',      label: 'Bulk Import' },
@@ -27,7 +26,6 @@ export async function renderAdminHubPage() {
     case 'settings':    await R.renderSettings(); break;
     case 'billing':     await R.renderBillingPage(); break;
     case 'contracts':   await R.renderContractsPage(); break;
-    case 'payers':      await R.renderPayers(); break;
     case 'users':       await R.renderUsersStub(); break;
     case 'onboarding':  await R.renderOnboardingStub(); break;
     case 'import':      await R.renderImportPage(); break;
