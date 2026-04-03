@@ -1140,6 +1140,15 @@ async function navigateTo(page) {
       document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'message-center'));
       await renderMessageCenterPage();
       break;
+    case 'patients':
+    case 'patient-detail':
+      if (page === 'patient-detail') { window._patientTab = 'detail'; }
+      pageTitle.textContent = 'Patients';
+      pageSubtitle.textContent = 'Patient roster, accounts, claims & encounters';
+      pageActions.innerHTML = printBtn;
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'patients'));
+      await renderPatientsPage();
+      break;
     case 'workspace':
     case 'tasks':
     case 'kanban':
@@ -6821,6 +6830,7 @@ async function renderBillingClientDetail(id) { await (await _page('billing-servi
 async function renderRcmPage()              { await (await _page('rcm')).renderRcmPage(); }
 async function renderStatesPage()           { await (await _page('states')).renderStatesPage(); }
 async function renderMessageCenterPage()    { await (await _page('message-center')).renderMessageCenterPage(); }
+async function renderPatientsPage()         { await (await _page('patients')).renderPatientsPage(); }
 async function renderPayersPage()           { await (await _page('payers-page')).renderPayersPage(); }
 async function renderRevenueCyclePage()     { await (await _page('revenue-cycle')).renderRevenueCyclePage(); }
 // renderBillingClientDetail still loaded from billing-services via revenue-cycle re-export
@@ -11452,6 +11462,17 @@ function handleNppesProxy(payload) {
     window._analyticsTab = tab;
     await renderAnalyticsHubPage();
   },
+  // ── Patients ──
+  viewPatient(patientKey) {
+    window._selectedPatientId = patientKey;
+    window._patientTab = 'detail';
+    window._patientDetailTab = 'claims';
+    navigateTo('patient-detail');
+  },
+  async renderPatientsTab() {
+    await renderPatientsPage();
+  },
+
   // ── Message Center ──
   async mcSwitchTab(tab) {
     window._mcTab = tab;

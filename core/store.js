@@ -1321,6 +1321,27 @@ class Store {
     async updateAuthorization(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/authorizations/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
     async deleteAuthorization(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/authorizations/${id}`, { method: 'DELETE' }); this._invalidateCacheByPattern('rcm'); return r; }
 
+    // ── Patients ──
+    async getPatients(params = {}) {
+        const q = new URLSearchParams(params).toString();
+        try { return (await this._fetch(`${CONFIG.API_URL}/patients${q ? '?' + q : ''}`)).data || []; }
+        catch { return []; } // Fallback: backend may not have patients table yet
+    }
+    async getPatient(id) {
+        try { return (await this._fetch(`${CONFIG.API_URL}/patients/${id}`)).data || {}; }
+        catch { return {}; }
+    }
+    async createPatient(data) {
+        const r = (await this._fetch(`${CONFIG.API_URL}/patients`, { method: 'POST', body: JSON.stringify(data) })).data || {};
+        this._invalidateCacheByPattern('patient');
+        return r;
+    }
+    async updatePatient(id, data) {
+        const r = (await this._fetch(`${CONFIG.API_URL}/patients/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {};
+        this._invalidateCacheByPattern('patient');
+        return r;
+    }
+
     // ERA/EOB Parsing & Auto-Posting
     async parseEra(eraData) { return (await this._fetch(`${CONFIG.API_URL}/rcm/era/parse`, { method: 'POST', body: JSON.stringify({ era_data: eraData }) })).data || {}; }
     async postEra(parsedData) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/era/post`, { method: 'POST', body: JSON.stringify(parsedData) }); this._invalidateCacheByPattern('rcm'); return r.data || r; }
