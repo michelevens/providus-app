@@ -2425,40 +2425,73 @@ select.form-control {
    ═══════════════════════════════════════════ */
 
 @media print {
-  body { background: white; font-size: 11px; color: #000; }
+  @page { margin: 0.6in 0.5in; size: letter; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+  body { background: white !important; font-size: 11px; color: #000; line-height: 1.4; }
   .sidebar, .sidebar-overlay, .mobile-menu-btn,
   .toast, .modal-overlay, .no-print, .header-icon-bar,
-  .offline-bar { display: none !important; }
-  .main-content { margin-left: 0; }
+  .offline-bar, .bottom-nav, .sidebar-quick-actions { display: none !important; }
+  .main-content { margin-left: 0; padding: 0; }
   .page-header {
     position: static;
-    border-bottom: 2px solid #333;
-    padding: 12px 0;
+    border-bottom: 2px solid #1a1a2e;
+    padding: 8px 0 12px;
     backdrop-filter: none;
+    margin-bottom: 16px;
   }
   .page-header-actions { display: none !important; }
-  .page-body { padding: 12px 0; animation: none; }
-  .card { box-shadow: none; border: 1px solid #ddd; page-break-inside: avoid; }
-  .stat-card { box-shadow: none; border: 1px solid #ddd; }
-  .stat-card::before { display: none; }
-  .table-wrap { box-shadow: none; border: 1px solid #ddd; }
-  table { font-size: 10px; }
+  #page-title { font-size: 18px; color: #1a1a2e; }
+  #page-subtitle { font-size: 10px; color: #666; }
+  .page-body { padding: 0; animation: none; }
+
+  /* Cards print clean */
+  .card, .cd-card, .cd-section, .pt-stat, .rcm-stat { box-shadow: none; border: 1px solid #ddd; page-break-inside: avoid; border-radius: 4px; }
+  .stat-card, .pt-stat, .rcm-stat { box-shadow: none; border: 1px solid #ddd; }
+  .stat-card::before, .pt-stat::before, .rcm-stat::before { print-color-adjust: exact; }
+
+  /* Tables print professionally */
+  .table-wrap { box-shadow: none; border: 1px solid #ccc; overflow: visible; }
+  table { font-size: 10px; border-collapse: collapse; }
   thead th {
-    background: #333 !important;
+    background: #2C4A5A !important;
     color: white !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    font-size: 9px;
+    padding: 6px 8px;
+    letter-spacing: 0.3px;
   }
-  tbody td { padding: 6px 8px; }
-  .badge, .wave-badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .btn { display: none !important; }
-  .filters-bar { display: none !important; }
-  .action-btns { display: none !important; }
-  .stats-grid { grid-template-columns: repeat(5, 1fr); }
+  tbody td { padding: 5px 8px; border-bottom: 1px solid #eee; }
+  tbody tr:nth-child(even) { background: #f8f9fa !important; }
+
+  /* Badges print with color */
+  .badge, .wave-badge { print-color-adjust: exact; font-size: 9px; }
+
+  /* Hide interactive elements */
+  .btn, button:not(.print-visible) { display: none !important; }
+  .filters-bar, .action-btns { display: none !important; }
+  select, input[type="text"], input[type="search"], textarea { display: none !important; }
+  .nav-section, .nav-item { display: none !important; }
+
+  /* Stats grid stays horizontal */
+  .stats-grid, .pt-stats { grid-template-columns: repeat(5, 1fr); }
+  .cd-grid { grid-template-columns: repeat(3, 1fr); }
+
+  /* Links don't show underlines */
   a { text-decoration: none; color: inherit; }
-  .print-header { display: block !important; text-align: center; margin-bottom: 12px; font-size: 10px; color: #666; }
+
+  /* Print header/footer */
+  .print-header { display: block !important; text-align: center; margin-bottom: 8px; font-size: 9px; color: #999; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+  .print-footer { display: block !important; }
+
+  /* Claim detail prints well */
+  .cd-back { display: none !important; }
+  .cd-timeline { break-inside: avoid; }
+  .cd-tl-dot { print-color-adjust: exact; }
+
+  /* Charts don't print well — hide them */
+  canvas { max-height: 200px; }
 }
 .print-header { display: none; }
+.print-footer { display: none; font-size: 9px; color: #999; text-align: center; margin-top: 24px; padding-top: 8px; border-top: 1px solid #eee; }
 
 /* ═══════════════════════════════════════════
    UTILITY CLASSES
