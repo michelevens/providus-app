@@ -30,11 +30,11 @@ export async function renderPatientsPage() {
     store.getRcmCharges().catch(() => []),
   ]);
 
-  const claimArr = Array.isArray(claims) ? claims : [];
-  const payArr = Array.isArray(payments) ? payments : [];
-  const denArr = Array.isArray(denials) ? denials : [];
-  const stmtArr = Array.isArray(statements) ? statements : [];
-  const chargeArr = Array.isArray(charges) ? charges : [];
+  const claimArr = store.filterByScope(Array.isArray(claims) ? claims : []);
+  const payArr = store.filterByScope(Array.isArray(payments) ? payments : []);
+  const denArr = store.filterByScope(Array.isArray(denials) ? denials : []);
+  const stmtArr = store.filterByScope(Array.isArray(statements) ? statements : []);
+  const chargeArr = store.filterByScope(Array.isArray(charges) ? charges : []);
 
   // Extract unique patients from claims
   const patientMap = {};

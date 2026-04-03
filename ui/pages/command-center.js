@@ -90,17 +90,17 @@ async function _renderOverview(body) {
     store.getRcmPayments().catch(() => []),
   ]);
 
-  if (r0.status === 'fulfilled') providers = r0.value || [];
-  if (r1.status === 'fulfilled') orgs = r1.value || [];
-  if (r2.status === 'fulfilled') apps = r2.value || [];
-  if (r3.status === 'fulfilled') licenses = r3.value || [];
-  if (r4.status === 'fulfilled') tasks = r4.value || [];
-  if (r5.status === 'fulfilled') followups = r5.value || [];
+  if (r0.status === 'fulfilled') providers = store.filterByScope(r0.value || []);
+  if (r1.status === 'fulfilled') orgs = store.filterByScope(r1.value || []);
+  if (r2.status === 'fulfilled') apps = store.filterByScope(r2.value || []);
+  if (r3.status === 'fulfilled') licenses = store.filterByScope(r3.value || []);
+  if (r4.status === 'fulfilled') tasks = store.filterByScope(r4.value || []);
+  if (r5.status === 'fulfilled') followups = store.filterByScope(r5.value || []);
   if (r6.status === 'fulfilled') bsStats = r6.value || {};
-  if (r7.status === 'fulfilled') bsClients = r7.value || [];
-  if (r8.status === 'fulfilled') claims = Array.isArray(r8.value) ? r8.value : [];
-  if (r9.status === 'fulfilled') denials = Array.isArray(r9.value) ? r9.value : [];
-  if (r10.status === 'fulfilled') payments = Array.isArray(r10.value) ? r10.value : [];
+  if (r7.status === 'fulfilled') bsClients = store.filterByScope(r7.value || []);
+  if (r8.status === 'fulfilled') claims = store.filterByScope(Array.isArray(r8.value) ? r8.value : []);
+  if (r9.status === 'fulfilled') denials = store.filterByScope(Array.isArray(r9.value) ? r9.value : []);
+  if (r10.status === 'fulfilled') payments = store.filterByScope(Array.isArray(r10.value) ? r10.value : []);
 
   const today = new Date();
   const pendingTasks = (Array.isArray(tasks) ? tasks : []).filter(t => !t.completed && !t.isCompleted);

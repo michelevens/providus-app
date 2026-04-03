@@ -21,10 +21,10 @@ export async function renderStatesPage() {
     store.getFacilities(),
   ]);
 
-  const licenses = (licRes.status === 'fulfilled' ? licRes.value : []) || [];
-  const apps = (appRes.status === 'fulfilled' ? appRes.value : []) || [];
-  const providers = (provRes.status === 'fulfilled' ? provRes.value : []) || [];
-  const facilities = (facRes.status === 'fulfilled' ? facRes.value : []) || [];
+  const licenses = store.filterByScope((licRes.status === 'fulfilled' ? licRes.value : []) || []);
+  const apps = store.filterByScope((appRes.status === 'fulfilled' ? appRes.value : []) || []);
+  const providers = store.filterByScope((provRes.status === 'fulfilled' ? provRes.value : []) || []);
+  const facilities = store.filterByScope((facRes.status === 'fulfilled' ? facRes.value : []) || []);
 
   // Build per-state stats
   const stateData = STATES.map(s => {

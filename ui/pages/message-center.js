@@ -33,8 +33,8 @@ export async function renderMessageCenterPage() {
 
   const logs = Array.isArray(allLogs) ? allLogs : [];
   const userArr = Array.isArray(users) ? users : [];
-  const provArr = Array.isArray(providers) ? providers : [];
-  const appArr = Array.isArray(apps) ? apps : [];
+  const provArr = store.filterByScope(Array.isArray(providers) ? providers : []);
+  const appArr = store.filterByScope(Array.isArray(apps) ? apps : []);
 
   // Build name maps
   const nameMap = {};

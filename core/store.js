@@ -47,19 +47,26 @@ class Store {
         if (this._scope.type === 'provider' && this._scope.providerId) {
             const pid = this._scope.providerId;
             return items.filter(item =>
-                item.id === pid ||                          // item IS the provider
-                item.providerId == pid ||                   // has providerId field
-                item.provider?.id == pid                    // nested provider object
+                item.id === pid ||
+                item.providerId == pid ||
+                item.provider_id == pid ||
+                item.provider?.id == pid ||
+                item.renderingProviderId == pid ||
+                item.rendering_provider_id == pid
             );
         }
 
         if (this._scope.type === 'organization' && this._scope.orgId) {
             const oid = this._scope.orgId;
             return items.filter(item =>
-                item.id === oid ||                          // item IS the org
-                item.organizationId == oid ||               // has organizationId field
-                item.organization?.id == oid ||             // nested org object
-                item.provider?.organizationId == oid        // nested through provider
+                item.id === oid ||
+                item.organizationId == oid ||
+                item.organization_id == oid ||
+                item.billingClientId == oid ||
+                item.billing_client_id == oid ||
+                item.organization?.id == oid ||
+                item.provider?.organizationId == oid ||
+                item.provider?.organization_id == oid
             );
         }
 

@@ -25,7 +25,7 @@ export async function renderPayerDetailPage(payerId) {
   if (!payer) { body.innerHTML = '<div class="alert alert-warning">Payer not found.</div>'; return; }
 
   // ── Load all data in parallel ──
-  const [apps, claims, denials, payments, licenses, providers, orgs, facilities, followups, activityLogs, agencyUsers] = await Promise.all([
+  let [apps, claims, denials, payments, licenses, providers, orgs, facilities, followups, activityLogs, agencyUsers] = await Promise.all([
     store.getAll('applications').catch(() => []),
     store.getRcmClaims().catch(() => []),
     store.getRcmDenials().catch(() => []),
@@ -38,6 +38,16 @@ export async function renderPayerDetailPage(payerId) {
     store.getActivityLogs ? store.getActivityLogs({ collection: 'applications' }).catch(() => []) : Promise.resolve([]),
     store.getAgencyUsers ? store.getAgencyUsers().catch(() => []) : Promise.resolve([]),
   ]);
+
+  // Apply scope filtering to prevent cross-org data leaks
+  apps = store.filterByScope(Array.isArray(apps) ? apps : []);
+  claims = store.filterByScope(Array.isArray(claims) ? claims : []);
+  denials = store.filterByScope(Array.isArray(denials) ? denials : []);
+  payments = store.filterByScope(Array.isArray(payments) ? payments : []);
+  licenses = store.filterByScope(Array.isArray(licenses) ? licenses : []);
+  providers = store.filterByScope(Array.isArray(providers) ? providers : []);
+  facilities = store.filterByScope(Array.isArray(facilities) ? facilities : []);
+  followups = store.filterByScope(Array.isArray(followups) ? followups : []);
 
   // Build staff ID → name lookup
   const staffMap = {};

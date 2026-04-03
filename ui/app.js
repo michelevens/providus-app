@@ -21278,11 +21278,11 @@ async function renderFacilitiesPage() {
   body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
 
   let facilities = [];
-  try { facilities = await store.getFacilities(); } catch (e) { console.error('Facilities error:', e); }
+  try { facilities = store.filterByScope(await store.getFacilities()); } catch (e) { console.error('Facilities error:', e); }
   if (!Array.isArray(facilities)) facilities = [];
 
   // Build facility-to-application count map — count apps by state matching facility state
-  const allAppsForFac = await store.getAll('applications').catch(() => []);
+  const allAppsForFac = store.filterByScope(await store.getAll('applications').catch(() => []));
   const facAppCount = {};
   const appArr = Array.isArray(allAppsForFac) ? allAppsForFac : [];
   // Count by facilityId if set, otherwise count apps in same state as facility
@@ -21452,7 +21452,7 @@ async function renderFacilityDetailPage(facilityId) {
   if (!facilityId) { body.innerHTML = '<div style="padding:3rem;text-align:center;color:var(--gray-500);">No facility selected.</div>'; return; }
 
   let facilities = [];
-  try { facilities = await store.getFacilities(); } catch (e) { console.error(e); }
+  try { facilities = store.filterByScope(await store.getFacilities()); } catch (e) { console.error(e); }
   if (!Array.isArray(facilities)) facilities = [];
   const fac = facilities.find(f => f.id === facilityId || String(f.id) === String(facilityId));
   if (!fac) { body.innerHTML = '<div style="padding:3rem;text-align:center;color:var(--gray-500);">Facility not found.</div>'; return; }

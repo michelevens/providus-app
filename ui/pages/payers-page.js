@@ -17,8 +17,8 @@ export async function renderPayersPage() {
     store.getAll('applications'),
     store.getAll('licenses'),
   ]);
-  const apps = (appRes.status === 'fulfilled' ? appRes.value : []) || [];
-  const licenses = (licRes.status === 'fulfilled' ? licRes.value : []) || [];
+  const apps = store.filterByScope((appRes.status === 'fulfilled' ? appRes.value : []) || []);
+  const licenses = store.filterByScope((licRes.status === 'fulfilled' ? licRes.value : []) || []);
 
   // Build per-payer app stats
   const payerAppMap = {};

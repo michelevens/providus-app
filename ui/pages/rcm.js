@@ -226,6 +226,13 @@ async function renderRcmPage() {
   if (!Array.isArray(clients)) clients = [];
   if (!Array.isArray(providers)) providers = [];
   if (!Array.isArray(payers)) payers = [];
+  // Apply organization/provider scope filtering
+  claims = store.filterByScope(claims);
+  denials = store.filterByScope(denials);
+  payments = store.filterByScope(payments);
+  charges = store.filterByScope(charges);
+  clients = store.filterByScope(clients);
+  providers = store.filterByScope(providers);
   window._rcmClaims = claims;
   window._rcmDenials = denials;
   window._rcmPayments = payments;
