@@ -10175,11 +10175,10 @@ function handleNppesProxy(payload) {
   },
   onInviteRoleChange() {
     const role = document.getElementById('invite-role')?.value;
-    const orgSel = document.getElementById('invite-org');
-    const provSel = document.getElementById('invite-provider');
-    // Agency and Staff see all data (no org/provider scope needed)
-    if (orgSel) orgSel.classList.toggle('hidden', role === 'agency' || role === 'staff');
-    if (provSel) provSel.classList.toggle('hidden', role !== 'provider');
+    const orgWrap = document.getElementById('invite-org-wrap');
+    const provWrap = document.getElementById('invite-provider-wrap');
+    if (orgWrap) orgWrap.classList.toggle('hidden', role !== 'organization');
+    if (provWrap) provWrap.classList.toggle('hidden', role !== 'provider');
   },
   async submitInvite() {
     const errEl = document.getElementById('invite-error');
@@ -10201,10 +10200,7 @@ function handleNppesProxy(payload) {
       if (errEl) { errEl.textContent = 'Please select an organization for this user.'; errEl.classList.remove('hidden'); }
       return;
     }
-    if (role === 'provider' && !providerId) {
-      if (errEl) { errEl.textContent = 'Please select a provider for this user.'; errEl.classList.remove('hidden'); }
-      return;
-    }
+    // Provider role: providerId is optional — if empty, backend auto-creates provider profile
 
     const btn = document.querySelector('#invite-user-modal .btn-primary');
     const btnText = btn?.textContent;
@@ -10224,7 +10220,19 @@ function handleNppesProxy(payload) {
         provider_id: providerId ? parseInt(providerId) : null,
       });
       _subscriptionCache = null; // Invalidate cache so usage counts refresh
-      showToast('User created successfully');
+
+      // Send welcome email with login credentials
+      try {
+        const loginUrl = location.origin + location.pathname;
+        await store.sendNotification('welcome', {
+          recipient_email: email,
+          recipient_name: firstName + ' ' + lastName,
+          subject: 'Welcome to Credentik — Your account is ready',
+          body: `Hi ${firstName},\n\nYour Credentik account has been created.\n\nLogin URL: ${loginUrl}\nEmail: ${email}\nTemporary Password: ${password}\n\nPlease log in and change your password.\n\nRole: ${role.charAt(0).toUpperCase() + role.slice(1)}\n\nIf you have questions, contact your agency admin.`,
+        });
+      } catch {} // Don't fail user creation if email fails
+
+      showToast('User created — welcome email sent to ' + email);
       document.getElementById('invite-user-modal')?.classList.remove('active');
       await renderUsersStub();
     } catch (e) {
@@ -19990,14 +19998,22 @@ async function renderUsersStub() {
               </select>
             </div>
             <div class="auth-field" style="margin:0;">
-              <select id="invite-org" class="form-control hidden" style="margin-top:22px;">
-                <option value="">Select Organization *</option>
-                ${orgs.map(o => `<option value="${o.id}">${escHtml(o.name)}</option>`).join('')}
-              </select>
-              <select id="invite-provider" class="form-control hidden" style="margin-top:22px;">
-                <option value="">Select Provider *</option>
-                ${providers.map(p => `<option value="${p.id}">${escHtml((p.firstName || '') + ' ' + (p.lastName || ''))}</option>`).join('')}
-              </select>
+              <div id="invite-org-wrap" class="hidden">
+                <label>Organization *</label>
+                <select id="invite-org" class="form-control">
+                  <option value="">Select Organization...</option>
+                  ${orgs.map(o => `<option value="${o.id}">${escHtml(o.name)}</option>`).join('')}
+                </select>
+              </div>
+              <div id="invite-provider-wrap" class="hidden">
+                <label>Link to Provider</label>
+                <select id="invite-provider" class="form-control">
+                  <option value="">Auto-create new provider profile</option>
+                  <option value="__existing" disabled style="font-weight:600;color:var(--gray-400);font-size:11px;">── Or link to existing ──</option>
+                  ${providers.map(p => `<option value="${p.id}">${escHtml((p.firstName || '') + ' ' + (p.lastName || ''))}</option>`).join('')}
+                </select>
+                <div style="font-size:10px;color:var(--gray-400);margin-top:4px;">Leave as "Auto-create" to generate a new provider profile from the name above.</div>
+              </div>
             </div>
           </div>
           <div id="invite-error" class="alert alert-danger hidden" style="margin-bottom:10px;"></div>
