@@ -12517,10 +12517,20 @@ function handleNppesProxy(payload) {
       }
     } catch (e) { /* scrub failed, proceed with save */ }
     try {
-      if (editId) await store.updateRcmClaim(editId, data); else await store.createRcmClaim(data);
+      const result = editId ? await store.updateRcmClaim(editId, data) : await store.createRcmClaim(data);
       document.getElementById('rcm-claim-modal').classList.remove('active');
       const isEdit = !!editId;
+      const savedId = editId || result?.id;
       showToast(isEdit ? 'Claim updated' : 'Claim created');
+      // Log transaction event
+      if (savedId) {
+        store.createClaimEvent(savedId, {
+          type: isEdit ? 'Updated' : 'Created',
+          description: isEdit ? `Claim updated — ${data.patient_name || 'Patient'} / ${data.payer_name || 'Payer'}` : `Claim created for ${data.patient_name || 'Patient'} — $${parseFloat(data.total_charges || 0).toFixed(2)} billed to ${data.payer_name || 'Payer'}`,
+          amount: parseFloat(data.total_charges || 0),
+          user: ((auth.getUser()?.first_name || '') + ' ' + (auth.getUser()?.last_name || '')).trim(),
+        }).catch(() => {});
+      }
       const patientLabel = data.patient_name || 'Patient';
       const payerLabel = data.payer_name || 'Payer';
       const amtLabel = data.total_charges ? `$${parseFloat(data.total_charges).toFixed(2)}` : '';
@@ -12663,6 +12673,16 @@ function handleNppesProxy(payload) {
       document.getElementById('rcm-payment-modal').classList.remove('active');
       const isEdit = !!editId;
       showToast(isEdit ? 'Payment updated' : 'Payment posted');
+      // Log transaction event for allocated claims
+      if (data.allocations?.length > 0) {
+        data.allocations.forEach(a => {
+          if (a.claim_id) store.createClaimEvent(a.claim_id, {
+            type: 'Payment', description: `${isEdit ? 'Payment updated' : 'Payment posted'} — $${parseFloat(data.total_amount || 0).toFixed(2)} via ${data.payment_type || 'check'}`,
+            amount: parseFloat(a.amount || data.total_amount || 0),
+            user: ((auth.getUser()?.first_name || '') + ' ' + (auth.getUser()?.last_name || '')).trim(),
+          }).catch(() => {});
+        });
+      }
       const payerLabel = data.payer_name || 'Payer';
       const amtLabel = data.total_amount ? `$${parseFloat(data.total_amount).toFixed(2)}` : '';
       _triggerRcmNotification(

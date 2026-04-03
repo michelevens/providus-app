@@ -1321,6 +1321,16 @@ class Store {
     async updateAuthorization(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/authorizations/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
     async deleteAuthorization(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/authorizations/${id}`, { method: 'DELETE' }); this._invalidateCacheByPattern('rcm'); return r; }
 
+    // ── Claim Events / Transaction Log ──
+    async getClaimEvents(claimId) {
+        try { return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/${claimId}/events`)).data || []; }
+        catch { return []; }
+    }
+    async createClaimEvent(claimId, data) {
+        try { return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/${claimId}/events`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
+        catch { return {}; } // Non-blocking — don't fail the parent action
+    }
+
     // ── Patients ──
     async getPatients(params = {}) {
         const q = new URLSearchParams(params).toString();

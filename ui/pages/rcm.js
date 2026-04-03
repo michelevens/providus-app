@@ -1317,6 +1317,11 @@ async function renderClaimDetail(claimId) {
       </table>` : '<div style="padding:24px;text-align:center;color:var(--gray-400);">No payments posted yet.</div>'}
     </div>
 
+    <!-- Transaction Log -->
+    <div class="cd-section" id="cd-txn-log">
+      <div class="cd-sh"><h4>Transaction Log</h4><span style="font-size:11px;color:var(--gray-400);">Loading...</span></div>
+    </div>
+
     <!-- Payer Follow-Up Log -->
     <div class="cd-section">
       <div class="cd-sh">
@@ -1348,6 +1353,78 @@ async function renderClaimDetail(claimId) {
       <div class="cd-sh"><h4>Notes</h4></div>
       <div style="padding:14px 18px;font-size:13px;color:var(--gray-600);white-space:pre-wrap;">${escHtml(claim.notes)}</div>
     </div>` : ''}
+  `;
+
+  // ── Load Transaction Log async ──
+  _loadTransactionLog(claimId, claim, payments, denials);
+}
+
+async function _loadTransactionLog(claimId, claim, payments, denials) {
+  const txnDiv = document.getElementById('cd-txn-log');
+  if (!txnDiv) return;
+
+  let events = [];
+  try { events = await store.getClaimEvents(claimId); } catch {}
+
+  // Build synthetic events from claim data if API returns empty
+  if (!Array.isArray(events) || events.length === 0) {
+    events = [];
+    const charges = Number(claim.totalCharges || claim.total_charges || 0);
+    const patientName = escHtml(claim.patientName || claim.patient_name || '');
+    const payerName = escHtml(claim.payerName || claim.payer_name || 'payer');
+
+    if (claim.createdAt || claim.created_at)
+      events.push({ date: claim.createdAt || claim.created_at, type: 'Created', description: 'Claim created for patient ' + patientName, amount: charges });
+    if (claim.submittedDate || claim.submitted_date)
+      events.push({ date: claim.submittedDate || claim.submitted_date, type: 'Billed', description: 'Submitted electronic claim to ' + payerName });
+    if (claim.acknowledgedDate || claim.acknowledged_date)
+      events.push({ date: claim.acknowledgedDate || claim.acknowledged_date, type: 'Claim Processed', description: 'Acknowledged by ' + payerName });
+
+    payments.forEach(p => {
+      const paidAmt = Number(p.paidAmount || p.paid_amount || 0);
+      const adjAmt = Number(p.adjustmentAmount || p.adjustment_amount || 0);
+      const ptResp = Number(p.patientResponsibility || p.patient_responsibility || 0);
+      if (paidAmt > 0) events.push({ date: p.createdAt || p.created_at || '', type: 'Payment', description: 'Insurance payment' + (p.checkNumber || p.check_number ? ' — Check #' + (p.checkNumber || p.check_number) : ''), amount: paidAmt, ptResp });
+      if (adjAmt > 0) events.push({ date: p.createdAt || p.created_at || '', type: 'Adjustment', description: 'Contractual adjustment', amount: adjAmt });
+    });
+
+    denials.forEach(d => {
+      events.push({ date: d.createdAt || d.created_at || '', type: 'Denied', description: (d.denialCode || d.denial_code || '') + ' — ' + (d.denialReason || d.denial_reason || 'Claim denied'), amount: Number(d.deniedAmount || d.denied_amount || 0) });
+    });
+
+    if (claim.paidDate || claim.paid_date)
+      events.push({ date: claim.paidDate || claim.paid_date, type: 'Settled', description: 'Claim settled — ' + (claim.status === 'paid' ? 'fully paid' : (claim.status || 'closed')) });
+
+    events.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+
+    // Running balance
+    let runBal = Number(claim.totalCharges || claim.total_charges || 0);
+    events.forEach(e => {
+      if (e.type === 'Payment' || e.type === 'Adjustment') runBal -= (e.amount || 0);
+      e.balance = Math.max(0, runBal);
+    });
+  }
+
+  const typeColors = { Created: '#3b82f6', Billed: '#8b5cf6', 'Claim Processed': '#0891b2', Payment: '#16a34a', Adjustment: '#f59e0b', Denied: '#dc2626', Settled: '#059669', 'Re-Billed': '#6366f1', Transfer: '#6b7280' };
+
+  txnDiv.innerHTML = `
+    <div class="cd-sh"><h4>Transaction Log (${events.length})</h4></div>
+    ${events.length > 0 ? `<table>
+      <thead><tr><th>Date</th><th>Transaction</th><th>Description</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Pt Resp</th><th style="text-align:right;">Balance</th></tr></thead>
+      <tbody>
+        ${events.map(e => {
+          const color = typeColors[e.type] || '#6b7280';
+          return `<tr>
+            <td class="text-sm">${formatDateDisplay(e.date) || '—'}</td>
+            <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;background:${color}15;color:${color};">${e.type || '—'}</span></td>
+            <td class="text-sm" style="max-width:300px;">${e.description || ''}</td>
+            <td style="text-align:right;font-weight:600;${e.type === 'Payment' ? 'color:var(--green);' : e.type === 'Denied' ? 'color:var(--red);' : ''}">${e.amount ? _fm(e.amount) : '$0.00'}</td>
+            <td style="text-align:right;color:#7c3aed;">${e.ptResp ? _fm(e.ptResp) : '$0.00'}</td>
+            <td style="text-align:right;font-weight:600;">${_fm(e.balance)}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>` : '<div style="padding:24px;text-align:center;color:var(--gray-400);">No transaction events recorded.</div>'}
   `;
 }
 
