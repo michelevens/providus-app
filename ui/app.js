@@ -1831,7 +1831,7 @@ async function renderDashboard() {
       subtitle: getStateName(a.state),
       time: formatDateDisplay(a.createdAt || a.created_at),
       urgency: 10,
-      action: () => `window.app.viewApplication('${a.id}')`,
+      action: () => `window.app.viewApplicationDetail('${a.id}')`,
       actionLabel: 'Open'
     });
   });
@@ -2268,7 +2268,7 @@ async function renderDashboard() {
             </div>
             ${col.apps.slice(0, 2).map(a => {
               const payer = getPayerById(a.payerId) || { name: a.payerName };
-              return `<div class="mc-kanban-card" onclick="window.app.viewApplication('${a.id}')">
+              return `<div class="mc-kanban-card" onclick="window.app.viewApplicationDetail('${a.id}')">
                 <div class="mc-kanban-card-title">${escHtml(payer.name || 'Unknown')}</div>
                 <div class="mc-kanban-card-sub">${getStateName(a.state)}</div>
               </div>`;
@@ -20885,9 +20885,9 @@ function _kbCard(a, col, providerMap) {
 
   return `<div class="kb-card" style="--card-accent:${col.color}" draggable="true"
     ondragstart="window.app._kbDragStart(event,'${appId}')" ondragend="window.app._kbDragEnd(event)"
-    onclick="window.app.viewApplication('${appId}')">
+    onclick="window.app.viewApplicationDetail('${appId}')">
     <div class="kb-card-actions" onclick="event.stopPropagation()">
-      <button title="Edit" onclick="window.app.viewApplication('${appId}')">&#9998;</button>
+      <button title="Edit" onclick="window.app.viewApplicationDetail('${appId}')">&#9998;</button>
       <button title="Follow-up" onclick="window.app._kbFollowUp('${appId}')">&#128340;</button>
       <button class="kb-act-danger" title="Delete" onclick="window.app._kbDelete('${appId}')">&#128465;</button>
     </div>
