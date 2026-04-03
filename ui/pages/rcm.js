@@ -575,7 +575,12 @@ async function renderRcmPage() {
               <td>${_claimBadge(c.status)}${_filingBadge(c.id)}</td>
               <td><button class="btn btn-sm" onclick="event.stopPropagation();window.app.editRcmClaim(${c.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="event.stopPropagation();window.app.deleteRcmClaim(${c.id})">Del</button></td>
             </tr>`).join('')}
-            ${filteredClaims.length === 0 ? '<tr><td colspan="11" style="text-align:center;padding:2rem;color:var(--gray-500);">' + (hasFilters ? 'No claims match the current filters.' : 'No claims yet. Click "+ New Claim" to create one.') + '</td></tr>' : ''}
+            ${filteredClaims.length === 0 ? `<tr><td colspan="11" style="text-align:center;padding:3rem;">
+              <div style="color:var(--gray-400);font-size:32px;margin-bottom:8px;">&#128203;</div>
+              <div style="font-size:14px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">${hasFilters ? 'No claims match the current filters' : 'No claims yet'}</div>
+              <div style="font-size:12px;color:var(--gray-400);margin-bottom:12px;">${hasFilters ? 'Try adjusting your filters or search terms.' : 'Claims track bills sent to payers through their full lifecycle — submission, adjudication, payment, and denial.'}</div>
+              ${!hasFilters ? '<button class="btn btn-sm btn-primary" onclick="window.app.openRcmClaimModal()" style="font-size:12px;">+ New Claim</button> <button class="btn btn-sm" onclick="window.app.openClaimImportModal()" style="font-size:12px;margin-left:6px;">Import Claims</button>' : ''}
+            </td></tr>` : ''}
           </tbody>
         </table></div>
         ${filteredClaims.length <= PAGE_SIZE ? '' : `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid var(--gray-200);">
@@ -671,7 +676,11 @@ async function renderRcmPage() {
               <td style="text-align:right;font-weight:600;">${_fm(ch.chargeAmount || ch.charge_amount)}</td>
               <td><span class="badge badge-${ch.status === 'submitted' || ch.status === 'billed' ? 'approved' : 'pending'}">${escHtml(ch.status || 'pending')}</span></td>
               <td><button class="btn btn-sm" onclick="window.app.editRcmCharge(${ch.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteRcmCharge(${ch.id})">Del</button></td>
-            </tr>`).join('') + (charges.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No charge entries. Use the quick entry form above.</td></tr>' : '');
+            </tr>`).join('') + (charges.length === 0 ? `<tr><td colspan="9" style="text-align:center;padding:3rem;">
+              <div style="color:var(--gray-400);font-size:32px;margin-bottom:8px;">&#129534;</div>
+              <div style="font-size:14px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">No charge entries</div>
+              <div style="font-size:12px;color:var(--gray-400);">Charges capture individual CPT line items before they're grouped into claims. Use the quick entry form above to start.</div>
+            </td></tr>` : '');
             })()}
           </tbody>
         </table></div>
@@ -781,7 +790,12 @@ async function renderRcmPage() {
                 <td><button class="btn btn-sm" onclick="window.app.editRcmDenial(${d.id})">Edit</button> <button class="btn btn-sm" style="color:var(--red);" onclick="window.app.deleteRcmDenial(${d.id})">Del</button></td>
               </tr>`;
             }).join('')}
-            ${denials.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No denials tracked yet.</td></tr>' : ''}
+            ${denials.length === 0 ? `<tr><td colspan="8" style="text-align:center;padding:3rem;">
+              <div style="color:var(--gray-400);font-size:32px;margin-bottom:8px;">&#9888;&#65039;</div>
+              <div style="font-size:14px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">No denials tracked</div>
+              <div style="font-size:12px;color:var(--gray-400);margin-bottom:12px;">Denial management tracks rejected claims, appeal deadlines, and recovery. No denials is great news!</div>
+              <button class="btn btn-sm" onclick="window.app.openRcmDenialModal()" style="font-size:12px;">+ Track Denial</button>
+            </td></tr>` : ''}
           </tbody>
         </table></div></div>
       </div>
@@ -838,7 +852,13 @@ async function renderRcmPage() {
           </div>
         </div>
         <div class="card-body" style="padding:0;">
-          ${checkList.length === 0 ? '<div style="text-align:center;padding:2rem;color:var(--gray-500);">No payments posted yet.</div>' : ''}
+          ${checkList.length === 0 ? `<div style="text-align:center;padding:3rem;">
+            <div style="color:var(--gray-400);font-size:32px;margin-bottom:8px;">&#128176;</div>
+            <div style="font-size:14px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">No payments posted</div>
+            <div style="font-size:12px;color:var(--gray-400);margin-bottom:12px;">Payments track insurance and patient collections. Post payments manually or import an ERA/835 file.</div>
+            <button class="btn btn-sm btn-primary" onclick="window.app.openRcmPaymentModal()" style="font-size:12px;">+ Post Payment</button>
+            <button class="btn btn-sm" onclick="window.app.openEraImportModal()" style="font-size:12px;margin-left:6px;">Import ERA</button>
+          </div>` : ''}
           ${checkList.map(([checkNum, group]) => `
           <div class="payment-group" data-check="${escAttr(checkNum)}" data-payer="${escAttr(group.payer.toLowerCase())}" data-dos-min="${group.claims.reduce((m, c) => { const d = (c.dateOfService || c.date_of_service || '').toString().slice(0,10); return d && d < m ? d : m; }, '9999-99-99')}" data-dos-max="${group.claims.reduce((m, c) => { const d = (c.dateOfService || c.date_of_service || '').toString().slice(0,10); return d && d > m ? d : m; }, '0000-00-00')}">
             <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--gray-200);cursor:pointer;gap:12px;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none';this.querySelector('.chevron').style.transform=this.nextElementSibling.style.display==='none'?'':'rotate(90deg)'">
@@ -930,7 +950,11 @@ async function renderRcmPage() {
                 <td>${_claimBadge(c.status)}</td>
               </tr>`;
             }).join('')}
-            ${(arData.claims || []).length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No open A/R</td></tr>' : ''}
+            ${(arData.claims || []).length === 0 ? `<tr><td colspan="8" style="text-align:center;padding:3rem;">
+              <div style="color:var(--gray-400);font-size:32px;margin-bottom:8px;">&#9989;</div>
+              <div style="font-size:14px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">No open A/R</div>
+              <div style="font-size:12px;color:var(--gray-400);">All claims are current. Outstanding balances will appear here as they age.</div>
+            </td></tr>` : ''}
           </tbody>
         </table></div></div>
       </div>

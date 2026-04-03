@@ -833,10 +833,61 @@ body.funding-hub-active .page-header {
   letter-spacing: 1.2px;
   color: var(--gray-500);
   font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+  transition: color 0.15s;
 }
+.nav-section:hover { color: var(--gray-300); }
+.nav-section::after {
+  content: '';
+  width: 6px; height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+.nav-section.collapsed::after { transform: rotate(-45deg); }
+.nav-section.collapsed ~ .nav-item:not(.nav-section ~ .nav-section ~ .nav-item) { /* handled by JS */ }
 .nav-section:first-child {
   padding-top: 4px;
 }
+
+/* Quick Actions Bar */
+.sidebar-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 8px 12px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.sq-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px;
+  border: none;
+  background: rgba(255,255,255,0.04);
+  border-radius: 10px;
+  color: var(--gray-400);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.sq-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  transform: translateY(-1px);
+}
+.sq-btn svg { opacity: 0.7; }
+.sq-btn:hover svg { opacity: 1; }
 
 .nav-item {
   display: flex;

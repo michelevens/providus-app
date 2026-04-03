@@ -12190,23 +12190,55 @@ function handleNppesProxy(payload) {
     }
   },
   async saveRcmClaim() {
+    // Inline validation — highlight fields with issues
+    const _vf = (id, msg) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.borderColor = '#ef4444';
+      let hint = el.parentElement?.querySelector('.field-hint');
+      if (!hint) { hint = document.createElement('div'); hint.className = 'field-hint'; hint.style.cssText = 'font-size:11px;color:#ef4444;margin-top:2px;'; el.parentElement?.appendChild(hint); }
+      hint.textContent = msg;
+    };
+    const _vc = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.borderColor = '';
+      const hint = el.parentElement?.querySelector('.field-hint');
+      if (hint) hint.remove();
+    };
+    // Clear previous
+    ['rcm-claim-dos', 'rcm-claim-patient', 'rcm-claim-payer', 'rcm-claim-payer-other', 'rcm-claim-charges'].forEach(_vc);
+
     const dos = document.getElementById('rcm-claim-dos').value;
-    if (!dos) { showToast('Date of service is required'); return; }
+    const patientName = document.getElementById('rcm-claim-patient').value.trim();
     const payerSel = document.getElementById('rcm-claim-payer');
     const payerVal = payerSel?.value === '__other__' ? (document.getElementById('rcm-claim-payer-other')?.value?.trim() || '') : (payerSel?.value || '');
+    const charges = parseFloat(document.getElementById('rcm-claim-charges').value) || 0;
+
+    let hasError = false;
+    if (!dos) { _vf('rcm-claim-dos', 'Date of service is required'); hasError = true; }
+    if (!patientName) { _vf('rcm-claim-patient', 'Patient name is required'); hasError = true; }
+    if (!payerVal) {
+      if (payerSel?.value === '__other__') _vf('rcm-claim-payer-other', 'Enter payer name');
+      else _vf('rcm-claim-payer', 'Select a payer');
+      hasError = true;
+    }
+    if (charges <= 0) { _vf('rcm-claim-charges', 'Charges must be greater than $0'); hasError = true; }
+    if (hasError) { showToast('Please fix the highlighted fields'); return; }
+
     const provSel = document.getElementById('rcm-claim-provider');
     const provName = provSel?.selectedOptions[0]?.dataset?.name || provSel?.value || '';
     const provId = provSel?.value && provSel.value !== '' ? provSel.value : null;
     const data = {
       billing_client_id: document.getElementById('rcm-claim-client').value || null,
       claim_type: document.getElementById('rcm-claim-type').value,
-      patient_name: document.getElementById('rcm-claim-patient').value.trim(),
+      patient_name: patientName,
       patient_member_id: document.getElementById('rcm-claim-member').value.trim(),
       payer_name: payerVal,
       provider_id: provId,
       provider_name: provName.trim(),
       date_of_service: dos,
-      total_charges: parseFloat(document.getElementById('rcm-claim-charges').value) || 0,
+      total_charges: charges,
       status: document.getElementById('rcm-claim-status-sel').value,
       submission_method: document.getElementById('rcm-claim-method').value,
       authorization_number: document.getElementById('rcm-claim-auth').value.trim(),
