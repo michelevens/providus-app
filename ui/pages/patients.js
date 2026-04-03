@@ -128,21 +128,6 @@ export async function renderPatientsPage() {
   }
 
   body.innerHTML = `
-    <style>
-      .pt-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px;}
-      .pt-stat{background:var(--surface-card,#fff);border-radius:16px;padding:18px 16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:transform 0.18s,box-shadow 0.18s;}
-      .pt-stat:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.1);}
-      .pt-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
-      .pt-stat:nth-child(1)::before{background:linear-gradient(90deg,var(--brand-500),var(--brand-700));}
-      .pt-stat:nth-child(2)::before{background:linear-gradient(90deg,#22c55e,#16a34a);}
-      .pt-stat:nth-child(3)::before{background:linear-gradient(90deg,#f59e0b,#d97706);}
-      .pt-stat:nth-child(4)::before{background:linear-gradient(90deg,#8b5cf6,#6d28d9);}
-      .pt-stat:nth-child(5)::before{background:linear-gradient(90deg,#ef4444,#dc2626);}
-      .pt-stat .pt-val{font-size:28px;font-weight:800;line-height:1.1;}
-      .pt-stat .pt-lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;}
-      .pt-row:hover{background:var(--gray-50);cursor:pointer;}
-    </style>
-
     <div class="pt-stats">
       <div class="pt-stat"><div class="pt-val" style="color:var(--brand-600);">${totalPatients}</div><div class="pt-lbl">Total Patients</div></div>
       <div class="pt-stat"><div class="pt-val" style="color:#16a34a;">${activePatients}</div><div class="pt-lbl">Active (90 days)</div></div>
