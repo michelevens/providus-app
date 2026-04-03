@@ -350,7 +350,7 @@ const DEFAULT_ENGINE_RULES = [
                     description: `A new provider (${name}) was added. Complete their profile, upload credentials, and verify information.`,
                     dueDate: formatDate(addDays(new Date(), 7)),
                     status: 'pending',
-                    priority: 'medium',
+                    priority: 'normal',
                     providerId: data.providerId,
                 });
                 _logAutomation('_engine_provider_onboard', 'provider.created', data);
