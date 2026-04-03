@@ -1,4 +1,4 @@
-const CACHE_NAME = 'credentik-v14';
+const CACHE_NAME = 'credentik-v15';
 const API_CACHE = 'credentik-api-v2';
 const API_TTL = 5 * 60 * 1000; // 5 minutes
 const API_MAX_ENTRIES = 100;
@@ -58,9 +58,12 @@ self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys => Promise.all(
       keys.filter(k => k !== CACHE_NAME && k !== API_CACHE).map(k => caches.delete(k))
-    ))
+    )).then(() => self.clients.claim())
+      .then(() => self.clients.matchAll().then(clients => {
+        // Notify all tabs to reload when new SW takes over
+        clients.forEach(client => client.postMessage({ type: 'SW_UPDATED' }));
+      }))
   );
-  self.clients.claim();
 });
 
 // Trim API cache to max entries

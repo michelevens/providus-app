@@ -2208,31 +2208,36 @@
   <!-- App Init -->
   <script type="module">
     import { initApp } from './ui/app.js';
-    document.addEventListener('DOMContentLoaded', async () => {
+
+    async function _boot() {
       const token = localStorage.getItem('credentik_token');
-      if (token) {
-        // Validate token before init — prevents 401 cascade on stale tokens
-        try {
-          const resp = await fetch('https://api.credentik.com/api/auth/me', {
-            headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + token },
-            cache: 'no-store', // Bypass SW/browser cache for auth check
-          });
-          if (resp.ok) {
-            await initApp();
-          } else if (resp.status === 401) {
-            // Token expired — clear and show login (don't reload in a loop)
-            localStorage.removeItem('credentik_token');
-            localStorage.removeItem('credentik_user');
-            document.getElementById('app-sidebar')?.classList.add('hidden');
-            document.getElementById('login-screen')?.classList.remove('hidden');
-          } else {
-            await initApp(); // Other errors — try anyway
-          }
-        } catch (e) {
-          await initApp(); // Network error — try anyway (offline mode)
+      if (!token) return; // No token — login screen already visible
+      try {
+        const resp = await fetch('https://api.credentik.com/api/auth/me', {
+          headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + token },
+          cache: 'no-store',
+        });
+        if (resp.ok) {
+          await initApp();
+        } else if (resp.status === 401) {
+          localStorage.removeItem('credentik_token');
+          localStorage.removeItem('credentik_user');
+          document.getElementById('app-sidebar')?.classList.add('hidden');
+          document.getElementById('login-screen')?.classList.remove('hidden');
+        } else {
+          await initApp(); // Other errors — try anyway
         }
+      } catch (e) {
+        await initApp(); // Network error — try anyway (offline mode)
       }
-    });
+    }
+
+    // Module scripts are deferred — DOMContentLoaded may have already fired
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', _boot);
+    } else {
+      _boot(); // DOM already ready — run immediately
+    }
 
     // Ctrl+K / Cmd+K → Global Search
     document.addEventListener('keydown', (e) => {
@@ -2241,6 +2246,13 @@
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(() => {});
+      // Auto-reload when new SW activates (prevents stale cache issues)
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type === 'SW_UPDATED') {
+          console.log('[SW] New version activated — reloading');
+          window.location.reload();
+        }
+      });
     }
 
     function updateOnlineStatus() {
