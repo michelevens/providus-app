@@ -1307,6 +1307,7 @@ async function renderBottleneckAnalysis() {
 
   // ─── Section 1: Pipeline Funnel ───
   const funnelStages = [
+    { value: 'planned', label: 'Planned', color: '#6366F1' },
     { value: 'new', label: 'New', color: '#6B7280' },
     { value: 'gathering_docs', label: 'Gathering Docs', color: '#3B82F6' },
     { value: 'submitted', label: 'Submitted', color: '#8B5CF6' },
@@ -1315,6 +1316,8 @@ async function renderBottleneckAnalysis() {
     { value: 'approved', label: 'Approved', color: '#10B981' },
     { value: 'credentialed', label: 'Credentialed', color: '#059669' },
     { value: 'denied', label: 'Denied', color: '#DC2626' },
+    { value: 'on_hold', label: 'On Hold', color: '#9CA3AF' },
+    { value: 'withdrawn', label: 'Withdrawn', color: '#6B7280' },
   ];
   const stageCounts = {};
   funnelStages.forEach(s => { stageCounts[s.value] = 0; });
