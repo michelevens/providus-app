@@ -11469,7 +11469,7 @@ function handleNppesProxy(payload) {
     const senderName = ((currentUser.first_name || currentUser.firstName || '') + ' ' + (currentUser.last_name || currentUser.lastName || '')).trim();
     try {
       await store.createCommunicationLog({
-        channel: 'internal', direction: 'outbound', type: 'message', messageType: 'message',
+        direction: 'outbound', type: 'message', messageType: 'message',
         subject: '', body, notes: body,
         senderId: currentUser.id, senderName,
         recipientId, recipientType,
@@ -11498,7 +11498,7 @@ function handleNppesProxy(payload) {
     const senderName = ((currentUser.first_name || currentUser.firstName || '') + ' ' + (currentUser.last_name || currentUser.lastName || '')).trim();
     try {
       await store.createCommunicationLog({
-        channel: 'internal', direction: 'outbound', type: msgType, messageType: msgType,
+        direction: 'outbound', type: msgType, messageType: msgType,
         subject, body, notes: body,
         senderId: currentUser.id, senderName,
         recipientId: toId, recipientType: toType,
@@ -17915,7 +17915,7 @@ async function updateNotificationBell() {
   }
   // Update message badge in sidebar
   try {
-    const msgs = await store.getCommunicationLogs({ channel: 'internal' }).catch(() => []);
+    const msgs = await store.getCommunicationLogs().catch(() => []);
     const currentUserId = auth.getUser()?.id;
     const unreadMsgs = (Array.isArray(msgs) ? msgs : []).filter(m => !m.isRead && !m.is_read && String(m.recipientId || m.recipient_id) === String(currentUserId)).length;
     const msgBadge = document.getElementById('msg-badge');
@@ -20031,7 +20031,7 @@ async function renderMessagesPage() {
   let logs = [], users = [], providers = [];
   try {
     [logs, users, providers] = await Promise.all([
-      store.getCommunicationLogs({ channel: 'internal' }).catch(() => []),
+      store.getCommunicationLogs().catch(() => []),
       store.getAgencyUsers().catch(() => []),
       store.getAll('providers').catch(() => []),
     ]);
@@ -20252,7 +20252,6 @@ async function sendMessage() {
   const currentUser = auth.getUser();
   try {
     await store.createCommunicationLog({
-      channel: 'internal',
       direction: 'outbound',
       type: msgType,
       messageType: msgType,
@@ -20283,7 +20282,7 @@ async function openThread(threadId) {
   let logs = [], users = [], providers = [];
   try {
     [logs, users, providers] = await Promise.all([
-      store.getCommunicationLogs({ channel: 'internal' }).catch(() => []),
+      store.getCommunicationLogs().catch(() => []),
       store.getAgencyUsers().catch(() => []),
       store.getAll('providers').catch(() => []),
     ]);
@@ -20351,7 +20350,6 @@ async function sendReply() {
 
   try {
     await store.createCommunicationLog({
-      channel: 'internal',
       direction: 'outbound',
       type: 'message',
       messageType: 'message',

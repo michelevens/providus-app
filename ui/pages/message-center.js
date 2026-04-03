@@ -41,7 +41,7 @@ export async function renderMessageCenterPage() {
   userArr.forEach(u => { nameMap['user:' + u.id] = ((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || '')).trim() || 'User'; });
   provArr.forEach(p => { nameMap['provider:' + p.id] = ((p.firstName || p.first_name || '') + ' ' + (p.lastName || p.last_name || '')).trim() || 'Provider'; });
   const getName = (type, id) => nameMap[(type || 'user') + ':' + id] || nameMap['user:' + id] || nameMap['provider:' + id] || 'Unknown';
-  const getInitials = (name) => { const parts = (name || '?').split(' '); return ((parts[0] || '?')[0] + (parts[1] || '')[0] || '').toUpperCase(); };
+  const getInitials = (name) => { const parts = (name || '?').split(' '); return ((parts[0] || '?')[0] + (parts.length > 1 && parts[1] ? parts[1][0] : '')).toUpperCase(); };
 
   // Email map for Send as Email
   const emailMap = {};
@@ -49,8 +49,10 @@ export async function renderMessageCenterPage() {
   provArr.forEach(p => { if (p.email) emailMap['provider:' + p.id] = p.email; });
 
   // Split internal messages vs call logs
-  const internalLogs = logs.filter(l => (l.channel || 'internal') === 'internal');
-  const commLogs = logs.filter(l => l.channel && l.channel !== 'internal');
+  // Internal messages have recipientId; call logs have channel set to phone/email/fax/etc.
+  const externalChannels = ['phone', 'email', 'fax', 'portal', 'mail', 'billing'];
+  const internalLogs = logs.filter(l => !externalChannels.includes(l.channel) && (l.recipientId || l.recipient_id || l.senderId || l.sender_id));
+  const commLogs = logs.filter(l => externalChannels.includes(l.channel));
 
   // Group into threads
   const threadMap = {};
@@ -150,7 +152,7 @@ export async function renderMessageCenterPage() {
   // ─── Main 3-column layout ───
   body.innerHTML = `
     <div class="mc-tabs">${_tab('inbox', 'Inbox', unreadTotal)}${_tab('sent', 'Sent', 0)}${isAdmin ? _tab('all', 'All Messages', 0) : ''}${_tab('communications', 'Call Log', 0)}</div>
-    <div class="mc-layout ${window._mcShowContext && activeThread ? '' : 'no-context'}" id="mc-grid">
+    <div class="mc-layout ${window._mcShowContext && activeThread ? '' : 'no-context'} ${activeThread ? 'show-thread' : ''}" id="mc-grid">
 
       <!-- LEFT: Conversation List -->
       <div class="mc-left">
@@ -221,9 +223,9 @@ export async function renderMessageCenterPage() {
   clearInterval(window._mcPollInterval);
   window._mcPollInterval = setInterval(async () => {
     try {
-      const fresh = await store.getCommunicationLogs({ channel: 'internal' });
+      const fresh = await store.getCommunicationLogs();
       const freshCount = Array.isArray(fresh) ? fresh.length : 0;
-      if (freshCount !== internalLogs.length) {
+      if (freshCount !== logs.length) {
         window.app.mcRefresh();
       }
     } catch {}
@@ -247,10 +249,13 @@ function _renderThread(thread, currentUserId, nameMap, recipientOpts, emailMap) 
   const replyEmail = emailMap[replyToKey] || '';
 
   return `
-    <div class="mc-center-header">
-      <div>
-        <div style="font-size:14px;font-weight:700;color:var(--text-primary);">${escHtml(thread.subject)}</div>
-        <div style="font-size:11px;color:var(--gray-400);">${thread.msgs.length} message${thread.msgs.length !== 1 ? 's' : ''} &middot; ${escHtml(TYPE_LABELS[thread.type] || 'Message')}</div>
+    <div class="mc-center-header" style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-sm mc-back-btn" onclick="window._mcThread=null;window.app.mcRefresh();" style="font-size:11px;display:none;">&#8592; Back</button>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--text-primary);">${escHtml(thread.subject)}</div>
+          <div style="font-size:11px;color:var(--gray-400);">${thread.msgs.length} message${thread.msgs.length !== 1 ? 's' : ''} &middot; ${escHtml(TYPE_LABELS[thread.type] || 'Message')}</div>
+        </div>
       </div>
       <div style="display:flex;gap:6px;">
         <button class="btn btn-sm" onclick="window._mcShowContext=!window._mcShowContext;window.app.mcRefresh();" style="font-size:11px;">${window._mcShowContext ? 'Hide' : 'Show'} Context</button>
@@ -349,7 +354,7 @@ function _renderContext(thread, appArr, provArr) {
           <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">${escHtml(app.state || '')} &middot; ${escHtml(app.providerName || app.provider_name || '')}</div>
           <div style="margin-top:6px;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:${(statusColors[app.status] || '#6b7280') + '20'};color:${statusColors[app.status] || '#6b7280'};">${(app.status || '').replace(/_/g, ' ').toUpperCase()}</span></div>
           ${app.submittedDate || app.submitted_date ? `<div style="font-size:11px;color:var(--gray-400);margin-top:4px;">Submitted: ${formatDateDisplay(app.submittedDate || app.submitted_date)}</div>` : ''}
-          <button class="btn btn-sm" onclick="window._selectedApplicationId='${app.id}';navigateTo('application-detail')" style="margin-top:8px;font-size:11px;width:100%;">View Application</button>
+          <button class="btn btn-sm" onclick="window._selectedApplicationId='${app.id}';window.app.navigateTo('application-detail')" style="margin-top:8px;font-size:11px;width:100%;">View Application</button>
         </div>`;
     }
   }

@@ -3775,6 +3775,7 @@ a, button, [role="button"], .nav-item, .btn, .tab,
   .mc-layout .mc-right { display: none; }
   .mc-layout.show-thread .mc-left { display: none; }
   .mc-layout:not(.show-thread) .mc-center { display: none; }
+  .mc-back-btn { display: inline-flex !important; }
 }
 
 /* ─── Guided Tour ─── */
