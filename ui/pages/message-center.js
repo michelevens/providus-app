@@ -218,21 +218,87 @@ export async function renderMessageCenterPage() {
     }
   }
 
+  // Request notification permission on first visit
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+
   // Scroll to bottom of messages
   const msgArea = document.getElementById('mc-messages');
   if (msgArea) msgArea.scrollTop = msgArea.scrollHeight;
 
-  // Polling
+  // Fast polling (5s) for near-real-time feel
   clearInterval(window._mcPollInterval);
+  const _lastLogCount = logs.length;
   window._mcPollInterval = setInterval(async () => {
     try {
       const fresh = await store.getCommunicationLogs();
       const freshCount = Array.isArray(fresh) ? fresh.length : 0;
-      if (freshCount !== logs.length) {
+      if (freshCount !== _lastLogCount) {
+        // New message arrived — check if it's for us
+        const freshArr = Array.isArray(fresh) ? fresh : [];
+        const currentId = String(auth.getUser()?.id || '');
+        const newForMe = freshArr.filter(m => {
+          const rid = String(m.recipientId || m.recipient_id || '');
+          return rid === currentId && !(m.isRead || m.is_read);
+        });
+        const prevUnread = logs.filter(m => {
+          const rid = String(m.recipientId || m.recipient_id || '');
+          return rid === currentId && !(m.isRead || m.is_read);
+        });
+        // Desktop notification + sound for truly new messages
+        if (newForMe.length > prevUnread.length) {
+          const newest = freshArr.sort((a, b) => new Date(b.createdAt || b.created_at || 0) - new Date(a.createdAt || a.created_at || 0))[0];
+          const senderName = newest?.senderName || newest?.sender_name || 'Someone';
+          const preview = (newest?.body || newest?.notes || '').substring(0, 80);
+          _notifyNewMessage(senderName, preview);
+        }
         window.app.mcRefresh();
       }
     } catch {}
-  }, 30000);
+  }, 5000);
+}
+
+// ─── Desktop Notification + Sound ───
+function _notifyNewMessage(sender, preview) {
+  // Play notification sound
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.value = 0.08;
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.stop(ctx.currentTime + 0.3);
+    // Second tone
+    setTimeout(() => {
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.frequency.value = 1100;
+      osc2.type = 'sine';
+      gain2.gain.value = 0.06;
+      osc2.start();
+      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+      osc2.stop(ctx.currentTime + 0.25);
+    }, 150);
+  } catch {}
+
+  // Browser desktop notification
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification('New message from ' + sender, {
+      body: preview || 'You have a new message',
+      icon: './manifest-icon-192.png',
+      tag: 'credentik-msg', // Replaces previous notification
+    });
+  } else if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission(); // Ask on first message
+  }
 }
 
 // ─── Thread View ───
@@ -281,13 +347,21 @@ function _renderThread(thread, currentUserId, nameMap, recipientOpts, emailMap) 
               ${mType !== 'message' ? `<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:${tColor}15;color:${tColor};">${TYPE_LABELS[mType] || mType}</span>` : ''}
             </div>
             ${m.subject && thread.msgs.indexOf(m) > 0 ? `<div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:2px;">${escHtml(m.subject)}</div>` : ''}
-            <div class="mc-bubble ${isMe ? 'outgoing' : 'incoming'}">${escHtml(m.body || m.notes || '').replace(/\n/g, '<br>')}</div>
+            <div class="mc-bubble ${isMe ? 'outgoing' : 'incoming'}">
+              ${escHtml(m.body || m.notes || '').replace(/\n/g, '<br>')}
+              ${_renderAttachments(m.attachments || m.metadata?.attachments)}
+            </div>
             <div style="font-size:10px;color:var(--gray-400);${isMe ? 'text-align:right;' : ''}">${isMe ? (isRead ? '&#10003;&#10003; Read' : '&#10003; Sent') : ''}</div>
           </div>
         </div>`;
       }).join('')}
     </div>
+    <div id="mc-reply-attachments" style="display:none;padding:8px 16px;border-top:1px solid var(--gray-100);display:flex;flex-wrap:wrap;gap:6px;"></div>
     <div class="mc-reply-bar">
+      <label style="cursor:pointer;display:flex;align-items:center;padding:8px;border-radius:8px;color:var(--gray-400);transition:color 0.15s;" title="Attach file" onmouseover="this.style.color='var(--brand-600)'" onmouseout="this.style.color='var(--gray-400)'">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M15 7l-6.5 6.5a3.5 3.5 0 01-5-5L10 2a2.5 2.5 0 013.5 3.5L7 12a1.5 1.5 0 01-2-2l5.5-5.5"/></svg>
+        <input type="file" id="mc-reply-file" multiple style="display:none;" onchange="window.app.mcAttachFiles(this.files, 'reply')">
+      </label>
       <textarea id="mc-reply-input" class="form-control" placeholder="Type a reply... (Enter to send, Shift+Enter for newline)" rows="1" style="flex:1;resize:none;min-height:40px;max-height:120px;border-radius:10px;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();window.app.mcSendReply();}"></textarea>
       <div style="display:flex;flex-direction:column;gap:4px;">
         <button class="btn btn-primary btn-sm" onclick="window.app.mcSendReply()" style="white-space:nowrap;">Send</button>
@@ -326,6 +400,14 @@ function _renderCompose(recipientOpts, emailMap) {
         </div>
         <div class="auth-field" style="margin:0;"><label>Message *</label>
           <textarea id="mc-compose-body" class="form-control" rows="6" placeholder="Type your message..." style="resize:vertical;"></textarea></div>
+        <div class="auth-field" style="margin:0;">
+          <label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1.5px dashed var(--gray-300);border-radius:8px;font-size:12px;color:var(--gray-500);transition:all 0.15s;" onmouseover="this.style.borderColor='var(--brand-500)';this.style.color='var(--brand-600)'" onmouseout="this.style.borderColor='var(--gray-300)';this.style.color='var(--gray-500)'">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M15 7l-6.5 6.5a3.5 3.5 0 01-5-5L10 2a2.5 2.5 0 013.5 3.5L7 12a1.5 1.5 0 01-2-2l5.5-5.5"/></svg>
+            Attach files
+            <input type="file" id="mc-compose-file" multiple style="display:none;" onchange="window.app.mcAttachFiles(this.files, 'compose')">
+          </label>
+          <div id="mc-compose-attachments" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
+        </div>
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <label style="font-size:12px;color:var(--gray-500);display:flex;align-items:center;gap:6px;cursor:pointer;">
             <input type="checkbox" id="mc-compose-email" onchange="window.app.mcCheckEmailAvailable()" style="width:14px;height:14px;">
@@ -397,6 +479,23 @@ function _renderContext(thread, appArr, provArr) {
     </div>`;
 
   return html;
+}
+
+// ─── Attachment rendering ───
+function _renderAttachments(attachments) {
+  if (!attachments || !Array.isArray(attachments) || attachments.length === 0) return '';
+  return `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">${attachments.map(a => {
+    const name = a.name || a.fileName || 'file';
+    const size = a.size ? (a.size > 1024 * 1024 ? (a.size / 1024 / 1024).toFixed(1) + ' MB' : (a.size / 1024).toFixed(0) + ' KB') : '';
+    const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(name) || (a.type || '').startsWith('image/');
+    if (isImage && a.url) {
+      return `<a href="${escAttr(a.url)}" target="_blank" style="display:block;"><img src="${escAttr(a.url)}" alt="${escAttr(name)}" style="max-width:200px;max-height:150px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);"></a>`;
+    }
+    return `<a href="${escAttr(a.url || '#')}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;background:rgba(0,0,0,0.06);border-radius:8px;font-size:11px;color:inherit;text-decoration:none;">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="1" width="8" height="12" rx="1"/><path d="M6 1v3h3"/></svg>
+      ${escHtml(name)}${size ? ` <span style="color:var(--gray-400);">(${size})</span>` : ''}
+    </a>`;
+  }).join('')}</div>`;
 }
 
 export function mcRefresh() {

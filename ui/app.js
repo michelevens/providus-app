@@ -11459,7 +11459,8 @@ function handleNppesProxy(payload) {
   },
   async mcSendReply() {
     const body = document.getElementById('mc-reply-input')?.value?.trim();
-    if (!body) { showToast('Type a message'); return; }
+    const attachments = window.app._mcAttachments.reply || [];
+    if (!body && attachments.length === 0) { showToast('Type a message or attach a file'); return; }
     const threadId = document.getElementById('mc-reply-thread')?.value;
     const recipientId = document.getElementById('mc-reply-to-id')?.value;
     const recipientType = document.getElementById('mc-reply-to-type')?.value || 'user';
@@ -11467,15 +11468,18 @@ function handleNppesProxy(payload) {
     const recipientEmail = document.getElementById('mc-reply-to-email')?.value;
     const currentUser = auth.getUser() || {};
     const senderName = ((currentUser.first_name || currentUser.firstName || '') + ' ' + (currentUser.last_name || currentUser.lastName || '')).trim();
+    const msgBody = body + (attachments.length > 0 ? '\n\n[' + attachments.length + ' file(s) attached]' : '');
     try {
       await store.createCommunicationLog({
         channel: 'portal', direction: 'outbound', type: 'message', messageType: 'message',
-        subject: '', body, notes: body,
+        subject: '', body: msgBody, notes: msgBody,
         senderId: currentUser.id, senderName,
         recipientId, recipientType,
         threadId: threadId || undefined,
         isRead: false, status: 'sent',
+        metadata: attachments.length > 0 ? { attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size, url: a.data })) } : undefined,
       });
+      window.app._mcAttachments.reply = [];
       if (sendEmail && recipientEmail) {
         await store.sendNotification('message', {
           recipient_email: recipientEmail, recipient_name: '', subject: 'New message from ' + senderName, body,
@@ -11489,21 +11493,25 @@ function handleNppesProxy(payload) {
     const toVal = document.getElementById('mc-compose-to')?.value;
     if (!toVal) { showToast('Select a recipient'); return; }
     const body = document.getElementById('mc-compose-body')?.value?.trim();
-    if (!body) { showToast('Type a message'); return; }
+    const attachments = window.app._mcAttachments.compose || [];
+    if (!body && attachments.length === 0) { showToast('Type a message or attach a file'); return; }
     const [toType, toId] = toVal.split(':');
     const msgType = document.getElementById('mc-compose-type')?.value || 'message';
     const subject = document.getElementById('mc-compose-subject')?.value?.trim() || '';
     const sendEmail = document.getElementById('mc-compose-email')?.checked;
     const currentUser = auth.getUser() || {};
     const senderName = ((currentUser.first_name || currentUser.firstName || '') + ' ' + (currentUser.last_name || currentUser.lastName || '')).trim();
+    const msgBody = (body || '') + (attachments.length > 0 ? '\n\n[' + attachments.length + ' file(s) attached]' : '');
     try {
       await store.createCommunicationLog({
         channel: 'portal', direction: 'outbound', type: msgType, messageType: msgType,
-        subject, body, notes: body,
+        subject, body: msgBody, notes: msgBody,
         senderId: currentUser.id, senderName,
         recipientId: toId, recipientType: toType,
         isRead: false, status: 'sent',
+        metadata: attachments.length > 0 ? { attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size, url: a.data })) } : undefined,
       });
+      window.app._mcAttachments.compose = [];
       if (sendEmail) {
         // Resolve email from users/providers
         const users = await store.getAgencyUsers().catch(() => []);
@@ -11522,6 +11530,47 @@ function handleNppesProxy(payload) {
       await renderMessageCenterPage();
     } catch (e) { showToast('Send failed: ' + e.message); }
   },
+  // ── Attachment handling ──
+  _mcAttachments: { reply: [], compose: [] },
+  mcAttachFiles(fileList, target) {
+    const files = Array.from(fileList || []);
+    const maxSize = 5 * 1024 * 1024; // 5MB per file
+    files.forEach(file => {
+      if (file.size > maxSize) { showToast(`${file.name} is too large (max 5MB)`); return; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        window.app._mcAttachments[target].push({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          data: reader.result, // base64 data URL
+        });
+        window.app._renderAttachmentPreviews(target);
+      };
+      reader.readAsDataURL(file);
+    });
+  },
+  _renderAttachmentPreviews(target) {
+    const container = document.getElementById(`mc-${target}-attachments`);
+    if (!container) return;
+    const atts = window.app._mcAttachments[target];
+    if (atts.length === 0) { container.innerHTML = ''; container.style.display = 'none'; return; }
+    container.style.display = 'flex';
+    container.innerHTML = atts.map((a, i) => {
+      const isImage = a.type?.startsWith('image/');
+      const sizeStr = a.size > 1024 * 1024 ? (a.size / 1024 / 1024).toFixed(1) + 'MB' : (a.size / 1024).toFixed(0) + 'KB';
+      return `<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--gray-100);border-radius:6px;font-size:11px;">
+        ${isImage ? `<img src="${a.data}" style="width:24px;height:24px;border-radius:4px;object-fit:cover;">` : '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="1" width="8" height="12" rx="1"/><path d="M6 1v3h3"/></svg>'}
+        ${escHtml(a.name)} <span style="color:var(--gray-400);">(${sizeStr})</span>
+        <button onclick="window.app._mcRemoveAttachment('${target}',${i})" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:14px;padding:0 2px;">&times;</button>
+      </div>`;
+    }).join('');
+  },
+  _mcRemoveAttachment(target, index) {
+    window.app._mcAttachments[target].splice(index, 1);
+    window.app._renderAttachmentPreviews(target);
+  },
+
   mcCheckEmailAvailable() {
     const toVal = document.getElementById('mc-compose-to')?.value;
     const hint = document.getElementById('mc-compose-email-hint');
