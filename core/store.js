@@ -1304,10 +1304,27 @@ class Store {
     async updateAuthorization(id, data) { const r = (await this._fetch(`${CONFIG.API_URL}/rcm/authorizations/${id}`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; this._invalidateCacheByPattern('rcm'); return r; }
     async deleteAuthorization(id) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/authorizations/${id}`, { method: 'DELETE' }); this._invalidateCacheByPattern('rcm'); return r; }
 
-    // ERA/EOB Parsing
+    // ERA/EOB Parsing & Auto-Posting
     async parseEra(eraData) { return (await this._fetch(`${CONFIG.API_URL}/rcm/era/parse`, { method: 'POST', body: JSON.stringify({ era_data: eraData }) })).data || {}; }
+    async postEra(parsedData) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/era/post`, { method: 'POST', body: JSON.stringify(parsedData) }); this._invalidateCacheByPattern('rcm'); return r.data || r; }
+    async getEraHistory(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/era/history${q ? '?' + q : ''}`)).data || []; }
     async parse837(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/837/parse`, { method: 'POST', body: JSON.stringify({ data }) })).data || {}; }
     async import837(claims, clientId) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/837/import`, { method: 'POST', body: JSON.stringify({ claims, billing_client_id: clientId }) }); return r.data || r; }
+
+    // Claim Status (276/277)
+    async checkClaimStatus(data) { return (await this._fetch(`${CONFIG.API_URL}/proxy/availity/claim-status`, { method: 'POST', body: JSON.stringify(data) })).data || {}; }
+    async getClaimStatusHistory(claimId) { return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/${claimId}/status-history`)).data || []; }
+    async saveClaimStatusCheck(claimId, data) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/claims/${claimId}/status-check`, { method: 'POST', body: JSON.stringify(data) }); return r.data || r; }
+    async batchCheckClaimStatus(claimIds) { return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/batch-status-check`, { method: 'POST', body: JSON.stringify({ claim_ids: claimIds }) })).data || {}; }
+
+    // Clearinghouse / Electronic Submission
+    async submitClaimElectronic(claimId) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/claims/${claimId}/submit-electronic`, { method: 'POST' }); this._invalidateCacheByPattern('rcm'); return r.data || r; }
+    async bulkSubmitClaims(claimIds) { const r = await this._fetch(`${CONFIG.API_URL}/rcm/claims/bulk-submit`, { method: 'POST', body: JSON.stringify({ claim_ids: claimIds }) }); this._invalidateCacheByPattern('rcm'); return r.data || r; }
+    async getSubmissionStatus(claimId) { return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/${claimId}/submission-status`)).data || {}; }
+    async getSubmissionHistory(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/submissions${q ? '?' + q : ''}`)).data || []; }
+    async getClearinghouseConfig() { return (await this._fetch(`${CONFIG.API_URL}/rcm/clearinghouse/config`)).data || {}; }
+    async updateClearinghouseConfig(data) { return (await this._fetch(`${CONFIG.API_URL}/rcm/clearinghouse/config`, { method: 'PUT', body: JSON.stringify(data) })).data || {}; }
+    async testClearinghouseConnection() { return (await this._fetch(`${CONFIG.API_URL}/rcm/clearinghouse/test`, { method: 'POST' })).data || {}; }
 
     // AI Denial Prevention
     async getDenialRiskAnalysis() { return (await this._fetch(`${CONFIG.API_URL}/rcm/denial-risk`)).data || {}; }

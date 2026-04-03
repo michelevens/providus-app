@@ -3683,3 +3683,25 @@ a, button, [role="button"], .nav-item, .btn, .tab,
 [data-theme="dark"] [style*="color: black"] {
   color: var(--text-primary) !important;
 }
+
+/* ─── Guided Tour ─── */
+#tour-overlay { position: fixed; inset: 0; z-index: 99999; }
+.tour-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); transition: opacity 0.3s; }
+.tour-spotlight { position: fixed; border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.55); z-index: 1; pointer-events: none; transition: all 0.3s ease; }
+.tour-card { position: fixed; z-index: 2; width: 300px; background: var(--surface-card, #fff); border-radius: 16px; padding: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); animation: tour-in 0.3s ease; }
+@keyframes tour-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.tour-step-indicator { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--brand-500); margin-bottom: 6px; }
+.tour-title { font-size: 16px; font-weight: 800; margin: 0 0 6px; color: var(--text-primary); }
+.tour-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 16px; }
+.tour-actions { display: flex; justify-content: space-between; align-items: center; }
+.tour-skip { background: none; border: none; color: var(--text-tertiary); font-size: 12px; font-weight: 600; cursor: pointer; padding: 6px 0; }
+.tour-skip:hover { color: var(--text-primary); }
+.tour-next { background: var(--brand-600); color: #fff; border: none; padding: 8px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.15s; }
+.tour-next:hover { background: var(--brand-700); }
+.tour-dots { display: flex; gap: 6px; justify-content: center; margin-top: 12px; }
+.tour-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gray-300); transition: all 0.2s; }
+.tour-dot.active { background: var(--brand-500); width: 18px; border-radius: 3px; }
+.tour-dot.done { background: var(--brand-300); }
+@media (max-width: 768px) {
+  .tour-card { width: calc(100vw - 32px); left: 16px !important; bottom: 16px; top: auto !important; }
+}

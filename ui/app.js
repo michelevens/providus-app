@@ -13596,6 +13596,68 @@ function handleNppesProxy(payload) {
       showToast(`Parsed ${result.claim_count} claims from ERA`);
     } catch (e) { showToast('Parse error: ' + e.message); }
   },
+  async postEraParsed() {
+    const parsed = window._parsedEra;
+    if (!parsed || !parsed.claims?.length) { showToast('Parse an ERA file first'); return; }
+    if (!await appConfirm(`Post ${parsed.claims.length} ERA payment(s) totaling $${(parsed.total_amount || 0).toFixed(2)}?\n\nThis will create payment records and update claim statuses.`)) return;
+    const btn = document.getElementById('era-post-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Posting...'; }
+    try {
+      const result = await store.postEra(parsed);
+      const matched = result.matched || [];
+      const unmatched = result.unmatched || [];
+      const errors = result.errors || [];
+      const posted = result.posted || matched.length;
+      const totalAmt = result.total_amount || 0;
+
+      // Render reconciliation report
+      const prev = document.getElementById('era-preview');
+      if (prev) {
+        prev.innerHTML = `
+          <div style="margin-bottom:12px;">
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">
+              <div style="background:#dcfce7;padding:10px;border-radius:8px;text-align:center;"><div style="font-size:20px;font-weight:800;color:#16a34a;">${posted}</div><div style="font-size:10px;font-weight:600;color:#166534;">POSTED</div></div>
+              <div style="background:#dbeafe;padding:10px;border-radius:8px;text-align:center;"><div style="font-size:20px;font-weight:800;color:#2563eb;">$${totalAmt.toFixed(2)}</div><div style="font-size:10px;font-weight:600;color:#1e40af;">TOTAL</div></div>
+              <div style="background:${unmatched.length > 0 ? '#fef3c7' : '#f3f4f6'};padding:10px;border-radius:8px;text-align:center;"><div style="font-size:20px;font-weight:800;color:${unmatched.length > 0 ? '#d97706' : '#9ca3af'};">${unmatched.length}</div><div style="font-size:10px;font-weight:600;color:${unmatched.length > 0 ? '#92400e' : '#6b7280'};">UNMATCHED</div></div>
+              <div style="background:${errors.length > 0 ? '#fee2e2' : '#f3f4f6'};padding:10px;border-radius:8px;text-align:center;"><div style="font-size:20px;font-weight:800;color:${errors.length > 0 ? '#dc2626' : '#9ca3af'};">${errors.length}</div><div style="font-size:10px;font-weight:600;color:${errors.length > 0 ? '#991b1b' : '#6b7280'};">ERRORS</div></div>
+            </div>
+          </div>
+          ${matched.length > 0 ? `<div style="margin-bottom:12px;"><strong style="color:#16a34a;">Matched & Posted</strong><table style="width:100%;font-size:12px;margin-top:4px;"><thead><tr style="background:#f0fdf4;"><th>Claim #</th><th>Patient</th><th style="text-align:right;">Charged</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Adjustment</th><th>Status</th></tr></thead><tbody>${matched.map(m => `<tr><td>${escHtml(m.claim_number || '—')}</td><td>${escHtml(m.patient_name || '—')}</td><td style="text-align:right;">$${(m.charged_amount || 0).toFixed(2)}</td><td style="text-align:right;color:#16a34a;font-weight:600;">$${(m.paid_amount || 0).toFixed(2)}</td><td style="text-align:right;color:#d97706;">$${(m.adjustment_amount || 0).toFixed(2)}</td><td><span style="font-size:10px;font-weight:600;color:#16a34a;">${(m.new_status || 'paid').toUpperCase()}</span></td></tr>`).join('')}</tbody></table></div>` : ''}
+          ${unmatched.length > 0 ? `<div style="margin-bottom:12px;"><strong style="color:#d97706;">Unmatched — Review Manually</strong><table style="width:100%;font-size:12px;margin-top:4px;"><thead><tr style="background:#fffbeb;"><th>Claim #</th><th style="text-align:right;">Charged</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Pt Resp</th><th>Reason</th></tr></thead><tbody>${unmatched.map(u => `<tr><td>${escHtml(u.claim_number || '—')}</td><td style="text-align:right;">$${(u.charged_amount || 0).toFixed(2)}</td><td style="text-align:right;">$${(u.paid_amount || 0).toFixed(2)}</td><td style="text-align:right;">$${(u.patient_responsibility || 0).toFixed(2)}</td><td class="text-sm text-muted">${escHtml(u.reason || 'No matching claim found')}</td></tr>`).join('')}</tbody></table></div>` : ''}
+          ${errors.length > 0 ? `<div><strong style="color:#dc2626;">Errors</strong><table style="width:100%;font-size:12px;margin-top:4px;"><thead><tr style="background:#fef2f2;"><th>Claim #</th><th>Error</th></tr></thead><tbody>${errors.map(e => `<tr><td>${escHtml(e.claim_number || '—')}</td><td class="text-sm" style="color:#dc2626;">${escHtml(e.message || e.error || '—')}</td></tr>`).join('')}</tbody></table></div>` : ''}
+          <div style="margin-top:12px;display:flex;gap:8px;">
+            <button class="btn btn-sm" onclick="window.app.exportEraReconciliation()">Download Report</button>
+            <button class="btn btn-sm" onclick="document.getElementById('era-modal').remove()">Close</button>
+          </div>
+        `;
+      }
+      if (btn) { btn.style.display = 'none'; }
+      showToast(`ERA posted: ${posted} payment(s), $${totalAmt.toFixed(2)}`);
+      _triggerRcmNotification('payment_posted', 'rcmPayments', `ERA Auto-Posted — ${posted} payments, $${totalAmt.toFixed(2)}`, `An ERA/835 file was auto-posted.\n\nPayer: ${parsed.payer_name || 'N/A'}\nCheck #: ${parsed.check_number || 'N/A'}\nPayments: ${posted}\nTotal: $${totalAmt.toFixed(2)}\nUnmatched: ${unmatched.length}\nErrors: ${errors.length}`, { posted, totalAmount: totalAmt, unmatched: unmatched.length, errors: errors.length }).catch(() => {});
+    } catch (e) {
+      showToast('Post error: ' + e.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Post Payments'; }
+    }
+  },
+  exportEraReconciliation() {
+    const parsed = window._parsedEra;
+    if (!parsed) { showToast('No ERA data to export'); return; }
+    let csv = 'Status,Claim #,Patient,Charged,Paid,Adjustment,Pt Responsibility,New Status,Notes\n';
+    (parsed._postResult?.matched || []).forEach(m => {
+      csv += `Matched,${m.claim_number || ''},${m.patient_name || ''},${m.charged_amount || 0},${m.paid_amount || 0},${m.adjustment_amount || 0},${m.patient_responsibility || 0},${m.new_status || 'paid'},\n`;
+    });
+    (parsed._postResult?.unmatched || []).forEach(u => {
+      csv += `Unmatched,${u.claim_number || ''},,${u.charged_amount || 0},${u.paid_amount || 0},,${u.patient_responsibility || 0},,${u.reason || ''}\n`;
+    });
+    (parsed._postResult?.errors || []).forEach(e => {
+      csv += `Error,${e.claim_number || ''},,,,,,,"${(e.message || e.error || '').replace(/"/g, '""')}"\n`;
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `era-reconciliation-${new Date().toISOString().split('T')[0]}.csv`; a.click();
+    showToast('ERA reconciliation report exported');
+  },
+
   // Generate Report modal
   openGenerateReportModal() {
     const clients = window._bsClients || window._rcmClients || [];
@@ -13944,6 +14006,162 @@ function handleNppesProxy(payload) {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `balance-reminders-${new Date().toISOString().split('T')[0]}.csv`; a.click();
     showToast('Reminder list exported');
   },
+
+  // ── Claim Status (276/277) Handlers ──
+  async checkSingleClaimStatus(claimId) {
+    try {
+      showToast('Checking claim status...');
+      const claim = await store.getRcmClaim(claimId);
+      const payload = {
+        payer_id: claim.ediPayerId || claim.edi_payer_id || claim.payerName || claim.payer_name || '',
+        member_id: claim.patientMemberId || claim.patient_member_id || '',
+        claim_number: claim.claimNumber || claim.claim_number || '',
+        date_of_service: claim.dateOfService || claim.date_of_service || '',
+        provider_npi: claim.providerNpi || claim.provider_npi || '',
+        patient_name: claim.patientName || claim.patient_name || '',
+      };
+      const result = await store.checkClaimStatus(payload);
+      // Save the status check result
+      await store.saveClaimStatusCheck(claimId, result);
+      const statusDesc = result.status_description || result.category_description || result.status || 'Status received';
+      const newStatus = result.claim_status || '';
+      if (newStatus && newStatus !== claim.status) {
+        await store.updateRcmClaim(claimId, { status: newStatus });
+        showToast(`Claim status updated: ${statusDesc}`);
+      } else {
+        showToast(`Status: ${statusDesc}`);
+      }
+    } catch (e) { showToast('Status check failed: ' + (e.message || 'Unable to reach clearinghouse')); }
+  },
+  toggleAllClaimCheckboxes(checked) {
+    document.querySelectorAll('.cs-claim-cb').forEach(cb => { cb.checked = checked; });
+  },
+  async batchCheckAllSubmitted() {
+    const cbs = document.querySelectorAll('.cs-claim-cb');
+    const claimIds = Array.from(cbs).map(cb => cb.value);
+    if (!claimIds.length) { showToast('No submitted claims to check'); return; }
+    await this._runBatchStatusCheck(claimIds);
+  },
+  async batchCheckStaleClaims() {
+    const cbs = document.querySelectorAll('.cs-claim-cb');
+    const now = new Date();
+    const staleIds = Array.from(cbs).filter(cb => {
+      const dos = cb.dataset.dos;
+      return dos && Math.floor((now - new Date(dos)) / 86400000) > 30;
+    }).map(cb => cb.value);
+    if (!staleIds.length) { showToast('No stale claims to check'); return; }
+    await this._runBatchStatusCheck(staleIds);
+  },
+  async _runBatchStatusCheck(claimIds) {
+    if (!await appConfirm(`Check status for ${claimIds.length} claim(s)? This may take a moment.`)) return;
+    const progressDiv = document.getElementById('claim-status-progress');
+    const progressBar = document.getElementById('cs-progress-bar');
+    const progressText = document.getElementById('cs-progress-text');
+    const resultsDiv = document.getElementById('claim-status-results');
+    if (progressDiv) progressDiv.style.display = '';
+    let completed = 0; let updated = 0; let errors = 0;
+    const results = [];
+    // Process in batches of 5 (rate limiting)
+    for (let i = 0; i < claimIds.length; i += 5) {
+      const batch = claimIds.slice(i, i + 5);
+      const promises = batch.map(async (id) => {
+        try {
+          await this.checkSingleClaimStatus(id);
+          results.push({ id, status: 'ok' });
+          updated++;
+        } catch (e) {
+          results.push({ id, status: 'error', message: e.message });
+          errors++;
+        } finally {
+          completed++;
+          if (progressBar) progressBar.style.width = `${(completed / claimIds.length) * 100}%`;
+          if (progressText) progressText.textContent = `${completed}/${claimIds.length}`;
+        }
+      });
+      await Promise.all(promises);
+    }
+    if (progressDiv) progressDiv.style.display = 'none';
+    if (resultsDiv) {
+      resultsDiv.innerHTML = `<div class="card rcm-card" style="margin-bottom:16px;"><div class="card-body" style="padding:14px 20px;">
+        <strong>Batch Complete:</strong> ${updated} checked, ${errors} error${errors !== 1 ? 's' : ''}
+        <button class="btn btn-sm" style="margin-left:12px;" onclick="window.app.rcSwitchTab('claim-status')">Refresh</button>
+      </div></div>`;
+    }
+    showToast(`Batch status check complete: ${updated} checked, ${errors} errors`);
+  },
+
+  // ── Clearinghouse / Submissions Handlers ──
+  async submitClaimElectronic(claimId) {
+    try {
+      showToast('Submitting claim electronically...');
+      const result = await store.submitClaimElectronic(claimId);
+      showToast(result.status === 'rejected' ? `Submission rejected: ${result.message || 'See details'}` : `Claim submitted — Tracking ID: ${result.tracking_id || 'pending'}`);
+      _triggerRcmNotification('claim_created', 'rcmClaims', 'Claim Submitted Electronically', `Claim ${result.claim_number || claimId} submitted to clearinghouse.\nTracking: ${result.tracking_id || 'pending'}`, { claimId, trackingId: result.tracking_id }).catch(() => {});
+    } catch (e) { showToast('Submission failed: ' + e.message); }
+  },
+  async resubmitClaim(claimId) {
+    if (!await appConfirm('Resubmit this claim electronically?')) return;
+    await this.submitClaimElectronic(claimId);
+    window.app.rcSwitchTab('submissions');
+  },
+  filterSubmissions() {
+    const q = (document.getElementById('sub-filter')?.value || '').toLowerCase();
+    document.querySelectorAll('.sub-row').forEach(r => {
+      r.style.display = !q || (r.dataset.search || '').includes(q) ? '' : 'none';
+    });
+  },
+  async openClearinghouseConfig() {
+    let config = {};
+    try { config = await store.getClearinghouseConfig(); } catch (e) {}
+    const html = `<div class="modal-overlay active" id="ch-config-modal">
+      <div class="modal" style="max-width:500px;">
+        <div class="modal-header"><h3>Clearinghouse Configuration</h3><button class="modal-close" onclick="document.getElementById('ch-config-modal').remove()">&times;</button></div>
+        <div class="modal-body">
+          <div style="display:grid;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Clearinghouse</label>
+              <select id="ch-name" class="form-control">
+                <option value="availity" ${(config.clearinghouse_name || '') === 'availity' ? 'selected' : ''}>Availity</option>
+                <option value="change_healthcare" ${config.clearinghouse_name === 'change_healthcare' ? 'selected' : ''}>Change Healthcare</option>
+                <option value="waystar" ${config.clearinghouse_name === 'waystar' ? 'selected' : ''}>Waystar</option>
+                <option value="office_ally" ${config.clearinghouse_name === 'office_ally' ? 'selected' : ''}>Office Ally</option>
+                <option value="trizetto" ${config.clearinghouse_name === 'trizetto' ? 'selected' : ''}>Trizetto</option>
+              </select></div>
+            <div class="auth-field" style="margin:0;"><label>Organization / Submitter Name</label><input type="text" id="ch-org" class="form-control" value="${escAttr(config.organization_name || '')}"></div>
+            <div class="auth-field" style="margin:0;"><label>Submitter NPI</label><input type="text" id="ch-npi" class="form-control" value="${escAttr(config.submitter_npi || '')}" maxlength="10"></div>
+            <div class="auth-field" style="margin:0;"><label>Tax ID</label><input type="text" id="ch-taxid" class="form-control" value="${escAttr(config.tax_id || '')}"></div>
+            <div style="padding:10px;background:var(--gray-50);border-radius:8px;font-size:12px;color:var(--gray-600);">API credentials are stored securely on the server. Contact support to update API keys.</div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('ch-config-modal').remove()">Cancel</button>
+          <button class="btn" onclick="window.app.testClearinghouseConn()">Test Connection</button>
+          <button class="btn btn-primary" onclick="window.app.saveClearinghouseConfig()">Save</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  async saveClearinghouseConfig() {
+    const data = {
+      clearinghouse_name: document.getElementById('ch-name')?.value || 'availity',
+      organization_name: document.getElementById('ch-org')?.value?.trim() || '',
+      submitter_npi: document.getElementById('ch-npi')?.value?.trim() || '',
+      tax_id: document.getElementById('ch-taxid')?.value?.trim() || '',
+    };
+    try {
+      await store.updateClearinghouseConfig(data);
+      document.getElementById('ch-config-modal')?.remove();
+      showToast('Clearinghouse configuration saved');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async testClearinghouseConn() {
+    try {
+      showToast('Testing connection...');
+      const result = await store.testClearinghouseConnection();
+      showToast(result.connected ? 'Connection successful!' : 'Connection failed: ' + (result.error || 'Check credentials'));
+    } catch (e) { showToast('Connection test failed: ' + e.message); }
+  },
+
   async printStatement(id) {
     let statements = [];
     try { statements = await store.getPatientStatements(); } catch (e) {}
@@ -18551,17 +18769,34 @@ let _toastActive = false;
 let _toastTimer = null;
 let _toastUndoCallback = null;
 
-function showToast(msg, type = 'info', { undo, duration = 3500 } = {}) {
-  _toastQueue.push({ msg, type, undo, duration });
+function showToast(msg, type = 'info', { undo, action, onAction, duration = 3500 } = {}) {
+  _toastQueue.push({ msg, type, undo, action, onAction, duration });
   if (!_toastActive) _processToastQueue();
+}
+
+// Translate API/network errors into user-friendly messages
+function friendlyError(e) {
+  if (!e) return 'Unknown error';
+  const msg = e.message || String(e);
+  const status = e.status || e.statusCode;
+  if (status === 401 || msg.includes('401') || msg.includes('Unauthenticated')) return 'Session expired — please log in again';
+  if (status === 403 || msg.includes('403') || msg.includes('Forbidden')) return 'Permission denied — contact your admin';
+  if (status === 404 || msg.includes('404') || msg.includes('Not Found')) return 'Resource not found';
+  if (status === 422 || msg.includes('422') || msg.includes('Unprocessable')) return 'Invalid data — check required fields';
+  if (status === 429 || msg.includes('429') || msg.includes('Too Many')) return 'Too many requests — please wait a moment';
+  if (status >= 500 || msg.includes('500') || msg.includes('Server Error')) return 'Server error — try again in a moment';
+  if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('net::')) return 'Connection lost — check your internet';
+  if (msg.includes('timeout') || msg.includes('Timeout')) return 'Request timed out — try again';
+  return msg.length > 120 ? msg.substring(0, 120) + '...' : msg;
 }
 
 function _processToastQueue() {
   if (!_toastQueue.length) { _toastActive = false; return; }
   _toastActive = true;
-  const { msg, type, undo, duration } = _toastQueue.shift();
+  const { msg, type, undo, action, onAction, duration } = _toastQueue.shift();
   const t = document.getElementById('toast');
   _toastUndoCallback = undo || null;
+  window._toastActionCallback = onAction || null;
 
   // Icon by type
   const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
@@ -18570,12 +18805,13 @@ function _processToastQueue() {
   t.innerHTML = `
     <span style="color:${colors[type] || colors.info};font-size:16px;flex-shrink:0;">${icons[type] || icons.info}</span>
     <span style="flex:1;">${msg}</span>
+    ${action && onAction ? `<button onclick="if(window._toastActionCallback)window._toastActionCallback();_dismissToast();" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">${action}</button>` : ''}
     ${undo ? '<button onclick="_undoToast()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Undo</button>' : ''}
     <button onclick="_dismissToast()" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:16px;cursor:pointer;padding:0 2px;line-height:1;">✕</button>
   `;
   t.classList.add('show');
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(_dismissToast, duration);
+  _toastTimer = setTimeout(_dismissToast, action ? 8000 : duration); // Longer duration when action button shown
 }
 
 function _dismissToast() {

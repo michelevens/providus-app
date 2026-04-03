@@ -869,4 +869,195 @@ async function renderBalanceRemindersTab(body) {
   `;
 }
 
-export { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection, renderPayerIntelligenceTab, renderProviderFeedbackTab, renderAuthorizationsTab, renderModifierGuideTab, renderCallTrackingTab, renderBalanceRemindersTab };
+// ═══════════════════════════════════════════════════
+// ERA POSTING TAB — import history + quick import
+// ═══════════════════════════════════════════════════
+async function renderEraPostingTab(body) {
+  let history = [];
+  try { history = await store.getEraHistory(); } catch (e) {}
+  if (!Array.isArray(history)) history = [];
+
+  const totalPosted = history.reduce((s, h) => s + Number(h.posted || h.matched_count || 0), 0);
+  const totalAmount = history.reduce((s, h) => s + Number(h.total_amount || 0), 0);
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
+      <div class="rcm-stat"><div class="rcm-label">ERA Imports</div><div class="rcm-val" style="color:#3b82f6;">${history.length}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Payments Posted</div><div class="rcm-val" style="color:var(--green);">${totalPosted}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Total Amount</div><div class="rcm-val" style="color:#7c3aed;">${_fk(totalAmount)}</div></div>
+    </div>
+
+    <div class="card rcm-card" style="margin-bottom:16px;">
+      <div class="card-body" style="padding:16px;text-align:center;">
+        <button class="btn btn-primary" onclick="window.app.openEraImportModal()" style="font-size:14px;padding:10px 24px;">Import ERA/835 File</button>
+        <div style="font-size:12px;color:var(--gray-500);margin-top:8px;">Paste an 835 ERA file to auto-parse and post payments to matched claims.</div>
+      </div>
+    </div>
+
+    <div class="card rcm-card rcm-table">
+      <div class="card-header"><h3>ERA Import History</h3></div>
+      <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Payer</th><th>Check #</th><th>Claims</th><th style="text-align:right;">Total</th><th>Matched</th><th>Unmatched</th><th>Status</th></tr></thead>
+        <tbody>
+          ${history.map(h => {
+            const matched = Number(h.matched_count || h.posted || 0);
+            const unmatched = Number(h.unmatched_count || 0);
+            const status = unmatched > 0 ? 'partial' : 'complete';
+            return `<tr>
+              <td class="text-sm">${formatDateDisplay(h.created_at || h.createdAt) || '—'}</td>
+              <td style="font-weight:600;">${escHtml(h.payer_name || h.payerName || '—')}</td>
+              <td class="text-sm" style="font-family:monospace;">${escHtml(h.check_number || h.checkNumber || '—')}</td>
+              <td class="text-sm">${Number(h.claim_count || h.claimCount || 0)}</td>
+              <td style="text-align:right;font-weight:600;color:var(--green);">${_fm(h.total_amount || h.totalAmount)}</td>
+              <td><span style="font-size:11px;font-weight:600;color:#16a34a;">${matched}</span></td>
+              <td>${unmatched > 0 ? `<span style="font-size:11px;font-weight:600;color:#d97706;">${unmatched}</span>` : '<span style="color:var(--gray-400);">0</span>'}</td>
+              <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:${status === 'complete' ? '#dcfce7' : '#fef3c7'};color:${status === 'complete' ? '#16a34a' : '#d97706'};">${status === 'complete' ? 'COMPLETE' : 'PARTIAL'}</span></td>
+            </tr>`;
+          }).join('')}
+          ${history.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No ERA files imported yet. Click "Import ERA/835 File" to auto-post payments from electronic remittance advice.</td></tr>' : ''}
+        </tbody>
+      </table></div></div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════
+// CLAIM STATUS TAB — 276/277 real-time claim status checks
+// ═══════════════════════════════════════════════════
+async function renderClaimStatusTab(body) {
+  const claims = window._rcmClaims || [];
+  const submittedClaims = claims.filter(c => ['submitted', 'pending', 'acknowledged'].includes(c.status));
+  const now = new Date();
+  const stale30 = submittedClaims.filter(c => {
+    const dos = c.dateOfService || c.date_of_service;
+    return dos && Math.floor((now - new Date(dos)) / 86400000) > 30;
+  });
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
+      <div class="rcm-stat"><div class="rcm-label">Submitted Claims</div><div class="rcm-val" style="color:#3b82f6;">${submittedClaims.length}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Stale (30+ days)</div><div class="rcm-val" style="color:#d97706;">${stale30.length}</div></div>
+    </div>
+
+    <div class="card rcm-card" style="margin-bottom:16px;">
+      <div class="card-body" style="padding:16px;display:flex;gap:12px;align-items:center;justify-content:center;">
+        <button class="btn btn-primary" onclick="window.app.batchCheckAllSubmitted()" style="font-size:13px;">Check All Submitted Claims</button>
+        <button class="btn" onclick="window.app.batchCheckStaleClaims()" style="font-size:13px;">Check Stale Claims (30+ days)</button>
+      </div>
+    </div>
+
+    <div id="claim-status-progress" style="display:none;margin-bottom:16px;">
+      <div class="card rcm-card"><div class="card-body" style="padding:14px 20px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><strong style="font-size:13px;">Checking claim status...</strong><span id="cs-progress-text" style="font-size:12px;color:var(--gray-500);">0/0</span></div>
+        <div style="height:8px;background:var(--gray-200);border-radius:4px;overflow:hidden;"><div id="cs-progress-bar" style="height:100%;background:var(--brand-500);border-radius:4px;transition:width 0.3s;width:0%;"></div></div>
+      </div></div>
+    </div>
+
+    <div id="claim-status-results"></div>
+
+    <div class="card rcm-card rcm-table">
+      <div class="card-header"><h3>Submitted Claims Awaiting Response</h3></div>
+      <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+        <thead><tr><th><input type="checkbox" id="cs-select-all" onchange="window.app.toggleAllClaimCheckboxes(this.checked)"></th><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th style="text-align:right;">Charges</th><th>Status</th><th>Days</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${submittedClaims.map(c => {
+            const dos = c.dateOfService || c.date_of_service || '';
+            const days = dos ? Math.floor((now - new Date(dos)) / 86400000) : 0;
+            const daysColor = days > 60 ? 'var(--red)' : days > 30 ? '#d97706' : 'var(--gray-600)';
+            return `<tr>
+              <td><input type="checkbox" class="cs-claim-cb" value="${c.id}" data-payer="${escAttr(c.payerName || c.payer_name || '')}" data-member="${escAttr(c.patientMemberId || c.patient_member_id || '')}" data-claim="${escAttr(c.claimNumber || c.claim_number || '')}" data-dos="${escAttr(dos)}" data-npi="${escAttr(c.providerNpi || c.provider_npi || '')}"></td>
+              <td class="text-sm" style="font-family:monospace;font-weight:600;cursor:pointer;color:var(--brand-600);" onclick="window.app.openClaimDetail(${c.id})">${escHtml(c.claimNumber || c.claim_number || '—')}</td>
+              <td>${escHtml(c.patientName || c.patient_name || '—')}</td>
+              <td class="text-sm">${escHtml(c.payerName || c.payer_name || '—')}</td>
+              <td class="text-sm">${dos ? formatDateDisplay(dos) : '—'}</td>
+              <td style="text-align:right;">${_fm(c.totalCharges || c.total_charges)}</td>
+              <td><span class="badge badge-${c.status}" style="font-size:10px;">${(c.status || '').replace(/_/g, ' ')}</span></td>
+              <td style="font-weight:600;color:${daysColor};">${days}d</td>
+              <td><button class="btn btn-sm" onclick="window.app.checkSingleClaimStatus(${c.id})" style="font-size:11px;">Check</button></td>
+            </tr>`;
+          }).join('')}
+          ${submittedClaims.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No submitted claims awaiting status. Claims appear here after submission.</td></tr>' : ''}
+        </tbody>
+      </table></div></div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════
+// SUBMISSIONS TAB — electronic claim submission tracking
+// ═══════════════════════════════════════════════════
+async function renderSubmissionsTab(body) {
+  let submissions = [];
+  try { submissions = await store.getSubmissionHistory(); } catch (e) {}
+  if (!Array.isArray(submissions)) submissions = [];
+
+  let chConfig = {};
+  try { chConfig = await store.getClearinghouseConfig(); } catch (e) {}
+
+  const connected = chConfig.connected || chConfig.status === 'active';
+  const accepted = submissions.filter(s => s.status === 'accepted').length;
+  const rejected = submissions.filter(s => s.status === 'rejected').length;
+  const pending = submissions.filter(s => s.status === 'pending' || s.status === 'submitted').length;
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
+      <div class="rcm-stat"><div class="rcm-label">Total Submissions</div><div class="rcm-val" style="color:#3b82f6;">${submissions.length}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Accepted</div><div class="rcm-val" style="color:var(--green);">${accepted}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Pending</div><div class="rcm-val" style="color:#d97706;">${pending}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Rejected</div><div class="rcm-val" style="color:var(--red);">${rejected}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Clearinghouse</div><div class="rcm-val" style="font-size:14px;color:${connected ? '#16a34a' : '#dc2626'};">${connected ? 'Connected' : 'Not Connected'}</div></div>
+    </div>
+
+    ${!connected ? `
+    <div class="card rcm-card" style="margin-bottom:16px;border:1px solid #fde68a;">
+      <div class="card-body" style="padding:16px;background:#fffbeb;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <strong style="color:#92400e;">Clearinghouse not configured</strong>
+          <div style="font-size:12px;color:#a16207;margin-top:2px;">Connect to Availity or another clearinghouse to submit claims electronically.</div>
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="window.app.openClearinghouseConfig()">Configure</button>
+      </div>
+    </div>` : `
+    <div class="card rcm-card" style="margin-bottom:16px;">
+      <div class="card-body" style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:#22c55e;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:600;">Connected to ${escHtml(chConfig.clearinghouse_name || 'Availity')}</span>
+          <span style="font-size:11px;color:var(--gray-500);">| Submitter: ${escHtml(chConfig.submitter_name || chConfig.organization_name || '—')}</span>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm" onclick="window.app.openClearinghouseConfig()">Settings</button>
+          <button class="btn btn-sm" onclick="window.app.testClearinghouseConn()">Test</button>
+        </div>
+      </div>
+    </div>`}
+
+    <div class="card rcm-card rcm-table">
+      <div class="card-header"><h3>Submission History</h3>
+        <input type="text" id="sub-filter" class="form-control" style="width:200px;height:34px;font-size:13px;" placeholder="Filter..." oninput="window.app.filterSubmissions()">
+      </div>
+      <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Claim #</th><th>Patient</th><th>Payer</th><th style="text-align:right;">Charges</th><th>Status</th><th>Tracking ID</th><th>Response</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${submissions.map(s => {
+            const statusColors = { accepted: '#16a34a', rejected: '#dc2626', pending: '#d97706', submitted: '#3b82f6', acknowledged: '#0891b2' };
+            return `<tr class="sub-row" data-search="${escAttr(((s.claim_number || '') + ' ' + (s.patient_name || '') + ' ' + (s.payer_name || '')).toLowerCase())}">
+              <td class="text-sm">${formatDateDisplay(s.submitted_at || s.submittedAt || s.created_at) || '—'}</td>
+              <td class="text-sm" style="font-family:monospace;font-weight:600;">${escHtml(s.claim_number || s.claimNumber || '—')}</td>
+              <td>${escHtml(s.patient_name || s.patientName || '—')}</td>
+              <td class="text-sm">${escHtml(s.payer_name || s.payerName || '—')}</td>
+              <td style="text-align:right;">${_fm(s.total_charges || s.totalCharges)}</td>
+              <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:${(statusColors[s.status] || '#9ca3af') + '20'};color:${statusColors[s.status] || '#9ca3af'};">${(s.status || 'pending').toUpperCase()}</span></td>
+              <td class="text-sm" style="font-family:monospace;">${escHtml(s.tracking_id || s.trackingId || '—')}</td>
+              <td class="text-sm text-muted" style="max-width:180px;">${escHtml((s.response_message || s.responseMessage || '').substring(0, 60))}</td>
+              <td>${s.status === 'rejected' ? `<button class="btn btn-sm" onclick="window.app.resubmitClaim(${s.claim_id || s.claimId})" style="font-size:11px;color:var(--brand-600);">Resubmit</button>` : ''}</td>
+            </tr>`;
+          }).join('')}
+          ${submissions.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No electronic submissions yet. Submit claims from the Claims tab or use Batch Submit.</td></tr>' : ''}
+        </tbody>
+      </table></div></div>
+    </div>
+  `;
+}
+
+export { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection, renderPayerIntelligenceTab, renderProviderFeedbackTab, renderAuthorizationsTab, renderModifierGuideTab, renderCallTrackingTab, renderBalanceRemindersTab, renderEraPostingTab, renderClaimStatusTab, renderSubmissionsTab };
