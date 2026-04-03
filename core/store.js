@@ -118,6 +118,13 @@ class Store {
             headers['X-Agency-Id'] = String(this.activeAgencyId);
         }
 
+        // Send scope context so backend can enforce data isolation
+        if (this._scope && this._scope.type !== 'all') {
+            headers['X-Scope-Type'] = this._scope.type;
+            if (this._scope.orgId) headers['X-Scope-Org-Id'] = String(this._scope.orgId);
+            if (this._scope.providerId) headers['X-Scope-Provider-Id'] = String(this._scope.providerId);
+        }
+
         // Convert request body from camelCase to snake_case
         if (options.body && typeof options.body === 'string') {
             try {
