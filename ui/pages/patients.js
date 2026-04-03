@@ -66,7 +66,7 @@ export async function renderPatientsPage() {
     p.claims.push(c);
     const payer = c.payerName || c.payer_name || '';
     if (payer) p.payers.add(payer);
-    const provider = c.providerName || c.provider_name || '';
+    const provider = c.providerName || c.provider_name || c.renderingProviderName || c.rendering_provider_name || c.renderingProvider || c.rendering_provider || '';
     if (provider) p.providers.add(provider);
     const charged = Number(c.totalCharges || c.total_charges || 0);
     const paid = Number(c.totalPaid || c.total_paid || 0);
@@ -219,7 +219,7 @@ async function _renderPatientDetail(body, patientKey) {
 
   // Aggregate stats
   const payers = [...new Set(claimArr.map(c => c.payerName || c.payer_name || '').filter(Boolean))];
-  const providers = [...new Set(claimArr.map(c => c.providerName || c.provider_name || '').filter(Boolean))];
+  const providers = [...new Set(claimArr.map(c => c.providerName || c.provider_name || c.renderingProviderName || c.rendering_provider_name || c.renderingProvider || c.rendering_provider || '').filter(Boolean))];
   const totalCharged = claimArr.reduce((s, c) => s + Number(c.totalCharges || c.total_charges || 0), 0);
   const totalPaid = claimArr.reduce((s, c) => s + Number(c.totalPaid || c.total_paid || 0), 0);
   const totalAdjusted = claimArr.reduce((s, c) => s + Number(c.adjustments || c.total_adjustments || 0), 0);
@@ -332,9 +332,9 @@ async function _renderPatientDetail(body, patientKey) {
               return `<tr>
                 <td class="text-sm" style="cursor:pointer;" onclick="window.app.openClaimDetail(${claimId})">${formatDateDisplay(c.dateOfService || c.date_of_service) || '—'}</td>
                 <td class="text-sm" style="font-family:monospace;font-weight:600;color:var(--brand-600);cursor:pointer;" onclick="window.app.openClaimDetail(${claimId})">${escHtml(c.claimNumber || c.claim_number || '—')}</td>
-                <td class="text-sm"><code>${escHtml(c.cptCode || c.cpt_code || c.serviceLines?.[0]?.cptCode || '—')}</code></td>
+                <td class="text-sm"><code>${escHtml(c.cptCode || c.cpt_code || c.procedure_code || c.procedureCode || (c.serviceLines || c.service_lines || [])[0]?.cptCode || (c.serviceLines || c.service_lines || [])[0]?.cpt_code || (c.serviceLines || c.service_lines || [])[0]?.procedure_code || '—')}</code></td>
                 <td class="text-sm">${escHtml(c.payerName || c.payer_name || '—')}</td>
-                <td class="text-sm">${escHtml(c.providerName || c.provider_name || '—')}</td>
+                <td class="text-sm">${escHtml(c.providerName || c.provider_name || c.renderingProviderName || c.rendering_provider_name || c.renderingProvider || c.rendering_provider || '—')}</td>
                 <td style="text-align:right;">${_fm(charged)}</td>
                 <td style="text-align:right;color:var(--green);">${_fm(paid)}</td>
                 <td style="text-align:right;font-weight:600;color:${bal > 0 ? 'var(--red)' : 'var(--green)'};">${_fm(bal)}</td>
@@ -356,7 +356,7 @@ async function _renderPatientDetail(body, patientKey) {
               if (sls.length === 0) {
                 return `<tr>
                   <td class="text-sm">${formatDateDisplay(c.dateOfService || c.date_of_service) || '—'}</td>
-                  <td class="text-sm"><code>${escHtml(c.cptCode || c.cpt_code || '—')}</code></td>
+                  <td class="text-sm"><code>${escHtml(c.cptCode || c.cpt_code || c.procedure_code || c.procedureCode || '—')}</code></td>
                   <td class="text-sm"><code>${escHtml(c.icdCodes || c.icd_codes || '—')}</code></td>
                   <td class="text-sm">${escHtml(c.payerName || c.payer_name || '—')}</td>
                   <td class="text-sm">${escHtml(c.providerName || c.provider_name || '—')}</td>
