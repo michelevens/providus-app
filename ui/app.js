@@ -10324,7 +10324,7 @@ function handleNppesProxy(payload) {
   async deactivateUser(userId, name) {
     if (!await appConfirm(`Deactivate user "<strong>${name}</strong>"? They will no longer be able to log in.`, { title: 'Deactivate User', okLabel: 'Deactivate', okClass: 'btn-danger', raw: true })) return;
     try {
-      await store.deleteUser(userId);
+      await store.updateUser(userId, { is_active: false });
       showToast('User deactivated');
       await renderUsersStub();
     } catch (e) {
