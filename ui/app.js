@@ -11469,7 +11469,7 @@ function handleNppesProxy(payload) {
     const senderName = ((currentUser.first_name || currentUser.firstName || '') + ' ' + (currentUser.last_name || currentUser.lastName || '')).trim();
     try {
       await store.createCommunicationLog({
-        direction: 'outbound', type: 'message', messageType: 'message',
+        channel: 'portal', direction: 'outbound', type: 'message', messageType: 'message',
         subject: '', body, notes: body,
         senderId: currentUser.id, senderName,
         recipientId, recipientType,
@@ -11498,7 +11498,7 @@ function handleNppesProxy(payload) {
     const senderName = ((currentUser.first_name || currentUser.firstName || '') + ' ' + (currentUser.last_name || currentUser.lastName || '')).trim();
     try {
       await store.createCommunicationLog({
-        direction: 'outbound', type: msgType, messageType: msgType,
+        channel: 'portal', direction: 'outbound', type: msgType, messageType: msgType,
         subject, body, notes: body,
         senderId: currentUser.id, senderName,
         recipientId: toId, recipientType: toType,
@@ -20252,6 +20252,7 @@ async function sendMessage() {
   const currentUser = auth.getUser();
   try {
     await store.createCommunicationLog({
+      channel: 'portal',
       direction: 'outbound',
       type: msgType,
       messageType: msgType,
@@ -20350,6 +20351,7 @@ async function sendReply() {
 
   try {
     await store.createCommunicationLog({
+      channel: 'portal',
       direction: 'outbound',
       type: 'message',
       messageType: 'message',

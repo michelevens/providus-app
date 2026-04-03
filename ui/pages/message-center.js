@@ -49,10 +49,13 @@ export async function renderMessageCenterPage() {
   provArr.forEach(p => { if (p.email) emailMap['provider:' + p.id] = p.email; });
 
   // Split internal messages vs call logs
-  // Internal messages have recipientId; call logs have channel set to phone/email/fax/etc.
-  const externalChannels = ['phone', 'email', 'fax', 'portal', 'mail', 'billing'];
-  const internalLogs = logs.filter(l => !externalChannels.includes(l.channel) && (l.recipientId || l.recipient_id || l.senderId || l.sender_id));
-  const commLogs = logs.filter(l => externalChannels.includes(l.channel));
+  // Internal messages use channel='portal' and have recipientId; external logs are phone/email/fax/mail/billing
+  const callLogChannels = ['phone', 'fax', 'mail', 'billing'];
+  const internalLogs = logs.filter(l => {
+    if (callLogChannels.includes(l.channel)) return false;
+    return l.recipientId || l.recipient_id || l.senderId || l.sender_id;
+  });
+  const commLogs = logs.filter(l => callLogChannels.includes(l.channel));
 
   // Group into threads
   const threadMap = {};
