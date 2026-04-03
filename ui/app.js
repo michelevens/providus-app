@@ -11472,6 +11472,82 @@ function handleNppesProxy(payload) {
   async renderPatientsTab() {
     await renderPatientsPage();
   },
+  async checkPatientEligibility(patientName, memberId, payerName) {
+    showToast('Checking eligibility for ' + patientName + '...');
+    try {
+      const result = await store.checkEligibility({ patient_name: patientName, member_id: memberId, payer_name: payerName });
+      const status = result.eligible ? 'Eligible' : 'Not Eligible';
+      const details = result.plan_name || result.coverage || '';
+      showToast(`${patientName}: ${status}${details ? ' — ' + details : ''}`);
+    } catch (e) { showToast('Eligibility check failed: ' + friendlyError(e), 'error'); }
+  },
+  async printPatientStatement(patientKey) {
+    try {
+      const statements = await store.getPatientStatements();
+      const patientStmts = (Array.isArray(statements) ? statements : []).filter(s =>
+        (s.patient_name || s.patientName || '').trim().toLowerCase() === patientKey
+      );
+      if (patientStmts.length === 0) { showToast('No statements for this patient. Generate one from the Statements tab.'); return; }
+      // Print the most recent
+      const latest = patientStmts.sort((a, b) => (b.created_at || b.createdAt || '').localeCompare(a.created_at || a.createdAt || ''))[0];
+      window.app.printStatement(latest.id);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async collectPatientPayment(patientKey, patientName) {
+    window.app.openRcmPaymentModal({ patientName });
+  },
+  async sendPatientReminder(patientKey, patientName) {
+    try {
+      const statements = await store.getPatientStatements();
+      const patientStmts = (Array.isArray(statements) ? statements : []).filter(s =>
+        (s.patient_name || s.patientName || '').trim().toLowerCase() === patientKey &&
+        !['paid', 'written_off'].includes(s.status)
+      );
+      if (patientStmts.length === 0) { showToast('No outstanding statements for ' + patientName); return; }
+      let sent = 0;
+      for (const s of patientStmts) {
+        await store.updatePatientStatement(s.id, {
+          status: 'sent',
+          times_sent: (Number(s.times_sent || s.timesSent || 0)) + 1,
+          last_sent_date: new Date().toISOString().split('T')[0],
+        });
+        sent++;
+      }
+      showToast(`${sent} reminder(s) sent to ${patientName}`);
+      window.app.renderPatientsTab();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async sendPatientToCollections(patientKey, patientName) {
+    if (!await appConfirm(`Send ${patientName} to collections? This will mark all outstanding statements as "collections".`)) return;
+    try {
+      const statements = await store.getPatientStatements();
+      const patientStmts = (Array.isArray(statements) ? statements : []).filter(s =>
+        (s.patient_name || s.patientName || '').trim().toLowerCase() === patientKey &&
+        !['paid', 'written_off', 'collections'].includes(s.status)
+      );
+      for (const s of patientStmts) {
+        await store.updatePatientStatement(s.id, { status: 'collections' });
+      }
+      showToast(`${patientName} marked for collections (${patientStmts.length} statement(s))`);
+      window.app.renderPatientsTab();
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  exportPatientAccount(patientKey, patientName) {
+    const rows = document.querySelectorAll('table tbody tr');
+    if (!rows.length) { showToast('No data to export'); return; }
+    let csv = '';
+    const headers = document.querySelectorAll('table thead th');
+    csv += Array.from(headers).map(h => `"${h.textContent.trim()}"`).join(',') + '\n';
+    rows.forEach(r => {
+      const cells = r.querySelectorAll('td');
+      csv += Array.from(cells).map(c => `"${c.textContent.trim().replace(/"/g, '""')}"`).join(',') + '\n';
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `patient-account-${patientName.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    showToast('Account summary exported');
+  },
 
   // ── Message Center ──
   async mcSwitchTab(tab) {

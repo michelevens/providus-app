@@ -259,6 +259,20 @@ async function _renderPatientDetail(body, patientKey) {
               <span>Claims: <strong>${claimArr.length}</strong></span>
               ${payers.map(py => `<span style="padding:2px 8px;border-radius:10px;background:var(--brand-50);color:var(--brand-600);font-weight:600;">${escHtml(py)}</span>`).join('')}
             </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;">
+              <button class="btn btn-sm btn-primary" onclick="window.app.checkPatientEligibility('${escAttr(name)}','${escAttr(memberId)}','${escAttr(payers[0] || '')}')" style="font-size:11px;">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M6 1v10M1 6h10"/></svg>Check Eligibility
+              </button>
+              <button class="btn btn-sm" onclick="window.app.openNewMessage({title:'Message about ${escAttr(name)}',subject:'RE: ${escAttr(name)}'})" style="font-size:11px;">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M1 3h10v6H3l-2 2V3z"/></svg>Message
+              </button>
+              <button class="btn btn-sm" onclick="window.app.printPatientStatement('${escAttr(patientKey)}')" style="font-size:11px;">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M3 8H1.5V5h9V8H9M3 5V1h6v4M3 7h6v4H3z"/></svg>Print Statement
+              </button>
+              <button class="btn btn-sm" onclick="window.app.collectPatientPayment('${escAttr(patientKey)}','${escAttr(name)}')" style="font-size:11px;">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><circle cx="6" cy="6" r="5"/><path d="M6 3v6M4 4.5c0-.5.6-1 2-1s2 .5 2 1-.6 1-2 1.5-2 .5-2 1c0 .5.6 1 2 1"/></svg>Collect Payment
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -273,6 +287,31 @@ async function _renderPatientDetail(body, patientKey) {
       <div class="pt-stat"><div class="pt-val" style="color:${patientBalance > 0 ? '#dc2626' : '#16a34a'};">${_fm(patientBalance)}</div><div class="pt-lbl">Patient Balance</div></div>
     </div>
 
+    <!-- Account Actions -->
+    ${patientBalance > 0 || insuranceBalance > 0 ? `
+    <div class="card" style="border-radius:12px;margin-bottom:16px;border:1px solid var(--gray-200);">
+      <div class="card-body" style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div style="font-size:13px;color:var(--gray-600);">
+          ${patientBalance > 0 ? `<strong style="color:#dc2626;">$${patientBalance.toFixed(2)}</strong> patient balance outstanding` : ''}
+          ${patientBalance > 0 && insuranceBalance > 0 ? ' &middot; ' : ''}
+          ${insuranceBalance > 0 ? `<strong style="color:#d97706;">$${insuranceBalance.toFixed(2)}</strong> pending from insurance` : ''}
+        </div>
+        <div style="display:flex;gap:6px;">
+          ${patientBalance > 0 ? `
+            <button class="btn btn-sm" onclick="window.app.sendPatientReminder('${escAttr(patientKey)}','${escAttr(name)}')" style="font-size:11px;color:#d97706;">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M6 1v4l2.5 1.5"/><circle cx="6" cy="6" r="5"/></svg>Send Reminder
+            </button>
+            <button class="btn btn-sm" onclick="window.app.sendPatientToCollections('${escAttr(patientKey)}','${escAttr(name)}')" style="font-size:11px;color:#dc2626;">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M1 11l5-5 5 5M6 1v5"/></svg>Collections
+            </button>
+          ` : ''}
+          <button class="btn btn-sm" onclick="window.app.exportPatientAccount('${escAttr(patientKey)}','${escAttr(name)}')" style="font-size:11px;">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M3 8v3h6V8M6 1v7M3 4l3 3 3-3"/></svg>Download Summary
+          </button>
+        </div>
+      </div>
+    </div>` : ''}
+
     <!-- Detail Tabs -->
     <div style="display:flex;gap:0;border-bottom:2px solid var(--gray-200);margin-bottom:16px;">
       ${['claims', 'encounters', 'denials', 'statements'].map(t => `<button style="padding:8px 16px;font-size:12px;font-weight:600;color:${detailTab === t ? 'var(--brand-600)' : 'var(--gray-500)'};border:none;background:none;border-bottom:3px solid ${detailTab === t ? 'var(--brand-600)' : 'transparent'};margin-bottom:-2px;cursor:pointer;" onclick="window._patientDetailTab='${t}';window.app.renderPatientsTab();">${t.charAt(0).toUpperCase() + t.slice(1)} (${t === 'claims' ? claimArr.length : t === 'denials' ? patientDenials.length : t === 'statements' ? patientStatements.length : claimArr.length})</button>`).join('')}
@@ -282,15 +321,17 @@ async function _renderPatientDetail(body, patientKey) {
     <div class="card" style="border-radius:16px;overflow:hidden;">
       <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
         ${detailTab === 'claims' ? `
-          <thead><tr><th>DOS</th><th>Claim #</th><th>CPT</th><th>Payer</th><th>Provider</th><th style="text-align:right;">Charged</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Balance</th><th>Status</th></tr></thead>
+          <thead><tr><th>DOS</th><th>Claim #</th><th>CPT</th><th>Payer</th><th>Provider</th><th style="text-align:right;">Charged</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Balance</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>
             ${claimArr.map(c => {
               const charged = Number(c.totalCharges || c.total_charges || 0);
               const paid = Number(c.totalPaid || c.total_paid || 0);
               const bal = charged - paid - Number(c.adjustments || c.total_adjustments || 0);
-              return `<tr style="cursor:pointer;" onclick="window.app.openClaimDetail(${c.id})">
-                <td class="text-sm">${formatDateDisplay(c.dateOfService || c.date_of_service) || '—'}</td>
-                <td class="text-sm" style="font-family:monospace;font-weight:600;color:var(--brand-600);">${escHtml(c.claimNumber || c.claim_number || '—')}</td>
+              const isDenied = c.status === 'denied';
+              const claimId = c.id;
+              return `<tr>
+                <td class="text-sm" style="cursor:pointer;" onclick="window.app.openClaimDetail(${claimId})">${formatDateDisplay(c.dateOfService || c.date_of_service) || '—'}</td>
+                <td class="text-sm" style="font-family:monospace;font-weight:600;color:var(--brand-600);cursor:pointer;" onclick="window.app.openClaimDetail(${claimId})">${escHtml(c.claimNumber || c.claim_number || '—')}</td>
                 <td class="text-sm"><code>${escHtml(c.cptCode || c.cpt_code || c.serviceLines?.[0]?.cptCode || '—')}</code></td>
                 <td class="text-sm">${escHtml(c.payerName || c.payer_name || '—')}</td>
                 <td class="text-sm">${escHtml(c.providerName || c.provider_name || '—')}</td>
@@ -298,6 +339,11 @@ async function _renderPatientDetail(body, patientKey) {
                 <td style="text-align:right;color:var(--green);">${_fm(paid)}</td>
                 <td style="text-align:right;font-weight:600;color:${bal > 0 ? 'var(--red)' : 'var(--green)'};">${_fm(bal)}</td>
                 <td><span class="badge badge-${c.status}" style="font-size:10px;">${(c.status || '').replace(/_/g, ' ')}</span></td>
+                <td style="white-space:nowrap;">
+                  <button class="btn btn-sm" onclick="event.stopPropagation();window.app.openRcmPaymentModal({claimId:${claimId},payerName:'${escAttr(c.payerName || c.payer_name || '')}'})" style="font-size:10px;padding:3px 8px;" title="Post Payment">Pay</button>
+                  <button class="btn btn-sm" onclick="event.stopPropagation();window.app.openFollowupModal(${claimId})" style="font-size:10px;padding:3px 8px;" title="Log Follow-up">F/U</button>
+                  ${isDenied ? `<button class="btn btn-sm" onclick="event.stopPropagation();window.app.openRcmDenialModal({claimId:${claimId}})" style="font-size:10px;padding:3px 8px;color:#dc2626;" title="Appeal Denial">Appeal</button>` : ''}
+                </td>
               </tr>`;
             }).join('')}
             ${claimArr.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-500);">No claims for this patient.</td></tr>' : ''}
