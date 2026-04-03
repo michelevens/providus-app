@@ -11,7 +11,7 @@ export { CLAIM_STATUSES, DENIAL_CATEGORIES, DENIAL_STATUSES, CPT_CODES, ICD_CODE
 // Import renderers from sub-modules
 import { renderBillingServicesPage, renderBillingClientDetail, TASK_CATEGORIES, ACTIVITY_TYPES } from './billing-services.js';
 import { renderRcmPage } from './rcm.js';
-import { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection, renderPayerIntelligenceTab, renderProviderFeedbackTab, renderAuthorizationsTab, renderModifierGuideTab } from './rcm-phase2.js';
+import { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection, renderPayerIntelligenceTab, renderProviderFeedbackTab, renderAuthorizationsTab, renderModifierGuideTab, renderCallTrackingTab, renderBalanceRemindersTab } from './rcm-phase2.js';
 
 if (typeof window._rcTab === 'undefined') window._rcTab = 'dashboard';
 
@@ -24,7 +24,7 @@ async function renderRevenueCyclePage() {
   // Determine which sub-module to render based on tab
   const bsTabs = ['dashboard', 'clients', 'activity', 'financials'];
   const rcmTabs = ['claims', 'charges', 'denials', 'payments', 'ar'];
-  const phase2Tabs = ['fee-schedules', 'eligibility', 'statements', 'payer-intel', 'provider-feedback', 'authorizations', 'modifier-guide'];
+  const phase2Tabs = ['fee-schedules', 'eligibility', 'statements', 'payer-intel', 'provider-feedback', 'authorizations', 'modifier-guide', 'call-tracking', 'balance-reminders'];
 
   // Set the sub-module tab state
   if (bsTabs.includes(tab)) {
@@ -44,6 +44,8 @@ async function renderRevenueCyclePage() {
     else if (tab === 'provider-feedback') await renderProviderFeedbackTab(body);
     else if (tab === 'authorizations') await renderAuthorizationsTab(body);
     else if (tab === 'modifier-guide') await renderModifierGuideTab(body);
+    else if (tab === 'call-tracking') await renderCallTrackingTab(body);
+    else if (tab === 'balance-reminders') await renderBalanceRemindersTab(body);
   } else if (bsTabs.includes(tab)) {
     await renderBillingServicesPage();
   } else {
@@ -106,6 +108,8 @@ async function renderRevenueCyclePage() {
             ${_t('statements','Statements')}
             ${_t('payer-intel','Payer Intel')}
             ${_t('modifier-guide','Modifiers')}
+            ${_t('call-tracking','Call Log')}
+            ${_t('balance-reminders','Reminders')}
             ${_t('provider-feedback','Feedback')}
           </div>
         </div>

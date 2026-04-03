@@ -13178,7 +13178,68 @@ function handleNppesProxy(payload) {
         if (cpt === '90853' && !mods.includes('HQ')) add('warning','Group therapy code 90853 missing HQ modifier','Add HQ modifier for group setting services');
         if (isFlBluePayer && matEMCodes.includes(cpt) && !mods.includes('HF')) add('warning','FL Blue MAT E/M code '+cpt+' may need HF modifier','Add HF modifier if service is for substance abuse/MAT program');
       });
-      // f. Payer-Specific Rules
+      // f. NCCI Bundling Edits — prevent billing mutually exclusive or bundled code pairs
+      if (sls.length > 1) {
+        const cptList = sls.map(sl => (sl.cptCode || sl.cpt_code || '').trim()).filter(Boolean);
+        // NCCI Column 1 / Column 2 pairs (most common behavioral health + E/M bundles)
+        const ncciBundles = [
+          // Psychotherapy add-ons cannot be billed without primary code (already checked in modifier section)
+          // E/M bundling: cannot bill two E/M codes same DOS
+          { c1: ['99202','99203','99204','99205','99211','99212','99213','99214','99215'],
+            c2: ['99202','99203','99204','99205','99211','99212','99213','99214','99215'],
+            msg: 'Two E/M codes on same date of service', fix: 'Only one E/M code per visit unless modifier 25 is used for separate service' },
+          // Full psych eval + therapy same day
+          { c1: ['90791'], c2: ['90832','90834','90837'],
+            msg: 'Psych diagnostic eval (90791) bundled with therapy on same DOS', fix: 'Generally cannot bill both — use 90791 alone or therapy alone unless separate sessions documented' },
+          { c1: ['90792'], c2: ['90832','90834','90837'],
+            msg: 'Psych diagnostic eval w/medical (90792) bundled with therapy on same DOS', fix: 'Generally cannot bill both — verify separate sessions or use modifier' },
+          // Two individual therapy codes same DOS
+          { c1: ['90832','90834','90837'], c2: ['90832','90834','90837'],
+            msg: 'Two individual therapy codes on same date of service', fix: 'Bill only the single therapy code that represents the total time — do not split' },
+          // Group + individual therapy same DOS
+          { c1: ['90853'], c2: ['90832','90834','90837'],
+            msg: 'Group therapy (90853) + individual therapy on same DOS', fix: 'Verify both sessions occurred and are separately documented — append modifier 59 if distinct services' },
+          // Crisis + therapy same day
+          { c1: ['90839','90840'], c2: ['90832','90834','90837'],
+            msg: 'Crisis psychotherapy + standard therapy on same DOS', fix: 'Crisis and standard therapy are typically mutually exclusive on same date' },
+          // E/M + psych eval same day
+          { c1: ['99202','99203','99204','99205','99211','99212','99213','99214','99215'], c2: ['90791','90792'],
+            msg: 'E/M code + psychiatric evaluation on same DOS', fix: 'Bundled unless separate and distinct services with modifier 25' },
+          // Interactive complexity — must be with eligible base code
+          { c1: ['90785'], c2: ['90785'],
+            msg: 'Duplicate interactive complexity add-on (90785)', fix: '90785 can only be billed once per session' },
+          // TMS bundling
+          { c1: ['90867','90868','90869'], c2: ['90867','90868','90869'],
+            msg: 'Multiple TMS codes on same DOS', fix: 'Only one TMS delivery code per session' },
+        ];
+        for (const rule of ncciBundles) {
+          const c1Match = cptList.filter(c => rule.c1.includes(c));
+          const c2Match = cptList.filter(c => rule.c2.includes(c));
+          if (c1Match.length > 0 && c2Match.length > 0) {
+            // Exclude self-match for same-code rules unless actually duplicated
+            const isSameSet = JSON.stringify(rule.c1.sort()) === JSON.stringify(rule.c2.sort());
+            if (isSameSet) {
+              // Only flag if there are actually duplicates from these sets
+              const fromSet = cptList.filter(c => rule.c1.includes(c));
+              if (fromSet.length > 1) {
+                const hasMod59 = sls.some(sl => {
+                  const m = (sl.modifiers || sl.modifier || '').toUpperCase();
+                  return m.includes('59') || m.includes('XE') || m.includes('XS') || m.includes('XP') || m.includes('XU');
+                });
+                if (!hasMod59) add('error', 'NCCI Edit: ' + rule.msg + ' (' + fromSet.join(', ') + ')', rule.fix);
+              }
+            } else {
+              const hasMod59 = sls.some(sl => {
+                const slCpt = (sl.cptCode || sl.cpt_code || '');
+                const m = (sl.modifiers || sl.modifier || '').toUpperCase();
+                return c2Match.includes(slCpt) && (m.includes('59') || m.includes('XE') || m.includes('XS') || m.includes('XP') || m.includes('XU') || m.includes('25'));
+              });
+              if (!hasMod59) add('warning', 'NCCI Edit: ' + rule.msg + ' (' + [...new Set([...c1Match, ...c2Match])].join(', ') + ')', rule.fix);
+            }
+          }
+        }
+      }
+      // g. Payer-Specific Rules
       const pr = rulesByPayer[payer.toLowerCase()];
       if (pr) { const ac = pr.auth_required_cpts || pr.authRequiredCpts || [];
         if (ac.length > 0 && !authNum) { const cc = sls.map(sl => (sl.cptCode || sl.cpt_code || '').trim());
@@ -13707,6 +13768,181 @@ function handleNppesProxy(payload) {
   },
   editStatement(id) {
     showToast('Statement editing coming soon.');
+  },
+
+  // ── Call Tracking Handlers ──
+  filterCallLogs() {
+    const q = (document.getElementById('call-filter')?.value || '').toLowerCase();
+    const type = document.getElementById('call-filter-type')?.value || '';
+    document.querySelectorAll('.call-row').forEach(r => {
+      const matchQ = !q || (r.dataset.search || '').includes(q);
+      const matchType = !type || r.dataset.type === type;
+      r.style.display = matchQ && matchType ? '' : 'none';
+    });
+  },
+  openBillingCallModal(editData) {
+    const claims = window._rcmClaims || [];
+    const existing = editData || {};
+    const html = `<div class="modal-overlay active" id="billing-call-modal">
+      <div class="modal" style="max-width:600px;">
+        <div class="modal-header"><h3>${editData ? 'Edit' : 'Log'} Billing Call</h3><button class="modal-close" onclick="document.getElementById('billing-call-modal').remove()">&times;</button></div>
+        <div class="modal-body">
+          <input type="hidden" id="bcall-edit-id" value="${existing.id || ''}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="auth-field" style="margin:0;"><label>Direction</label>
+              <select id="bcall-direction" class="form-control"><option value="outbound" ${existing.direction === 'outbound' ? 'selected' : ''}>Outbound</option><option value="inbound" ${existing.direction === 'inbound' ? 'selected' : ''}>Inbound</option></select></div>
+            <div class="auth-field" style="margin:0;"><label>Patient Name</label><input type="text" id="bcall-patient" class="form-control" value="${escAttr(existing.patient_name || existing.patientName || '')}" placeholder="Patient name"></div>
+            <div class="auth-field" style="margin:0;"><label>Payer</label><input type="text" id="bcall-payer" class="form-control" value="${escAttr(existing.payer_name || existing.payerName || '')}" placeholder="Insurance payer"></div>
+            <div class="auth-field" style="margin:0;"><label>Claim #</label><input type="text" id="bcall-claim" class="form-control" value="${escAttr(existing.claim_number || existing.claimNumber || '')}" placeholder="Claim reference"></div>
+            <div class="auth-field" style="margin:0;"><label>Reason</label>
+              <select id="bcall-reason" class="form-control">
+                <option value="">Select reason...</option>
+                <option value="balance_inquiry" ${existing.reason === 'balance_inquiry' ? 'selected' : ''}>Balance Inquiry</option>
+                <option value="payment_arrangement" ${existing.reason === 'payment_arrangement' ? 'selected' : ''}>Payment Arrangement</option>
+                <option value="billing_dispute" ${existing.reason === 'billing_dispute' ? 'selected' : ''}>Billing Dispute</option>
+                <option value="insurance_question" ${existing.reason === 'insurance_question' ? 'selected' : ''}>Insurance Question</option>
+                <option value="claim_status" ${existing.reason === 'claim_status' ? 'selected' : ''}>Claim Status</option>
+                <option value="collection_followup" ${existing.reason === 'collection_followup' ? 'selected' : ''}>Collection Follow-up</option>
+                <option value="refund_request" ${existing.reason === 'refund_request' ? 'selected' : ''}>Refund Request</option>
+                <option value="statement_question" ${existing.reason === 'statement_question' ? 'selected' : ''}>Statement Question</option>
+                <option value="other" ${existing.reason === 'other' ? 'selected' : ''}>Other</option>
+              </select></div>
+            <div class="auth-field" style="margin:0;"><label>Rep / Contact Name</label><input type="text" id="bcall-rep" class="form-control" value="${escAttr(existing.rep_name || existing.repName || '')}" placeholder="Who you spoke with"></div>
+            <div class="auth-field" style="margin:0;"><label>Outcome</label>
+              <select id="bcall-outcome" class="form-control">
+                <option value="pending" ${(existing.outcome || 'pending') === 'pending' ? 'selected' : ''}>Pending</option>
+                <option value="resolved" ${existing.outcome === 'resolved' ? 'selected' : ''}>Resolved</option>
+                <option value="paid" ${existing.outcome === 'paid' ? 'selected' : ''}>Paid</option>
+                <option value="escalated" ${existing.outcome === 'escalated' ? 'selected' : ''}>Escalated</option>
+                <option value="callback" ${existing.outcome === 'callback' ? 'selected' : ''}>Callback Requested</option>
+                <option value="no_answer" ${existing.outcome === 'no_answer' ? 'selected' : ''}>No Answer</option>
+                <option value="voicemail" ${existing.outcome === 'voicemail' ? 'selected' : ''}>Left Voicemail</option>
+              </select></div>
+            <div class="auth-field" style="margin:0;"><label>Follow-up Date</label><input type="date" id="bcall-followup" class="form-control" value="${existing.followup_date || existing.followupDate || ''}"></div>
+            <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Notes</label><textarea id="bcall-notes" class="form-control" rows="3" placeholder="Call details, promises made, next steps...">${escHtml(existing.notes || existing.body || '')}</textarea></div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('billing-call-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.app.saveBillingCall()">Save Call</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  },
+  async saveBillingCall() {
+    const editId = document.getElementById('bcall-edit-id')?.value;
+    const data = {
+      channel: 'billing',
+      direction: document.getElementById('bcall-direction')?.value || 'outbound',
+      patient_name: document.getElementById('bcall-patient')?.value?.trim() || '',
+      payer_name: document.getElementById('bcall-payer')?.value?.trim() || '',
+      claim_number: document.getElementById('bcall-claim')?.value?.trim() || '',
+      reason: document.getElementById('bcall-reason')?.value || '',
+      rep_name: document.getElementById('bcall-rep')?.value?.trim() || '',
+      outcome: document.getElementById('bcall-outcome')?.value || 'pending',
+      followup_date: document.getElementById('bcall-followup')?.value || null,
+      notes: document.getElementById('bcall-notes')?.value?.trim() || '',
+      subject: (document.getElementById('bcall-reason')?.value || 'billing call').replace(/_/g, ' '),
+    };
+    try {
+      if (editId) await store.updateCommunicationLog(editId, data);
+      else await store.createCommunicationLog(data);
+      document.getElementById('billing-call-modal')?.remove();
+      showToast(editId ? 'Call updated' : 'Call logged');
+      window.app.rcSwitchTab('call-tracking');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async editBillingCall(id) {
+    try {
+      const logs = await store.getCommunicationLogs({ channel: 'billing' });
+      let log = (Array.isArray(logs) ? logs : []).find(l => l.id == id);
+      if (!log) {
+        const allLogs = await store.getCommunicationLogs();
+        log = (Array.isArray(allLogs) ? allLogs : []).find(l => l.id == id);
+      }
+      if (!log) { showToast('Call not found'); return; }
+      window.app.openBillingCallModal(log);
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async deleteBillingCall(id) {
+    if (!await appConfirm('Delete this call log entry?')) return;
+    try { await store.deleteCommunicationLog(id); showToast('Call deleted'); window.app.rcSwitchTab('call-tracking'); } catch (e) { showToast('Error: ' + e.message); }
+  },
+
+  // ── Balance Reminder Handlers ──
+  filterReminders() {
+    const q = (document.getElementById('reminder-filter')?.value || '').toLowerCase();
+    const urgency = document.getElementById('reminder-filter-urgency')?.value || '';
+    document.querySelectorAll('.reminder-row').forEach(r => {
+      const matchQ = !q || (r.dataset.search || '').includes(q);
+      const matchU = !urgency || r.dataset.urgency === urgency;
+      r.style.display = matchQ && matchU ? '' : 'none';
+    });
+  },
+  async sendSingleReminder(statementId) {
+    try {
+      await store.updatePatientStatement(statementId, {
+        status: 'sent',
+        times_sent: (await store.getPatientStatements().then(s => (s || []).find(x => x.id == statementId)?.times_sent || 0)) + 1,
+        last_sent_date: new Date().toISOString().split('T')[0],
+      });
+      showToast('Reminder sent');
+      const prefs = _getNotificationPrefs();
+      _triggerRcmNotification('payment_reminder', 'rcmClaims', 'Patient Balance Reminder Sent', 'A balance reminder has been sent for statement #' + statementId, { statementId }).catch(() => {});
+      window.app.rcSwitchTab('balance-reminders');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async sendBulkReminders() {
+    if (!await appConfirm('Send reminders to all patients with outstanding balances needing action?')) return;
+    try {
+      let statements = await store.getPatientStatements();
+      if (!Array.isArray(statements)) statements = [];
+      const now = new Date();
+      const needsAction = statements.filter(s => {
+        if (['paid', 'written_off'].includes(s.status)) return false;
+        const bal = Number(s.patient_balance || s.patientBalance || 0);
+        if (bal <= 0) return false;
+        const dueDate = s.due_date || s.dueDate || '';
+        const lastSent = s.last_sent_date || s.lastSentDate || '';
+        const daysSinceLastSent = lastSent ? Math.floor((now - new Date(lastSent)) / 86400000) : 999;
+        return daysSinceLastSent >= 14; // Only send if >14 days since last reminder
+      });
+      let sent = 0;
+      for (const s of needsAction) {
+        try {
+          await store.updatePatientStatement(s.id, {
+            status: 'sent',
+            times_sent: (Number(s.times_sent || s.timesSent || 0)) + 1,
+            last_sent_date: now.toISOString().split('T')[0],
+          });
+          sent++;
+        } catch {}
+      }
+      showToast(`${sent} reminder${sent !== 1 ? 's' : ''} sent`);
+      _triggerRcmNotification('payment_reminder', 'rcmClaims', `${sent} Patient Balance Reminders Sent`, `Bulk reminders sent to ${sent} patients with outstanding balances.`, { count: sent }).catch(() => {});
+      window.app.rcSwitchTab('balance-reminders');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  async sendToCollections(statementId) {
+    if (!await appConfirm('Mark this statement as sent to collections? This cannot be easily undone.')) return;
+    try {
+      await store.updatePatientStatement(statementId, { status: 'collections' });
+      showToast('Statement marked for collections');
+      window.app.rcSwitchTab('balance-reminders');
+    } catch (e) { showToast('Error: ' + e.message); }
+  },
+  exportReminderList() {
+    const rows = document.querySelectorAll('.reminder-row');
+    if (!rows.length) { showToast('No data to export'); return; }
+    let csv = 'Patient,Email,Balance,Due Date,Days Overdue,Times Sent,Last Sent,Urgency,Next Action\n';
+    rows.forEach(r => {
+      const cells = r.querySelectorAll('td');
+      if (cells.length >= 9) csv += Array.from(cells).slice(0, 9).map(c => `"${c.textContent.trim().replace(/"/g, '""')}"`).join(',') + '\n';
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `balance-reminders-${new Date().toISOString().split('T')[0]}.csv`; a.click();
+    showToast('Reminder list exported');
   },
   async printStatement(id) {
     let statements = [];

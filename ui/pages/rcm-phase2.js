@@ -648,4 +648,225 @@ async function renderModifierGuideTab(body) {
   `;
 }
 
-export { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection, renderPayerIntelligenceTab, renderProviderFeedbackTab, renderAuthorizationsTab, renderModifierGuideTab };
+// ═══════════════════════════════════════════════════
+// PATIENT CALL TRACKING — billing inquiry / collection call log
+// ═══════════════════════════════════════════════════
+async function renderCallTrackingTab(body) {
+  let logs = [];
+  try { logs = await store.getCommunicationLogs({ channel: 'billing' }); } catch (e) {}
+  if (!Array.isArray(logs)) logs = [];
+
+  // Also get non-billing logs as fallback (if billing channel has none, show all)
+  if (logs.length === 0) {
+    try { const all = await store.getCommunicationLogs(); logs = Array.isArray(all) ? all : []; } catch (e) {}
+  }
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayCalls = logs.filter(l => (l.created_at || l.createdAt || '').toString().slice(0, 10) === todayStr);
+  const pendingFollowups = logs.filter(l => l.followup_date && !l.followup_completed && new Date(l.followup_date) <= new Date());
+  const resolved = logs.filter(l => l.outcome === 'resolved' || l.outcome === 'paid');
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
+      <div class="rcm-stat"><div class="rcm-label">Total Calls</div><div class="rcm-val" style="color:#3b82f6;">${logs.length}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Today</div><div class="rcm-val" style="color:#8b5cf6;">${todayCalls.length}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Follow-ups Due</div><div class="rcm-val" style="color:#d97706;">${pendingFollowups.length}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Resolved</div><div class="rcm-val" style="color:var(--green);">${resolved.length}</div></div>
+    </div>
+
+    <div class="card rcm-card rcm-table">
+      <div class="card-header"><h3>Billing Call Log</h3>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="call-filter" class="form-control" style="width:180px;height:34px;font-size:13px;" placeholder="Filter..." oninput="window.app.filterCallLogs()">
+          <select id="call-filter-type" class="form-control" style="width:130px;height:34px;font-size:13px;" onchange="window.app.filterCallLogs()">
+            <option value="">All Types</option>
+            <option value="inbound">Inbound</option>
+            <option value="outbound">Outbound</option>
+          </select>
+          <button class="btn btn-sm btn-primary" onclick="window.app.openBillingCallModal()">+ Log Call</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Direction</th><th>Patient</th><th>Payer</th><th>Claim #</th><th>Reason</th><th>Rep / Contact</th><th>Outcome</th><th>Follow-up</th><th>Notes</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${logs.map(l => {
+            const dir = l.direction || l.type || 'outbound';
+            const dirBadge = dir === 'inbound'
+              ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:#dbeafe;color:#2563eb;">IN</span>'
+              : '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:#dcfce7;color:#16a34a;">OUT</span>';
+            const outcomeColors = { pending: '#f59e0b', resolved: '#16a34a', paid: '#16a34a', escalated: '#dc2626', no_answer: '#9ca3af', voicemail: '#6b7280', callback: '#8b5cf6' };
+            const outcomeLabel = (l.outcome || 'pending').replace(/_/g, ' ');
+            const fuDate = l.followup_date || l.followupDate || '';
+            const fuOverdue = fuDate && !l.followup_completed && new Date(fuDate) < new Date();
+            return `<tr class="call-row" data-search="${escAttr(((l.patient_name || l.patientName || '') + ' ' + (l.payer_name || l.payerName || '') + ' ' + (l.claim_number || l.claimNumber || '')).toLowerCase())}" data-type="${dir}">
+              <td class="text-sm">${formatDateDisplay(l.created_at || l.createdAt) || '—'}</td>
+              <td>${dirBadge}</td>
+              <td style="font-weight:600;">${escHtml(l.patient_name || l.patientName || l.contact_name || l.contactName || '—')}</td>
+              <td class="text-sm">${escHtml(l.payer_name || l.payerName || '—')}</td>
+              <td class="text-sm" style="font-family:monospace;">${escHtml(l.claim_number || l.claimNumber || l.reference || '—')}</td>
+              <td class="text-sm">${escHtml(l.reason || l.subject || '—')}</td>
+              <td class="text-sm">${escHtml(l.rep_name || l.repName || l.contact_name || '—')}</td>
+              <td><span style="font-size:11px;font-weight:600;color:${outcomeColors[l.outcome] || '#9ca3af'};">${outcomeLabel.toUpperCase()}</span></td>
+              <td class="text-sm" style="${fuOverdue ? 'color:var(--red);font-weight:700;' : ''}">${fuDate ? formatDateDisplay(fuDate) : '—'}${fuOverdue ? ' !' : ''}</td>
+              <td class="text-sm text-muted" style="max-width:180px;">${escHtml((l.notes || l.body || '').substring(0, 80))}</td>
+              <td style="white-space:nowrap;">
+                <button class="btn btn-sm" onclick="window.app.editBillingCall(${l.id})" style="font-size:11px;">Edit</button>
+                <button class="btn btn-sm" onclick="window.app.deleteBillingCall(${l.id})" style="font-size:11px;color:var(--red);">Del</button>
+              </td>
+            </tr>`;
+          }).join('')}
+          ${logs.length === 0 ? '<tr><td colspan="11" style="text-align:center;padding:2rem;color:var(--gray-500);">No billing calls logged yet. Click "+ Log Call" to record a patient or payer call.</td></tr>' : ''}
+        </tbody>
+      </table></div></div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════
+// BALANCE REMINDERS — automated patient reminder scheduling
+// ═══════════════════════════════════════════════════
+async function renderBalanceRemindersTab(body) {
+  let statements = [];
+  try { statements = await store.getPatientStatements(); } catch (e) {}
+  if (!Array.isArray(statements)) statements = [];
+
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+
+  // Calculate reminder status for each statement
+  const reminders = statements
+    .filter(s => !['paid', 'written_off'].includes(s.status) && Number(s.patient_balance || s.patientBalance || 0) > 0)
+    .map(s => {
+      const balance = Number(s.patient_balance || s.patientBalance || 0);
+      const dueDate = s.due_date || s.dueDate || '';
+      const lastSent = s.last_sent_date || s.lastSentDate || '';
+      const timesSent = Number(s.times_sent || s.timesSent || 0);
+      const daysSinceDue = dueDate ? Math.floor((now - new Date(dueDate)) / 86400000) : 0;
+      const daysSinceLastSent = lastSent ? Math.floor((now - new Date(lastSent)) / 86400000) : 999;
+
+      // Reminder urgency logic
+      let urgency = 'current';
+      let nextAction = 'Send initial statement';
+      if (timesSent === 0) {
+        urgency = 'new';
+        nextAction = 'Send initial statement';
+      } else if (daysSinceDue > 90) {
+        urgency = 'collections';
+        nextAction = 'Consider collections referral';
+      } else if (daysSinceDue > 60) {
+        urgency = 'final_notice';
+        nextAction = 'Send final notice — 90-day collections warning';
+      } else if (daysSinceDue > 30) {
+        urgency = 'second_reminder';
+        nextAction = 'Send 2nd reminder — account past due';
+      } else if (daysSinceDue > 0) {
+        urgency = 'first_reminder';
+        nextAction = 'Send 1st reminder — payment overdue';
+      } else if (daysSinceLastSent > 14) {
+        urgency = 'follow_up';
+        nextAction = 'Follow up — no payment after 14 days';
+      } else {
+        urgency = 'current';
+        nextAction = 'Waiting for payment';
+      }
+
+      return { ...s, balance, dueDate, lastSent, timesSent, daysSinceDue, daysSinceLastSent, urgency, nextAction };
+    })
+    .sort((a, b) => {
+      const urgencyOrder = { collections: 0, final_notice: 1, second_reminder: 2, first_reminder: 3, follow_up: 4, new: 5, current: 6 };
+      return (urgencyOrder[a.urgency] || 99) - (urgencyOrder[b.urgency] || 99);
+    });
+
+  const totalOutstanding = reminders.reduce((s, r) => s + r.balance, 0);
+  const needsAction = reminders.filter(r => r.urgency !== 'current').length;
+  const collectionsReady = reminders.filter(r => r.urgency === 'collections').length;
+  const overdue = reminders.filter(r => r.daysSinceDue > 0).length;
+
+  const urgencyColors = {
+    new: { bg: '#dbeafe', color: '#2563eb', label: 'NEW' },
+    current: { bg: '#f3f4f6', color: '#6b7280', label: 'CURRENT' },
+    follow_up: { bg: '#fef3c7', color: '#b45309', label: 'FOLLOW UP' },
+    first_reminder: { bg: '#ffedd5', color: '#ea580c', label: '1ST REMINDER' },
+    second_reminder: { bg: '#fee2e2', color: '#dc2626', label: '2ND REMINDER' },
+    final_notice: { bg: '#fce7f3', color: '#be185d', label: 'FINAL NOTICE' },
+    collections: { bg: '#fef2f2', color: '#991b1b', label: 'COLLECTIONS' },
+  };
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
+      <div class="rcm-stat"><div class="rcm-label">Open Balances</div><div class="rcm-val" style="color:#3b82f6;">${reminders.length}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Outstanding</div><div class="rcm-val" style="color:var(--red);">${_fk(totalOutstanding)}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Needs Action</div><div class="rcm-val" style="color:#d97706;">${needsAction}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Overdue</div><div class="rcm-val" style="color:#dc2626;">${overdue}</div></div>
+      <div class="rcm-stat"><div class="rcm-label">Collections Ready</div><div class="rcm-val" style="color:#991b1b;">${collectionsReady}</div></div>
+    </div>
+
+    ${needsAction > 0 ? `
+    <div class="card rcm-card" style="margin-bottom:16px;border:1px solid #fde68a;">
+      <div class="card-body" style="padding:14px 20px;background:#fffbeb;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <strong style="color:#92400e;">${needsAction} patient${needsAction !== 1 ? 's' : ''} need${needsAction === 1 ? 's' : ''} a reminder</strong>
+            <div style="font-size:12px;color:#a16207;margin-top:2px;">
+              ${collectionsReady > 0 ? `<span style="color:#dc2626;font-weight:700;">${collectionsReady} ready for collections</span> &middot; ` : ''}
+              ${overdue} overdue &middot; $${totalOutstanding.toLocaleString('en-US', { minimumFractionDigits: 2 })} outstanding
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm btn-primary" onclick="window.app.sendBulkReminders()">Send All Reminders</button>
+            <button class="btn btn-sm" onclick="window.app.exportReminderList()">Export List</button>
+          </div>
+        </div>
+      </div>
+    </div>` : ''}
+
+    <div class="card rcm-card rcm-table">
+      <div class="card-header"><h3>Balance Reminder Queue</h3>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="reminder-filter" class="form-control" style="width:180px;height:34px;font-size:13px;" placeholder="Filter by patient..." oninput="window.app.filterReminders()">
+          <select id="reminder-filter-urgency" class="form-control" style="width:150px;height:34px;font-size:13px;" onchange="window.app.filterReminders()">
+            <option value="">All Urgency</option>
+            <option value="collections">Collections</option>
+            <option value="final_notice">Final Notice</option>
+            <option value="second_reminder">2nd Reminder</option>
+            <option value="first_reminder">1st Reminder</option>
+            <option value="follow_up">Follow Up</option>
+            <option value="new">New</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;"><div class="table-wrap"><table>
+        <thead><tr><th>Patient</th><th>Email</th><th style="text-align:right;">Balance</th><th>Due Date</th><th>Days Overdue</th><th>Times Sent</th><th>Last Sent</th><th>Urgency</th><th>Next Action</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${reminders.map(r => {
+            const uc = urgencyColors[r.urgency] || urgencyColors.current;
+            return `<tr class="reminder-row" data-search="${escAttr((r.patient_name || r.patientName || '').toLowerCase())}" data-urgency="${r.urgency}" style="${r.urgency === 'collections' ? 'background:#fef2f2;' : r.urgency === 'final_notice' ? 'background:#fef7f0;' : ''}">
+              <td style="font-weight:600;">${escHtml(r.patient_name || r.patientName || '—')}</td>
+              <td class="text-sm">${r.patient_email || r.patientEmail ? escHtml(r.patient_email || r.patientEmail) : '<span style="color:var(--gray-400);">—</span>'}</td>
+              <td style="text-align:right;color:var(--red);font-weight:700;">${_fm(r.balance)}</td>
+              <td class="text-sm">${r.dueDate ? formatDateDisplay(r.dueDate) : '—'}</td>
+              <td class="text-sm" style="${r.daysSinceDue > 60 ? 'color:var(--red);font-weight:700;' : r.daysSinceDue > 30 ? 'color:#d97706;font-weight:600;' : ''}">${r.daysSinceDue > 0 ? r.daysSinceDue + 'd' : '—'}</td>
+              <td class="text-sm">${r.timesSent}x</td>
+              <td class="text-sm">${r.lastSent ? formatDateDisplay(r.lastSent) : '—'}</td>
+              <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:${uc.bg};color:${uc.color};">${uc.label}</span></td>
+              <td class="text-sm" style="max-width:200px;">${escHtml(r.nextAction)}</td>
+              <td style="white-space:nowrap;">
+                <button class="btn btn-sm" onclick="window.app.sendSingleReminder(${r.id})" style="font-size:11px;" title="Send reminder">Send</button>
+                <button class="btn btn-sm" onclick="window.app.markStatementPaid(${r.id})" style="font-size:11px;color:var(--green);" title="Mark paid">Paid</button>
+                ${r.urgency === 'collections' ? `<button class="btn btn-sm" onclick="window.app.sendToCollections(${r.id})" style="font-size:11px;color:var(--red);" title="Send to collections">Collect</button>` : ''}
+              </td>
+            </tr>`;
+          }).join('')}
+          ${reminders.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--gray-500);">No outstanding patient balances. All statements are paid or written off.</td></tr>' : ''}
+        </tbody>
+      </table></div></div>
+    </div>
+
+    <div style="margin-top:16px;padding:14px;background:var(--gray-50);border-radius:8px;font-size:12px;color:var(--gray-600);">
+      <strong>Reminder Schedule:</strong> Initial statement → 14-day follow-up → 1st reminder (30 days) → 2nd reminder (60 days) → Final notice (90 days) → Collections referral.
+      Reminders are sent via email when a patient email is on file. Click "Send All Reminders" to batch-send to all patients needing action.
+    </div>
+  `;
+}
+
+export { renderFeeSchedulesTab, renderEligibilityTab, renderStatementsTab, renderClientReportsSection, renderPayerIntelligenceTab, renderProviderFeedbackTab, renderAuthorizationsTab, renderModifierGuideTab, renderCallTrackingTab, renderBalanceRemindersTab };
