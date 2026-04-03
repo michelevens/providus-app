@@ -1060,6 +1060,11 @@ async function navigateTo(page) {
   });
   if (window._updateBottomNav) window._updateBottomNav(page);
 
+  // Clear message center polling when navigating away
+  if (page !== 'message-center' && page !== 'messages' && page !== 'communications') {
+    clearInterval(window._mcPollInterval);
+  }
+
   // Update notification badge
   if (window.app?.refreshNotifBadge) window.app.refreshNotifBadge();
 
@@ -1124,21 +1129,28 @@ async function navigateTo(page) {
       await renderApplicationDetailPage(window._selectedApplicationId);
       break;
     // ─── Workspace (unified) ───
+    case 'message-center':
+    case 'messages':
+    case 'communications':
+      if (page === 'communications') window._mcTab = 'communications';
+      clearInterval(window._mcPollInterval); // Clear any stale poll
+      pageTitle.textContent = 'Message Center';
+      pageSubtitle.textContent = 'Conversations, notifications & communications';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openNewMessage()">+ New Message</button> <button class="btn" onclick="window.app.openCommLogModal()">+ Log Call</button>' + printBtn;
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'message-center'));
+      await renderMessageCenterPage();
+      break;
     case 'workspace':
     case 'tasks':
     case 'kanban':
     case 'calendar':
-    case 'messages':
-    case 'communications':
       if (page === 'tasks') window._wsTab = 'tasks';
       else if (page === 'kanban') window._wsTab = 'kanban';
       else if (page === 'calendar') window._wsTab = 'calendar';
-      else if (page === 'messages') window._wsTab = 'messages';
-      else if (page === 'communications') window._wsTab = 'communications';
       else if (!window._wsTab) window._wsTab = 'tasks';
       pageTitle.textContent = 'Workspace';
-      pageSubtitle.textContent = 'Tasks, kanban, calendar, messages & communications';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.showAddTaskForm()">+ Add Task</button> <button class="btn" onclick="window.app.openNewMessage()">+ Message</button> <button class="btn" onclick="window.app.openCommLogModal()">+ Log Call</button>' + printBtn;
+      pageSubtitle.textContent = 'Tasks, kanban board & calendar';
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.showAddTaskForm()">+ Add Task</button>' + printBtn;
       document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'workspace'));
       await renderWorkspaceHubPage();
       break;
@@ -6808,6 +6820,7 @@ async function renderBillingServicesPage()   { await (await _page('billing-servi
 async function renderBillingClientDetail(id) { await (await _page('billing-services')).renderBillingClientDetail(id); }
 async function renderRcmPage()              { await (await _page('rcm')).renderRcmPage(); }
 async function renderStatesPage()           { await (await _page('states')).renderStatesPage(); }
+async function renderMessageCenterPage()    { await (await _page('message-center')).renderMessageCenterPage(); }
 async function renderPayersPage()           { await (await _page('payers-page')).renderPayersPage(); }
 async function renderRevenueCyclePage()     { await (await _page('revenue-cycle')).renderRevenueCyclePage(); }
 // renderBillingClientDetail still loaded from billing-services via revenue-cycle re-export
@@ -11431,6 +11444,92 @@ function handleNppesProxy(payload) {
     window._analyticsTab = tab;
     await renderAnalyticsHubPage();
   },
+  // ── Message Center ──
+  async mcSwitchTab(tab) {
+    window._mcTab = tab;
+    window._mcThread = null;
+    await renderMessageCenterPage();
+  },
+  async mcSelectThread(threadId) {
+    window._mcThread = threadId;
+    await renderMessageCenterPage();
+  },
+  async mcRefresh() {
+    await renderMessageCenterPage();
+  },
+  async mcSendReply() {
+    const body = document.getElementById('mc-reply-input')?.value?.trim();
+    if (!body) { showToast('Type a message'); return; }
+    const threadId = document.getElementById('mc-reply-thread')?.value;
+    const recipientId = document.getElementById('mc-reply-to-id')?.value;
+    const recipientType = document.getElementById('mc-reply-to-type')?.value || 'user';
+    const sendEmail = document.getElementById('mc-send-email')?.checked;
+    const recipientEmail = document.getElementById('mc-reply-to-email')?.value;
+    const currentUser = auth.getUser() || {};
+    const senderName = ((currentUser.first_name || currentUser.firstName || '') + ' ' + (currentUser.last_name || currentUser.lastName || '')).trim();
+    try {
+      await store.createCommunicationLog({
+        channel: 'internal', direction: 'outbound', type: 'message', messageType: 'message',
+        subject: '', body, notes: body,
+        senderId: currentUser.id, senderName,
+        recipientId, recipientType,
+        threadId: threadId || undefined,
+        isRead: false, status: 'sent',
+      });
+      if (sendEmail && recipientEmail) {
+        await store.sendNotification('message', {
+          recipient_email: recipientEmail, recipient_name: '', subject: 'New message from ' + senderName, body,
+        }).catch(() => {});
+      }
+      document.getElementById('mc-reply-input').value = '';
+      await renderMessageCenterPage();
+    } catch (e) { showToast('Send failed: ' + e.message); }
+  },
+  async mcSendCompose() {
+    const toVal = document.getElementById('mc-compose-to')?.value;
+    if (!toVal) { showToast('Select a recipient'); return; }
+    const body = document.getElementById('mc-compose-body')?.value?.trim();
+    if (!body) { showToast('Type a message'); return; }
+    const [toType, toId] = toVal.split(':');
+    const msgType = document.getElementById('mc-compose-type')?.value || 'message';
+    const subject = document.getElementById('mc-compose-subject')?.value?.trim() || '';
+    const sendEmail = document.getElementById('mc-compose-email')?.checked;
+    const currentUser = auth.getUser() || {};
+    const senderName = ((currentUser.first_name || currentUser.firstName || '') + ' ' + (currentUser.last_name || currentUser.lastName || '')).trim();
+    try {
+      await store.createCommunicationLog({
+        channel: 'internal', direction: 'outbound', type: msgType, messageType: msgType,
+        subject, body, notes: body,
+        senderId: currentUser.id, senderName,
+        recipientId: toId, recipientType: toType,
+        isRead: false, status: 'sent',
+      });
+      if (sendEmail) {
+        // Resolve email from users/providers
+        const users = await store.getAgencyUsers().catch(() => []);
+        const providers = await store.getAll('providers').catch(() => []);
+        const user = users.find(u => String(u.id) === toId);
+        const prov = providers.find(p => String(p.id) === toId);
+        const email = user?.email || prov?.email || '';
+        if (email) {
+          await store.sendNotification('message', {
+            recipient_email: email, recipient_name: '', subject: subject || 'New message from ' + senderName, body,
+          }).catch(() => {});
+        }
+      }
+      showToast('Message sent');
+      window._mcTab = 'sent';
+      await renderMessageCenterPage();
+    } catch (e) { showToast('Send failed: ' + e.message); }
+  },
+  mcCheckEmailAvailable() {
+    const toVal = document.getElementById('mc-compose-to')?.value;
+    const hint = document.getElementById('mc-compose-email-hint');
+    if (!toVal || !hint) return;
+    // Simple hint — actual email check would need async lookup
+    hint.textContent = toVal ? '(will send to recipient\'s email on file)' : '';
+  },
+
   // ── Revenue Cycle (unified) ──
   async rcSwitchTab(tab) {
     window._rcTab = tab;

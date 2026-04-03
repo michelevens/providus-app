@@ -7,8 +7,6 @@ const WS_TABS = [
   { key: 'tasks',          label: 'Tasks' },
   { key: 'kanban',         label: 'Kanban Board' },
   { key: 'calendar',       label: 'Calendar' },
-  { key: 'messages',       label: 'Messages' },
-  { key: 'communications', label: 'Communications' },
 ];
 
 export async function renderWorkspaceHubPage() {
@@ -42,8 +40,6 @@ export async function renderWorkspaceHubPage() {
     case 'tasks':          await R.renderTasksPage(); break;
     case 'kanban':         await R.renderKanbanBoard(); break;
     case 'calendar':       await R.renderCalendarPage(); break;
-    case 'messages':       await R.renderMessagesPage(); break;
-    case 'communications': await R.renderCommunicationsPage(); break;
     default:               await R.renderTasksPage(); break;
   }
 

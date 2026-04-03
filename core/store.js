@@ -1216,6 +1216,23 @@ class Store {
     async deleteCommunicationLog(id) {
         await this._fetch(`${CONFIG.API_URL}/communication-logs/${id}`, { method: 'DELETE' });
     }
+    async markBulkRead(ids) {
+        try {
+            return (await this._fetch(`${CONFIG.API_URL}/communication-logs/bulk-read`, { method: 'POST', body: JSON.stringify({ ids }) })).data || {};
+        } catch {
+            // Fallback: update individually
+            await Promise.all(ids.map(id => this.updateCommunicationLog(id, { is_read: true }).catch(() => {})));
+            return { updated: ids.length };
+        }
+    }
+    async archiveMessages(ids) {
+        try {
+            return (await this._fetch(`${CONFIG.API_URL}/communication-logs/bulk-archive`, { method: 'POST', body: JSON.stringify({ ids }) })).data || {};
+        } catch {
+            await Promise.all(ids.map(id => this.updateCommunicationLog(id, { archived: true }).catch(() => {})));
+            return { archived: ids.length };
+        }
+    }
 
     // ── RCM: Claims, Denials, Payments, Charges, AR ──
     async getRcmClaimStats(params = {}) { const q = new URLSearchParams(params).toString(); return (await this._fetch(`${CONFIG.API_URL}/rcm/claims/stats${q ? '?' + q : ''}`)).data || {}; }
