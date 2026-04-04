@@ -1288,10 +1288,10 @@ async function renderBottleneckAnalysis() {
   const body = document.getElementById('page-body');
   body.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);">Loading pipeline analytics...</div>';
 
-  const [apps, providers] = await Promise.all([
+  const [apps, providers] = (await Promise.all([
     store.getAll('applications'),
     store.getAll('providers'),
-  ]);
+  ])).map(d => store.filterByScope(d));
   const allApps = Array.isArray(apps) ? apps : [];
   const allProviders = Array.isArray(providers) ? providers : [];
 

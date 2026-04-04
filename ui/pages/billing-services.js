@@ -99,7 +99,7 @@ async function renderBillingServicesPage() {
     store.getRcmClaimStats({ months: chartRange }),
     store.getWorkQueues(),
     store.getDenialRiskAnalysis(),
-    store.getAll('organizations'),
+    store.getAll('organizations').then(d => store.filterByScope(d)),
     store.getReconciliationReport(),
     store.getRcmClaims(),
     store.getPayerRules(),

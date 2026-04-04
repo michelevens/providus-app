@@ -315,9 +315,9 @@ async function renderStateLookupTool() {
 }
 
 async function renderDeadlineTimelineTool() {
-  const apps = await store.getAll('applications');
-  const licenses = await store.getAll('licenses');
-  const tasks = (await store.getAll('tasks')).filter(t => !t.completed && t.dueDate);
+  const apps = store.filterByScope(await store.getAll('applications'));
+  const licenses = store.filterByScope(await store.getAll('licenses'));
+  const tasks = store.filterByScope(await store.getAll('tasks')).filter(t => !t.completed && t.dueDate);
   const now = new Date();
   const items = [];
 
@@ -565,7 +565,7 @@ async function renderTaxonomySearch() {
 
 async function renderCaqhManager() {
   const body = document.getElementById('page-body');
-  const providers = await store.getAll('providers');
+  const providers = store.filterByScope(await store.getAll('providers'));
   const configured = caqhApi.isCaqhConfigured();
   const tracking = caqhApi.getCaqhTracking();
 

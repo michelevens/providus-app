@@ -867,7 +867,7 @@ export async function initApp() {
   // First-run onboarding for new agency accounts (only if zero providers AND never dismissed)
   if (userLevel >= 3) {
     try {
-      const providers = await store.getAll('providers');
+      const providers = store.filterByScope(await store.getAll('providers'));
       if (!providers || providers.length === 0) {
         if (!localStorage.getItem('credentik_onboarding_complete') && !localStorage.getItem('credentik_setup_dismissed')) {
           showAgencyOnboarding();
@@ -884,8 +884,8 @@ export async function initApp() {
   // (established accounts should never see the tour)
   if (!localStorage.getItem('credentik_tour_completed')) {
     try {
-      const provCount = (await store.getAll('providers'))?.length || 0;
-      const appCount = (await store.getAll('applications'))?.length || 0;
+      const provCount = store.filterByScope(await store.getAll('providers'))?.length || 0;
+      const appCount = store.filterByScope(await store.getAll('applications'))?.length || 0;
       if (provCount === 0 && appCount === 0) {
         setTimeout(() => startGuidedTour(), 1500);
       } else {
@@ -2793,9 +2793,9 @@ async function renderApplications() {
 }
 
 async function renderAppTable(prefetchedApps = null) {
-  const apps = prefetchedApps || await store.getAll('applications');
-  const allProviders = await store.getAll('providers').catch(() => []);
-  const allFacilities = await store.getFacilities().catch(() => []);
+  const apps = prefetchedApps || store.filterByScope(await store.getAll('applications'));
+  const allProviders = store.filterByScope(await store.getAll('providers').catch(() => []));
+  const allFacilities = store.filterByScope(await store.getFacilities().catch(() => []));
   const allStaff = await store.getAgencyUsers().catch(() => []);
   const facMap = {};
   (Array.isArray(allFacilities) ? allFacilities : []).forEach(f => { facMap[f.id] = f; });
@@ -3208,9 +3208,9 @@ function getLiveTopReadinessStates(minScore = 7) {
 
 async function renderStatePolicies() {
   const body = document.getElementById('page-body');
-  const licenses = await store.getAll('licenses');
+  const licenses = store.filterByScope(await store.getAll('licenses'));
   const licensedStates = licenses.map(l => l.state);
-  const apps = await store.getAll('applications');
+  const apps = store.filterByScope(await store.getAll('applications'));
   const allPolicies = getLivePolicies();
 
   const fullPractice = allPolicies.filter(p => p.practiceAuthority === 'full');
@@ -4448,7 +4448,7 @@ function statusPriority(status) {
 
 async function renderBatchGenerator() {
   const body = document.getElementById('page-body');
-  const licenses = (await store.getAll('licenses')).filter(l => l.status === 'active');
+  const licenses = store.filterByScope(await store.getAll('licenses')).filter(l => l.status === 'active');
   const licensedStates = licenses.map(l => l.state);
 
   body.innerHTML = `
@@ -4482,8 +4482,8 @@ async function renderBatchGenerator() {
 async function renderEmailGenerator() {
   const body = document.getElementById('page-body');
   const templates = emailGenerator.getTemplateList();
-  const apps = (await store.getAll('applications')).filter(a => a.status !== 'approved' && a.status !== 'denied');
-  const emailLicensedCodes = new Set((await store.getAll('licenses')).filter(l => l.status === 'active').map(l => l.state));
+  const apps = store.filterByScope(await store.getAll('applications')).filter(a => a.status !== 'approved' && a.status !== 'denied');
+  const emailLicensedCodes = new Set(store.filterByScope(await store.getAll('licenses')).filter(l => l.status === 'active').map(l => l.state));
   const emailLicensed = STATES.filter(s => emailLicensedCodes.has(s.code));
   const emailUnlicensed = STATES.filter(s => !emailLicensedCodes.has(s.code));
 
@@ -4695,7 +4695,7 @@ async function openProviderModal(id) {
   const existing = id ? await store.getOne('providers', id) : null;
   title.textContent = existing ? 'Edit Provider' : 'Add Provider';
 
-  const orgs = await store.getAll('organizations');
+  const orgs = store.filterByScope(await store.getAll('organizations'));
 
   form.innerHTML = `
     <input type="hidden" id="edit-prov-id" value="${id || ''}">
@@ -5478,10 +5478,10 @@ function renderPayerStrategicPlanner(payers) {
 
 async function renderSettings() {
   const body = document.getElementById('page-body');
-  const orgs = await store.getAll('organizations');
-  const providers = await store.getAll('providers');
-  const licenses = await store.getAll('licenses');
-  const apps = await store.getAll('applications');
+  const orgs = store.filterByScope(await store.getAll('organizations'));
+  const providers = store.filterByScope(await store.getAll('providers'));
+  const licenses = store.filterByScope(await store.getAll('licenses'));
+  const apps = store.filterByScope(await store.getAll('applications'));
   let agency = {};
   try { agency = await store.getAgency(); } catch (e) { /* ignore */ }
   const embedBase = CONFIG.API_URL.replace('/api', '');
@@ -6384,14 +6384,14 @@ async function _loadLinkOptions(prefix, type, selectedId) {
   try {
     let items = [];
     if (type === 'application') {
-      items = (await store.getAll('applications')).map(a => ({ id: a.id, label: `${getStateName(a.state)} — ${a.payerName || getPayerById(a.payerId)?.name || 'Unknown'} (${a.status})` }));
+      items = store.filterByScope(await store.getAll('applications')).map(a => ({ id: a.id, label: `${getStateName(a.state)} — ${a.payerName || getPayerById(a.payerId)?.name || 'Unknown'} (${a.status})` }));
     } else if (type === 'provider') {
-      items = (await store.getAll('providers')).map(p => ({ id: p.id, label: `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''} — ${p.credentials || p.credential || ''}`.trim() }));
+      items = store.filterByScope(await store.getAll('providers')).map(p => ({ id: p.id, label: `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''} — ${p.credentials || p.credential || ''}`.trim() }));
     } else if (type === 'organization') {
-      items = (await store.getAll('organizations')).map(o => ({ id: o.id, label: o.name }));
+      items = store.filterByScope(await store.getAll('organizations')).map(o => ({ id: o.id, label: o.name }));
     } else if (type === 'license') {
-      const licenses = await store.getAll('licenses');
-      const providers = await store.getAll('providers');
+      const licenses = store.filterByScope(await store.getAll('licenses'));
+      const providers = store.filterByScope(await store.getAll('providers'));
       const provMap = Object.fromEntries(providers.map(p => [p.id, p]));
       items = licenses.map(l => {
         const p = provMap[l.providerId || l.provider_id];
@@ -6669,8 +6669,8 @@ function renderTaskPageRow(task, today, appsMap, staffMap) {
 }
 
 async function renderTaskModal() {
-  const tasks = await store.getAll('tasks');
-  const modalApps = await store.getAll('applications');
+  const tasks = store.filterByScope(await store.getAll('tasks'));
+  const modalApps = store.filterByScope(await store.getAll('applications'));
   const modalAppsMap = {};
   modalApps.forEach(a => { modalAppsMap[a.id] = a; });
   const today = new Date().toISOString().split('T')[0];
@@ -6932,7 +6932,7 @@ async function generateCredentialingReport(providerId){
   if(!providerId){showToast('No provider selected');return;}
   showToast('Generating credentialing report...');
   try{
-    const[provider,licenses,apps,orgs,exclusions]=await Promise.all([store.getOne('providers',providerId),store.getAll('licenses'),store.getAll('applications'),store.getAll('organizations'),store.getAll('exclusions').catch(function(){return[];})]);
+    const[provider,licenses,apps,orgs,exclusions]=await Promise.all([store.getOne('providers',providerId),store.getAll('licenses').then(function(d){return store.filterByScope(d);}),store.getAll('applications').then(function(d){return store.filterByScope(d);}),store.getAll('organizations').then(function(d){return store.filterByScope(d);}),store.getAll('exclusions').catch(function(){return[];}).then(function(d){return store.filterByScope(d);})]);
     if(!provider){showToast('Provider not found','error');return;}
     var org=orgs[0]||{};var agencyName=org.name||'Credentik Agency';var now=new Date();var nowStr=now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
     var provName=((provider.firstName||'')+' '+(provider.lastName||'')).trim()||'Unknown Provider';
@@ -6984,7 +6984,7 @@ async function generateCredentialingReport(providerId){
 async function generateComplianceReportPDF(){
   showToast('Generating compliance PDF...');
   try{
-    const[providers,licenses,apps,orgs,exclusions]=await Promise.all([store.getAll('providers'),store.getAll('licenses'),store.getAll('applications'),store.getAll('organizations'),store.getAll('exclusions').catch(function(){return[];})]);
+    const[providers,licenses,apps,orgs,exclusions]=await Promise.all([store.getAll('providers'),store.getAll('licenses'),store.getAll('applications'),store.getAll('organizations'),store.getAll('exclusions').catch(function(){return[];})]).then(function(r){return r.map(function(d){return store.filterByScope(d);});});
     var org=orgs[0]||{};var agencyName=org.name||'Credentik Agency';var now=new Date();var nowStr=now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});var today=new Date();var in90=new Date(Date.now()+90*86400000);
     var providerRows=providers.map(function(p){var pLic=licenses.filter(function(l){return(l.providerId||l.provider_id)===p.id;});var expCount=pLic.filter(function(l){var e=l.expirationDate||l.expiration_date;return e&&new Date(e)<today;}).length;var e30=pLic.filter(function(l){var e=l.expirationDate||l.expiration_date;return e&&new Date(e)>=today&&new Date(e)<=new Date(Date.now()+30*86400000);}).length;var pExcl=Array.isArray(exclusions)?exclusions.filter(function(x){return(x.providerId||x.provider_id)===p.id;}):[];var hExcl=pExcl.some(function(x){return x.status==='excluded'||x.result==='excluded';});var sc=100;if(expCount>0)sc-=expCount*20;if(hExcl)sc-=30;if(e30>0)sc-=e30*10;if(pLic.length===0)sc-=15;sc=Math.max(0,Math.min(100,sc));var st=sc>=85?'Healthy':sc>=60?'At Risk':'Critical';return{name:((p.firstName||'')+' '+(p.lastName||'')).trim(),npi:p.npi||'',specialty:p.specialty||'',score:sc,status:st,licenses:pLic.length,expired:expCount};});
     var avgScore=providerRows.length>0?Math.round(providerRows.reduce(function(s,r){return s+r.score;},0)/providerRows.length):0;
@@ -7806,11 +7806,11 @@ window.app = {
 
   // ── Cross-Facility Credentialing ──
   async openCrossFacilityCredentialing() {
-    const [providers, facilities, apps] = await Promise.all([
+    const [providers, facilities, apps] = (await Promise.all([
       store.getAll('providers'),
       store.getFacilities().catch(() => []),
       store.getAll('applications'),
-    ]);
+    ])).map(d => store.filterByScope(d));
     if (!providers.length) { showToast('No providers found'); return; }
     if (!facilities.length) { showToast('No facilities found — add facilities first'); return; }
 
@@ -7949,11 +7949,11 @@ window.app = {
         clearTimeout(window._searchDebounce);
         window._searchDebounce = setTimeout(async () => {
           try {
-            const [providers, apps, tasks, licenses, followups, facilities, orgs] = await Promise.all([
+            const [providers, apps, tasks, licenses, followups, facilities, orgs] = (await Promise.all([
               store.getAll('providers'), store.getAll('applications'), store.getAll('tasks'),
               store.getAll('licenses'), store.getAll('followups'), store.getFacilities().catch(() => []),
               store.getAll('organizations'),
-            ]);
+            ])).map(d => store.filterByScope(d));
 
             const results = [];
 
@@ -9045,12 +9045,12 @@ window.app = {
 
   async exportData() {
     try {
-      const apps = await store.getAll('applications');
-      const providers = await store.getAll('providers');
-      const licenses = await store.getAll('licenses');
-      const followups = await store.getAll('followups');
-      const tasks = await store.getAll('tasks');
-      const orgs = await store.getAll('organizations');
+      const apps = store.filterByScope(await store.getAll('applications'));
+      const providers = store.filterByScope(await store.getAll('providers'));
+      const licenses = store.filterByScope(await store.getAll('licenses'));
+      const followups = store.filterByScope(await store.getAll('followups'));
+      const tasks = store.filterByScope(await store.getAll('tasks'));
+      const orgs = store.filterByScope(await store.getAll('organizations'));
       const data = { applications: apps, providers, licenses, followups, tasks, organizations: orgs, exportedAt: new Date().toISOString() };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -9068,7 +9068,7 @@ window.app = {
   async clearApplications() {
     if (!await appConfirm('Delete ALL applications? This cannot be undone.', { title: 'Clear Applications', okLabel: 'Delete All', okClass: 'btn-danger' })) return;
     try {
-      const apps = await store.getAll('applications');
+      const apps = store.filterByScope(await store.getAll('applications'));
       for (const app of apps) { await store.remove('applications', app.id); }
       showToast('All applications cleared');
       await navigateTo('dashboard');
@@ -9077,7 +9077,7 @@ window.app = {
   async clearFollowups() {
     if (!await appConfirm('Delete ALL follow-ups? This cannot be undone.', { title: 'Clear Follow-ups', okLabel: 'Delete All', okClass: 'btn-danger' })) return;
     try {
-      const followups = await store.getAll('followups');
+      const followups = store.filterByScope(await store.getAll('followups'));
       for (const fu of followups) { await store.remove('followups', fu.id); }
       showToast('All follow-ups cleared');
       await navigateTo('dashboard');
@@ -9234,8 +9234,8 @@ window.app = {
   async showPolicyDetail(stateCode) {
     const pol = getLivePolicyByState(stateCode);
     if (!pol) return;
-    const licenses = (await store.getAll('licenses')).filter(l => l.state === stateCode);
-    const apps = (await store.getAll('applications')).filter(a => a.state === stateCode);
+    const licenses = store.filterByScope(await store.getAll('licenses')).filter(l => l.state === stateCode);
+    const apps = store.filterByScope(await store.getAll('applications')).filter(a => a.state === stateCode);
     const authColor = pol.practiceAuthority === 'full' ? 'var(--green)' : pol.practiceAuthority === 'reduced' ? 'var(--gold)' : 'var(--red)';
     const scoreColor = pol.readinessScore >= 7 ? 'var(--green)' : pol.readinessScore >= 5 ? 'var(--gold)' : 'var(--red)';
 
@@ -9618,9 +9618,9 @@ window.app = {
   async generateStatusReport() {
     const type = document.getElementById('export-type')?.value || 'executive';
     const format = document.getElementById('export-format')?.value || 'text';
-    const apps = await store.getAll('applications');
-    const licenses = await store.getAll('licenses');
-    const orgs = await store.getAll('organizations');
+    const apps = store.filterByScope(await store.getAll('applications'));
+    const licenses = store.filterByScope(await store.getAll('licenses'));
+    const orgs = store.filterByScope(await store.getAll('organizations'));
     const org = orgs[0] || {};
     const now = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     let report = '';
@@ -15580,14 +15580,14 @@ function handleNppesProxy(payload) {
   async exportAuditPacket() {
     showToast('Generating audit-ready packet...');
     try {
-      const [providers, licenses, apps, orgs, exclusions, report] = await Promise.all([
+      const [providers, licenses, apps, orgs, exclusions, report] = (await Promise.all([
         store.getAll('providers'),
         store.getAll('licenses'),
         store.getAll('applications'),
         store.getAll('organizations'),
         store.getAll('exclusions').catch(() => []),
         store.getComplianceReport().catch(() => ({})),
-      ]);
+      ])).map((d, i) => i < 5 ? store.filterByScope(d) : d);
       const org = orgs[0] || {};
       const today = new Date();
       const now = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -17240,9 +17240,9 @@ async function openApplicationModal(id) {
   const existing = id ? await store.getOne('applications', id) : null;
   title.textContent = existing ? 'Edit Application' : 'Add Application';
 
-  const licensedStates = (await store.getAll('licenses')).map(l => l.state);
-  const providers = await store.getAll('providers');
-  const facilities = await store.getFacilities().catch(() => []);
+  const licensedStates = store.filterByScope(await store.getAll('licenses')).map(l => l.state);
+  const providers = store.filterByScope(await store.getAll('providers'));
+  const facilities = store.filterByScope(await store.getFacilities().catch(() => []));
   const staffUsers = await store.getAgencyUsers().catch(() => []);
   const currentUser = auth.getUser();
 
@@ -17668,7 +17668,7 @@ async function openLicenseModal(id) {
   const existing = id ? await store.getOne('licenses', id) : null;
   title.textContent = existing ? 'Edit License' : 'Add License';
 
-  const providers = await store.getAll('providers');
+  const providers = store.filterByScope(await store.getAll('providers'));
 
   form.innerHTML = `
     <input type="hidden" id="edit-lic-id" value="${id || ''}">
@@ -17783,7 +17783,7 @@ async function openDeaModal(id) {
   const existing = id ? (await store.getDeaRegistrations()).find(d => String(d.id) === String(id)) : null;
   title.textContent = existing ? 'Edit DEA Registration' : 'Add DEA Registration';
 
-  const providers = await store.getAll('providers');
+  const providers = store.filterByScope(await store.getAll('providers'));
 
   form.innerHTML = `
     <input type="hidden" id="edit-dea-id" value="${id || ''}">
@@ -18052,7 +18052,7 @@ async function getAlerts() {
   const todayStr = today.toISOString().split('T')[0];
 
   // License expiration alerts
-  const licenses = await store.getAll('licenses');
+  const licenses = store.filterByScope(await store.getAll('licenses'));
   licenses.forEach(l => {
     if (!l.expirationDate) return;
     const exp = new Date(l.expirationDate);
@@ -18075,7 +18075,7 @@ async function getAlerts() {
   }
 
   // Overdue tasks
-  const tasks = await store.getAll('tasks');
+  const tasks = store.filterByScope(await store.getAll('tasks'));
   const overdueTasks = tasks.filter(t => !t.completed && t.dueDate && t.dueDate < todayStr);
   if (overdueTasks.length > 0) {
     alerts.push({ type: 'red', icon: '&#9745;', title: `${overdueTasks.length} overdue task${overdueTasks.length > 1 ? 's' : ''}`, desc: overdueTasks.slice(0, 2).map(t => t.title).join(', '), page: 'tasks', priority: 1 });
@@ -18088,7 +18088,7 @@ async function getAlerts() {
   }
 
   // Stale applications (stuck > 45 days in same status)
-  const apps = await store.getAll('applications');
+  const apps = store.filterByScope(await store.getAll('applications'));
   const staleApps = apps.filter(a => {
     if (['approved', 'denied', 'withdrawn', 'not_started'].includes(a.status)) return false;
     const updated = new Date(a.updatedAt || a.createdAt);
@@ -18727,7 +18727,7 @@ async function renderDocumentTracker() {
 
 async function renderReimbursement() {
   const body = document.getElementById('page-body');
-  const allApps = await store.getAll('applications');
+  const allApps = store.filterByScope(await store.getAll('applications'));
 
   // Get unique states and payers from applications
   const statesInUse = [...new Set(allApps.map(a => a.state).filter(Boolean))].sort();
@@ -18973,7 +18973,7 @@ async function renderRenewalCalendar() {
 // ─── Credentialing Renewal Section (effective-date based) ───
 
 async function renderCredentialingRenewalSection(today) {
-  const allApps = (await store.getAll('applications')).filter(a => a.status !== 'denied' && a.status !== 'withdrawn');
+  const allApps = store.filterByScope(await store.getAll('applications')).filter(a => a.status !== 'denied' && a.status !== 'withdrawn');
   if (allApps.length === 0) {
     return `
       <div class="card" style="margin-top:24px;">
@@ -19517,10 +19517,10 @@ async function renderOrganizationsPage() {
 
   let orgs = [], providers = [], licenses = [], apps = [];
   const [_orgs, _provs, _lics, _apps] = await Promise.allSettled([store.getAll('organizations'), store.getAll('providers'), store.getAll('licenses'), store.getAll('applications')]);
-  if (_orgs.status === 'fulfilled') orgs = _orgs.value;
-  if (_provs.status === 'fulfilled') providers = _provs.value;
-  if (_lics.status === 'fulfilled') licenses = _lics.value;
-  if (_apps.status === 'fulfilled') apps = _apps.value;
+  if (_orgs.status === 'fulfilled') orgs = store.filterByScope(_orgs.value);
+  if (_provs.status === 'fulfilled') providers = store.filterByScope(_provs.value);
+  if (_lics.status === 'fulfilled') licenses = store.filterByScope(_lics.value);
+  if (_apps.status === 'fulfilled') apps = store.filterByScope(_apps.value);
 
   body.innerHTML = `
     <style>
@@ -19612,8 +19612,8 @@ async function renderOrgDetailPage(orgId) {
   ]);
   if (_o.status === 'fulfilled') o = _o.value;
   if (_p.status === 'fulfilled') providers = (_p.value || []).filter(p => (p.organizationId || p.orgId) == orgId);
-  if (_l.status === 'fulfilled') licenses = _l.value;
-  if (_a.status === 'fulfilled') apps = _a.value;
+  if (_l.status === 'fulfilled') licenses = store.filterByScope(_l.value);
+  if (_a.status === 'fulfilled') apps = store.filterByScope(_a.value);
   if (_f.status === 'fulfilled') facilities = (_f.value || []).filter(f => String(f.organizationId || f.organization_id || '') === String(orgId));
 
   let billingActivities = [], billingClient = null, billingFinancials = [], rcmClaims = [], rcmDenials = [], rcmTasks = [];
@@ -20753,7 +20753,7 @@ async function renderKanbanBoard() {
   try {
     [apps, providers] = await Promise.all([
       store.getAll('applications').then(a => store.filterByScope(a)),
-      store.getAll('providers')
+      store.getAll('providers').then(p => store.filterByScope(p))
     ]);
   } catch (e) { console.error('Kanban error:', e); }
   if (!Array.isArray(apps)) apps = [];
@@ -21331,10 +21331,15 @@ async function renderFacilitiesPage() {
   const allAppsForFac = store.filterByScope(await store.getAll('applications').catch(() => []));
   const facAppCount = {};
   const appArr = Array.isArray(allAppsForFac) ? allAppsForFac : [];
-  // Count by facilityId if set, otherwise count apps in same state as facility
+  // Count by facilityId if set, otherwise count apps in same state + same org as facility
   facilities.forEach(f => {
     const byId = appArr.filter(a => a.facilityId && String(a.facilityId) === String(f.id)).length;
-    const byState = byId === 0 && f.state ? appArr.filter(a => a.state === f.state).length : 0;
+    const fOrgId = f.organizationId || f.organization_id || '';
+    const byState = byId === 0 && f.state ? appArr.filter(a => {
+      if (a.state !== f.state) return false;
+      if (fOrgId) return String(a.organizationId || a.orgId || '') === String(fOrgId);
+      return true;
+    }).length : 0;
     facAppCount[f.id] = byId || byState;
   });
 
@@ -21413,7 +21418,7 @@ async function renderFacilitiesPage() {
             <div class="auth-field" style="margin:0;grid-column:1/-1;"><label>Organization *</label>
               <select id="fac-org" class="form-control">
                 <option value="">Select Organization...</option>
-                ${(await store.getAll('organizations').catch(() => [])).map(o => `<option value="${o.id}">${escHtml(o.name)}</option>`).join('')}
+                ${store.filterByScope(await store.getAll('organizations').catch(() => [])).map(o => `<option value="${o.id}">${escHtml(o.name)}</option>`).join('')}
               </select>
             </div>
             <div class="auth-field" style="margin:0;"><label>Location Name *</label><input type="text" id="fac-name" class="form-control" placeholder="e.g. Main Office, Orlando Satellite"></div>
@@ -21504,7 +21509,7 @@ async function renderFacilityDetailPage(facilityId) {
   if (!fac) { body.innerHTML = '<div style="padding:3rem;text-align:center;color:var(--gray-500);">Facility not found.</div>'; return; }
 
   // Linked providers — find via applications
-  const allApps = await store.getAll('applications').catch(() => []);
+  const allApps = store.filterByScope(await store.getAll('applications').catch(() => []));
   const appArr = Array.isArray(allApps) ? allApps : [];
   const facOrgId = fac.organizationId || fac.organization_id || '';
   const facApps = appArr.filter(a => {
@@ -21512,13 +21517,14 @@ async function renderFacilityDetailPage(facilityId) {
     if (!a.facilityId && a.state && a.state === fac.state) {
       // Only match state-based fallback if the app's org matches the facility's org
       if (facOrgId) return String(a.organizationId || a.orgId || '') === String(facOrgId);
-      return true;
+      // No org on facility — don't match loosely by state alone
+      return false;
     }
     return false;
   });
 
   // Get provider details for linked apps
-  const allProviders = await store.getAll('providers').catch(() => []);
+  const allProviders = store.filterByScope(await store.getAll('providers').catch(() => []));
   const provArr = Array.isArray(allProviders) ? allProviders : [];
   const linkedProviderIds = [...new Set(facApps.map(a => a.providerId || a.provider_id).filter(Boolean))];
   const linkedProviders = linkedProviderIds.map(pid => {
