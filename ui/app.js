@@ -2113,7 +2113,7 @@ async function renderDashboard() {
     <div class="mc-welcome">
       <div>
         <h2>${greeting}, ${escHtml(firstName)}</h2>
-        <div class="mc-welcome-sub">${escHtml(org.name || 'Your Organization')} &middot; ${providers.length} provider${providers.length !== 1 ? 's' : ''}${userRoleLabel ? ` &middot; ${escHtml(userRoleLabel)}` : ''}</div>
+        <div class="mc-welcome-sub">${escHtml(document.getElementById('sidebar-agency-name')?.textContent || org.name || 'Your Organization')} &middot; ${providers.length} provider${providers.length !== 1 ? 's' : ''}${userRoleLabel ? ` &middot; ${escHtml(userRoleLabel)}` : ''}</div>
       </div>
       <div class="mc-welcome-right">
         <div style="font-size:13px;font-weight:600;">${today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</div>
