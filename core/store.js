@@ -1570,10 +1570,17 @@ class Store {
     // ── Notifications (Resend) ──
 
     async sendNotification(type, data) {
-        const result = await this._fetch(`${CONFIG.API_URL}/notifications/send`, {
+        // Backend expects camelCase (recipientEmail, recipientName) — skip _camelToSnake
+        const payload = { type, ...data };
+        // Normalize: if snake_case keys were passed, convert to camelCase for the backend
+        if (payload.recipient_email && !payload.recipientEmail) { payload.recipientEmail = payload.recipient_email; delete payload.recipient_email; }
+        if (payload.recipient_name && !payload.recipientName) { payload.recipientName = payload.recipient_name; delete payload.recipient_name; }
+        const token = auth.getToken();
+        const result = await (await fetch(`${CONFIG.API_URL}/notifications/send`, {
             method: 'POST',
-            body: JSON.stringify({ type, ...data }),
-        });
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+            body: JSON.stringify(payload),
+        })).json();
         this._invalidateCache('notifications');
         return result.data || result;
     }
