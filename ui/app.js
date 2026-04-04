@@ -21597,7 +21597,7 @@ async function renderFacilityDetailPage(facilityId) {
             <div class="fac-info-item"><div class="fac-label">Fax</div><div class="fac-value">${escHtml(fac.fax || '—')}</div></div>
             <div class="fac-info-item"><div class="fac-label">Location NPI</div><div class="fac-value"><code>${escHtml(fac.npi || '—')}</code></div></div>
             <div class="fac-info-item"><div class="fac-label">Location Type</div><div class="fac-value">${escHtml(facType || '—')}</div></div>
-            <div class="fac-info-item"><div class="fac-label">Organization</div><div class="fac-value">${org ? escHtml(org.name) : '—'}</div></div>
+            <div class="fac-info-item"><div class="fac-label">Organization</div><div class="fac-value">${org ? '<a href="#" onclick="event.preventDefault();window._selectedOrgId=' + org.id + ';window.app.navigateTo(\'org-detail\');" style="color:var(--brand-600);text-decoration:none;font-weight:500;">' + escHtml(org.name) + '</a>' : '—'}</div></div>
             <div class="fac-info-item"><div class="fac-label">Status</div><div class="fac-value"><span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:8px;height:8px;border-radius:50%;background:${isActive ? 'var(--green)' : 'var(--gray-400)'};"></span>${statusLabel}</span></div></div>
             <div class="fac-info-item"><div class="fac-label">Facility ID</div><div class="fac-value"><code style="font-size:11px;color:var(--gray-500);">${escHtml(String(fac.id))}</code></div></div>
             <div class="fac-info-item"><div class="fac-label">Applications</div><div class="fac-value"><strong>${facApps.length}</strong> application${facApps.length !== 1 ? 's' : ''}</div></div>
