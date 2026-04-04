@@ -34,8 +34,7 @@ function fundingOppCard(opp) {
       <span class="funding-source-badge funding-source-${opp.source}">${(opp.source || '').toUpperCase()}</span>
       ${opp.amount ? `<span style="font-weight:700;color:#10b981;font-size:14px;">${opp.amount}</span>` : ''}
     </div>
-    <h4 style="margin:0 0 6px;font-size:14px;font-weight:600;color:var(--text-primary);line-height:1.3;">${escHtml(opp.title)}</h4>
-    <p style="margin:0 0 10px;font-size:12px;color:var(--gray-400);line-height:1.4;">${escHtml(opp.description || '')}</p>
+    <h4 style="margin:0 0 10px;font-size:14px;font-weight:600;color:var(--text-primary);line-height:1.3;">${escHtml(opp.title)}</h4>
     <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--gray-500);">
       <span>${escHtml(opp.agency || '')}</span>
       <div style="display:flex;align-items:center;gap:8px;">
@@ -192,7 +191,7 @@ async function renderFundingFederal() {
     grants = (res.data || []).map(o => {
       const daysLeft = o.closeDate ? Math.ceil((new Date(o.closeDate) - new Date()) / 86400000) : null;
       return {
-        title: o.title, agency: o.agencySource || 'Federal', cfda: o.cfdaNumber || '—',
+        id: o.id, title: o.title, agency: o.agencySource || 'Federal', cfda: o.cfdaNumber || '—',
         amount: o.amountDisplay || '—', deadline: o.closeDate ? o.closeDate.substring(0, 10) : 'Rolling',
         status: daysLeft !== null && daysLeft <= 14 ? 'Closing Soon' : 'Open', description: o.description || '', url: o.url,
       };
@@ -229,8 +228,9 @@ async function renderFundingFederal() {
           <tbody>
             ${grants.map(g => {
               const statusColor = g.status === 'Closing Soon' ? 'var(--red)' : '#10b981';
-              return `<tr>
-                <td><strong style="font-size:13px;">${escHtml(g.title)}</strong><br><span style="font-size:11px;color:var(--gray-400);">${escHtml(g.description)}</span></td>
+              const clickAction = g.id ? `window.app.viewFundingDetail(${g.id})` : (g.url ? `window.open('${escAttr(g.url)}','_blank')` : '');
+              return `<tr style="cursor:pointer;" onclick="${clickAction}">
+                <td><strong style="font-size:13px;color:var(--brand-400);">${escHtml(g.title)}</strong></td>
                 <td style="white-space:nowrap;">${escHtml(g.agency)}</td>
                 <td style="font-family:var(--font-mono);font-size:11px;">${escHtml(g.cfda)}</td>
                 <td style="font-weight:600;color:#10b981;white-space:nowrap;">${escHtml(g.amount)}</td>
