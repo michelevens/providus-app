@@ -1104,6 +1104,11 @@ async function renderProviderProfilePage(providerId) {
           <a class="cp-edit-link" onclick="window.app.switchProfileTab('overview')">Edit Profile</a>
           <a class="cp-edit-link" onclick="window.app.generatePublicShareLink(${providerId})" style="color:var(--brand-500,#0891b2);">&#128279; Share Progress</a>
         </div>
+        ${provider.organizationId || provider.organization_id ? `
+        <div style="margin-top:8px;display:flex;align-items:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--gray-400)" stroke-width="1.5"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M5 4V2.5a1 1 0 011-1h4a1 1 0 011 1V4"/><path d="M2 8h12"/></svg>
+          <a onclick="window._selectedOrgId='${provider.organizationId || provider.organization_id}';window.app.navigateTo('org-detail')" style="font-size:12px;color:var(--brand-600);font-weight:600;cursor:pointer;text-decoration:none;border-bottom:1px dashed var(--brand-300);">${escHtml(provider.organization?.name || provider.organizationName || provider.organization_name || 'Organization')} <span style="font-size:10px;color:var(--gray-400);font-weight:400;">#${String(provider.organizationId || provider.organization_id).padStart(3, '0')}</span></a>
+        </div>` : ''}
       </div>
 
       <!-- Center: Completion Ring -->
