@@ -659,10 +659,18 @@ async function _renderProviderProductivity(body) {
   ]);
   if (r0.status === 'fulfilled') claims = Array.isArray(r0.value) ? r0.value : [];
 
+  // Build provider ID→name lookup
+  const allProviders = store.filterByScope(await store.getAll('providers').catch(() => []));
+  const provMap = {};
+  (Array.isArray(allProviders) ? allProviders : []).forEach(p => {
+    provMap[String(p.id)] = ((p.firstName || p.first_name || '') + ' ' + (p.lastName || p.last_name || '')).trim().toUpperCase() || 'Unknown';
+  });
+
   // Group by provider
   const byProvider = {};
   claims.forEach(c => {
-    const prov = c.providerName || c.provider_name || 'Unknown';
+    const pid = c.renderingProviderId || c.rendering_provider_id || c.providerId || c.provider_id || '';
+    const prov = c.providerName || c.provider_name || (pid && provMap[String(pid)]) || 'Unknown';
     if (!byProvider[prov]) byProvider[prov] = [];
     byProvider[prov].push(c);
   });
