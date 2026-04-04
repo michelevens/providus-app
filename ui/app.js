@@ -529,11 +529,49 @@ const PAYER_TAG_MAP = {
   'BCBS of Minnesota':    ['caqh_accepts','behavioral_health','telehealth_friendly'],
 };
 
+// National market share estimates (%) — behavioral health adjusted
+// Sources: CMS enrollment data, KFF, payer annual reports (2024-2025 estimates)
+const PAYER_MARKET_SHARE = {
+  // National (Big 5)
+  'UnitedHealthcare': 15, 'Optum': 15, 'Anthem': 10, 'Elevance Health': 10,
+  'Aetna': 8, 'CVS Aetna': 8, 'Cigna': 8, 'Evernorth': 8,
+  'Humana': 6, 'Centene': 5, 'Molina Healthcare': 3,
+  // BCBS plans (vary by state, use avg)
+  'Florida Blue': 28, 'BCBS of Arizona': 20, 'Regence BCBS': 15,
+  'BCBS of Montana': 35, 'BCBS of New Mexico': 22, 'Anthem BCBS': 18,
+  'Highmark BCBS': 20, 'BCBS FEP': 3,
+  // Medicare / Government
+  'Medicare': 18, 'Medicaid': 20, 'VACCN': 2, 'Tricare': 2,
+  // Behavioral Health / EAP
+  'Carelon': 4, 'Optum BH': 8, 'Magellan Health': 3,
+  'Lucet': 2, 'ComPsych': 1, 'Lyra Health': 1,
+  // Regional
+  'Kaiser Permanente': 8, 'AvMed': 3, 'CarePlus': 2,
+  'Sunshine Health': 4, 'Simply Healthcare': 3, 'WellCare': 4,
+  'Devoted Health': 2, 'Oscar Health': 2, 'Bright Health': 1,
+  'Friday Health Plans': 1, 'Rocky Mountain Health Plans': 3,
+  'Moda Health': 5, 'Providence Health Plan': 4, 'PacificSource': 3,
+  'AllCare Health': 1, 'Prominence Health Plan': 3,
+  'Sierra Health & Life': 4, 'Health Plan of Nevada': 5,
+  'Health Net': 4, 'Banner University Health Plan': 2,
+  'Ambetter': 3, 'Lovelace Health Plan': 3, 'True Health New Mexico': 2,
+  'Presbyterian Health Plan': 8, 'Allegiance Benefit Plan': 2,
+  'Mountain Health CO-OP': 1, 'Denver Health Medical Plan': 1,
+  'Select Health': 2, 'SilverSummit Healthplan': 2,
+};
+
 async function enrichPayerTags() {
-  // Tag existing payers from API
+  // Tag existing payers from API + add market share estimates
   PAYER_CATALOG.forEach(p => {
     if (!p.tags || p.tags.length === 0) {
       p.tags = PAYER_TAG_MAP[p.name] || [];
+    }
+    // Enrich with market share if not already set
+    if (!p.marketShare) {
+      const name = p.name || '';
+      p.marketShare = PAYER_MARKET_SHARE[name]
+        || PAYER_MARKET_SHARE[Object.keys(PAYER_MARKET_SHARE).find(k => name.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(name.toLowerCase()))]
+        || (p.category === 'national' ? 5 : p.category === 'medicare' ? 18 : p.category === 'medicaid' ? 10 : 2);
     }
   });
 
@@ -4199,7 +4237,7 @@ async function renderCoverageMatrix() {
               if (tags.includes('medicaid_prerequisite')) payerScore -= 2;
               payerScore = Math.max(0, Math.min(30, payerScore));
               const shareScore = Math.min(20, Math.round(marketShare * 1.5));
-              const estLives = statePop * (marketShare || 5) / 100;
+              const estLives = statePop * (marketShare || 2) / 100;
               const revenueScore = Math.min(20, Math.round(estLives / 200));
               const totalScore = stateScore + payerScore + shareScore + revenueScore;
               const isTelehealthFriendly = tags.includes('telehealth_friendly') || (readiness >= 7);
