@@ -1678,10 +1678,13 @@ class Store {
     }
 
     async updateOrgBranding(data) {
-        const result = await this._fetch(`${CONFIG.API_URL}/agency/branding`, {
+        // Backend expects camelCase (companyName, logoUrl, primaryColor) — skip _camelToSnake
+        const token = auth.getToken();
+        const result = await (await fetch(`${CONFIG.API_URL}/agency/branding`, {
             method: 'PUT',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
             body: JSON.stringify(data),
-        });
+        })).json();
         this._invalidateCache('org_branding');
         return result.data || result;
     }
