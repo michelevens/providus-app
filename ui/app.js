@@ -19614,7 +19614,7 @@ async function renderOrgDetailPage(orgId) {
   if (_p.status === 'fulfilled') providers = (_p.value || []).filter(p => (p.organizationId || p.orgId) == orgId);
   if (_l.status === 'fulfilled') licenses = _l.value;
   if (_a.status === 'fulfilled') apps = _a.value;
-  if (_f.status === 'fulfilled') facilities = _f.value;
+  if (_f.status === 'fulfilled') facilities = (_f.value || []).filter(f => String(f.organizationId || f.organization_id || '') === String(orgId));
 
   let billingActivities = [], billingClient = null, billingFinancials = [], rcmClaims = [], rcmDenials = [], rcmTasks = [];
   const allClients = _bc.status === 'fulfilled' ? (_bc.value || []) : [];
