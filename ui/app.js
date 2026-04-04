@@ -21506,7 +21506,16 @@ async function renderFacilityDetailPage(facilityId) {
   // Linked providers — find via applications
   const allApps = await store.getAll('applications').catch(() => []);
   const appArr = Array.isArray(allApps) ? allApps : [];
-  const facApps = appArr.filter(a => (a.facilityId && String(a.facilityId) === String(fac.id)) || (!a.facilityId && a.state && a.state === fac.state));
+  const facOrgId = fac.organizationId || fac.organization_id || '';
+  const facApps = appArr.filter(a => {
+    if (a.facilityId && String(a.facilityId) === String(fac.id)) return true;
+    if (!a.facilityId && a.state && a.state === fac.state) {
+      // Only match state-based fallback if the app's org matches the facility's org
+      if (facOrgId) return String(a.organizationId || a.orgId || '') === String(facOrgId);
+      return true;
+    }
+    return false;
+  });
 
   // Get provider details for linked apps
   const allProviders = await store.getAll('providers').catch(() => []);
