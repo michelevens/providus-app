@@ -4960,8 +4960,9 @@ async function renderLicenses() {
 
       <!-- License Table -->
       <div class="card" style="border-radius:16px;overflow:hidden;">
-        <div class="card-header">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
           <h3>All State Licenses</h3>
+          <button class="btn btn-sm btn-gold" onclick="window.app.openLicenseModal(null, {providerId:${provider.id}})">+ Add License</button>
         </div>
         <div class="card-body" style="padding:0;">
           <table>
@@ -9104,7 +9105,7 @@ window.app = {
     _licTab = tab;
     await renderLicenses();
   },
-  async openLicenseModal(id) { await openLicenseModal(id); },
+  async openLicenseModal(id, opts) { await openLicenseModal(id, opts); },
   async editLicense(id) { await openLicenseModal(id); },
   async deleteLicense(id) {
     if (!await appConfirm('Delete this license?', { title: 'Delete License', okLabel: 'Delete', okClass: 'btn-danger' })) return;
@@ -17660,30 +17661,41 @@ window.submitLocationAddition = async function(parentAppId) {
 
 // ─── License Modal ───
 
-async function openLicenseModal(id) {
+async function openLicenseModal(id, opts = {}) {
   const modal = document.getElementById('lic-modal');
   const title = document.getElementById('lic-modal-title');
   const form = document.getElementById('lic-modal-form');
 
   const existing = id ? await store.getOne('licenses', id) : null;
+  const preselectedProviderId = opts.providerId || window._selectedProviderId || null;
   title.textContent = existing ? 'Edit License' : 'Add License';
 
   const providers = store.filterByScope(await store.getAll('providers'));
+  const existingLicenses = existing ? [] : store.filterByScope(await store.getAll('licenses'));
+  const providerExistingStates = preselectedProviderId && !existing
+    ? new Set(existingLicenses.filter(l => String(l.providerId || l.provider_id) === String(preselectedProviderId)).map(l => l.state))
+    : new Set();
 
   form.innerHTML = `
     <input type="hidden" id="edit-lic-id" value="${id || ''}">
+    ${!existing ? `<div style="margin-bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.12);font-size:12px;color:var(--gray-600);">
+      <strong style="color:var(--brand-600);">Quick add:</strong> After saving, click <em>Save &amp; Add Another</em> to keep adding licenses for the same provider.
+    </div>` : ''}
     <div class="form-row">
       <div class="form-group">
         <label>Provider</label>
-        <select class="form-control" id="lic-provider">
-          ${providers.map(p => `<option value="${p.id}" ${existing?.providerId === p.id ? 'selected' : ''}>${p.firstName} ${p.lastName} (${p.credentials})</option>`).join('')}
+        <select class="form-control" id="lic-provider" onchange="window._licModalUpdateStates && window._licModalUpdateStates()">
+          ${providers.map(p => `<option value="${p.id}" ${(existing?.providerId === p.id || (!existing && String(p.id) === String(preselectedProviderId))) ? 'selected' : ''}>${p.firstName} ${p.lastName} (${p.credentials})</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
         <label>State</label>
         <select class="form-control" id="lic-state">
           <option value="">Select state...</option>
-          ${STATES.map(s => `<option value="${s.code}" ${existing?.state === s.code ? 'selected' : ''}>${s.name} (${s.code})</option>`).join('')}
+          ${STATES.map(s => {
+            const already = providerExistingStates.has(s.code);
+            return `<option value="${s.code}" ${existing?.state === s.code ? 'selected' : ''} ${already ? 'style="color:var(--gray-400);"' : ''}>${s.name} (${s.code})${already ? ' ✓' : ''}</option>`;
+          }).join('')}
         </select>
       </div>
     </div>
@@ -17725,6 +17737,20 @@ async function openLicenseModal(id) {
     <div class="form-group"><label>Notes</label><textarea class="form-control" id="lic-notes">${existing?.notes || ''}</textarea></div>
   `;
 
+  // Update state dropdown when provider changes (mark already-licensed states)
+  window._licModalUpdateStates = async function() {
+    const pid = document.getElementById('lic-provider')?.value;
+    if (!pid) return;
+    const allLic = store.filterByScope(await store.getAll('licenses'));
+    const existing = new Set(allLic.filter(l => String(l.providerId || l.provider_id) === String(pid)).map(l => l.state));
+    const sel = document.getElementById('lic-state');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Select state...</option>' + STATES.map(s => {
+      const already = existing.has(s.code);
+      return `<option value="${s.code}" ${s.code === cur ? 'selected' : ''} ${already ? 'style="color:var(--gray-400);"' : ''}>${s.name} (${s.code})${already ? ' ✓' : ''}</option>`;
+    }).join('');
+  };
+
   modal.classList.add('active');
 }
 
@@ -17732,7 +17758,7 @@ window.closeLicModal = function() {
   document.getElementById('lic-modal').classList.remove('active');
 };
 
-window.saveLicense = async function() {
+window.saveLicense = async function(addAnother) {
   const btn = document.querySelector('#lic-modal .btn-primary');
   const btnText = btn?.textContent;
   if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
@@ -17757,6 +17783,7 @@ window.saveLicense = async function() {
 
   if (!data.state) {
     showToast('State is required');
+    if (btn) { btn.disabled = false; btn.textContent = btnText; }
     return;
   }
 
@@ -17765,11 +17792,22 @@ window.saveLicense = async function() {
     showToast('License updated');
   } else {
     await store.create('licenses', data);
-    showToast('License added');
+    showToast('License added — ' + data.state);
   }
 
-  closeLicModal();
-  await navigateTo('licenses');
+  if (addAnother && !id) {
+    // Clear fields but keep provider selected for quick multi-add
+    document.getElementById('lic-state').value = '';
+    document.getElementById('lic-number').value = '';
+    document.getElementById('lic-issued').value = '';
+    document.getElementById('lic-expiration').value = '';
+    document.getElementById('lic-notes').value = '';
+    // Refresh state dropdown to mark newly added state
+    if (window._licModalUpdateStates) await window._licModalUpdateStates();
+  } else {
+    closeLicModal();
+    await navigateTo('licenses');
+  }
   } finally { if (btn) { btn.disabled = false; btn.textContent = btnText; } }
 };
 
