@@ -4962,7 +4962,7 @@ async function renderLicenses() {
       <div class="card" style="border-radius:16px;overflow:hidden;">
         <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
           <h3>All State Licenses</h3>
-          <button class="btn btn-sm btn-gold" onclick="window.app.openLicenseModal(null, {providerId:${provider.id}})">+ Add License</button>
+          <button class="btn btn-sm btn-gold" onclick="window.app.openLicenseModal(null, {providerId: window._selectedProviderId || ''})">+ Add License</button>
         </div>
         <div class="card-body" style="padding:0;">
           <table>
