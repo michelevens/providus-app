@@ -3969,7 +3969,7 @@ async function renderCoverageMatrix() {
     const payer = getPayerById(a.payerId);
     if (!payer) return;
     const statePop = getStatePop(a.state);
-    const share = (payer.marketShare || 5) / 100;
+    const share = (payer.marketShare || 2) / 100; // Default 2% if no market share data
     const lives = statePop * share;
     const key = `${a.payerId}_${a.state}`;
 
