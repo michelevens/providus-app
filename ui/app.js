@@ -18325,12 +18325,20 @@ async function renderApplicationDetailPage(appId) {
   try { provider = await store.getOne('providers', app.providerId || app.provider_id); } catch {}
   const provName = provider ? `${provider.firstName || provider.first_name || ''} ${provider.lastName || provider.last_name || ''}`.trim() : '—';
 
-  let logs = [], followups = [], tasks = [], facilities = [];
-  const [_lg, _fu, _tk, _fc] = await Promise.allSettled([store.getAll('activity-logs'), store.getAll('followups'), store.getAll('tasks'), store.getAll('facilities')]);
+  let logs = [], followups = [], tasks = [], facilities = [], agencyUsers = [];
+  const [_lg, _fu, _tk, _fc, _us] = await Promise.allSettled([store.getAll('activity-logs'), store.getAll('followups'), store.getAll('tasks'), store.getAll('facilities'), store.getAgencyUsers()]);
   if (_lg.status === 'fulfilled') logs = (_lg.value || []).filter(l => String(l.applicationId || l.application_id) === String(appId)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   if (_fu.status === 'fulfilled') followups = (_fu.value || []).filter(f => String(f.applicationId || f.application_id) === String(appId)).sort((a, b) => (b.dueDate || b.due_date || '').localeCompare(a.dueDate || a.due_date || ''));
   if (_tk.status === 'fulfilled') tasks = (_tk.value || []).filter(t => (t.linkedApplicationId || t.linkedAppId || t.linked_application_id) == appId);
   if (_fc.status === 'fulfilled') facilities = _fc.value;
+  if (_us.status === 'fulfilled') agencyUsers = _us.value || [];
+
+  // Resolve assigned staff name from ID
+  const assignedId = app.assignedTo || app.assigned_to;
+  if (assignedId && !app.assignedToName && !app.assigned_to_name) {
+    const staffUser = (Array.isArray(agencyUsers) ? agencyUsers : []).find(u => String(u.id) === String(assignedId));
+    if (staffUser) app.assignedToName = ((staffUser.firstName || staffUser.first_name || '') + ' ' + (staffUser.lastName || staffUser.last_name || '')).trim();
+  }
 
   const status = app.status || 'new';
   const statusColors = APPLICATION_STATUSES || {};
