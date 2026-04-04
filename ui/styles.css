@@ -752,25 +752,38 @@ body.funding-hub-active .page-header {
 
 @media (max-width: 768px) {
   .auth-split { flex-direction: column; }
-  .auth-brand { flex: 0 0 auto; padding: 32px 24px; min-height: auto; }
-  .auth-brand-inner h1 { font-size: 24px !important; }
+  .auth-brand { flex: 0 0 auto; padding: 28px 24px; min-height: auto; }
+  .auth-brand-inner h1 { font-size: 22px !important; }
   .auth-brand-inner > div:last-child { display: none; } /* Hide feature list on mobile */
   .auth-form-panel { padding: 24px; }
+  .auth-row { grid-template-columns: 1fr; gap: 8px; }
 }
 @media (max-width: 480px) {
   .auth-gate { padding: 0; }
-  .auth-brand { padding: 24px 20px; }
-  .auth-form-panel { padding: 20px; }
+  .auth-brand { padding: 20px 16px; }
+  .auth-brand-inner h1 { font-size: 20px !important; margin-bottom: 4px !important; }
+  .auth-brand-inner p { font-size: 13px !important; }
+  .auth-form-panel { padding: 16px; }
   .auth-box h2 { font-size: 20px; }
-  .auth-box p { font-size: 13px; margin-bottom: 20px; }
-  .auth-box input { padding: 12px 14px; font-size: 14px; }
-  .auth-box .btn-enter { padding: 12px; font-size: 14px; }
+  .auth-box p { font-size: 13px; margin-bottom: 16px; }
+  /* iOS prevents zoom on 16px+ font inputs */
+  .auth-box input, .auth-box select { padding: 14px 14px; font-size: 16px; min-height: 48px; border-radius: 12px; }
+  .auth-box .btn-enter { padding: 14px; font-size: 16px; min-height: 48px; border-radius: 12px; }
+  .auth-field { margin-bottom: 12px; }
+  .auth-field label { font-size: 12px; margin-bottom: 4px; }
   .demo-grid { grid-template-columns: 1fr; gap: 6px; }
-  .demo-btn { padding: 10px 12px; }
+  .demo-btn { padding: 12px; min-height: 48px; }
   .demo-icon { font-size: 18px; }
-  .demo-role { font-size: 12px; }
-  .auth-switch { font-size: 12px; }
-  .auth-field label { font-size: 12px; }
+  .demo-role { font-size: 13px; }
+  .auth-switch { font-size: 13px; margin-top: 16px; text-align: center; }
+  .auth-row { grid-template-columns: 1fr; gap: 8px; }
+}
+@media (max-width: 360px) {
+  .auth-brand { padding: 16px 12px; }
+  .auth-brand-inner h1 { font-size: 18px !important; }
+  .auth-form-panel { padding: 12px; }
+  .auth-box h2 { font-size: 18px; }
+  .auth-box .logo img { width: 48px !important; height: 48px !important; }
 }
 
 /* ═══════════════════════════════════════════
@@ -2120,10 +2133,11 @@ select.form-control {
     min-height: auto;
   }
   .header-icon-bar { gap: 3px; }
-  .header-icon-btn { width: 34px; height: 34px; font-size: 15px; }
+  .header-icon-btn { width: 40px; height: 40px; font-size: 16px; }
   .tools-dropdown-panel {
-    width: 300px;
-    right: -60px;
+    width: calc(100vw - 32px);
+    right: 16px;
+    left: 16px;
   }
   .tools-dropdown-grid { grid-template-columns: 1fr; }
   .page-body { padding: 16px; }
@@ -2135,24 +2149,27 @@ select.form-control {
   .stat-card .label { font-size: 10px; }
   .filters-bar { flex-direction: column; }
   .filters-bar .form-control { width: 100%; }
-  .modal { max-width: 100%; margin: 0 8px; border-radius: var(--radius-lg); }
+  .modal { max-width: 100%; margin: 0 8px; border-radius: var(--radius-lg); min-width: auto; }
   .modal-overlay { padding: 16px 8px; }
   .modal-body { padding: 18px; }
   .modal-header { padding: 16px 18px; }
-  .modal-footer { padding: 14px 18px; }
+  .modal-footer { padding: 14px 18px; flex-wrap: wrap; }
   table { font-size: 12px; }
   thead th, tbody td { padding: 8px 10px; }
   .toast { left: 16px; right: 16px; text-align: center; }
   .card-header { flex-direction: column; gap: 8px; align-items: flex-start; }
   .card-body { padding: 16px; }
   .action-btns { flex-wrap: wrap; gap: 4px !important; }
-  .action-btns .btn { padding: 4px 8px; font-size: 11px; }
-  .btn { min-height: 36px; }
-  .nav-item { padding: 12px 20px; font-size: 15px; }
+  .action-btns .btn { padding: 6px 10px; font-size: 11px; min-height: 36px; }
+  .btn { min-height: 40px; }
+  .nav-item { padding: 12px 20px; font-size: 15px; min-height: 44px; }
   .activity-header { flex-direction: column; align-items: flex-start; gap: 2px; }
   .truncate { max-width: 100px; }
   .cal-grid { grid-template-columns: repeat(4, 1fr); }
   .notification-panel { width: calc(100vw - 32px); right: 16px; left: 16px; }
+  /* Ensure form inputs meet touch target size */
+  .form-control { min-height: 44px; font-size: 16px; }
+  select.form-control { min-height: 44px; }
 }
 
 /* ═══════════════════════════════════════════
@@ -2161,12 +2178,33 @@ select.form-control {
 
 @media (max-width: 480px) {
   .stats-grid { grid-template-columns: 1fr; }
-  .page-body { padding: 12px; }
-  .btn { padding: 8px 12px; font-size: 12px; }
+  .page-body { padding: 10px; }
+  .btn { padding: 10px 14px; font-size: 13px; min-height: 44px; }
   .stat-card .value { font-size: 20px; }
   .page-header-actions { width: 100%; }
   .page-header-actions .btn { width: 100%; justify-content: center; }
   .cal-grid { grid-template-columns: repeat(3, 1fr); }
+  .modal { margin: 0 4px; }
+  .modal-overlay { padding: 8px 4px; }
+  .modal-footer .btn { flex: 1; min-width: 0; font-size: 12px; padding: 10px 8px; }
+  .card { border-radius: 12px; }
+  .card-header h3 { font-size: 14px; }
+  .page-header h2 { font-size: 15px; }
+  .page-header .subtitle { font-size: 11px; }
+  /* Table scroll container */
+  .card-body { overflow-x: auto; }
+}
+
+/* ═══════════════════════════════════════════
+   TOUCH DEVICE OPTIMIZATIONS
+   ═══════════════════════════════════════════ */
+@media (hover: none) and (pointer: coarse) {
+  .btn, .nav-item, .header-icon-btn { min-height: 44px; }
+  .header-icon-btn { min-width: 44px; }
+  /* Larger tap targets for table action buttons */
+  .action-btns .btn { min-height: 36px; min-width: 44px; }
+  /* Prevent iOS zoom on input focus */
+  input, select, textarea { font-size: 16px !important; }
 }
 
 /* ─── Chart Grid Responsive ─── */
