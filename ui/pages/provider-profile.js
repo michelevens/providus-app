@@ -1034,7 +1034,7 @@ async function renderProviderProfilePage(providerId) {
   const cpMalpracticeStatus = malpractice.length === 0 ? 'None' : (cpActiveMalpractice.length > 0 ? 'Active' : 'Expired');
   const cpMalpracticeColor = cpMalpracticeStatus === 'Active' ? 'var(--green-600, #16a34a)' : (cpMalpracticeStatus === 'Expired' ? 'var(--red-600, #dc2626)' : 'var(--gray-500, #6b7280)');
   const cpProviderInitials = ((provider.firstName || provider.first_name || '').charAt(0) + (provider.lastName || provider.last_name || '').charAt(0)).toUpperCase() || '?';
-  const cpProviderStatus = provider.status || 'unknown';
+  const cpProviderStatus = provider.status || 'active';
   const cpStatusBadgeClass = cpProviderStatus === 'active' ? 'approved' : 'inactive';
 
   // Missing items
@@ -1177,7 +1177,7 @@ async function renderProviderProfilePage(providerId) {
             <div><span class="text-sm text-muted">Phone</span><div style="margin-top:2px;">${escHtml(provider.phone || '—')}</div></div>
             <div><span class="text-sm text-muted">Email</span><div style="margin-top:2px;">${escHtml(provider.email || '—')}</div></div>
             <div><span class="text-sm text-muted">State</span><div style="margin-top:2px;">${escHtml(provider.state || '—')}</div></div>
-            <div><span class="text-sm text-muted">Status</span><div style="margin-top:2px;"><span class="badge badge-${provider.status === 'active' ? 'approved' : 'inactive'}">${escHtml(provider.status || 'unknown')}</span></div></div>
+            <div><span class="text-sm text-muted">Status</span><div style="margin-top:2px;"><span class="badge badge-${provider.status === 'active' ? 'approved' : 'inactive'}">${escHtml(provider.status || 'active')}</span></div></div>
             ${profile.ssn ? `<div><span class="text-sm text-muted">SSN (last 4)</span><div style="margin-top:2px;">***-**-${escHtml(String(profile.ssn).slice(-4))}</div></div>` : ''}
             ${profile.dob || profile.dateOfBirth ? `<div><span class="text-sm text-muted">Date of Birth</span><div style="margin-top:2px;">${formatDateDisplay(profile.dob || profile.dateOfBirth)}</div></div>` : ''}
           </div>
