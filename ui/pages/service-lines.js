@@ -782,6 +782,40 @@ const SERVICE_LINES = [
     ],
     credentialingNotes: 'Must be credentialed with each payer BEFORE receiving referrals — this is where standard credentialing (which you already do on Credentik) is the prerequisite. The referral network is the monetization layer ON TOP of credentialing. No additional credentialing needed — you are already in-network. The step is operational: contact the payer BH network manager, request to be added to their care navigator routing, submit your availability schedule. For VA CCN: register at vacaa.med.va.gov/provider or contact Optum/TriWest directly. For EAPs: apply through each EAP vendor provider portal.',
     marketDemand: 'Massive structural demand. 160M+ Americans have behavioral health needs. Provider shortage: only 28,000 psychiatrists vs 45,000+ needed. 60% of US counties have zero psychiatrists. Every major payer is actively recruiting telehealth BH providers to fill network gaps. Federal network adequacy rules (Mental Health Parity Act, CMS network adequacy standards) require payers to maintain access — they face penalties for non-compliance. The providers who make themselves AVAILABLE to payer navigators get the patients. This is not competitive — it is filling a void. Companies like Alma, Headway, Grow Therapy, and Rula built billion-dollar valuations by inserting themselves between providers and payers in this exact model.',
+    outreachContacts: [
+      { tier: 'BH Carve-Outs', payer: 'Lucet (Florida Blue)', contact: 'ACTIVE — already partnered', status: 'active' },
+      { tier: 'BH Carve-Outs', payer: 'Carelon Behavioral Health', contact: '800-397-1630 | providerrelations@carelon.com', status: 'planned' },
+      { tier: 'BH Carve-Outs', payer: 'Magellan Health', contact: '800-788-4005 | providerrelations@magellanhealth.com', status: 'planned' },
+      { tier: 'BH Carve-Outs', payer: 'Optum Behavioral Health', contact: '877-614-0484 | providerexpress.com', status: 'planned' },
+      { tier: 'BCBS Plans', payer: 'BCBS NM', contact: '800-232-2345 | jessica_urioste@bcbsnm.com', status: 'outreach' },
+      { tier: 'BCBS Plans', payer: 'BCBS TX', contact: '800-451-0287', status: 'planned' },
+      { tier: 'BCBS Plans', payer: 'Anthem (CA,CO,CT,NV,NY,VA)', contact: '800-677-6669', status: 'planned' },
+      { tier: 'BCBS Plans', payer: 'CareFirst BCBS (DC,MD,VA)', contact: '800-842-5975', status: 'planned' },
+      { tier: 'BCBS Plans', payer: 'Regence BCBS (OR,WA,UT,ID)', contact: '800-452-7278', status: 'planned' },
+      { tier: 'BCBS Plans', payer: 'BCBS MA', contact: '800-882-2060', status: 'planned' },
+      { tier: 'BCBS Plans', payer: 'BCBS MN', contact: '800-262-0820', status: 'planned' },
+      { tier: 'BCBS Plans', payer: 'Highmark BCBS (WV)', contact: '800-876-7639', status: 'planned' },
+      { tier: 'BCBS Plans', payer: 'BCBS OK', contact: '800-942-5837', status: 'planned' },
+      { tier: 'BCBS Plans', payer: 'BCBS KS', contact: '800-432-3990', status: 'planned' },
+      { tier: 'BCBS Plans', payer: 'BCBS VT', contact: '800-247-2583', status: 'planned' },
+      { tier: 'BCBS Plans', payer: 'BCBS WY', contact: '800-851-2227', status: 'planned' },
+      { tier: 'BCBS Plans', payer: 'BCBS ND', contact: '800-342-4718', status: 'planned' },
+      { tier: 'BCBS Plans', payer: 'BCBS MT', contact: '800-447-7828', status: 'planned' },
+      { tier: 'National Payers', payer: 'UnitedHealthcare', contact: '877-842-3210 | uhcprovider.com', status: 'planned' },
+      { tier: 'National Payers', payer: 'Cigna / Evernorth', contact: '800-882-4462 | cignaforhcp.cigna.com', status: 'planned' },
+      { tier: 'National Payers', payer: 'Aetna', contact: '800-624-0756 | providerrelations@aetna.com', status: 'planned' },
+      { tier: 'National Payers', payer: 'Humana', contact: '800-448-6262 | humana.com/provider', status: 'planned' },
+      { tier: 'Medicaid MCOs', payer: 'Molina Healthcare', contact: '888-562-5442 | molinahealthcare.com/providers', status: 'planned' },
+      { tier: 'Medicaid MCOs', payer: 'Sunshine Health (FL)', contact: '866-796-0530 | sunshinehealth.com/providers', status: 'planned' },
+      { tier: 'Medicaid MCOs', payer: 'Centene / Ambetter', contact: 'Through state-level plans', status: 'planned' },
+      { tier: 'EAP / Telehealth', payer: 'Lyra Health', contact: 'providers@lyrahealth.com', status: 'planned' },
+      { tier: 'EAP / Telehealth', payer: 'Spring Health', contact: 'providers@springhealth.com', status: 'planned' },
+      { tier: 'EAP / Telehealth', payer: 'Headway', contact: 'join@headway.co', status: 'planned' },
+      { tier: 'EAP / Telehealth', payer: 'Grow Therapy', contact: 'providers@growtherapy.com', status: 'planned' },
+      { tier: 'EAP / Telehealth', payer: 'Alma', contact: 'hello@helloalma.com', status: 'planned' },
+      { tier: 'VA Community Care', payer: 'VA CCN (Optum East)', contact: 'Already registered via Optum', status: 'outreach' },
+      { tier: 'VA Community Care', payer: 'VA CCN (TriWest West)', contact: '888-874-9378 | providerservices@triwest.com', status: 'planned' },
+    ],
   },
 ];
 
@@ -1740,6 +1774,41 @@ async function renderServiceLines() {
           <div style="font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;margin-bottom:4px;">Credentialing & Licensing Notes</div>
           <div style="font-size:13px;color:#166534;line-height:1.5;">${escHtml(s.credentialingNotes)}</div>
         </div>
+
+        ${s.outreachContacts ? `
+        <div style="margin-bottom:20px;">
+          <div style="font-size:15px;font-weight:700;color:var(--gray-800);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:18px;">📡</span> Outreach Contacts & Status
+          </div>
+          ${(() => {
+            const tiers = [...new Set(s.outreachContacts.map(c => c.tier))];
+            return tiers.map(tier => {
+              const contacts = s.outreachContacts.filter(c => c.tier === tier);
+              return `
+              <div style="margin-bottom:16px;">
+                <div style="font-size:12px;font-weight:700;color:#0891b2;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">${escHtml(tier)}</div>
+                <div style="background:var(--surface-card,#fff);border:1px solid var(--border-color);border-radius:10px;overflow:hidden;">
+                  <table style="width:100%;font-size:13px;margin:0;">
+                    <tbody>
+                      ${contacts.map(c => {
+                        const statusColors = { active: '#16a34a', outreach: '#2563eb', planned: '#9ca3af' };
+                        const statusBg = { active: 'rgba(22,163,74,0.1)', outreach: 'rgba(37,99,235,0.1)', planned: 'rgba(156,163,175,0.1)' };
+                        const sc = statusColors[c.status] || '#9ca3af';
+                        const sb = statusBg[c.status] || 'rgba(156,163,175,0.1)';
+                        return `<tr style="border-bottom:1px solid var(--border-color);">
+                          <td style="padding:8px 12px;font-weight:600;white-space:nowrap;">${escHtml(c.payer)}</td>
+                          <td style="padding:8px 12px;color:var(--gray-500);font-size:12px;">${escHtml(c.contact)}</td>
+                          <td style="padding:8px 12px;text-align:right;"><span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:${sb};color:${sc};text-transform:uppercase;">${escHtml(c.status)}</span></td>
+                        </tr>`;
+                      }).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>`;
+            }).join('');
+          })()}
+        </div>
+        ` : ''}
 
         ${intel ? _section('Business Case & ROI', '💰', '#b45309', '#fffbeb', intel.businessCase) +
                   _section('Coding & Billing Guide', '📋', '#1d4ed8', '#eff6ff', intel.codingGuide) +
