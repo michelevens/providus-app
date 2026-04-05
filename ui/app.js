@@ -21373,10 +21373,9 @@ async function renderFacilitiesPage() {
   facilities.forEach(f => {
     const byId = appArr.filter(a => a.facilityId && String(a.facilityId) === String(f.id)).length;
     const fOrgId = f.organizationId || f.organization_id || '';
-    const byState = byId === 0 && f.state ? appArr.filter(a => {
+    const byState = byId === 0 && f.state && fOrgId ? appArr.filter(a => {
       if (a.state !== f.state) return false;
-      if (fOrgId) return String(a.organizationId || a.orgId || '') === String(fOrgId);
-      return true;
+      return String(a.organizationId || a.orgId || '') === String(fOrgId);
     }).length : 0;
     facAppCount[f.id] = byId || byState;
   });
