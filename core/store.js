@@ -118,8 +118,8 @@ class Store {
             headers['X-Agency-Id'] = String(this.activeAgencyId);
         }
 
-        // Send scope context so backend can enforce data isolation
-        if (this._scope && this._scope.type !== 'all') {
+        // Send scope context so backend can enforce data isolation (skip for detail views)
+        if (this._scope && this._scope.type !== 'all' && !options.skipScope) {
             headers['X-Scope-Type'] = this._scope.type;
             if (this._scope.orgId) headers['X-Scope-Org-Id'] = String(this._scope.orgId);
             if (this._scope.providerId) headers['X-Scope-Provider-Id'] = String(this._scope.providerId);
@@ -355,7 +355,7 @@ class Store {
         const cached = this._getCache(cacheKey);
         if (cached) return cached;
 
-        const result = await this._dedupFetch(`${this._url(collection)}/${id}`);
+        const result = await this._dedupFetch(`${this._url(collection)}/${id}`, { skipScope: true });
         const data = result.data || result;
         this._setCache(cacheKey, data);
         return data;
