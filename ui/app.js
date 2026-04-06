@@ -756,7 +756,7 @@ function _applyBrandingCSS(branding) {
   }
   // Update page title
   if (branding.companyName) {
-    document.title = branding.companyName + ' — Credentialing Platform';
+    document.title = branding.companyName + ' — Enroll. Credential. Get Paid.';
   }
 }
 
@@ -6091,7 +6091,7 @@ async function renderSettings() {
               <div id="branding-preview-logo" style="width:48px;height:48px;border-radius:12px;background:var(--brand-500,#2563EB);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:20px;flex-shrink:0;overflow:hidden;">C</div>
               <div>
                 <div id="branding-preview-name" style="font-size:16px;font-weight:700;color:var(--gray-900);">Credentik</div>
-                <div style="font-size:12px;color:var(--gray-400);">Credentialing Platform</div>
+                <div style="font-size:12px;color:var(--gray-400);">Enroll. Credential. Get Paid.</div>
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -10127,7 +10127,7 @@ function handleNppesProxy(payload) {
     document.getElementById('branding-preview-name').textContent = 'Credentik';
     const sidebarName = document.getElementById('sidebar-agency-name');
     if (sidebarName) sidebarName.textContent = 'Credentik';
-    document.title = 'Credentik \u2014 Credentialing Platform';
+    document.title = 'Credentik \u2014 Enroll. Credential. Get Paid.';
     localStorage.removeItem('credentik_org_branding');
     showToast('Branding reset to defaults');
   },
