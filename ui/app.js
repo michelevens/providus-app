@@ -18022,7 +18022,7 @@ async function viewActivityLog(applicationId) {
 
   const app = await store.getOne('applications', applicationId);
   const payer = app ? (getPayerById(app.payerId) || { name: app.payerName }) : {};
-  const _allLogs = await store.getAll('activity-logs').catch(() => []);
+  const _allLogs = await store.getAll('activity_logs').catch(() => []);
   const logs = (Array.isArray(_allLogs) ? _allLogs : []).filter(l => String(l.applicationId || l.application_id) === String(applicationId))
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
 
@@ -18283,7 +18283,7 @@ async function renderApplicationTimeline(appId) {
   if (!app) return;
 
   const payer = getPayerById(app.payerId) || { name: app.payerName };
-  const allLogs = await store.getAll('activity-logs').catch(() => []);
+  const allLogs = await store.getAll('activity_logs').catch(() => []);
   const logs = (Array.isArray(allLogs) ? allLogs : []).filter(l => String(l.applicationId || l.application_id) === String(appId))
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const allFollowups = await store.getAll('followups').catch(() => []);
@@ -18364,7 +18364,7 @@ async function renderApplicationDetailPage(appId) {
   const provName = provider ? `${provider.firstName || provider.first_name || ''} ${provider.lastName || provider.last_name || ''}`.trim() : '—';
 
   let logs = [], followups = [], tasks = [], facilities = [], agencyUsers = [];
-  const [_lg, _fu, _tk, _fc, _us] = await Promise.allSettled([store.getAll('activity-logs'), store.getAll('followups'), store.getAll('tasks'), store.getAll('facilities'), store.getAgencyUsers()]);
+  const [_lg, _fu, _tk, _fc, _us] = await Promise.allSettled([store.getAll('activity_logs'), store.getAll('followups'), store.getAll('tasks'), store.getAll('facilities'), store.getAgencyUsers()]);
   if (_lg.status === 'fulfilled') logs = (_lg.value || []).filter(l => String(l.applicationId || l.application_id) === String(appId)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   if (_fu.status === 'fulfilled') followups = (_fu.value || []).filter(f => String(f.applicationId || f.application_id) === String(appId)).sort((a, b) => (b.dueDate || b.due_date || '').localeCompare(a.dueDate || a.due_date || ''));
   if (_tk.status === 'fulfilled') tasks = (_tk.value || []).filter(t => (t.linkedApplicationId || t.linkedAppId || t.linked_application_id) == appId);
