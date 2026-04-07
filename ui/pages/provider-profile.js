@@ -1370,9 +1370,12 @@ async function renderProviderProfilePage(providerId) {
     <!-- Licenses Tab -->
     <div class="profile-tab-content" id="tab-licenses" style="display:none;">
       <div class="card">
-        <div class="card-header">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
           <h3>Licenses (${providerLicenses.length})</h3>
-          ${editButton('+ Add License', `window.app.openLicenseModal(${providerId})`)}
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm" onclick="window.app.exportProviderLicenses(${providerId}, '${escAttr(provName)}')" style="background:rgba(16,185,129,0.1);color:#059669;border:1px solid rgba(16,185,129,0.2);"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M8 1v10M4 7l4 4 4-4M2 14h12"/></svg>Excel</button>
+            ${editButton('+ Add License', `window.app.openLicenseModal(null, {providerId: ${providerId}})`)}
+          </div>
         </div>
         <div class="card-body" style="padding:0;">
           ${providerLicenses.length > 0 ? `<table>

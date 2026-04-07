@@ -9108,6 +9108,33 @@ window.app = {
   },
   async openLicenseModal(id, opts) { await openLicenseModal(id, opts); },
   async exportCollection(type) { await exportCollection(type); },
+  async exportProviderLicenses(providerId, providerName) {
+    try {
+      const all = await store.getAll('licenses');
+      const licenses = (all || []).filter(l => String(l.providerId || l.provider_id) === String(providerId));
+      const formatDate = d => d ? String(d).substring(0, 10) : '';
+      const rows = licenses.map(l => {
+        const exp = l.expirationDate || l.expiration_date;
+        const daysLeft = exp ? Math.ceil((new Date(exp) - new Date()) / 86400000) : '';
+        return {
+          'State': l.state || '',
+          'License Number': l.licenseNumber || l.license_number || '',
+          'Type': l.licenseType || l.license_type || '',
+          'Status': l.status || '',
+          'Issue Date': formatDate(l.issueDate || l.issue_date),
+          'Expiration Date': formatDate(exp),
+          'Days Left': daysLeft,
+          'Compact State': (l.compactState || l.compact_state) ? 'Yes' : 'No',
+          'Notes': l.notes || '',
+        };
+      });
+      const safeName = (providerName || 'provider').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+      exportToExcel(rows, `${safeName}-licenses`, 'Licenses');
+    } catch (e) {
+      console.error('Export failed:', e);
+      showToast('Export failed: ' + e.message, 'error');
+    }
+  },
   async editLicense(id) { await openLicenseModal(id); },
   async deleteLicense(id) {
     if (!await appConfirm('Delete this license?', { title: 'Delete License', okLabel: 'Delete', okClass: 'btn-danger' })) return;
