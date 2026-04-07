@@ -17838,8 +17838,8 @@ async function openLicenseModal(id, opts = {}) {
       </div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Issue Date</label><input type="date" class="form-control" id="lic-issued" value="${existing?.issueDate || ''}"></div>
-      <div class="form-group"><label>Expiration Date</label><input type="date" class="form-control" id="lic-expiration" value="${existing?.expirationDate || ''}"></div>
+      <div class="form-group"><label>Issue Date</label><input type="date" class="form-control" id="lic-issued" value="${(existing?.issueDate || '').substring(0, 10)}"></div>
+      <div class="form-group"><label>Expiration Date</label><input type="date" class="form-control" id="lic-expiration" value="${(existing?.expirationDate || '').substring(0, 10)}"></div>
     </div>
     <div class="form-group"><label>Notes</label><textarea class="form-control" id="lic-notes">${existing?.notes || ''}</textarea></div>
   `;
@@ -19647,10 +19647,37 @@ function toHexId(id) {
  *
  * Example: exportToExcel(providers.map(p => ({Name: p.firstName + ' ' + p.lastName, NPI: p.npi})), 'providers', 'Providers')
  */
-function exportToExcel(rows, filename = 'export', sheetName = 'Sheet1') {
+async function _loadXlsxLib() {
+  if (window.XLSX) return true;
+  // Try loading from multiple CDNs in case one is blocked
+  const cdns = [
+    'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
+  ];
+  for (const url of cdns) {
+    try {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = url;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+      if (window.XLSX) return true;
+    } catch (e) { /* try next CDN */ }
+  }
+  return !!window.XLSX;
+}
+
+async function exportToExcel(rows, filename = 'export', sheetName = 'Sheet1') {
   if (!window.XLSX) {
-    showToast('Excel export library not loaded', 'error');
-    return;
+    showToast('Loading Excel library...', 'info');
+    const loaded = await _loadXlsxLib();
+    if (!loaded) {
+      showToast('Excel export library failed to load — check your network', 'error');
+      return;
+    }
   }
   if (!Array.isArray(rows) || rows.length === 0) {
     showToast('No data to export', 'warning');
