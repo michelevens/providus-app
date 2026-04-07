@@ -9108,6 +9108,84 @@ window.app = {
   },
   async openLicenseModal(id, opts) { await openLicenseModal(id, opts); },
   async exportCollection(type) { await exportCollection(type); },
+  orgDetailTabByName(tabName) {
+    const btn = document.querySelector(`button.tab[onclick*="${tabName}"]`);
+    if (btn) btn.click();
+  },
+  async exportOrgDetail(orgId) {
+    try {
+      const [providers, licenses, apps, facilities] = await Promise.all([
+        store.getAll('providers'), store.getAll('licenses'),
+        store.getAll('applications'), store.getFacilities().catch(() => []),
+      ]);
+      const orgProviders = (providers || []).filter(p => String(p.organizationId || p.organization_id) === String(orgId));
+      const orgProviderIds = new Set(orgProviders.map(p => String(p.id)));
+      const orgLicenses = (licenses || []).filter(l => orgProviderIds.has(String(l.providerId || l.provider_id)));
+      const orgApps = (apps || []).filter(a => String(a.organizationId || a.org_id) === String(orgId) || orgProviderIds.has(String(a.providerId || a.provider_id)));
+      const orgFacilities = (facilities || []).filter(f => String(f.organizationId || f.organization_id) === String(orgId));
+      const formatDate = d => d ? String(d).substring(0, 10) : '';
+      const provMap = {};
+      orgProviders.forEach(p => { provMap[p.id] = `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim(); });
+
+      if (!window.XLSX) { showToast('Excel library not loaded', 'error'); return; }
+      const wb = window.XLSX.utils.book_new();
+
+      const provRows = orgProviders.map(p => ({ ID: p.id, 'First Name': p.firstName || p.first_name || '', 'Last Name': p.lastName || p.last_name || '', Credentials: p.credentials || p.credential || '', NPI: p.npi || '', Specialty: p.specialty || '', Email: p.email || '', Phone: p.phone || '' }));
+      if (provRows.length) window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.json_to_sheet(provRows), 'Providers');
+
+      const licRows = orgLicenses.map(l => ({ Provider: provMap[l.providerId || l.provider_id] || '', State: l.state || '', 'License #': l.licenseNumber || l.license_number || '', Type: l.licenseType || l.license_type || '', Status: l.status || '', Issued: formatDate(l.issueDate || l.issue_date), Expires: formatDate(l.expirationDate || l.expiration_date) }));
+      if (licRows.length) window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.json_to_sheet(licRows), 'Licenses');
+
+      const appRows = orgApps.map(a => ({ Provider: provMap[a.providerId || a.provider_id] || '', State: a.state || '', Payer: a.payerName || a.payer_name || '', Status: a.status || '', Submitted: formatDate(a.submittedDate || a.submitted_date), 'Effective Date': formatDate(a.effectiveDate || a.effective_date) }));
+      if (appRows.length) window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.json_to_sheet(appRows), 'Applications');
+
+      const facRows = orgFacilities.map(f => ({ Name: f.name || '', NPI: f.npi || '', Type: f.facilityType || f.facility_type || '', Street: f.street || '', City: f.city || '', State: f.state || '', ZIP: f.zip || '', Phone: f.phone || '' }));
+      if (facRows.length) window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.json_to_sheet(facRows), 'Locations');
+
+      const date = new Date().toISOString().split('T')[0];
+      window.XLSX.writeFile(wb, `org-${orgId}-detail-${date}.xlsx`);
+      showToast(`Exported ${provRows.length} providers, ${licRows.length} licenses, ${appRows.length} apps, ${facRows.length} locations`);
+    } catch (e) {
+      console.error('Org export failed:', e);
+      showToast('Export failed: ' + e.message, 'error');
+    }
+  },
+  async exportOrgEntity(orgId, type) {
+    try {
+      const [providers, licenses, apps, claims, tasks, denials] = await Promise.all([
+        store.getAll('providers'),
+        store.getAll('licenses'),
+        store.getAll('applications'),
+        type === 'claims' ? store.getRcmClaims({ per_page: 1000 }).catch(() => []) : Promise.resolve([]),
+        type === 'tasks' ? store.getAll('tasks') : Promise.resolve([]),
+        type === 'denials' ? store.getRcmDenials({ per_page: 1000 }).catch(() => []) : Promise.resolve([]),
+      ]);
+      const orgProviders = (providers || []).filter(p => String(p.organizationId || p.organization_id) === String(orgId));
+      const orgProviderIds = new Set(orgProviders.map(p => String(p.id)));
+      const provMap = {};
+      orgProviders.forEach(p => { provMap[p.id] = `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim(); });
+      const formatDate = d => d ? String(d).substring(0, 10) : '';
+      let rows = [];
+
+      if (type === 'providers') {
+        rows = orgProviders.map(p => ({ ID: p.id, 'First Name': p.firstName || p.first_name || '', 'Last Name': p.lastName || p.last_name || '', Credentials: p.credentials || p.credential || '', NPI: p.npi || '', Specialty: p.specialty || '', Email: p.email || '', Phone: p.phone || '' }));
+      } else if (type === 'licenses') {
+        rows = (licenses || []).filter(l => orgProviderIds.has(String(l.providerId || l.provider_id))).map(l => ({ Provider: provMap[l.providerId || l.provider_id] || '', State: l.state || '', 'License #': l.licenseNumber || l.license_number || '', Type: l.licenseType || l.license_type || '', Status: l.status || '', Issued: formatDate(l.issueDate || l.issue_date), Expires: formatDate(l.expirationDate || l.expiration_date) }));
+      } else if (type === 'applications') {
+        rows = (apps || []).filter(a => String(a.organizationId || a.org_id) === String(orgId) || orgProviderIds.has(String(a.providerId || a.provider_id))).map(a => ({ Provider: provMap[a.providerId || a.provider_id] || '', State: a.state || '', Payer: a.payerName || a.payer_name || '', Status: a.status || '', Submitted: formatDate(a.submittedDate || a.submitted_date) }));
+      } else if (type === 'claims') {
+        rows = (Array.isArray(claims) ? claims : []).map(c => ({ 'Claim #': c.claimNumber || c.claim_number || '', Patient: c.patientName || c.patient_name || '', Provider: c.providerName || c.provider_name || '', Payer: c.payerName || c.payer_name || '', DOS: formatDate(c.dateOfService || c.date_of_service), Status: c.status || '', Charged: c.totalCharges || c.total_charges || 0, Paid: c.totalPaid || c.total_paid || 0, Balance: c.balance || 0 }));
+      } else if (type === 'tasks') {
+        rows = (tasks || []).map(t => ({ Title: t.title || '', Status: t.status || '', Priority: t.priority || '', 'Due Date': formatDate(t.dueDate || t.due_date), 'Assigned To': t.assignedTo || t.assigned_to || '' }));
+      } else if (type === 'denials') {
+        rows = (Array.isArray(denials) ? denials : []).map(d => ({ 'Claim #': d.claimNumber || d.claim_number || '', Reason: d.denialReason || d.denial_reason || '', Code: d.denialCode || d.denial_code || '', Amount: d.deniedAmount || d.denied_amount || 0, Status: d.status || '' }));
+      }
+      exportToExcel(rows, `org-${orgId}-${type}`, type.charAt(0).toUpperCase() + type.slice(1));
+    } catch (e) {
+      console.error('Export failed:', e);
+      showToast('Export failed: ' + e.message, 'error');
+    }
+  },
   async exportProviderLicenses(providerId, providerName) {
     try {
       const all = await store.getAll('licenses');
@@ -19944,6 +20022,7 @@ async function renderOrgDetailPage(orgId) {
     <button class="btn btn-sm" onclick="window.app.navigateTo('organizations')">&larr; Back</button>
     <button class="btn btn-sm" onclick="window.app.editOrg(${o.id})">Edit Organization</button>
     <button class="btn btn-sm btn-gold" onclick="window.app.openProviderModal()">+ Add Provider</button>
+    <button class="btn btn-sm" onclick="window.app.exportOrgDetail(${o.id})" style="background:rgba(16,185,129,0.1);color:#059669;border:1px solid rgba(16,185,129,0.2);"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M8 1v10M4 7l4 4 4-4M2 14h12"/></svg>Excel</button>
   `;
 
   // Load contacts
@@ -19985,16 +20064,16 @@ async function renderOrgDetailPage(orgId) {
       </div>
     </div>
 
-    <!-- Stats — Credentialing + Billing combined -->
+    <!-- Stats — Credentialing + Billing combined (clickable to jump to tab + export icon) -->
     <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin-bottom:16px;">
-      <div class="stat-card odv2-stat"><div class="label">Providers</div><div class="value">${providers.length}</div></div>
-      <div class="stat-card odv2-stat"><div class="label">Licenses</div><div class="value" style="color:var(--brand-600);">${orgLicenses.length}</div></div>
-      <div class="stat-card odv2-stat"><div class="label">Applications</div><div class="value">${orgApps.length}</div></div>
-      <div class="stat-card odv2-stat"><div class="label">Claims</div><div class="value" style="color:#3b82f6;">${billingTotals.claims}</div></div>
+      <div class="stat-card odv2-stat" style="cursor:pointer;position:relative;" onclick="window.app.orgDetailTabByName('od-providers')"><div class="label">Providers <span onclick="event.stopPropagation();window.app.exportOrgEntity(${o.id},'providers')" title="Export to Excel" style="float:right;cursor:pointer;color:#10b981;font-size:11px;">&#x2913;</span></div><div class="value">${providers.length}</div></div>
+      <div class="stat-card odv2-stat" style="cursor:pointer;position:relative;" onclick="window.app.orgDetailTabByName('od-licenses')"><div class="label">Licenses <span onclick="event.stopPropagation();window.app.exportOrgEntity(${o.id},'licenses')" title="Export to Excel" style="float:right;cursor:pointer;color:#10b981;font-size:11px;">&#x2913;</span></div><div class="value" style="color:var(--brand-600);">${orgLicenses.length}</div></div>
+      <div class="stat-card odv2-stat" style="cursor:pointer;position:relative;" onclick="window.app.orgDetailTabByName('od-applications')"><div class="label">Applications <span onclick="event.stopPropagation();window.app.exportOrgEntity(${o.id},'applications')" title="Export to Excel" style="float:right;cursor:pointer;color:#10b981;font-size:11px;">&#x2913;</span></div><div class="value">${orgApps.length}</div></div>
+      <div class="stat-card odv2-stat" style="cursor:pointer;position:relative;" onclick="window.app.orgDetailTabByName('od-claims')"><div class="label">Claims <span onclick="event.stopPropagation();window.app.exportOrgEntity(${o.id},'claims')" title="Export to Excel" style="float:right;cursor:pointer;color:#10b981;font-size:11px;">&#x2913;</span></div><div class="value" style="color:#3b82f6;">${billingTotals.claims}</div></div>
       <div class="stat-card odv2-stat"><div class="label">Collected</div><div class="value" style="color:#16a34a;">$${Math.round(billingTotals.collected).toLocaleString()}</div><div style="font-size:10px;color:var(--gray-400);">${bCollectionRate}%</div></div>
       <div class="stat-card odv2-stat"><div class="label">Balance</div><div class="value" style="color:#ea580c;">$${Math.round(billingTotals.balance).toLocaleString()}</div></div>
-      <div class="stat-card odv2-stat"><div class="label">Tasks</div><div class="value" style="color:#d97706;">${openBTasks.length}</div></div>
-      <div class="stat-card odv2-stat"><div class="label">Denials</div><div class="value" style="color:#ef4444;">${rcmDenials.length}</div></div>
+      <div class="stat-card odv2-stat" style="cursor:pointer;position:relative;" onclick="window.app.orgDetailTabByName('od-tasks')"><div class="label">Tasks <span onclick="event.stopPropagation();window.app.exportOrgEntity(${o.id},'tasks')" title="Export to Excel" style="float:right;cursor:pointer;color:#10b981;font-size:11px;">&#x2913;</span></div><div class="value" style="color:#d97706;">${openBTasks.length}</div></div>
+      <div class="stat-card odv2-stat" style="cursor:pointer;position:relative;" onclick="window.app.orgDetailTabByName('od-denials')"><div class="label">Denials <span onclick="event.stopPropagation();window.app.exportOrgEntity(${o.id},'denials')" title="Export to Excel" style="float:right;cursor:pointer;color:#10b981;font-size:11px;">&#x2913;</span></div><div class="value" style="color:#ef4444;">${rcmDenials.length}</div></div>
     </div>
 
     <!-- Tabs — unified credentialing + billing -->
