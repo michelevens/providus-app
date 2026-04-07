@@ -1120,6 +1120,7 @@ async function navigateTo(page) {
 
   // Print button for all pages
   const printBtn = '<button class="btn btn-sm no-print" onclick="window.app.printPage()" title="Print this page"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11H2.5A1 1 0 011.5 10V6.5A1 1 0 012.5 5.5h11a1 1 0 011 1V10a1 1 0 01-1 1H12"/><path d="M4 5.5V1.5h8v4"/><rect x="4" y="9" width="8" height="5.5" rx="0.5"/></svg> Print</button>';
+  const xlBtn = (type, label) => `<button class="btn btn-sm no-print" onclick="window.app.exportCollection('${type}')" title="Export to Excel" style="background:rgba(16,185,129,0.1);color:#059669;border:1px solid rgba(16,185,129,0.2);"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v10M4 7l4 4 4-4M2 14h12"/></svg> ${label || 'Export'}</button>`;
 
   switch (page) {
     // ─── Command Center ───
@@ -1155,7 +1156,7 @@ async function navigateTo(page) {
       else if (!window._credTab) window._credTab = 'dashboard';
       pageTitle.textContent = 'Healthcare Credentialing';
       pageSubtitle.textContent = 'Dashboard, providers, applications, follow-ups, licenses, locations, states, payers';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openProviderModal()">+ Provider</button> <button class="btn" onclick="window.app.openLicenseModal()">+ License</button>' + printBtn;
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openProviderModal()">+ Provider</button> <button class="btn" onclick="window.app.openLicenseModal()">+ License</button>' + xlBtn(window._credTab === 'licenses' ? 'licenses' : window._credTab === 'applications' ? 'applications' : 'providers', 'Excel') + printBtn;
       // Highlight the credentialing nav item for all sub-tabs
       document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'credentialing'));
       await renderCredentialingPage();
@@ -1197,7 +1198,7 @@ async function navigateTo(page) {
       else if (!window._wsTab) window._wsTab = 'tasks';
       pageTitle.textContent = 'Workspace';
       pageSubtitle.textContent = 'Tasks, kanban board & calendar';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.showAddTaskForm()">+ Add Task</button>' + printBtn;
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.showAddTaskForm()">+ Add Task</button>' + xlBtn('tasks', 'Excel') + printBtn;
       document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'workspace'));
       await renderWorkspaceHubPage();
       break;
@@ -1326,7 +1327,7 @@ async function navigateTo(page) {
     case 'organizations':
       pageTitle.textContent = 'Organizations';
       pageSubtitle.textContent = 'Manage organization profiles';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openOrgModal()">+ Add Organization</button>' + printBtn;
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openOrgModal()">+ Add Organization</button>' + xlBtn('organizations', 'Excel') + printBtn;
       await renderOrganizationsPage();
       break;
     case 'org-detail':
@@ -1348,7 +1349,7 @@ async function navigateTo(page) {
     case 'facilities':
       pageTitle.textContent = 'Practice Locations';
       pageSubtitle.textContent = 'Office sites and service delivery locations';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openFacilityModal()">+ Add Location</button> <button class="btn" onclick="window.app.openNpiFacilityModal()">+ Add from NPI</button>' + printBtn;
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openFacilityModal()">+ Add Location</button> <button class="btn" onclick="window.app.openNpiFacilityModal()">+ Add from NPI</button>' + xlBtn('facilities', 'Excel') + printBtn;
       await renderFacilitiesPage();
       break;
     case 'facility-detail':
@@ -1378,7 +1379,7 @@ async function navigateTo(page) {
     case 'revenue-cycle':
       pageTitle.textContent = 'Revenue Cycle';
       pageSubtitle.textContent = 'Clients, claims, denials, payments, charges, A/R';
-      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openBsClientModal()">+ Add Client</button> <button class="btn btn-sm btn-primary" onclick="window.app.openRcmClaimModal()">+ New Claim</button> <button class="btn btn-sm" onclick="window.app.openRcmPaymentModal()">+ Post Payment</button> <button class="btn btn-sm" style="color:#7c3aed;" onclick="window.app.openPatientPaymentModal()">+ Patient Payment</button>' + printBtn;
+      pageActions.innerHTML = '<button class="btn btn-gold" onclick="window.app.openBsClientModal()">+ Add Client</button> <button class="btn btn-sm btn-primary" onclick="window.app.openRcmClaimModal()">+ New Claim</button> <button class="btn btn-sm" onclick="window.app.openRcmPaymentModal()">+ Post Payment</button> <button class="btn btn-sm" style="color:#7c3aed;" onclick="window.app.openPatientPaymentModal()">+ Patient Payment</button>' + xlBtn('claims', 'Excel') + printBtn;
       await renderRevenueCyclePage();
       break;
     case 'billing-client-detail':
@@ -9106,6 +9107,7 @@ window.app = {
     await renderLicenses();
   },
   async openLicenseModal(id, opts) { await openLicenseModal(id, opts); },
+  async exportCollection(type) { await exportCollection(type); },
   async editLicense(id) { await openLicenseModal(id); },
   async deleteLicense(id) {
     if (!await appConfirm('Delete this license?', { title: 'Delete License', okLabel: 'Delete', okClass: 'btn-danger' })) return;
@@ -19531,6 +19533,214 @@ function toHexId(id) {
   if (!id) return '------';
   return Number(id).toString(16).toUpperCase().padStart(6, '0');
 }
+
+/**
+ * Export an array of objects to Excel (.xlsx).
+ * @param {Array<Object>} rows — array of plain objects, keys become column headers
+ * @param {string} filename — base filename (no extension); date auto-appended
+ * @param {string} sheetName — worksheet tab name (default "Sheet1")
+ *
+ * Example: exportToExcel(providers.map(p => ({Name: p.firstName + ' ' + p.lastName, NPI: p.npi})), 'providers', 'Providers')
+ */
+function exportToExcel(rows, filename = 'export', sheetName = 'Sheet1') {
+  if (!window.XLSX) {
+    showToast('Excel export library not loaded', 'error');
+    return;
+  }
+  if (!Array.isArray(rows) || rows.length === 0) {
+    showToast('No data to export', 'warning');
+    return;
+  }
+  try {
+    const ws = window.XLSX.utils.json_to_sheet(rows);
+    // Auto-size columns based on content length
+    const cols = Object.keys(rows[0]).map(key => ({
+      wch: Math.min(50, Math.max(key.length, ...rows.map(r => String(r[key] ?? '').length)) + 2)
+    }));
+    ws['!cols'] = cols;
+    const wb = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
+    const date = new Date().toISOString().split('T')[0];
+    window.XLSX.writeFile(wb, `${filename}-${date}.xlsx`);
+    showToast(`Exported ${rows.length} rows`);
+  } catch (e) {
+    console.error('Excel export failed:', e);
+    showToast('Export failed: ' + e.message, 'error');
+  }
+}
+window.exportToExcel = exportToExcel;
+
+/**
+ * Export a collection to Excel. Handles scoping and flattening nested data.
+ * @param {string} type — one of: providers, licenses, applications, facilities, organizations, claims, tasks, activity_logs, followups
+ */
+async function exportCollection(type) {
+  try {
+    let rows = [];
+    const date = new Date().toISOString().split('T')[0];
+    const formatDate = d => d ? String(d).substring(0, 10) : '';
+
+    if (type === 'providers') {
+      const data = store.filterByScope(await store.getAll('providers'));
+      rows = data.map(p => ({
+        'ID': p.id,
+        'First Name': p.firstName || p.first_name || '',
+        'Last Name': p.lastName || p.last_name || '',
+        'Credentials': p.credentials || p.credential || '',
+        'NPI': p.npi || '',
+        'Taxonomy': p.taxonomy || '',
+        'Specialty': p.specialty || '',
+        'Email': p.email || '',
+        'Phone': p.phone || '',
+        'Organization ID': p.organizationId || p.organization_id || '',
+        'Active': (p.isActive || p.is_active) ? 'Yes' : 'No',
+      }));
+    } else if (type === 'licenses') {
+      const [licenses, providers] = await Promise.all([
+        store.filterByScope(await store.getAll('licenses')),
+        store.filterByScope(await store.getAll('providers')),
+      ]);
+      const provMap = {};
+      providers.forEach(p => { provMap[p.id] = `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim(); });
+      rows = licenses.map(l => {
+        const pid = l.providerId || l.provider_id;
+        const exp = l.expirationDate || l.expiration_date;
+        const daysLeft = exp ? Math.ceil((new Date(exp) - new Date()) / 86400000) : '';
+        return {
+          'Provider': provMap[pid] || '',
+          'State': l.state || '',
+          'License Number': l.licenseNumber || l.license_number || '',
+          'Type': l.licenseType || l.license_type || '',
+          'Status': l.status || '',
+          'Issue Date': formatDate(l.issueDate || l.issue_date),
+          'Expiration Date': formatDate(exp),
+          'Days Left': daysLeft,
+          'Compact State': (l.compactState || l.compact_state) ? 'Yes' : 'No',
+          'Notes': l.notes || '',
+        };
+      });
+    } else if (type === 'applications') {
+      const [apps, providers] = await Promise.all([
+        store.filterByScope(await store.getAll('applications')),
+        store.filterByScope(await store.getAll('providers')),
+      ]);
+      const provMap = {};
+      providers.forEach(p => { provMap[p.id] = `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim(); });
+      rows = apps.map(a => ({
+        'ID': a.id,
+        'Provider': provMap[a.providerId || a.provider_id] || '',
+        'State': a.state || '',
+        'Payer': a.payerName || a.payer_name || '',
+        'Status': a.status || '',
+        'Submitted': formatDate(a.submittedDate || a.submitted_date),
+        'Effective Date': formatDate(a.effectiveDate || a.effective_date),
+        'Follow-up Date': formatDate(a.followupDate || a.followup_date),
+        'Est Monthly Revenue': a.estMonthlyRevenue || a.est_monthly_revenue || '',
+        'Assigned To': a.assignedTo || a.assigned_to || '',
+        'Contact Name': a.payerContactName || a.payer_contact_name || '',
+        'Contact Phone': a.payerContactPhone || a.payer_contact_phone || '',
+        'Notes': (a.notes || '').substring(0, 500),
+      }));
+    } else if (type === 'facilities') {
+      const data = store.filterByScope(await store.getFacilities().catch(() => []));
+      rows = data.map(f => ({
+        'ID': f.id,
+        'Name': f.name || '',
+        'Organization ID': f.organizationId || f.organization_id || '',
+        'NPI': f.npi || '',
+        'Type': f.facilityType || f.facility_type || '',
+        'Street': f.street || '',
+        'City': f.city || '',
+        'State': f.state || '',
+        'ZIP': f.zip || '',
+        'Phone': f.phone || '',
+        'Fax': f.fax || '',
+        'Tax ID': f.taxId || f.tax_id || '',
+        'Active': (f.isActive || f.is_active) ? 'Yes' : 'No',
+      }));
+    } else if (type === 'organizations') {
+      const data = store.filterByScope(await store.getAll('organizations'));
+      rows = data.map(o => ({
+        'ID': o.id,
+        'Name': o.name || '',
+        'NPI': o.npi || o.groupNpi || o.group_npi || '',
+        'Tax ID': o.taxId || o.tax_id || '',
+        'Taxonomy': o.taxonomy || '',
+        'Email': o.email || '',
+        'Phone': o.phone || '',
+        'Address': o.address || o.street || '',
+        'City': o.city || '',
+        'State': o.state || '',
+        'ZIP': o.zip || '',
+      }));
+    } else if (type === 'claims') {
+      const data = await store.getRcmClaims({ per_page: 1000 }).catch(() => []);
+      rows = (Array.isArray(data) ? data : []).map(c => ({
+        'Claim Number': c.claimNumber || c.claim_number || '',
+        'Patient': c.patientName || c.patient_name || '',
+        'Provider': c.providerName || c.provider_name || '',
+        'Payer': c.payerName || c.payer_name || '',
+        'DOS': formatDate(c.dateOfService || c.date_of_service),
+        'Status': c.status || '',
+        'Charged': c.totalCharges || c.total_charges || 0,
+        'Allowed': c.allowedAmount || c.allowed_amount || 0,
+        'Paid': c.totalPaid || c.total_paid || 0,
+        'Patient Resp': c.patientResponsibility || c.patient_responsibility || 0,
+        'Balance': c.balance || 0,
+        'POS': c.placeOfService || c.place_of_service || '',
+        'State': c.state || '',
+      }));
+    } else if (type === 'tasks') {
+      const data = store.filterByScope(await store.getAll('tasks'));
+      rows = data.map(t => ({
+        'ID': t.id,
+        'Title': t.title || '',
+        'Description': (t.description || '').substring(0, 300),
+        'Status': t.status || (t.completed ? 'completed' : 'pending'),
+        'Priority': t.priority || '',
+        'Due Date': formatDate(t.dueDate || t.due_date),
+        'Assigned To': t.assignedTo || t.assigned_to || '',
+        'Linked Type': t.linkType || t.link_type || '',
+        'Linked ID': t.linkId || t.link_id || '',
+      }));
+    } else if (type === 'activity_logs') {
+      const data = store.filterByScope(await store.getAll('activity_logs'));
+      rows = data.map(l => ({
+        'Date': formatDate(l.loggedDate || l.logged_date || l.createdAt || l.created_at),
+        'Application ID': l.applicationId || l.application_id || '',
+        'Type': l.type || '',
+        'Contact Name': l.contactName || l.contact_name || '',
+        'Contact Phone': l.contactPhone || l.contact_phone || '',
+        'Reference #': l.refNumber || l.ref_number || '',
+        'Outcome': (l.outcome || '').substring(0, 500),
+        'Next Step': l.nextStep || l.next_step || '',
+      }));
+    } else if (type === 'followups') {
+      const data = store.filterByScope(await store.getAll('followups'));
+      rows = data.map(f => ({
+        'ID': f.id,
+        'Application ID': f.applicationId || f.application_id || '',
+        'Due Date': formatDate(f.dueDate || f.due_date),
+        'Status': f.status || '',
+        'Notes': (f.notes || '').substring(0, 300),
+      }));
+    } else {
+      showToast(`Unknown export type: ${type}`, 'error');
+      return;
+    }
+
+    const labels = {
+      providers: 'Providers', licenses: 'Licenses', applications: 'Applications',
+      facilities: 'Locations', organizations: 'Organizations', claims: 'Claims',
+      tasks: 'Tasks', activity_logs: 'Activity Logs', followups: 'Follow-ups',
+    };
+    exportToExcel(rows, `credentik-${type.replace('_', '-')}`, labels[type] || 'Data');
+  } catch (e) {
+    console.error('Export failed:', e);
+    showToast('Export failed: ' + e.message, 'error');
+  }
+}
+window.exportCollection = exportCollection;
 
 function timeAgo(dateStr) {
   if (!dateStr) return '';
