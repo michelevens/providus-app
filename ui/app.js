@@ -9389,7 +9389,7 @@ window.app = {
                 <tr><td style="font-weight:600;padding:4px 12px 4px 0;">Medicaid Telehealth</td><td>${pol.medicaidTelehealth}${pol.medicaidNotes ? ' — ' + escHtml(pol.medicaidNotes) : ''}</td></tr>
                 <tr><td style="font-weight:600;padding:4px 12px 4px 0;">NLC Member</td><td>${pol.nlcMember ? 'Yes' : 'No'}</td></tr>
                 <tr><td style="font-weight:600;padding:4px 12px 4px 0;">APRN Compact</td><td>${pol.aprnCompact ? 'Yes' : 'No'}</td></tr>
-                <tr><td style="font-weight:600;padding:4px 12px 4px 0;">Cross-State License</td><td>${pol.crossStateLicense.replace('_', ' ')}</td></tr>
+                <tr><td style="font-weight:600;padding:4px 12px 4px 0;">Cross-State License</td><td>${(pol.crossStateLicense || '—').replace('_', ' ')}</td></tr>
               </table>
             </div>
             <div>
@@ -18196,8 +18196,8 @@ async function getAlerts() {
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
-  // License expiration alerts
-  const licenses = store.filterByScope(await store.getAll('licenses'));
+  // Alerts are system-wide — do NOT scope-filter (user needs to see all expiring licenses, overdue tasks, etc.)
+  const licenses = await store.getAll('licenses');
   licenses.forEach(l => {
     if (!l.expirationDate) return;
     const exp = new Date(l.expirationDate);
@@ -18220,7 +18220,7 @@ async function getAlerts() {
   }
 
   // Overdue tasks
-  const tasks = store.filterByScope(await store.getAll('tasks'));
+  const tasks = await store.getAll('tasks');
   const overdueTasks = tasks.filter(t => !t.completed && t.dueDate && t.dueDate < todayStr);
   if (overdueTasks.length > 0) {
     alerts.push({ type: 'red', icon: '&#9745;', title: `${overdueTasks.length} overdue task${overdueTasks.length > 1 ? 's' : ''}`, desc: overdueTasks.slice(0, 2).map(t => t.title).join(', '), page: 'tasks', priority: 1 });
@@ -18233,7 +18233,7 @@ async function getAlerts() {
   }
 
   // Stale applications (stuck > 45 days in same status)
-  const apps = store.filterByScope(await store.getAll('applications'));
+  const apps = await store.getAll('applications');
   const staleApps = apps.filter(a => {
     if (['approved', 'denied', 'withdrawn', 'not_started'].includes(a.status)) return false;
     const updated = new Date(a.updatedAt || a.createdAt);
