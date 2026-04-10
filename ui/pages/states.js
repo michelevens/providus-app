@@ -98,70 +98,76 @@ export async function renderStatesPage() {
       <div class="stpg-stat"><div class="stpg-val" style="color:#d97706;">${totalProvInStates}</div><div class="stpg-lbl">Licensed Providers</div></div>
     </div>
 
-    <div class="card" style="border-radius:16px;overflow:hidden;">
-      <div class="card-header" style="flex-wrap:wrap;gap:8px;">
-        <h3>States (${displayStates.length})</h3>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <select class="form-control" style="width:auto;height:34px;font-size:12px;border-radius:10px;" onchange="window._stateViewFilter=this.value;window.app.renderStatesTab();">
-            <option value="active" ${selectedView === 'active' ? 'selected' : ''}>Active States Only</option>
-            <option value="all" ${selectedView === 'all' ? 'selected' : ''}>All 50+ States</option>
-          </select>
-          <select class="form-control" style="width:auto;height:34px;font-size:12px;border-radius:10px;" onchange="window._stateRegionFilter=this.value;window.app.renderStatesTab();">
-            <option value="">All Regions</option>
-            ${regions.map(r => `<option value="${escHtml(r)}" ${selectedRegion === r ? 'selected' : ''}>${escHtml(r)}</option>`).join('')}
-          </select>
-          <input type="text" id="state-search" placeholder="Search states..." class="form-control" style="width:200px;height:34px;font-size:13px;border-radius:10px;" oninput="window.app.filterStates()">
-        </div>
-      </div>
-      <div class="card-body" style="padding:0;">
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>State</th>
-                <th>Region</th>
-                <th>Providers</th>
-                <th>Licenses</th>
-                <th>Applications</th>
-                <th>Locations</th>
-                <th>Payers</th>
-                <th>Presence</th>
-              </tr>
-            </thead>
-            <tbody id="states-table-body">
-              ${displayStates.map(s => {
-                const presenceColor = s.hasPresence ? '#16a34a' : '#9ca3af';
-                const presenceBg = s.hasPresence ? 'rgba(34,197,94,0.12)' : 'rgba(156,163,175,0.12)';
-                const presenceLabel = s.hasPresence ? 'Active' : 'None';
-                return `
-                <tr class="stpg-row" data-name="${escHtml((s.name || '').toLowerCase())}" data-code="${escHtml(s.code)}">
-                  <td>
-                    <strong style="color:var(--brand-600);cursor:pointer;" onclick="window.app.viewStateDetail('${escHtml(s.code)}')">${escHtml(s.name)}</strong>
-                    <br><span style="font-size:10px;color:var(--gray-400);font-family:monospace;">${escHtml(s.code)}</span>
-                  </td>
-                  <td><span style="font-size:12px;color:var(--gray-600);">${escHtml(s.region || '—')}</span></td>
-                  <td>${s.providerCount > 0 ? `<span class="stpg-pill" style="background:rgba(139,92,246,0.1);color:#7c3aed;">${s.providerCount}</span>` : '<span style="font-size:11px;color:var(--gray-400);">0</span>'}</td>
-                  <td>${s.activeLicenseCount > 0 ? `<span class="stpg-pill" style="background:rgba(34,197,94,0.1);color:#16a34a;">${s.activeLicenseCount} active</span>` : ''}${s.licenseCount - s.activeLicenseCount > 0 ? `<span class="stpg-pill" style="background:rgba(245,158,11,0.1);color:#d97706;margin-left:4px;">${s.licenseCount - s.activeLicenseCount} other</span>` : ''}${s.licenseCount === 0 ? '<span style="font-size:11px;color:var(--gray-400);">0</span>' : ''}</td>
-                  <td>${s.approvedCount > 0 ? `<span class="stpg-pill" style="background:rgba(34,197,94,0.1);color:#16a34a;">${s.approvedCount} approved</span>` : ''}${s.pendingCount > 0 ? `<span class="stpg-pill" style="background:rgba(59,130,246,0.1);color:#2563eb;margin-left:4px;">${s.pendingCount} pending</span>` : ''}${s.appCount === 0 ? '<span style="font-size:11px;color:var(--gray-400);">0</span>' : ''}</td>
-                  <td>${s.facilityCount > 0 ? `<span class="stpg-pill" style="background:rgba(139,92,246,0.1);color:#7c3aed;">${s.facilityCount}</span>` : '<span style="font-size:11px;color:var(--gray-400);">0</span>'}</td>
-                  <td>${s.payerCount > 0 ? `<span class="stpg-pill" style="background:rgba(59,130,246,0.1);color:#2563eb;">${s.payerCount}</span>` : '<span style="font-size:11px;color:var(--gray-400);">0</span>'}</td>
-                  <td><span class="stpg-presence" style="background:${presenceBg};color:${presenceColor};"><span style="width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;"></span>${presenceLabel}</span></td>
-                </tr>`;
-              }).join('')}
-              ${displayStates.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-500);">No states match the current filters.</td></tr>' : ''}
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <!-- Filters -->
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+      <select class="form-control" style="width:auto;height:38px;font-size:13px;border-radius:10px;" onchange="window._stateViewFilter=this.value;window.app.renderStatesTab();">
+        <option value="active" ${selectedView === 'active' ? 'selected' : ''}>Active States Only</option>
+        <option value="all" ${selectedView === 'all' ? 'selected' : ''}>All 50+ States</option>
+      </select>
+      <select class="form-control" style="width:auto;height:38px;font-size:13px;border-radius:10px;" onchange="window._stateRegionFilter=this.value;window.app.renderStatesTab();">
+        <option value="">All Regions</option>
+        ${regions.map(r => `<option value="${escHtml(r)}" ${selectedRegion === r ? 'selected' : ''}>${escHtml(r)}</option>`).join('')}
+      </select>
+      <input type="text" id="state-search" placeholder="Search states..." class="form-control" style="width:220px;height:38px;font-size:13px;border-radius:10px;" oninput="window.app.filterStates()">
+      <span style="font-size:12px;color:var(--gray-400);margin-left:auto;">${displayStates.length} state${displayStates.length !== 1 ? 's' : ''}</span>
+    </div>
+
+    <!-- State Cards Grid -->
+    <div id="states-card-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
+      ${displayStates.map(s => {
+        const presenceColor = s.hasPresence ? '#16a34a' : '#9ca3af';
+        const tp = s.telePolicy;
+        const authorityLabel = tp?.practiceAuthority === 'full' ? 'Full Practice' : tp?.practiceAuthority === 'reduced' ? 'Reduced Practice' : tp?.practiceAuthority === 'restricted' ? 'Restricted' : '';
+        const authorityColor = tp?.practiceAuthority === 'full' ? '#16a34a' : tp?.practiceAuthority === 'reduced' ? '#d97706' : tp?.practiceAuthority === 'restricted' ? '#ef4444' : '#9ca3af';
+        return `
+        <div class="stpg-card" data-name="${escHtml((s.name || '').toLowerCase())}" data-code="${escHtml(s.code)}"
+          onclick="window.app.viewStateDetail('${escHtml(s.code)}')"
+          style="background:var(--surface-card,#fff);border-radius:16px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.06);cursor:pointer;transition:transform 0.18s,box-shadow 0.18s;position:relative;overflow:hidden;border:1px solid ${s.hasPresence ? 'rgba(34,197,94,0.2)' : 'var(--border-color)'};"
+          onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 16px rgba(0,0,0,0.1)';"
+          onmouseout="this.style.transform='';this.style.boxShadow='0 1px 3px rgba(0,0,0,0.06)';">
+          <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${s.hasPresence ? 'linear-gradient(90deg,#16a34a,#22c55e)' : 'var(--gray-200)'};"></div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+            <div>
+              <div style="font-size:16px;font-weight:700;color:var(--text-primary);">${escHtml(s.name)}</div>
+              <div style="font-size:11px;color:var(--gray-400);font-family:monospace;">${escHtml(s.code)}${s.region ? ' · ' + escHtml(s.region) : ''}</div>
+            </div>
+            <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;background:${s.hasPresence ? 'rgba(34,197,94,0.12)' : 'rgba(156,163,175,0.12)'};color:${presenceColor};">
+              <span style="width:6px;height:6px;border-radius:50%;background:currentColor;"></span>${s.hasPresence ? 'Active' : 'None'}
+            </span>
+          </div>
+          ${authorityLabel ? `<div style="margin-bottom:10px;"><span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:${authorityColor}15;color:${authorityColor};">${authorityLabel}</span></div>` : ''}
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
+            <div style="text-align:center;padding:8px 4px;background:var(--gray-50);border-radius:8px;">
+              <div style="font-size:18px;font-weight:800;color:${s.activeLicenseCount > 0 ? '#16a34a' : 'var(--gray-400)'};">${s.activeLicenseCount}</div>
+              <div style="font-size:9px;font-weight:600;text-transform:uppercase;color:var(--gray-500);letter-spacing:0.5px;">Licenses</div>
+            </div>
+            <div style="text-align:center;padding:8px 4px;background:var(--gray-50);border-radius:8px;">
+              <div style="font-size:18px;font-weight:800;color:${s.appCount > 0 ? '#2563eb' : 'var(--gray-400)'};">${s.appCount}</div>
+              <div style="font-size:9px;font-weight:600;text-transform:uppercase;color:var(--gray-500);letter-spacing:0.5px;">Apps</div>
+            </div>
+            <div style="text-align:center;padding:8px 4px;background:var(--gray-50);border-radius:8px;">
+              <div style="font-size:18px;font-weight:800;color:${s.facilityCount > 0 ? '#7c3aed' : 'var(--gray-400)'};">${s.facilityCount}</div>
+              <div style="font-size:9px;font-weight:600;text-transform:uppercase;color:var(--gray-500);letter-spacing:0.5px;">Locations</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${s.approvedCount > 0 ? `<span class="stpg-pill" style="background:rgba(34,197,94,0.1);color:#16a34a;">${s.approvedCount} credentialed</span>` : ''}
+            ${s.pendingCount > 0 ? `<span class="stpg-pill" style="background:rgba(59,130,246,0.1);color:#2563eb;">${s.pendingCount} pending</span>` : ''}
+            ${s.providerCount > 0 ? `<span class="stpg-pill" style="background:rgba(139,92,246,0.1);color:#7c3aed;">${s.providerCount} provider${s.providerCount > 1 ? 's' : ''}</span>` : ''}
+            ${s.payerCount > 0 ? `<span class="stpg-pill" style="background:rgba(245,158,11,0.1);color:#d97706;">${s.payerCount} payers</span>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+      ${displayStates.length === 0 ? '<div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--gray-500);">No states match the current filters.</div>' : ''}
     </div>
   `;
 }
 
 export function filterStates() {
   const q = (document.getElementById('state-search')?.value || '').toLowerCase();
-  document.querySelectorAll('.stpg-row').forEach(row => {
-    const name = row.dataset.name || '';
-    const code = (row.dataset.code || '').toLowerCase();
-    row.style.display = (name.includes(q) || code.includes(q)) ? '' : 'none';
+  document.querySelectorAll('.stpg-card').forEach(card => {
+    const name = card.dataset.name || '';
+    const code = (card.dataset.code || '').toLowerCase();
+    card.style.display = (name.includes(q) || code.includes(q)) ? '' : 'none';
   });
 }
