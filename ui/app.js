@@ -10489,6 +10489,97 @@ function handleNppesProxy(payload) {
       showToast('Error: ' + (e.message || 'Failed to update role'));
     }
   },
+  async openEditUserModal(userId) {
+    const users = await store.getAgencyUsers();
+    const u = (users || []).find(x => x.id === userId);
+    if (!u) { showToast('User not found'); return; }
+    const orgs = store.filterByScope(await store.getAll('organizations'));
+    const provs = store.filterByScope(await store.getAll('providers'));
+    const uRole = u.uiRole || u.ui_role || u.role;
+    const firstName = u.firstName || u.first_name || '';
+    const lastName = u.lastName || u.last_name || '';
+
+    const html = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div class="auth-field" style="margin:0;"><label>First Name</label><input type="text" id="eu-first" class="form-control" value="${escAttr(firstName)}"></div>
+        <div class="auth-field" style="margin:0;"><label>Last Name</label><input type="text" id="eu-last" class="form-control" value="${escAttr(lastName)}"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div class="auth-field" style="margin:0;"><label>Email</label><input type="email" id="eu-email" class="form-control" value="${escAttr(u.email || '')}"></div>
+        <div class="auth-field" style="margin:0;"><label>Phone</label><input type="text" id="eu-phone" class="form-control" value="${escAttr(u.phone || '')}" placeholder="(555) 123-4567"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div class="auth-field" style="margin:0;">
+          <label>Role</label>
+          <select id="eu-role" class="form-control">
+            <option value="agency" ${uRole === 'agency' ? 'selected' : ''}>Agency (Full Access)</option>
+            <option value="staff" ${uRole === 'staff' ? 'selected' : ''}>Staff (Coordinator)</option>
+            <option value="organization" ${uRole === 'organization' ? 'selected' : ''}>Organization</option>
+            <option value="provider" ${uRole === 'provider' ? 'selected' : ''}>Provider</option>
+          </select>
+        </div>
+        <div class="auth-field" style="margin:0;">
+          <label>Organization</label>
+          <select id="eu-org" class="form-control">
+            <option value="">None</option>
+            ${orgs.map(o => `<option value="${o.id}" ${String(u.organizationId || u.organization_id) === String(o.id) ? 'selected' : ''}>${escHtml(o.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="auth-field" style="margin:0;margin-bottom:12px;">
+        <label>Linked Provider</label>
+        <select id="eu-provider" class="form-control">
+          <option value="">None</option>
+          ${provs.map(p => `<option value="${p.id}" ${String(u.providerId || u.provider_id) === String(p.id) ? 'selected' : ''}>${escHtml((p.firstName || p.first_name || '') + ' ' + (p.lastName || p.last_name || ''))}</option>`).join('')}
+        </select>
+      </div>
+      <div class="auth-field" style="margin:0;">
+        <label>New Password <span style="color:var(--gray-400);font-weight:400;">(leave blank to keep current)</span></label>
+        <input type="text" id="eu-password" class="form-control" placeholder="Enter new password...">
+      </div>
+    `;
+
+    const confirmed = await appConfirm(html, {
+      title: `Edit User — ${escHtml(firstName + ' ' + lastName)}`,
+      okLabel: 'Save Changes',
+      raw: true,
+    });
+    if (!confirmed) return;
+
+    const data = {};
+    const newFirst = document.getElementById('eu-first')?.value?.trim();
+    const newLast = document.getElementById('eu-last')?.value?.trim();
+    const newEmail = document.getElementById('eu-email')?.value?.trim();
+    const newPhone = document.getElementById('eu-phone')?.value?.trim();
+    const newRole = document.getElementById('eu-role')?.value;
+    const newOrg = document.getElementById('eu-org')?.value;
+    const newProvider = document.getElementById('eu-provider')?.value;
+    const newPassword = document.getElementById('eu-password')?.value;
+
+    if (newFirst !== firstName) data.first_name = newFirst;
+    if (newLast !== lastName) data.last_name = newLast;
+    if (newEmail && newEmail !== u.email) data.email = newEmail;
+    if (newPhone !== (u.phone || '')) data.phone = newPhone;
+    if (newRole && newRole !== uRole) {
+      data.role = newRole === 'staff' ? 'agency' : newRole;
+      data.ui_role = newRole;
+    }
+    if (newOrg) data.organization_id = parseInt(newOrg);
+    else if (!newOrg && (u.organizationId || u.organization_id)) data.organization_id = null;
+    if (newProvider) data.provider_id = parseInt(newProvider);
+    else if (!newProvider && (u.providerId || u.provider_id)) data.provider_id = null;
+    if (newPassword) data.password = newPassword;
+
+    if (Object.keys(data).length === 0) { showToast('No changes made'); return; }
+
+    try {
+      await store.updateUser(userId, data);
+      showToast('User updated successfully');
+      await renderUsersStub();
+    } catch (e) {
+      showToast('Error: ' + (e.message || 'Failed to update user'));
+    }
+  },
   async deactivateUser(userId, name) {
     if (!await appConfirm(`Deactivate user "<strong>${name}</strong>"? They will no longer be able to log in.`, { title: 'Deactivate User', okLabel: 'Deactivate', okClass: 'btn-danger', raw: true })) return;
     try {
@@ -20617,15 +20708,12 @@ async function renderUsersStub() {
                 <td>
                   ${!isSelf && (u.uiRole || u.ui_role || u.role) !== 'superadmin' ? `
                     <div style="display:flex;gap:4px;flex-wrap:wrap;">
-                      <button class="btn btn-sm" onclick="window.app.editUserRole(${u.id}, '${u.uiRole || u.ui_role || u.role}')" title="Change role">&#9998;</button>
+                      <button class="btn btn-sm" onclick="window.app.openEditUserModal(${u.id})" title="Edit user">&#9998; Edit</button>
                       ${isActive
                         ? `<button class="btn btn-sm" onclick="window.app.deactivateUser(${u.id}, '${name.replace(/'/g, "\\'")}')" title="Deactivate" style="color:var(--red);">&#10005;</button>`
                         : `<button class="btn btn-sm" onclick="window.app.reactivateUser(${u.id})" title="Reactivate" style="color:var(--green);">&#10003;</button>`
                       }
-                      ${auth.isSuperAdmin() ? `
-                        <button class="btn btn-sm" onclick="window.app.resetUserPassword(${u.id}, '${name.replace(/'/g, "\\'")}')" title="Reset password" style="color:var(--brand-600);">&#128274;</button>
-                        <button class="btn btn-sm" onclick="window.app.changeUserEmail(${u.id}, '${escAttr(u.email || '')}')" title="Change email" style="color:var(--brand-600);">&#9993;</button>
-                      ` : ''}
+                      <button class="btn btn-sm" onclick="window.app.resetUserPassword(${u.id}, '${name.replace(/'/g, "\\'")}')" title="Reset password" style="color:var(--brand-600);">&#128274;</button>
                     </div>
                   ` : isSelf ? '<span class="text-muted text-sm">You</span>' : ''}
                 </td>
