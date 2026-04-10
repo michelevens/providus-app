@@ -1358,6 +1358,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = '<button class="btn" onclick="window.app.navigateTo(\'facilities\')">← All Locations</button>' + printBtn;
       await renderFacilityDetailPage(window._selectedFacilityId);
       break;
+    case 'state-detail':
+      pageTitle.textContent = 'State Detail';
+      pageSubtitle.textContent = '';
+      pageActions.innerHTML = '<button class="btn" onclick="window._credTab=\'states\';window.app.navigateTo(\'credentialing\')">← All States</button>' + xlBtn('applications', 'Excel') + printBtn;
+      await renderStateDetailPage(window._selectedStateCode);
+      break;
     // billing, contracts → admin hub
     case 'billing':
       // Check for Stripe checkout return params
@@ -10765,14 +10771,8 @@ function handleNppesProxy(payload) {
     _page('states').then(m => m.filterStates());
   },
   viewStateDetail(stateCode) {
-    // Navigate to state policies with this state pre-selected
-    window._analyticsTab = 'policies';
-    filters._policyFilter = 'all';
-    navigateTo('analytics');
-    // After render, try to show detail for this state
-    setTimeout(() => {
-      if (window.app.showPolicyDetail) window.app.showPolicyDetail(stateCode);
-    }, 500);
+    window._selectedStateCode = stateCode;
+    navigateTo('state-detail');
   },
 
   // ── Payers Page (Credentialing tab) ──
@@ -21876,6 +21876,213 @@ async function renderFacilitiesPage() {
 }
 
 // ─── Facility Detail Page ───
+// ─── State Detail Page ───
+
+async function renderStateDetailPage(stateCode) {
+  const body = document.getElementById('page-body');
+  body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
+
+  if (!stateCode) { body.innerHTML = '<div style="padding:3rem;text-align:center;color:var(--gray-500);">No state selected.</div>'; return; }
+
+  const STATES = window.STATES || [];
+  const stateInfo = STATES.find(s => s.code === stateCode) || { code: stateCode, name: stateCode };
+  const stateName = stateInfo.name || stateCode;
+
+  // Load all related data
+  const [_l, _a, _p, _f] = await Promise.allSettled([
+    store.getAll('licenses'), store.getAll('applications'),
+    store.getAll('providers'), store.getFacilities(),
+  ]);
+  const allLicenses = store.filterByScope(_l.status === 'fulfilled' ? _l.value || [] : []);
+  const allApps = store.filterByScope(_a.status === 'fulfilled' ? _a.value || [] : []);
+  const allProviders = store.filterByScope(_p.status === 'fulfilled' ? _p.value || [] : []);
+  const allFacilities = store.filterByScope(_f.status === 'fulfilled' ? _f.value || [] : []);
+
+  const licenses = allLicenses.filter(l => l.state === stateCode);
+  const apps = allApps.filter(a => a.state === stateCode);
+  const facilities = allFacilities.filter(f => f.state === stateCode);
+  const providerIds = new Set(licenses.map(l => String(l.providerId || l.provider_id)).filter(Boolean));
+  const providers = allProviders.filter(p => providerIds.has(String(p.id)));
+
+  const activeLic = licenses.filter(l => l.status === 'active');
+  const pendingLic = licenses.filter(l => l.status === 'pending');
+  const expiredLic = licenses.filter(l => { const e = l.expirationDate || l.expiration_date; return e && new Date(e) < new Date(); });
+  const approvedApps = apps.filter(a => a.status === 'approved' || a.status === 'credentialed');
+  const pendingApps = apps.filter(a => !['approved', 'credentialed', 'denied', 'withdrawn'].includes(a.status));
+
+  // Telehealth policy
+  const TELEHEALTH_POLICIES = window.TELEHEALTH_POLICIES || [];
+  const tp = TELEHEALTH_POLICIES.find(t => t.state === stateCode);
+  const authorityLabel = tp?.practiceAuthority === 'full' ? 'Full Practice Authority' : tp?.practiceAuthority === 'reduced' ? 'Reduced Practice' : tp?.practiceAuthority === 'restricted' ? 'Restricted Practice' : '—';
+  const authorityColor = tp?.practiceAuthority === 'full' ? '#16a34a' : tp?.practiceAuthority === 'reduced' ? '#d97706' : tp?.practiceAuthority === 'restricted' ? '#ef4444' : '#9ca3af';
+
+  // Provider name map
+  const provMap = {};
+  allProviders.forEach(p => { provMap[p.id] = `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim(); });
+
+  const pageTitle = document.getElementById('page-title');
+  const pageSubtitle = document.getElementById('page-subtitle');
+  if (pageTitle) pageTitle.textContent = `${stateName} (${stateCode})`;
+  if (pageSubtitle) pageSubtitle.textContent = 'State Detail';
+
+  body.innerHTML = `
+    <style>
+      .sd-grid { display:grid; grid-template-columns:2fr 1fr; gap:20px; }
+      .sd-card { background:var(--surface-card,#fff); border-radius:16px; padding:24px; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+      .sd-hero h2 { font-size:22px; font-weight:800; margin:0 0 4px; }
+      .sd-meta { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 0; }
+      .sd-pill { display:inline-flex; align-items:center; gap:5px; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600; }
+      .sd-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:20px 0; }
+      .sd-stat { text-align:center; padding:14px 8px; background:var(--gray-50); border-radius:12px; }
+      .sd-stat-val { font-size:24px; font-weight:800; line-height:1.1; }
+      .sd-stat-lbl { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray-500); margin-top:4px; }
+      .sd-section { margin-top:20px; }
+      .sd-section h3 { font-size:15px; font-weight:700; margin:0 0 12px; }
+      @media (max-width:768px) { .sd-grid { grid-template-columns:1fr; } .sd-stats { grid-template-columns:repeat(2,1fr); } }
+    </style>
+
+    <div class="sd-grid">
+      <!-- Left Column -->
+      <div>
+        <!-- Hero -->
+        <div class="sd-card sd-hero">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div>
+              <h2>${escHtml(stateName)}</h2>
+              <div style="font-size:13px;color:var(--gray-500);">${escHtml(stateInfo.region || '')}${stateInfo.capital ? ' · Capital: ' + escHtml(stateInfo.capital) : ''}</div>
+            </div>
+            <span style="font-size:32px;font-weight:800;color:var(--brand-500);opacity:0.2;">${escHtml(stateCode)}</span>
+          </div>
+          <div class="sd-meta">
+            <span class="sd-pill" style="background:${authorityColor}15;color:${authorityColor};">${authorityLabel}</span>
+            ${tp?.nlcMember ? '<span class="sd-pill" style="background:rgba(59,130,246,0.1);color:#2563eb;">NLC Compact</span>' : ''}
+            ${tp?.aprnCompact ? '<span class="sd-pill" style="background:rgba(139,92,246,0.1);color:#7c3aed;">APRN Compact</span>' : ''}
+            ${tp?.telehealthParity ? '<span class="sd-pill" style="background:rgba(16,185,129,0.1);color:#059669;">Telehealth Parity</span>' : ''}
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="sd-stats">
+          <div class="sd-stat"><div class="sd-stat-val" style="color:#16a34a;">${activeLic.length}</div><div class="sd-stat-lbl">Active Licenses</div></div>
+          <div class="sd-stat"><div class="sd-stat-val" style="color:#2563eb;">${apps.length}</div><div class="sd-stat-lbl">Applications</div></div>
+          <div class="sd-stat"><div class="sd-stat-val" style="color:#7c3aed;">${facilities.length}</div><div class="sd-stat-lbl">Locations</div></div>
+          <div class="sd-stat"><div class="sd-stat-val" style="color:#d97706;">${providers.length}</div><div class="sd-stat-lbl">Providers</div></div>
+        </div>
+
+        <!-- Telehealth Policy Info -->
+        ${tp ? `<div class="sd-card sd-section">
+          <h3>Telehealth & Practice Policy</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;">
+            <div><span style="color:var(--gray-500);font-size:11px;text-transform:uppercase;font-weight:600;">Practice Authority</span><br><strong style="color:${authorityColor};">${authorityLabel}</strong></div>
+            <div><span style="color:var(--gray-500);font-size:11px;text-transform:uppercase;font-weight:600;">Prescriptive Authority</span><br><strong>${escHtml(tp.prescriptiveAuthority || '—')}</strong></div>
+            <div><span style="color:var(--gray-500);font-size:11px;text-transform:uppercase;font-weight:600;">Controlled Substances</span><br><strong>${escHtml(tp.controlledSubstances || '—')}</strong></div>
+            <div><span style="color:var(--gray-500);font-size:11px;text-transform:uppercase;font-weight:600;">Supervision</span><br><strong>${escHtml(tp.supervisionRequirement || tp.supervision || '—')}</strong></div>
+            <div><span style="color:var(--gray-500);font-size:11px;text-transform:uppercase;font-weight:600;">Telehealth Consent</span><br><strong>${escHtml(tp.telehealthConsent || '—')}</strong></div>
+            <div><span style="color:var(--gray-500);font-size:11px;text-transform:uppercase;font-weight:600;">Medicaid Telehealth</span><br><strong>${escHtml(tp.medicaidTelehealth || '—')}</strong></div>
+            <div><span style="color:var(--gray-500);font-size:11px;text-transform:uppercase;font-weight:600;">Cross-State License</span><br><strong>${escHtml((tp.crossStateLicense || '—').replace(/_/g, ' '))}</strong></div>
+            <div><span style="color:var(--gray-500);font-size:11px;text-transform:uppercase;font-weight:600;">Board URL</span><br>${tp.boardUrl ? `<a href="${escHtml(tp.boardUrl)}" target="_blank" style="color:var(--brand-600);text-decoration:none;font-weight:500;">${escHtml(tp.boardUrl).substring(0, 40)}…</a>` : '—'}</div>
+          </div>
+          ${tp.notes ? `<div style="margin-top:12px;padding:10px;background:var(--gray-50);border-radius:8px;font-size:12px;color:var(--gray-600);line-height:1.5;">${escHtml(tp.notes)}</div>` : ''}
+        </div>` : ''}
+
+        <!-- Licenses Table -->
+        <div class="sd-card sd-section">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h3 style="margin:0;">Licenses (${licenses.length})</h3>
+            <button class="btn btn-sm btn-gold" onclick="window.app.openLicenseModal()">+ Add License</button>
+          </div>
+          ${licenses.length > 0 ? `<table style="font-size:13px;">
+            <thead><tr><th>Provider</th><th>License #</th><th>Type</th><th>Status</th><th>Expires</th></tr></thead>
+            <tbody>
+              ${licenses.map(l => {
+                const pid = l.providerId || l.provider_id;
+                const exp = l.expirationDate || l.expiration_date;
+                const isExpired = exp && new Date(exp) < new Date();
+                return `<tr>
+                  <td style="font-weight:500;">${escHtml(provMap[pid] || '—')}</td>
+                  <td><code style="font-size:11px;">${escHtml(l.licenseNumber || l.license_number || '—')}</code></td>
+                  <td>${escHtml(l.licenseType || l.license_type || '—')}</td>
+                  <td><span class="badge badge-${l.status}">${l.status}</span></td>
+                  <td style="${isExpired ? 'color:var(--red);font-weight:600;' : ''}">${exp ? formatDateDisplay(exp) : '—'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>` : '<div style="text-align:center;padding:24px;color:var(--gray-400);">No licenses in this state.</div>'}
+        </div>
+
+        <!-- Applications Table -->
+        <div class="sd-card sd-section">
+          <h3>Applications (${apps.length})</h3>
+          ${apps.length > 0 ? `<table style="font-size:13px;">
+            <thead><tr><th>Provider</th><th>Payer</th><th>Status</th><th>Submitted</th></tr></thead>
+            <tbody>
+              ${apps.map(a => {
+                const pid = a.providerId || a.provider_id;
+                const statusColors = { approved: '#16a34a', credentialed: '#16a34a', submitted: '#2563eb', planned: '#9ca3af', denied: '#ef4444' };
+                const sc = statusColors[a.status] || '#6b7280';
+                return `<tr style="cursor:pointer;" onclick="window._selectedApplicationId='${a.id}';window.app.navigateTo('application-detail');">
+                  <td style="font-weight:500;">${escHtml(provMap[pid] || '—')}</td>
+                  <td>${escHtml(a.payerName || a.payer_name || '—')}</td>
+                  <td><span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:${sc}18;color:${sc};">${a.status}</span></td>
+                  <td>${a.submittedDate || a.submitted_date ? formatDateDisplay(a.submittedDate || a.submitted_date) : '—'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>` : '<div style="text-align:center;padding:24px;color:var(--gray-400);">No applications in this state.</div>'}
+        </div>
+      </div>
+
+      <!-- Right Column -->
+      <div>
+        <!-- Providers in State -->
+        <div class="sd-card">
+          <h3 style="font-size:15px;font-weight:700;margin:0 0 12px;">Providers (${providers.length})</h3>
+          ${providers.length > 0 ? `<div style="display:flex;flex-direction:column;gap:10px;">
+            ${providers.map(p => {
+              const pName = `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim() || 'Unknown';
+              const cred = p.credentials || p.credential || '';
+              return `<div style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;background:var(--gray-50);cursor:pointer;transition:background 0.15s;" onclick="window._selectedProviderId=${p.id};window.app.navigateTo('provider-profile');" onmouseover="this.style.background='var(--gray-100)'" onmouseout="this.style.background='var(--gray-50)'">
+                <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--brand-500),var(--brand-700));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex-shrink:0;">${escHtml((p.firstName || p.first_name || '?')[0])}${escHtml((p.lastName || p.last_name || '?')[0])}</div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-weight:600;font-size:13px;">${escHtml(pName)}${cred ? ', ' + escHtml(cred) : ''}</div>
+                  <div style="font-size:11px;color:var(--gray-500);">${escHtml(p.specialty || '')}</div>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>` : '<div style="text-align:center;padding:24px;color:var(--gray-400);">No providers licensed here.</div>'}
+        </div>
+
+        <!-- Locations in State -->
+        <div class="sd-card" style="margin-top:16px;">
+          <h3 style="font-size:15px;font-weight:700;margin:0 0 12px;">Locations (${facilities.length})</h3>
+          ${facilities.length > 0 ? `<div style="display:flex;flex-direction:column;gap:8px;">
+            ${facilities.map(f => {
+              const isActive = f.status === 'active' || f.isActive;
+              return `<div style="padding:10px 12px;border-radius:10px;background:var(--gray-50);cursor:pointer;transition:background 0.15s;" onclick="window.app.viewFacility('${f.id}')" onmouseover="this.style.background='var(--gray-100)'" onmouseout="this.style.background='var(--gray-50)'">
+                <div style="font-weight:600;font-size:13px;">${escHtml(f.name || '—')}</div>
+                <div style="font-size:11px;color:var(--gray-500);">${escHtml([f.city, f.state].filter(Boolean).join(', '))}</div>
+                <div style="margin-top:4px;"><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;background:${isActive ? 'rgba(34,197,94,0.12)' : 'rgba(156,163,175,0.12)'};color:${isActive ? '#16a34a' : '#9ca3af'};"><span style="width:5px;height:5px;border-radius:50%;background:currentColor;"></span>${isActive ? 'Active' : 'Inactive'}</span></div>
+              </div>`;
+            }).join('')}
+          </div>` : '<div style="text-align:center;padding:24px;color:var(--gray-400);">No locations in this state.</div>'}
+        </div>
+
+        <!-- Quick Summary -->
+        <div class="sd-card" style="margin-top:16px;background:linear-gradient(135deg,rgba(8,145,178,0.06),rgba(139,92,246,0.06));">
+          <h3 style="font-size:15px;font-weight:700;margin:0 0 12px;">Summary</h3>
+          <div style="font-size:13px;line-height:1.8;color:var(--gray-600);">
+            <div><strong>${activeLic.length}</strong> active license${activeLic.length !== 1 ? 's' : ''}</div>
+            ${pendingLic.length > 0 ? `<div><strong>${pendingLic.length}</strong> pending license${pendingLic.length !== 1 ? 's' : ''}</div>` : ''}
+            ${expiredLic.length > 0 ? `<div style="color:var(--red);"><strong>${expiredLic.length}</strong> expired license${expiredLic.length !== 1 ? 's' : ''}</div>` : ''}
+            <div><strong>${approvedApps.length}</strong> credentialed payer${approvedApps.length !== 1 ? 's' : ''}</div>
+            <div><strong>${pendingApps.length}</strong> pending application${pendingApps.length !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 async function renderFacilityDetailPage(facilityId) {
   const body = document.getElementById('page-body');
   body.innerHTML = '<div style="text-align:center;padding:48px;"><div class="spinner"></div></div>';
