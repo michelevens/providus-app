@@ -632,6 +632,7 @@ let APP_GROUPS = [
   { id: 1, label: 'Group 1', short: 'G1', color: '#0891b2' },
   { id: 2, label: 'Group 2', short: 'G2', color: '#3b82f6' },
   { id: 3, label: 'Group 3', short: 'G3', color: '#6b7280' },
+  { id: 4, label: 'Group 4', short: 'G4', color: '#8b5cf6' },
 ];
 
 function getGroupDef(id) {
