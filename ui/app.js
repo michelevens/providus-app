@@ -628,6 +628,7 @@ const APPLICATION_STATUSES = [
 
 // Application Groups (loaded from agency config, defaults below)
 let APP_GROUPS = [
+  { id: 0, label: 'Group 0', short: 'G0', color: '#10b981' },
   { id: 1, label: 'Group 1', short: 'G1', color: '#0891b2' },
   { id: 2, label: 'Group 2', short: 'G2', color: '#3b82f6' },
   { id: 3, label: 'Group 3', short: 'G3', color: '#6b7280' },
