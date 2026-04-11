@@ -22028,24 +22028,24 @@ async function renderStateDetailPage(stateCode) {
   };
   const pipelineTotal = Math.max(1, pipeline.planned + pipeline.submitted + pipeline.inReview + pipeline.credentialed);
 
-  // Expansion readiness score (0-100)
-  let readiness = 0;
-  if (activeLic.length > 0) readiness += 25; // Has active license
-  if (approvedApps.length > 0) readiness += 20; // Has credentialed payers
-  if (approvedApps.length >= 3) readiness += 10; // 3+ payers
-  if (facilities.length > 0) readiness += 10; // Has location
-  if (stateClaims.length > 0) readiness += 15; // Has claims (active revenue)
-  if (tp?.practiceAuthority === 'full') readiness += 10; // Full practice authority
-  if (tp?.telehealthParity) readiness += 5; // Telehealth parity
-  if (coveragePercent >= 50) readiness += 5; // Good payer coverage
-  const readinessColor = readiness >= 75 ? '#16a34a' : readiness >= 50 ? '#d97706' : readiness >= 25 ? '#f59e0b' : '#ef4444';
-  const readinessLabel = readiness >= 75 ? 'Ready' : readiness >= 50 ? 'Growing' : readiness >= 25 ? 'Early' : 'Not Started';
-
-  // Telehealth policy
+  // Telehealth policy (must be before readiness score which uses tp)
   const TELEHEALTH_POLICIES = window.TELEHEALTH_POLICIES || [];
   const tp = TELEHEALTH_POLICIES.find(t => t.state === stateCode);
   const authorityLabel = tp?.practiceAuthority === 'full' ? 'Full Practice Authority' : tp?.practiceAuthority === 'reduced' ? 'Reduced Practice' : tp?.practiceAuthority === 'restricted' ? 'Restricted Practice' : '—';
   const authorityColor = tp?.practiceAuthority === 'full' ? '#16a34a' : tp?.practiceAuthority === 'reduced' ? '#d97706' : tp?.practiceAuthority === 'restricted' ? '#ef4444' : '#9ca3af';
+
+  // Expansion readiness score (0-100)
+  let readiness = 0;
+  if (activeLic.length > 0) readiness += 25;
+  if (approvedApps.length > 0) readiness += 20;
+  if (approvedApps.length >= 3) readiness += 10;
+  if (facilities.length > 0) readiness += 10;
+  if (stateClaims.length > 0) readiness += 15;
+  if (tp?.practiceAuthority === 'full') readiness += 10;
+  if (tp?.telehealthParity) readiness += 5;
+  if (coveragePercent >= 50) readiness += 5;
+  const readinessColor = readiness >= 75 ? '#16a34a' : readiness >= 50 ? '#d97706' : readiness >= 25 ? '#f59e0b' : '#ef4444';
+  const readinessLabel = readiness >= 75 ? 'Ready' : readiness >= 50 ? 'Growing' : readiness >= 25 ? 'Early' : 'Not Started';
 
   // Provider name map
   const provMap = {};
