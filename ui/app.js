@@ -21979,9 +21979,10 @@ async function renderStateDetailPage(stateCode) {
   const stateName = stateInfo.name || stateCode;
 
   // Load all related data
-  const [_l, _a, _p, _f] = await Promise.allSettled([
+  const [_l, _a, _p, _f, _c] = await Promise.allSettled([
     store.getAll('licenses'), store.getAll('applications'),
     store.getAll('providers'), store.getFacilities(),
+    store.getRcmClaims({ per_page: 1000 }).catch(() => []),
   ]);
   const allLicenses = store.filterByScope(_l.status === 'fulfilled' ? _l.value || [] : []);
   const allApps = store.filterByScope(_a.status === 'fulfilled' ? _a.value || [] : []);
@@ -21999,6 +22000,46 @@ async function renderStateDetailPage(stateCode) {
   const expiredLic = licenses.filter(l => { const e = l.expirationDate || l.expiration_date; return e && new Date(e) < new Date(); });
   const approvedApps = apps.filter(a => a.status === 'approved' || a.status === 'credentialed');
   const pendingApps = apps.filter(a => !['approved', 'credentialed', 'denied', 'withdrawn'].includes(a.status));
+  const allClaims = _c.status === 'fulfilled' ? (Array.isArray(_c.value) ? _c.value : []) : [];
+  const stateClaims = allClaims.filter(c => (c.state || '') === stateCode);
+
+  // Revenue stats
+  const totalCharged = stateClaims.reduce((s, c) => s + Number(c.totalCharges || c.total_charges || 0), 0);
+  const totalCollected = stateClaims.reduce((s, c) => s + Number(c.totalPaid || c.total_paid || 0), 0);
+  const collectionRate = totalCharged > 0 ? ((totalCollected / totalCharged) * 100).toFixed(1) : '0.0';
+
+  // Payer coverage matrix
+  const PAYER_CATALOG = window.PAYER_CATALOG || [];
+  const availablePayers = PAYER_CATALOG.filter(p => Array.isArray(p.states) && (p.states.includes(stateCode) || p.states.includes('ALL')));
+  const credentialedPayerNames = new Set(approvedApps.map(a => (a.payerName || a.payer_name || '').toLowerCase()));
+  const inProgressPayerNames = new Set(pendingApps.map(a => (a.payerName || a.payer_name || '').toLowerCase()));
+  const coveredPayers = availablePayers.filter(p => credentialedPayerNames.has((p.name || '').toLowerCase()));
+  const gapPayers = availablePayers.filter(p => !credentialedPayerNames.has((p.name || '').toLowerCase()) && !inProgressPayerNames.has((p.name || '').toLowerCase()));
+  const coveragePercent = availablePayers.length > 0 ? Math.round((coveredPayers.length / availablePayers.length) * 100) : 0;
+
+  // Application pipeline counts
+  const pipeline = {
+    planned: apps.filter(a => a.status === 'planned' || a.status === 'not_started').length,
+    submitted: apps.filter(a => a.status === 'submitted').length,
+    inReview: apps.filter(a => a.status === 'in_review' || a.status === 'in_progress').length,
+    credentialed: approvedApps.length,
+    denied: apps.filter(a => a.status === 'denied').length,
+    withdrawn: apps.filter(a => a.status === 'withdrawn').length,
+  };
+  const pipelineTotal = Math.max(1, pipeline.planned + pipeline.submitted + pipeline.inReview + pipeline.credentialed);
+
+  // Expansion readiness score (0-100)
+  let readiness = 0;
+  if (activeLic.length > 0) readiness += 25; // Has active license
+  if (approvedApps.length > 0) readiness += 20; // Has credentialed payers
+  if (approvedApps.length >= 3) readiness += 10; // 3+ payers
+  if (facilities.length > 0) readiness += 10; // Has location
+  if (stateClaims.length > 0) readiness += 15; // Has claims (active revenue)
+  if (tp?.practiceAuthority === 'full') readiness += 10; // Full practice authority
+  if (tp?.telehealthParity) readiness += 5; // Telehealth parity
+  if (coveragePercent >= 50) readiness += 5; // Good payer coverage
+  const readinessColor = readiness >= 75 ? '#16a34a' : readiness >= 50 ? '#d97706' : readiness >= 25 ? '#f59e0b' : '#ef4444';
+  const readinessLabel = readiness >= 75 ? 'Ready' : readiness >= 50 ? 'Growing' : readiness >= 25 ? 'Early' : 'Not Started';
 
   // Telehealth policy
   const TELEHEALTH_POLICIES = window.TELEHEALTH_POLICIES || [];
@@ -22052,11 +22093,16 @@ async function renderStateDetailPage(stateCode) {
         </div>
 
         <!-- Stats -->
-        <div class="sd-stats">
+        <div class="sd-stats" style="grid-template-columns:repeat(5,1fr);">
           <div class="sd-stat"><div class="sd-stat-val" style="color:#16a34a;">${activeLic.length}</div><div class="sd-stat-lbl">Active Licenses</div></div>
           <div class="sd-stat"><div class="sd-stat-val" style="color:#2563eb;">${apps.length}</div><div class="sd-stat-lbl">Applications</div></div>
           <div class="sd-stat"><div class="sd-stat-val" style="color:#7c3aed;">${facilities.length}</div><div class="sd-stat-lbl">Locations</div></div>
-          <div class="sd-stat"><div class="sd-stat-val" style="color:#d97706;">${providers.length}</div><div class="sd-stat-lbl">Providers</div></div>
+          <div class="sd-stat"><div class="sd-stat-val" style="color:#059669;">$${Math.round(totalCollected).toLocaleString()}</div><div class="sd-stat-lbl">Collected</div><div style="font-size:10px;color:var(--gray-400);">${collectionRate}%</div></div>
+          <div class="sd-stat" style="position:relative;">
+            <div class="sd-stat-val" style="color:${readinessColor};">${readiness}%</div>
+            <div class="sd-stat-lbl">Readiness</div>
+            <div style="font-size:10px;color:${readinessColor};font-weight:600;">${readinessLabel}</div>
+          </div>
         </div>
 
         <!-- Telehealth Policy Info -->
@@ -22119,6 +22165,128 @@ async function renderStateDetailPage(stateCode) {
               }).join('')}
             </tbody>
           </table>` : '<div style="text-align:center;padding:24px;color:var(--gray-400);">No applications in this state.</div>'}
+        </div>
+
+        <!-- Application Pipeline Funnel -->
+        <div class="sd-card sd-section">
+          <h3>Application Pipeline</h3>
+          <div style="display:flex;gap:4px;align-items:flex-end;height:120px;margin-bottom:12px;">
+            ${[
+              { label: 'Planned', count: pipeline.planned, color: '#9ca3af' },
+              { label: 'Submitted', count: pipeline.submitted, color: '#3b82f6' },
+              { label: 'In Review', count: pipeline.inReview, color: '#f59e0b' },
+              { label: 'Credentialed', count: pipeline.credentialed, color: '#16a34a' },
+            ].map(s => {
+              const pct = Math.max(8, (s.count / pipelineTotal) * 100);
+              return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+                <div style="font-size:16px;font-weight:800;color:${s.color};">${s.count}</div>
+                <div style="width:100%;height:${pct}%;min-height:6px;background:${s.color};border-radius:6px;transition:height 0.3s;"></div>
+                <div style="font-size:9px;font-weight:600;text-transform:uppercase;color:var(--gray-500);text-align:center;">${s.label}</div>
+              </div>`;
+            }).join('')}
+          </div>
+          ${pipeline.denied > 0 || pipeline.withdrawn > 0 ? `<div style="font-size:11px;color:var(--gray-400);display:flex;gap:12px;">
+            ${pipeline.denied > 0 ? `<span style="color:#ef4444;">${pipeline.denied} denied</span>` : ''}
+            ${pipeline.withdrawn > 0 ? `<span>${pipeline.withdrawn} withdrawn</span>` : ''}
+          </div>` : ''}
+        </div>
+
+        <!-- License Renewal Timeline -->
+        ${activeLic.length > 0 ? `<div class="sd-card sd-section">
+          <h3>License Renewal Timeline</h3>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            ${activeLic.filter(l => l.expirationDate || l.expiration_date).sort((a, b) => {
+              const ea = new Date(a.expirationDate || a.expiration_date);
+              const eb = new Date(b.expirationDate || b.expiration_date);
+              return ea - eb;
+            }).map(l => {
+              const exp = new Date(l.expirationDate || l.expiration_date);
+              const daysLeft = Math.ceil((exp - new Date()) / 86400000);
+              const maxDays = 365;
+              const widthPct = Math.max(3, Math.min(100, (daysLeft > 0 ? daysLeft : 0) / maxDays * 100));
+              const barColor = daysLeft < 0 ? '#ef4444' : daysLeft < 90 ? '#f59e0b' : '#22c55e';
+              const pid = l.providerId || l.provider_id;
+              return `<div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px;">
+                  <span style="font-weight:600;">${escHtml(provMap[pid] || '')} — ${escHtml(l.licenseType || l.license_type || '')}</span>
+                  <span style="color:${barColor};font-weight:600;">${daysLeft > 0 ? daysLeft + 'd left' : 'EXPIRED'}</span>
+                </div>
+                <div style="width:100%;height:8px;background:var(--gray-100);border-radius:4px;overflow:hidden;">
+                  <div style="width:${widthPct}%;height:100%;background:${barColor};border-radius:4px;transition:width 0.3s;"></div>
+                </div>
+                <div style="font-size:10px;color:var(--gray-400);margin-top:1px;">Exp: ${formatDateDisplay(l.expirationDate || l.expiration_date)}</div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>` : ''}
+
+        <!-- Payer Coverage Matrix -->
+        <div class="sd-card sd-section">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h3 style="margin:0;">Payer Coverage</h3>
+            <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${coveragePercent >= 50 ? 'rgba(22,163,74,0.12)' : 'rgba(245,158,11,0.12)'};color:${coveragePercent >= 50 ? '#16a34a' : '#d97706'};">${coveragePercent}% covered</span>
+          </div>
+          ${availablePayers.length > 0 ? `
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+            ${availablePayers.slice(0, 20).map(p => {
+              const name = (p.name || '').toLowerCase();
+              const isCovered = credentialedPayerNames.has(name);
+              const inProgress = inProgressPayerNames.has(name);
+              const bg = isCovered ? 'rgba(22,163,74,0.12)' : inProgress ? 'rgba(59,130,246,0.12)' : 'rgba(156,163,175,0.08)';
+              const color = isCovered ? '#16a34a' : inProgress ? '#2563eb' : '#9ca3af';
+              const icon = isCovered ? '&#10003;' : inProgress ? '&#8987;' : '';
+              return `<span style="padding:4px 10px;border-radius:8px;font-size:11px;font-weight:500;background:${bg};color:${color};border:1px solid ${color}20;">${icon ? icon + ' ' : ''}${escHtml(p.name || '')}</span>`;
+            }).join('')}
+          </div>
+          <div style="font-size:11px;color:var(--gray-400);">
+            <span style="color:#16a34a;">&#10003; Credentialed (${coveredPayers.length})</span> &nbsp;
+            <span style="color:#2563eb;">&#8987; In Progress</span> &nbsp;
+            <span style="color:#9ca3af;">Not Started (${gapPayers.length})</span>
+          </div>` : '<div style="font-size:12px;color:var(--gray-400);">No payer catalog data for this state.</div>'}
+        </div>
+
+        <!-- Recommended Next Payers -->
+        ${gapPayers.length > 0 ? `<div class="sd-card sd-section">
+          <h3>Recommended Next Payers</h3>
+          <div style="font-size:12px;color:var(--gray-500);margin-bottom:10px;">Payers available in ${escHtml(stateCode)} that you're not yet credentialed with:</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            ${gapPayers.slice(0, 10).map(p => {
+              const cat = p.category || '';
+              const catColor = { national: '#3b82f6', bcbs: '#0891b2', regional: '#8b5cf6', medicaid: '#d97706', medicare: '#059669' }[cat] || '#6b7280';
+              return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;background:var(--gray-50);">
+                <div>
+                  <div style="font-weight:600;font-size:13px;">${escHtml(p.name || '')}</div>
+                  ${cat ? `<span style="font-size:10px;font-weight:600;text-transform:uppercase;color:${catColor};">${cat}</span>` : ''}
+                </div>
+                <button class="btn btn-sm" onclick="window.app.openAppModal(null, {state:'${stateCode}',payerName:'${escAttr(p.name || '')}'})" style="font-size:10px;padding:3px 10px;background:rgba(16,185,129,0.1);color:#059669;border:1px solid rgba(16,185,129,0.2);">+ Apply</button>
+              </div>`;
+            }).join('')}
+          </div>
+          ${gapPayers.length > 10 ? `<div style="font-size:11px;color:var(--gray-400);margin-top:8px;">+ ${gapPayers.length - 10} more available</div>` : ''}
+        </div>` : ''}
+
+        <!-- Expansion Readiness Breakdown -->
+        <div class="sd-card sd-section">
+          <h3>Expansion Readiness — ${readiness}%</h3>
+          <div style="width:100%;height:12px;background:var(--gray-100);border-radius:6px;overflow:hidden;margin-bottom:16px;">
+            <div style="width:${readiness}%;height:100%;background:linear-gradient(90deg,${readinessColor},${readinessColor}cc);border-radius:6px;transition:width 0.5s;"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;">
+            ${[
+              { done: activeLic.length > 0, label: 'Active license', pts: 25 },
+              { done: approvedApps.length > 0, label: 'At least 1 credentialed payer', pts: 20 },
+              { done: approvedApps.length >= 3, label: '3+ credentialed payers', pts: 10 },
+              { done: facilities.length > 0, label: 'Location/facility set up', pts: 10 },
+              { done: stateClaims.length > 0, label: 'Active revenue (claims filed)', pts: 15 },
+              { done: tp?.practiceAuthority === 'full', label: 'Full practice authority', pts: 10 },
+              { done: tp?.telehealthParity === true, label: 'Telehealth parity law', pts: 5 },
+              { done: coveragePercent >= 50, label: '50%+ payer coverage', pts: 5 },
+            ].map(item => `<div style="display:flex;align-items:center;gap:8px;">
+              <span style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;${item.done ? 'background:rgba(22,163,74,0.12);color:#16a34a;' : 'background:var(--gray-100);color:var(--gray-400);'}">${item.done ? '&#10003;' : ''}</span>
+              <span style="flex:1;${item.done ? '' : 'color:var(--gray-400);'}">${item.label}</span>
+              <span style="font-size:11px;font-weight:600;color:${item.done ? '#16a34a' : 'var(--gray-300)'};">+${item.pts}</span>
+            </div>`).join('')}
+          </div>
         </div>
       </div>
 
