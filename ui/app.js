@@ -9116,6 +9116,18 @@ window.app = {
   },
   async openLicenseModal(id, opts) { await openLicenseModal(id, opts); },
   async exportCollection(type) { await exportCollection(type); },
+  onPayerSelectChange() {
+    const sel = document.getElementById('field-payer');
+    const customInput = document.getElementById('field-payer-custom');
+    if (!sel || !customInput) return;
+    if (sel.value === '__custom__') {
+      customInput.style.display = 'block';
+      customInput.focus();
+    } else {
+      customInput.style.display = 'none';
+      customInput.value = '';
+    }
+  },
   orgDetailTabByName(tabName) {
     const btn = document.querySelector(`button.tab[onclick*="${tabName}"]`);
     if (btn) btn.click();
@@ -17483,10 +17495,12 @@ async function openApplicationModal(id) {
       </div>
       <div class="form-group">
         <label>Payer</label>
-        <select class="form-control" id="field-payer">
+        <select class="form-control" id="field-payer" onchange="window.app.onPayerSelectChange()">
           <option value="">Select payer...</option>
           ${[...PAYER_CATALOG].sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(p => `<option value="${p.id}" ${String(existPayerId) == String(p.id) ? 'selected' : ''}>${p.name}</option>`).join('')}
+          <option value="__custom__" ${!existPayerId && existing?.payerName ? 'selected' : ''}>+ Add custom payer…</option>
         </select>
+        <input type="text" class="form-control" id="field-payer-custom" placeholder="Enter custom payer name" value="${escAttr(!existPayerId && existing?.payerName ? existing.payerName : '')}" style="margin-top:6px;display:${!existPayerId && existing?.payerName ? 'block' : 'none'};">
       </div>
     </div>
     <div class="form-row-3">
@@ -17621,13 +17635,27 @@ window.saveApplication = async function() {
   if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
   try {
   const id = document.getElementById('edit-app-id').value;
-  const payerId = document.getElementById('field-payer').value;
-  const payer = getPayerById(payerId);
+  let payerId = document.getElementById('field-payer').value;
+  const customPayerName = (document.getElementById('field-payer-custom')?.value || '').trim();
+  let payer = null;
+  let resolvedPayerName = '';
+  if (payerId === '__custom__') {
+    if (!customPayerName) {
+      showToast('Enter a custom payer name');
+      if (btn) { btn.disabled = false; btn.textContent = btnText; }
+      return;
+    }
+    payerId = '';
+    resolvedPayerName = customPayerName;
+  } else {
+    payer = getPayerById(payerId);
+    resolvedPayerName = payer ? payer.name : '';
+  }
 
   const data = {
     state: document.getElementById('field-state').value,
     payerId,
-    payerName: payer ? payer.name : '',
+    payerName: resolvedPayerName,
     wave: document.getElementById('field-wave').value || '',
     status: document.getElementById('field-status').value,
     type: document.getElementById('field-type').value,
@@ -17648,8 +17676,9 @@ window.saveApplication = async function() {
     organizationId: '',
   };
 
-  if (!data.state || !data.payerId) {
+  if (!data.state || (!data.payerId && !data.payerName)) {
     showToast('State and payer are required');
+    if (btn) { btn.disabled = false; btn.textContent = btnText; }
     return;
   }
 
