@@ -9128,6 +9128,37 @@ window.app = {
       customInput.value = '';
     }
   },
+  onAppOrgChange() {
+    const d = window._appModalData;
+    if (!d) return;
+    const orgId = document.getElementById('field-org')?.value || '';
+    const provSel = document.getElementById('field-provider');
+    const facSel = document.getElementById('field-facility');
+    if (!provSel || !facSel) return;
+    const providers = orgId ? d.allProviders.filter(p => String(p.organizationId || p.organization_id || '') === String(orgId)) : d.allProviders;
+    const facilities = orgId ? d.allFacilities.filter(f => String(f.organizationId || f.organization_id || '') === String(orgId)) : d.allFacilities;
+    provSel.innerHTML = '<option value="">Select provider...</option>' + providers.map(p => `<option value="${p.id}">${escHtml(p.firstName + ' ' + p.lastName)} (${escHtml(p.credentials || '')})</option>`).join('');
+    facSel.innerHTML = '<option value="">Primary / Default</option>' + facilities.map(f => `<option value="${f.id}">${escHtml(f.name || '')}${f.city || f.state ? ' — ' + [f.city, f.state].filter(Boolean).join(', ') : ''}</option>`).join('');
+    // Update NPI/CAQH display
+    window.app.onAppProviderChange();
+  },
+  onAppProviderChange() {
+    const d = window._appModalData;
+    if (!d) return;
+    const provId = document.getElementById('field-provider')?.value || '';
+    const infoRow = document.getElementById('provider-info-row');
+    if (!infoRow) return;
+    const prov = d.allProviders.find(p => String(p.id) === String(provId));
+    const npi = prov?.npi || '';
+    const caqh = prov?.caqhId || prov?.caqh_id || '';
+    infoRow.innerHTML = `<div class="form-group" style="flex:1;"><div style="display:flex;gap:16px;font-size:11px;color:var(--gray-500);"><span>NPI: <strong style="color:var(--gray-700);">${escHtml(npi) || '—'}</strong></span><span>CAQH: <strong style="color:var(--gray-700);">${escHtml(caqh) || '—'}</strong></span></div></div>`;
+  },
+  onAppStatusChange() {
+    const status = document.getElementById('field-status')?.value || '';
+    const denialGroup = document.getElementById('denial-reason-group');
+    if (!denialGroup) return;
+    denialGroup.style.display = (status === 'denied' || status === 'withdrawn') ? 'block' : 'none';
+  },
   orgDetailTabByName(tabName) {
     const btn = document.querySelector(`button.tab[onclick*="${tabName}"]`);
     if (btn) btn.click();
@@ -17454,8 +17485,9 @@ async function openApplicationModal(id) {
   title.textContent = existing ? 'Edit Application' : 'Add Application';
 
   const licensedStates = store.filterByScope(await store.getAll('licenses')).map(l => l.state);
-  const providers = store.filterByScope(await store.getAll('providers'));
-  const facilities = store.filterByScope(await store.getFacilities().catch(() => []));
+  const allProviders = store.filterByScope(await store.getAll('providers'));
+  const allFacilities = store.filterByScope(await store.getFacilities().catch(() => []));
+  const orgs = store.filterByScope(await store.getAll('organizations'));
   const staffUsers = await store.getAgencyUsers().catch(() => []);
   const currentUser = auth.getUser();
 
@@ -17463,23 +17495,68 @@ async function openApplicationModal(id) {
   const existProviderId = existing?.providerId || existing?.provider_id || '';
   const existPayerId = existing?.payerId || existing?.payer_id || '';
   const existFacilityId = existing?.facilityId || '';
+  const existOrgId = existing?.organizationId || existing?.organization_id || '';
+
+  // Determine initial org: from existing app, or from existing provider's org
+  let initialOrgId = existOrgId;
+  if (!initialOrgId && existProviderId) {
+    const matchProv = allProviders.find(p => String(p.id) === String(existProviderId));
+    if (matchProv) initialOrgId = matchProv.organizationId || matchProv.organization_id || '';
+  }
+
+  // Filter providers/facilities by org
+  const filterByOrg = (orgId) => {
+    const providers = orgId ? allProviders.filter(p => String(p.organizationId || p.organization_id || '') === String(orgId)) : allProviders;
+    const facilities = orgId ? allFacilities.filter(f => String(f.organizationId || f.organization_id || '') === String(orgId)) : allFacilities;
+    return { providers, facilities };
+  };
+  const { providers: filteredProviders, facilities: filteredFacilities } = filterByOrg(initialOrgId);
+
+  // Store refs for org change handler
+  window._appModalData = { allProviders, allFacilities, existProviderId, existFacilityId };
+
+  // Helper: get selected provider's CAQH + NPI
+  const getProviderInfo = (provId) => {
+    const prov = allProviders.find(p => String(p.id) === String(provId));
+    if (!prov) return { npi: '', caqh: '' };
+    return { npi: prov.npi || '', caqh: prov.caqhId || prov.caqh_id || '' };
+  };
+  const initialProvInfo = getProviderInfo(existProviderId || (filteredProviders[0]?.id || ''));
 
   form.innerHTML = `
     <input type="hidden" id="edit-app-id" value="${id || ''}">
     <div class="form-row">
       <div class="form-group">
-        <label>Provider</label>
-        <select class="form-control" id="field-provider">
-          ${providers.map(p => `<option value="${p.id}" ${String(existProviderId) == String(p.id) ? 'selected' : ''}>${p.firstName} ${p.lastName} (${p.credentials})</option>`).join('')}
+        <label>Organization</label>
+        <select class="form-control" id="field-org" onchange="window.app.onAppOrgChange()">
+          <option value="">All Organizations</option>
+          ${orgs.map(o => `<option value="${o.id}" ${String(initialOrgId) == String(o.id) ? 'selected' : ''}>${escHtml(o.name || '')}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Provider <span style="color:var(--red);font-size:11px;">*</span></label>
+        <select class="form-control" id="field-provider" onchange="window.app.onAppProviderChange()">
+          <option value="">Select provider...</option>
+          ${filteredProviders.map(p => `<option value="${p.id}" ${String(existProviderId) == String(p.id) ? 'selected' : ''}>${escHtml(p.firstName + ' ' + p.lastName)} (${escHtml(p.credentials || '')})</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
         <label>Practice Location</label>
         <select class="form-control" id="field-facility">
           <option value="">Primary / Default</option>
-          ${facilities.map(f => `<option value="${f.id}" ${String(existFacilityId) == String(f.id) ? 'selected' : ''}>${escHtml(f.name || '')}${f.city || f.state ? ' — ' + [f.city, f.state].filter(Boolean).join(', ') : ''}</option>`).join('')}
+          ${filteredFacilities.map(f => `<option value="${f.id}" ${String(existFacilityId) == String(f.id) ? 'selected' : ''}>${escHtml(f.name || '')}${f.city || f.state ? ' — ' + [f.city, f.state].filter(Boolean).join(', ') : ''}</option>`).join('')}
         </select>
       </div>
+    </div>
+    <div class="form-row" id="provider-info-row" style="margin-top:-8px;margin-bottom:8px;">
+      <div class="form-group" style="flex:1;">
+        <div style="display:flex;gap:16px;font-size:11px;color:var(--gray-500);">
+          <span>NPI: <strong style="color:var(--gray-700);">${escHtml(initialProvInfo.npi) || '—'}</strong></span>
+          <span>CAQH: <strong style="color:var(--gray-700);">${escHtml(initialProvInfo.caqh) || '—'}</strong></span>
+        </div>
+      </div>
+    </div>
+    <div class="form-row">
       <div class="form-group">
         <label>State</label>
         <select class="form-control" id="field-state">
@@ -17502,8 +17579,21 @@ async function openApplicationModal(id) {
         </select>
         <input type="text" class="form-control" id="field-payer-custom" placeholder="Enter custom payer name" value="${escAttr(!existPayerId && existing?.payerName ? existing.payerName : '')}" style="margin-top:6px;display:${!existPayerId && existing?.payerName ? 'block' : 'none'};">
       </div>
+      <div class="form-group">
+        <label>Line of Business</label>
+        <select class="form-control" id="field-lob">
+          <option value="" ${!(existing?.lob || existing?.lineOfBusiness || existing?.line_of_business) ? 'selected' : ''}>Not Set</option>
+          <option value="commercial" ${(existing?.lob || existing?.lineOfBusiness || existing?.line_of_business) === 'commercial' ? 'selected' : ''}>Commercial</option>
+          <option value="medicare" ${(existing?.lob || existing?.lineOfBusiness || existing?.line_of_business) === 'medicare' ? 'selected' : ''}>Medicare</option>
+          <option value="medicaid" ${(existing?.lob || existing?.lineOfBusiness || existing?.line_of_business) === 'medicaid' ? 'selected' : ''}>Medicaid</option>
+          <option value="managed_medicaid" ${(existing?.lob || existing?.lineOfBusiness || existing?.line_of_business) === 'managed_medicaid' ? 'selected' : ''}>Managed Medicaid</option>
+          <option value="managed_medicare" ${(existing?.lob || existing?.lineOfBusiness || existing?.line_of_business) === 'managed_medicare' ? 'selected' : ''}>Managed Medicare (MA)</option>
+          <option value="tricare" ${(existing?.lob || existing?.lineOfBusiness || existing?.line_of_business) === 'tricare' ? 'selected' : ''}>TRICARE</option>
+          <option value="workers_comp" ${(existing?.lob || existing?.lineOfBusiness || existing?.line_of_business) === 'workers_comp' ? 'selected' : ''}>Workers' Comp</option>
+        </select>
+      </div>
     </div>
-    <div class="form-row-3">
+    <div class="form-row">
       <div class="form-group">
         <label>Group</label>
         <select class="form-control" id="field-wave">
@@ -17512,7 +17602,7 @@ async function openApplicationModal(id) {
       </div>
       <div class="form-group">
         <label>Status</label>
-        <select class="form-control" id="field-status">
+        <select class="form-control" id="field-status" onchange="window.app.onAppStatusChange()">
           ${APPLICATION_STATUSES.map(s => `<option value="${s.value}" ${existing?.status === s.value ? 'selected' : ''}>${s.label}</option>`).join('')}
         </select>
       </div>
@@ -17526,15 +17616,24 @@ async function openApplicationModal(id) {
           <option value="recredentialing" ${existing?.type === 'recredentialing' ? 'selected' : ''}>Re-credentialing</option>
         </select>
       </div>
+      <div class="form-group">
+        <label>Priority</label>
+        <select class="form-control" id="field-priority">
+          <option value="normal" ${(existing?.priority || 'normal') === 'normal' ? 'selected' : ''}>Normal</option>
+          <option value="high" ${existing?.priority === 'high' ? 'selected' : ''}>High</option>
+          <option value="urgent" ${existing?.priority === 'urgent' ? 'selected' : ''}>Urgent</option>
+          <option value="low" ${existing?.priority === 'low' ? 'selected' : ''}>Low</option>
+        </select>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label>Virtual Visit Status</label>
         <select class="form-control" id="field-telehealth-status">
           <option value="" ${!(existing?.telehealthStatus || existing?.telehealth_status) ? 'selected' : ''}>Not Set</option>
-          <option value="enabled" ${(existing?.telehealthStatus || existing?.telehealth_status) === 'enabled' ? 'selected' : ''}>✅ Enabled — virtual visits active on payer portal</option>
-          <option value="pending" ${(existing?.telehealthStatus || existing?.telehealth_status) === 'pending' ? 'selected' : ''}>⏳ Pending — address added, awaiting activation</option>
-          <option value="not_enrolled" ${(existing?.telehealthStatus || existing?.telehealth_status) === 'not_enrolled' ? 'selected' : ''}>❌ Not Enrolled — need to add virtual visit address</option>
+          <option value="enabled" ${(existing?.telehealthStatus || existing?.telehealth_status) === 'enabled' ? 'selected' : ''}>Enabled</option>
+          <option value="pending" ${(existing?.telehealthStatus || existing?.telehealth_status) === 'pending' ? 'selected' : ''}>Pending</option>
+          <option value="not_enrolled" ${(existing?.telehealthStatus || existing?.telehealth_status) === 'not_enrolled' ? 'selected' : ''}>Not Enrolled</option>
           <option value="not_applicable" ${(existing?.telehealthStatus || existing?.telehealth_status) === 'not_applicable' ? 'selected' : ''}>N/A — in-person only</option>
         </select>
       </div>
@@ -17547,6 +17646,19 @@ async function openApplicationModal(id) {
           <option value="both" ${(existing?.serviceMode || existing?.service_mode) === 'both' ? 'selected' : ''}>Both (Telehealth + In-Person)</option>
         </select>
       </div>
+      <div class="form-group">
+        <label>Application Method</label>
+        <select class="form-control" id="field-app-method">
+          <option value="" ${!(existing?.applicationMethod || existing?.application_method) ? 'selected' : ''}>Not Set</option>
+          <option value="online_portal" ${(existing?.applicationMethod || existing?.application_method) === 'online_portal' ? 'selected' : ''}>Online Portal</option>
+          <option value="caqh" ${(existing?.applicationMethod || existing?.application_method) === 'caqh' ? 'selected' : ''}>CAQH</option>
+          <option value="availity" ${(existing?.applicationMethod || existing?.application_method) === 'availity' ? 'selected' : ''}>Availity</option>
+          <option value="fax" ${(existing?.applicationMethod || existing?.application_method) === 'fax' ? 'selected' : ''}>Fax</option>
+          <option value="mail" ${(existing?.applicationMethod || existing?.application_method) === 'mail' ? 'selected' : ''}>Mail</option>
+          <option value="email" ${(existing?.applicationMethod || existing?.application_method) === 'email' ? 'selected' : ''}>Email</option>
+          <option value="phone" ${(existing?.applicationMethod || existing?.application_method) === 'phone' ? 'selected' : ''}>Phone</option>
+        </select>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -17557,8 +17669,13 @@ async function openApplicationModal(id) {
           ${staffUsers.filter(u => u.id !== currentUser?.id).map(u => `<option value="${u.id}" ${String(existing?.assignedTo || existing?.assignedToId || existing?.assigned_to || existing?.assigned_to_id) == String(u.id) ? 'selected' : ''}>${escHtml((u.firstName || u.first_name || '') + ' ' + (u.lastName || u.last_name || ''))}</option>`).join('')}
         </select>
       </div>
+      <div class="form-group"><label>Taxonomy Code</label><input type="text" class="form-control" id="field-taxonomy" value="${escAttr(existing?.taxonomyCode || existing?.taxonomy_code || '')}" placeholder="e.g. 2084P0800X"></div>
+    </div>
+    <div class="form-row">
       <div class="form-group"><label>Submitted Date</label><input type="date" class="form-control" id="field-submitted" value="${existing?.submittedDate || existing?.submitted_date || ''}"></div>
       <div class="form-group"><label>Effective Date</label><input type="date" class="form-control" id="field-effective" value="${existing?.effectiveDate || existing?.effective_date || ''}"></div>
+      <div class="form-group"><label>Follow-Up Date</label><input type="date" class="form-control" id="field-followup" value="${existing?.followUpDate || existing?.follow_up_date || ''}"></div>
+      <div class="form-group"><label>Expected Turnaround (days)</label><input type="number" class="form-control" id="field-sla-days" value="${existing?.slaDays || existing?.sla_days || ''}" placeholder="e.g. 30, 60, 90" min="0"></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Enrollment ID</label><input type="text" class="form-control" id="field-enrollment" value="${escAttr(existing?.enrollmentId || existing?.enrollment_id || '')}" placeholder="e.g. PRV-12345678"></div>
@@ -17570,7 +17687,11 @@ async function openApplicationModal(id) {
       <div class="form-group"><label>Payer Contact Phone</label><input type="text" class="form-control" id="field-payer-phone" value="${escAttr(existing?.payerContactPhone || existing?.payer_contact_phone || '')}" placeholder="e.g. (800) 555-1234"></div>
       <div class="form-group"><label>Payer Contact Email</label><input type="email" class="form-control" id="field-payer-email" value="${escAttr(existing?.payerContactEmail || existing?.payer_contact_email || '')}" placeholder="e.g. cred@payer.com"></div>
     </div>
-    <div class="form-group"><label>Notes</label><textarea class="form-control" id="field-notes">${existing?.notes || ''}</textarea></div>
+    <div id="denial-reason-group" class="form-group" style="display:${(existing?.status === 'denied' || existing?.status === 'withdrawn') ? 'block' : 'none'};">
+      <label>Denial / Rejection Reason</label>
+      <textarea class="form-control" id="field-denial-reason" placeholder="Why was this application denied or withdrawn?">${escHtml(existing?.denialReason || existing?.denial_reason || '')}</textarea>
+    </div>
+    <div class="form-group"><label>Notes</label><textarea class="form-control" id="field-notes">${escHtml(existing?.notes || '')}</textarea></div>
 
     ${id ? `
     <!-- Attachments -->
@@ -17659,8 +17780,11 @@ window.saveApplication = async function() {
     wave: document.getElementById('field-wave').value || '',
     status: document.getElementById('field-status').value,
     type: document.getElementById('field-type').value,
+    priority: document.getElementById('field-priority')?.value || 'normal',
     submittedDate: document.getElementById('field-submitted').value,
     effectiveDate: document.getElementById('field-effective').value,
+    followUpDate: document.getElementById('field-followup')?.value || '',
+    slaDays: parseInt(document.getElementById('field-sla-days')?.value) || 0,
     enrollmentId: document.getElementById('field-enrollment').value.trim(),
     estMonthlyRevenue: parseInt(document.getElementById('field-revenue').value) || 0,
     applicationRef: document.getElementById('field-appref').value.trim(),
@@ -17673,9 +17797,18 @@ window.saveApplication = async function() {
     assignedTo: document.getElementById('field-assigned-to')?.value || '',
     telehealthStatus: document.getElementById('field-telehealth-status')?.value || '',
     serviceMode: document.getElementById('field-service-mode')?.value || '',
-    organizationId: '',
+    organizationId: document.getElementById('field-org')?.value || '',
+    lob: document.getElementById('field-lob')?.value || '',
+    applicationMethod: document.getElementById('field-app-method')?.value || '',
+    taxonomyCode: document.getElementById('field-taxonomy')?.value?.trim() || '',
+    denialReason: document.getElementById('field-denial-reason')?.value?.trim() || '',
   };
 
+  if (!data.providerId) {
+    showToast('Provider is required');
+    if (btn) { btn.disabled = false; btn.textContent = btnText; }
+    return;
+  }
   if (!data.state || (!data.payerId && !data.payerName)) {
     showToast('State and payer are required');
     if (btn) { btn.disabled = false; btn.textContent = btnText; }
