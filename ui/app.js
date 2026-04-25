@@ -2858,6 +2858,32 @@ async function renderAppTable(prefetchedApps = null) {
     filtered.sort((a, b) => (a.wave || 9) - (b.wave || 9) || (a.state || '').localeCompare(b.state || ''));
   }
 
+  // Build dup-key index from the FULL apps set so the badge surfaces even when
+  // the user has filtered the list. Two apps share a key when they target the
+  // same provider+payer+state. Both rows in a dup cluster get the badge + a
+  // "Merge" action that opens a chooser.
+  const dupKey = (a) => {
+    const prov = String(a.providerId || a.provider_id || '');
+    const pid = String(a.payerId || a.payer_id || '');
+    const pname = (a.payerName || a.payer_name || '').toLowerCase().trim();
+    const payerKey = pid || pname;
+    return `${prov}|${payerKey}|${a.state || ''}`;
+  };
+  const dupClusters = {};
+  apps.forEach(a => {
+    if (!a.providerId && !a.provider_id) return;
+    if (!a.state) return;
+    if (!a.payerId && !a.payerName) return;
+    const k = dupKey(a);
+    (dupClusters[k] = dupClusters[k] || []).push(a);
+  });
+  const dupSet = new Set();
+  Object.values(dupClusters).forEach(group => { if (group.length > 1) group.forEach(a => dupSet.add(a.id)); });
+  window._appDupClusters = dupClusters; // used by mergeDuplicateApps()
+  const dupBadge = (a) => dupSet.has(a.id)
+    ? `<span title="Possible duplicate — same provider, payer, and state as another application. Click Merge in actions." style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:#fef3c7;color:#b45309;margin-left:4px;cursor:help;">&#9888; DUP</span>`
+    : '';
+
   const countEl = document.getElementById('app-result-count');
   const listView = document.getElementById('app-list-view');
   const cardView = document.getElementById('app-card-view');
@@ -2952,7 +2978,7 @@ async function renderAppTable(prefetchedApps = null) {
       return `<tr onclick="window.app.viewApplicationDetail('${a.id}')" style="cursor:pointer;">
         <td onclick="event.stopPropagation();"><input type="checkbox" class="app-checkbox" data-app-id="${a.id}" onchange="window.app.onBulkCheckChange()"></td>
         <td>
-          <span style="font-family:monospace;font-size:10px;color:var(--brand-600);">${toHexId(a.id)}</span>
+          <span style="font-family:monospace;font-size:10px;color:var(--brand-600);">${toHexId(a.id)}</span>${dupBadge(a)}
           <div>${groupBadge(a.wave)}</div>
         </td>
         <td><strong>${getStateName(a.state)}</strong></td>
@@ -2982,6 +3008,7 @@ async function renderAppTable(prefetchedApps = null) {
               ${['approved','credentialed'].includes(a.status) ? `<button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--brand-600);" onclick="window.app.addLocationToApp('${a.id}')">+ Add Location</button>` : ''}
               ${a.status !== 'planned' ? `<button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:#6366f1;" onclick="window.app.moveToExpansion('${a.id}')">Move to Expansion</button>` : ''}
               ${a.status === 'planned' ? `<button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:#16a34a;" onclick="window.app.createAppFromExpansion('${a.id}')">Create Application</button>` : ''}
+              ${dupSet.has(a.id) ? `<button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:#b45309;" onclick="window.app.mergeDuplicateApps('${a.id}')">&#9888; Merge Duplicate</button>` : ''}
               <button class="btn btn-sm" style="width:100%;text-align:left;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--red);" onclick="window.app.deleteApplication('${a.id}')">Delete</button>
             </div>
           </div>
@@ -3017,6 +3044,7 @@ async function renderAppTable(prefetchedApps = null) {
             <span class="v2-apps-pill" style="background:var(--gray-100);color:var(--text-primary);">${getStateName(a.state)}</span>
             <span class="v2-apps-pill" style="background:${statusObj.color}18;color:${statusObj.color};">${statusObj.label}</span>
             <span class="v2-apps-pill" style="background:var(--gray-50);color:var(--text-muted);">${typeLabel}</span>
+            ${dupSet.has(a.id) ? `<span class="v2-apps-pill" title="Possible duplicate" style="background:#fef3c7;color:#b45309;cursor:pointer;" onclick="event.stopPropagation();window.app.mergeDuplicateApps('${a.id}')">&#9888; DUP</span>` : ''}
             ${a.wave ? `<span class="v2-apps-pill" style="background:var(--brand-50);color:var(--brand-600);">G${a.wave}</span>` : ''}
             ${cardFacObj ? `<span class="v2-apps-pill loc-card-pill" style="background:rgba(139,92,246,0.08);color:#7c3aed;">&#128205; ${escHtml(cardFacObj.name || '')}</span>` : ''}
             ${a.assignedTo ? `<span class="v2-apps-pill" style="background:var(--brand-50);color:var(--brand-600);">${escHtml(staffMap[a.assignedTo] || 'Unknown')}</span>` : ''}
@@ -8269,6 +8297,91 @@ window.app = {
     await store.remove('applications', id);
     await renderApplications();
     showToast('Application deleted');
+  },
+  async mergeDuplicateApps(appId) {
+    const apps = store.filterByScope(await store.getAll('applications'));
+    const target = apps.find(a => String(a.id) === String(appId));
+    if (!target) { showToast('Application not found'); return; }
+    const provKey = String(target.providerId || target.provider_id || '');
+    const payKey = String(target.payerId || target.payer_id || '') || (target.payerName || target.payer_name || '').toLowerCase().trim();
+    const cluster = apps.filter(a => {
+      const p = String(a.providerId || a.provider_id || '');
+      const pid = String(a.payerId || a.payer_id || '');
+      const pname = (a.payerName || a.payer_name || '').toLowerCase().trim();
+      const ak = pid || pname;
+      return p === provKey && ak === payKey && (a.state || '') === (target.state || '');
+    });
+    if (cluster.length < 2) { showToast('No duplicates found for this application.'); return; }
+
+    const STATUS_RANK = { credentialed: 0, approved: 0, submitted: 1, in_review: 2, pending_info: 3, gathering_docs: 4, new: 5, on_hold: 6, withdrawn: 7, denied: 8, planned: 9 };
+    const recommend = [...cluster].sort((a, b) => (STATUS_RANK[a.status] ?? 99) - (STATUS_RANK[b.status] ?? 99))[0];
+    const allProviders = store.filterByScope(await store.getAll('providers').catch(() => []));
+    const provObj = allProviders.find(p => String(p.id) === provKey);
+    const provName = provObj ? `${provObj.firstName || ''} ${provObj.lastName || ''}`.trim() : 'Unknown';
+    const payerName = target.payerName || (getPayerById(target.payerId) || {}).name || '—';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay active';
+    overlay.id = 'merge-dup-modal';
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:680px;">
+        <div class="modal-header">
+          <h3>Merge Duplicate Applications</h3>
+          <button class="modal-close" onclick="document.getElementById('merge-dup-modal').remove()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#92400e;">
+            Found <strong>${cluster.length} applications</strong> for the same provider, payer, and state:<br>
+            <strong>${escHtml(provName)}</strong> &middot; <strong>${escHtml(payerName)}</strong> &middot; <strong>${escHtml(getStateName(target.state) || target.state)}</strong>
+          </div>
+          <p style="font-size:12px;color:var(--gray-600);margin-bottom:10px;">Pick the application to <strong>keep</strong>. The others will be deleted. The most-progressed application is pre-selected.</p>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            ${cluster.map(a => {
+              const statusObj = APPLICATION_STATUSES.find(s => s.value === a.status) || { label: a.status, color: '#888' };
+              const isRec = a.id === recommend.id;
+              return `<label style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:2px solid ${isRec ? 'var(--brand-500,#2563eb)' : 'var(--gray-200)'};border-radius:10px;cursor:pointer;background:${isRec ? 'var(--brand-50,#eff6ff)' : '#fff'};">
+                <input type="radio" name="merge-keep" value="${a.id}" ${isRec ? 'checked' : ''} style="margin-top:3px;">
+                <div style="flex:1;font-size:12px;">
+                  <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
+                    <span style="font-family:monospace;color:var(--brand-600);">${toHexId(a.id)}</span>
+                    <span style="padding:2px 8px;border-radius:6px;background:${statusObj.color}20;color:${statusObj.color};font-weight:700;">${escHtml(statusObj.label)}</span>
+                    ${a.wave ? `<span style="padding:2px 8px;border-radius:6px;background:var(--brand-50);color:var(--brand-600);font-weight:700;">G${a.wave}</span>` : ''}
+                    <span style="color:var(--gray-500);">${a.type || 'individual'}</span>
+                    ${isRec ? '<span style="margin-left:auto;font-size:10px;font-weight:700;color:var(--brand-600);">RECOMMENDED</span>' : ''}
+                  </div>
+                  <div style="color:var(--gray-600);">
+                    Submitted: ${a.submittedDate || a.submitted_date || '—'} &middot;
+                    Effective: ${a.effectiveDate || a.effective_date || '—'} &middot;
+                    Facility: ${escHtml(a.facilityId ? 'set' : 'none')}
+                  </div>
+                  ${a.notes ? `<div style="color:var(--gray-500);margin-top:4px;font-style:italic;">${escHtml((a.notes || '').substring(0, 120))}</div>` : ''}
+                </div>
+              </label>`;
+            }).join('')}
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--gray-200);">
+          <button class="btn" onclick="document.getElementById('merge-dup-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" id="merge-dup-confirm">Merge — Delete the others</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    document.getElementById('merge-dup-confirm').onclick = async () => {
+      const keepId = (overlay.querySelector('input[name="merge-keep"]:checked') || {}).value;
+      if (!keepId) { showToast('Pick which application to keep'); return; }
+      const toDelete = cluster.filter(a => String(a.id) !== String(keepId));
+      if (!await appConfirm(`Delete ${toDelete.length} duplicate application(s)? The kept application is not affected.`, { title: 'Confirm Merge', okLabel: 'Delete Duplicates', okClass: 'btn-danger' })) return;
+      const btn = document.getElementById('merge-dup-confirm');
+      btn.disabled = true; btn.textContent = 'Merging...';
+      let ok = 0, fail = 0;
+      for (const a of toDelete) {
+        try { await store.remove('applications', a.id); ok++; } catch { fail++; }
+      }
+      overlay.remove();
+      showToast(fail ? `Merged: deleted ${ok}, failed ${fail}` : `Merged — deleted ${ok} duplicate${ok !== 1 ? 's' : ''}`);
+      await renderApplications();
+    };
   },
   async applyFilters() {
     filters.state = document.getElementById('filter-state')?.value || '';
@@ -17843,22 +17956,51 @@ window.saveApplication = async function() {
       }).catch(err => console.warn('[Automation] edit-status trigger error:', err));
     }
   } else {
-    const created = await store.create('applications', data);
-    if (created && created.id) {
+    // Promote-on-create: if a "planned" placeholder already exists for the same
+    // provider+payer+state, update it instead of creating a duplicate row.
+    let promotedFrom = null;
+    try {
+      const all = store.filterByScope(await store.getAll('applications'));
+      const sameKey = (a) => String(a.providerId || a.provider_id || '') === String(data.providerId)
+        && (a.state || '') === data.state
+        && (
+          (data.payerId && String(a.payerId || a.payer_id || '') === String(data.payerId))
+          || (!data.payerId && (a.payerName || a.payer_name || '').toLowerCase().trim() === (data.payerName || '').toLowerCase().trim())
+        );
+      promotedFrom = all.find(a => a.status === 'planned' && sameKey(a));
+    } catch (e) { /* fall through to create */ }
+
+    if (promotedFrom) {
+      await store.update('applications', promotedFrom.id, data);
       try {
         await store.create('activity_logs', {
-          applicationId: created.id,
+          applicationId: promotedFrom.id,
           type: 'note',
           loggedDate: new Date().toISOString().split('T')[0],
-          outcome: 'Application created',
+          outcome: `Promoted from Planned placeholder (was status: planned)`,
         });
-      } catch (e) { console.error('Failed to log creation:', e); }
-      // Fire automation rules for new application
-      workflow.processAutomationRules('application.created', {
-        appId: created.id, application: created,
-      }).catch(err => console.warn('[Automation] app-created trigger error:', err));
+      } catch (e) { console.error('Failed to log promotion:', e); }
+      workflow.processAutomationRules('application.status_changed', {
+        appId: promotedFrom.id, oldStatus: 'planned', newStatus: data.status, application: { ...promotedFrom, ...data },
+      }).catch(err => console.warn('[Automation] promote trigger error:', err));
+      showToast('Promoted existing Planned application — no duplicate created');
+    } else {
+      const created = await store.create('applications', data);
+      if (created && created.id) {
+        try {
+          await store.create('activity_logs', {
+            applicationId: created.id,
+            type: 'note',
+            loggedDate: new Date().toISOString().split('T')[0],
+            outcome: 'Application created',
+          });
+        } catch (e) { console.error('Failed to log creation:', e); }
+        workflow.processAutomationRules('application.created', {
+          appId: created.id, application: created,
+        }).catch(err => console.warn('[Automation] app-created trigger error:', err));
+      }
+      showToast('Application added');
     }
-    showToast('Application added');
   }
 
   closeModal();
