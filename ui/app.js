@@ -13,6 +13,7 @@ import batchGenerator from '../core/batch-generator.js';
 import emailGenerator from '../core/email-generator.js';
 import caqhApi from '../core/caqh-api.js';
 import taxonomyApi from '../core/taxonomy-api.js';
+import recommendations from '../core/recommendations.js';
 // Lazy-loaded to avoid blocking initial render (53KB file)
 let SUPPLEMENTAL_PAYERS = [];
 
@@ -866,6 +867,23 @@ export async function initApp() {
   await navigateTo('dashboard');
   await updateNotificationBell();
 
+  // Wire the Recommendations badge: refresh on boot + on every relevant store mutation.
+  try {
+    const recMod = await _page('recommendations');
+    if (recMod.updateRecommendationsBadge) {
+      recMod.updateRecommendationsBadge().catch(() => {});
+      const REC_BADGE_COLLECTIONS = new Set(['applications', 'licenses', 'providers', 'payers', 'rcm_claims']);
+      const onMut = (evt) => {
+        if (!evt || !REC_BADGE_COLLECTIONS.has(evt.collection)) return;
+        clearTimeout(window._recBadgeT);
+        window._recBadgeT = setTimeout(() => recMod.updateRecommendationsBadge().catch(() => {}), 400);
+      };
+      store.on('created', onMut);
+      store.on('updated', onMut);
+      store.on('deleted', onMut);
+    }
+  } catch (e) { console.warn('[recommendations] badge init failed:', e); }
+
   // First-run onboarding for new agency accounts (only if zero providers AND never dismissed)
   if (userLevel >= 3) {
     try {
@@ -1090,6 +1108,9 @@ async function updateNavBadges() {
 
 async function navigateTo(page) {
   currentPage = page;
+  // Tag the page on body so cross-page modules (e.g. analytics-hub event listener)
+  // can tell whether they are still the active view before re-rendering.
+  document.body.dataset.currentPage = page;
 
   // Restore filters from URL if present
   readFiltersFromURL();
@@ -1235,6 +1256,12 @@ async function navigateTo(page) {
       pageActions.innerHTML = printBtn;
       document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === 'analytics'));
       await renderAnalyticsHubPage();
+      break;
+    case 'recommendations':
+      pageTitle.textContent = 'Recommendations';
+      pageSubtitle.textContent = 'Actionable next steps from your data';
+      pageActions.innerHTML = printBtn;
+      await renderRecommendationsPage();
       break;
     case 'batch':
       pageTitle.textContent = 'Batch Generator';
@@ -6891,6 +6918,7 @@ async function renderCredentialingPage()     { await (await _page('healthcare-cr
 async function renderComplianceHubPage()     { try { await (await _page('compliance-hub')).renderComplianceHubPage(); } catch(e) { console.error('Compliance hub load error:', e); document.getElementById('page-body').innerHTML = '<div class="alert alert-warning" style="margin:24px;"><strong>Failed to load Compliance.</strong> ' + (e.message || '') + '<br><button class="btn btn-sm" style="margin-top:8px;" onclick="navigateTo(\'compliance-hub\')">Retry</button></div>'; } }
 async function renderWorkspaceHubPage()      { await (await _page('workspace-hub')).renderWorkspaceHubPage(); }
 async function renderAnalyticsHubPage()      { await (await _page('analytics-hub')).renderAnalyticsHubPage(); }
+async function renderRecommendationsPage()   { await (await _page('recommendations')).renderRecommendationsPage(); }
 async function renderCommandCenterPage()     { await (await _page('command-center')).renderCommandCenterPage(); }
 async function renderAdminHubPage()          { await (await _page('admin-hub')).renderAdminHubPage(); }
 
@@ -11872,6 +11900,35 @@ function handleNppesProxy(payload) {
   async analyticsSwitchTab(tab) {
     window._analyticsTab = tab;
     await renderAnalyticsHubPage();
+  },
+  // ── Recommendations ──
+  async recFilterSeverity(sev) {
+    window._recFilter = window._recFilter || {};
+    window._recFilter.severity = sev;
+    await renderRecommendationsPage();
+  },
+  async recFilterType(t) {
+    window._recFilter = window._recFilter || {};
+    window._recFilter.type = t;
+    await renderRecommendationsPage();
+  },
+  async recToggleDismissed(showDismissed) {
+    window._recFilter = window._recFilter || {};
+    window._recFilter.showDismissed = !!showDismissed;
+    await renderRecommendationsPage();
+  },
+  async recDismiss(id) {
+    recommendations.dismissRecommendation(id);
+    showToast('Recommendation dismissed');
+    await renderRecommendationsPage();
+    try {
+      const mod = await _page('recommendations');
+      if (mod.updateRecommendationsBadge) mod.updateRecommendationsBadge().catch(() => {});
+    } catch {}
+  },
+  async recUndismiss(id) {
+    recommendations.undismissRecommendation(id);
+    await renderRecommendationsPage();
   },
   // ── Patients ──
   viewPatient(patientKey) {
