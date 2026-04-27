@@ -208,6 +208,8 @@ function _renderActionButtons(r) {
       return `<button class="btn btn-primary" onclick="window.app.openAddModal();">Create Application</button>`;
     case 'create_apps':
       return `<button class="btn btn-primary" onclick="window.app.navigateTo('coverage');">View in Coverage Matrix</button>`;
+    case 'add_locations':
+      return `<button class="btn btn-primary" onclick="window.app.viewPayerDetail('${escHtml(a.payerId || a.payerName)}');">Open ${escHtml(a.payerName)} Portal Setup</button>`;
     default:
       return '';
   }

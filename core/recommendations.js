@@ -60,6 +60,17 @@ function _payerNameOf(app, payerCatalog) {
 // ── Generators ──
 // Each generator returns an array of recommendations.
 
+function _isFederalPayer(payerName, payerCatalog) {
+  const cat = payerCatalog.find(p => (p.name || '').toLowerCase() === (payerName || '').toLowerCase());
+  if (!cat) {
+    // Fallback heuristic for payers in apps but not in catalog (VACCN, ChampVA, etc.)
+    const n = (payerName || '').toLowerCase();
+    return /\b(medicare|tricare|vaccn|va community|champva|federal)\b/.test(n);
+  }
+  const tags = Array.isArray(cat.tags) ? cat.tags : [];
+  return tags.includes('federal_program');
+}
+
 function _expansionRecommendations(apps, licenses, payerCatalog) {
   const recs = [];
   const licensedStates = new Set(licenses.map(l => l.state).filter(Boolean));
@@ -87,17 +98,36 @@ function _expansionRecommendations(apps, licenses, payerCatalog) {
 
     const sample = apps.find(a => `${a.providerId || a.provider_id}|${a.payerId || a.payerName}` === key);
     const payerName = _payerNameOf(sample, payerCatalog);
-    recs.push({
-      id: _id('expand', `${providerId}-${payerKey}`),
-      type: 'expand',
-      severity: gaps.length >= 5 ? 'high' : 'medium',
-      subject: `${payerName}`,
-      title: `Expand ${payerName} into ${gaps.length} licensed state${gaps.length !== 1 ? 's' : ''}`,
-      body: `Provider is credentialed with ${payerName} elsewhere. Gap states: ${gaps.join(', ')}.`,
-      evidence: { providerId, payerName, gapStates: gaps, licensedStates: [...licensedStates] },
-      action: { kind: 'create_apps', states: gaps, payerName, providerId },
-      generatedAt: new Date().toISOString(),
-    });
+    const isFederal = _isFederalPayer(payerName, payerCatalog);
+
+    if (isFederal) {
+      // Federal program — single enrollment covers all states. The action is to
+      // ADD A PRACTICE LOCATION (PECOS for Medicare, payer portal for others),
+      // not to file a new application.
+      recs.push({
+        id: _id('addloc', `${providerId}-${payerKey}`),
+        type: 'addloc',
+        severity: gaps.length >= 5 ? 'high' : 'medium',
+        subject: payerName,
+        title: `Add ${payerName} practice locations for ${gaps.length} state${gaps.length !== 1 ? 's' : ''}`,
+        body: `${payerName} is a federal program — your existing enrollment covers all licensed states once you add the practice location. No new application needed for: ${gaps.join(', ')}.`,
+        evidence: { providerId, payerName, gapStates: gaps, licensedStates: [...licensedStates], federal: true },
+        action: { kind: 'add_locations', states: gaps, payerName, providerId, payerId: payerKey },
+        generatedAt: new Date().toISOString(),
+      });
+    } else {
+      recs.push({
+        id: _id('expand', `${providerId}-${payerKey}`),
+        type: 'expand',
+        severity: gaps.length >= 5 ? 'high' : 'medium',
+        subject: payerName,
+        title: `Expand ${payerName} into ${gaps.length} licensed state${gaps.length !== 1 ? 's' : ''}`,
+        body: `Provider is credentialed with ${payerName} elsewhere. Gap states: ${gaps.join(', ')}.`,
+        evidence: { providerId, payerName, gapStates: gaps, licensedStates: [...licensedStates] },
+        action: { kind: 'create_apps', states: gaps, payerName, providerId },
+        generatedAt: new Date().toISOString(),
+      });
+    }
   });
 
   return recs;
@@ -322,6 +352,7 @@ export async function computeRecommendations(opts = {}) {
 
 export const REC_TYPE_LABELS = {
   expand: 'Expansion Opportunity',
+  addloc: 'Add Practice Location (Federal)',
   musthave: 'Must-Have Payer',
   renew: 'License Renewal',
   stalled: 'Stalled Application',
