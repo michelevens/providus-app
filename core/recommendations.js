@@ -42,6 +42,68 @@ export function clearAllDismissals() {
 
 const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 
+// ── Behavioral health arm relationships ──
+// When a provider is credentialed with a BH arm in a state, the parent payer's
+// BH line is considered covered for that state. This applies to behavioral
+// health practice modes only — medical-line claims still need a direct contract.
+//
+// Format: lowercase BH-arm name → array of parent payer names it satisfies in
+// that same state. Lucet manages BH for several Independent BCBS plans, so the
+// satisfied set is state-conditional (handled in the lookup function below).
+const BH_ARM_PARENTS = {
+  // Wholly-owned national arms — apply universally wherever the arm is credentialed
+  'optum':                       { parents: ['UnitedHealthcare'], scope: 'any' },
+  'optum behavioral health':     { parents: ['UnitedHealthcare'], scope: 'any' },
+  'evernorth':                   { parents: ['Cigna'], scope: 'any' },
+  'evernorth behavioral health': { parents: ['Cigna'], scope: 'any' },
+  'carelon':                     { parents: ['Anthem/Elevance', 'Anthem BCBS'], scope: 'any' },
+  'carelon behavioral health':   { parents: ['Anthem/Elevance', 'Anthem BCBS'], scope: 'any' },
+  // State-specific BH manager relationships
+  'lucet': {
+    scope: 'state-map',
+    byState: {
+      FL: ['Florida Blue'],
+      KS: ['BCBS of Kansas', 'BCBS of Kansas City'],
+      NC: ['BCBS of North Carolina'],
+      SC: ['BCBS of South Carolina'],
+    },
+  },
+  'new directions': {
+    scope: 'state-map',
+    byState: {
+      FL: ['Florida Blue'],
+      KS: ['BCBS of Kansas'],
+      NC: ['BCBS of North Carolina'],
+      SC: ['BCBS of South Carolina'],
+    },
+  },
+  // Magellan and Quest are independent BH networks — they do NOT auto-satisfy
+  // a parent payer in our map. Listed here for documentation only.
+};
+
+// Returns the set of parent payer names satisfied by this BH arm in this state.
+function _satisfiedParents(armName, state) {
+  const def = BH_ARM_PARENTS[(armName || '').toLowerCase()];
+  if (!def) return [];
+  if (def.scope === 'any') return def.parents || [];
+  if (def.scope === 'state-map') return (def.byState && def.byState[state]) || [];
+  return [];
+}
+
+// Build a Set of "PayerName|State" keys for parents that are BH-covered via an arm.
+// Only applies for behavioral-health practice (default true for this app).
+function _buildBhCoveredKeys(apps) {
+  const covered = new Set();
+  apps.forEach(a => {
+    if (a.status !== 'approved' && a.status !== 'credentialed') return;
+    const armName = (a.payerName || a.payer_name || '').trim();
+    if (!armName) return;
+    const parents = _satisfiedParents(armName, a.state);
+    parents.forEach(pn => covered.add(`${pn.toLowerCase()}|${a.state}`));
+  });
+  return covered;
+}
+
 // ── Helpers ──
 
 function _id(type, subject) {
@@ -76,6 +138,10 @@ function _expansionRecommendations(apps, licenses, payerCatalog) {
   const licensedStates = new Set(licenses.map(l => l.state).filter(Boolean));
   if (licensedStates.size === 0) return recs;
 
+  // BH coverage via arms (Optum=UHC BH, Evernorth=Cigna BH, Carelon=Anthem BH,
+  // Lucet=FL Blue/BCBS-KS/etc BH). Treats parent BH as covered in that state.
+  const bhCovered = _buildBhCoveredKeys(apps);
+
   // For each (provider, payer) pair currently approved/credentialed somewhere,
   // find licensed states with no application for that (provider, payer).
   const approvedKey = new Set();
@@ -93,11 +159,12 @@ function _expansionRecommendations(apps, licenses, payerCatalog) {
       if (aKey !== key) return;
       if (a.state) stateAppMap[a.state] = a;
     });
-    const gaps = [...licensedStates].filter(s => !stateAppMap[s]);
-    if (gaps.length === 0) return;
-
     const sample = apps.find(a => `${a.providerId || a.provider_id}|${a.payerId || a.payerName}` === key);
     const payerName = _payerNameOf(sample, payerCatalog);
+    // Drop states where this payer's BH is already covered via an arm.
+    const gaps = [...licensedStates].filter(s => !stateAppMap[s] && !bhCovered.has(`${payerName.toLowerCase()}|${s}`));
+    if (gaps.length === 0) return;
+
     const isFederal = _isFederalPayer(payerName, payerCatalog);
 
     if (isFederal) {
@@ -135,11 +202,18 @@ function _expansionRecommendations(apps, licenses, payerCatalog) {
 
 function _mustHaveRecommendations(apps, payerCatalog) {
   const recs = [];
+  const bhCovered = _buildBhCoveredKeys(apps);
+  // Set of must-have parent names whose BH is covered somewhere via an arm.
+  const bhCoveredParents = new Set();
+  bhCovered.forEach(k => bhCoveredParents.add(k.split('|')[0]));
+
   const mustHave = payerCatalog.filter(p => Array.isArray(p.tags) && p.tags.includes('must_have'));
   mustHave.forEach(payer => {
     const hasAny = apps.some(a => String(a.payerId) === String(payer.id) ||
       (a.payerName || '').toLowerCase() === payer.name.toLowerCase());
     if (hasAny) return;
+    // BH-arm coverage of this parent anywhere → not a "no applications" case.
+    if (bhCoveredParents.has(payer.name.toLowerCase())) return;
     recs.push({
       id: _id('musthave', payer.name),
       type: 'musthave',
